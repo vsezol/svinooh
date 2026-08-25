@@ -99,8 +99,10 @@ export interface PortfolioOwnerDto {
 export type PortfolioVisibility = 'anonymous' | 'private' | 'public';
 
 export interface PortfolioDto {
+  /** The portfolio's public identity — what it is called when it has no name */
   slug: string;
-  name: string;
+  /** Owner-given name; null — none, and the slug stands in for it */
+  name: string | null;
   /**
    * The owner's profile — sent to the OWNER ONLY, null for everyone else.
    * Showing who a balance belongs to is a deanonymization risk, so this never
@@ -124,7 +126,8 @@ export interface PortfolioDto {
  */
 export interface PublicPortfolioDto {
   slug: string;
-  name: string;
+  /** Owner-given name; null — none, and the slug stands in for it */
+  name: string | null;
   totalUsd: number;
   walletCount: number;
   chains: Chain[];

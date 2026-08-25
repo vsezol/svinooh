@@ -1,10 +1,27 @@
 import type { PortfolioVisibility } from '@svinooh/shared';
 
+const LOCK = (
+  <svg viewBox="0 0 12 12" width={10} height={10} fill="none" stroke="currentColor" strokeWidth={1.3}>
+    <rect x="2.2" y="5.2" width="7.6" height="5.3" rx="1.2" />
+    <path d="M4 5.2V3.8a2 2 0 0 1 4 0v1.4" />
+  </svg>
+);
+
+const GLOBE = (
+  <svg viewBox="0 0 12 12" width={10} height={10} fill="none" stroke="currentColor" strokeWidth={1.3}>
+    <circle cx="6" cy="6" r="4.3" />
+    <path d="M1.7 6h8.6M6 1.7c1.1 1.2 1.7 2.7 1.7 4.3S7.1 9.1 6 10.3C4.9 9.1 4.3 7.6 4.3 6S4.9 2.9 6 1.7Z" />
+  </svg>
+);
+
 /**
- * The owner's visibility switch, sitting above the wallets — the first thing
- * they see about their own portfolio, because it decides who else sees their
- * balances. Private is the default and the resting state; going public is a
- * deliberate step and passes through a confirmation.
+ * The owner's visibility switch, sitting in the top-right above the chart —
+ * the first thing they see about their own portfolio, because it decides who
+ * else sees their balances.
+ *
+ * Both states are spelled out and always visible: an unlabelled toggle makes
+ * you guess which way is "on". Private sits on the left as the default and
+ * resting state; going public is deliberate and passes through a confirmation.
  */
 export function VisibilityCard({
   visibility,
@@ -23,72 +40,62 @@ export function VisibilityCard({
   const isPublic = visibility === 'public';
 
   return (
-    <div
-      className="card"
-      style={{
-        marginTop: 26,
-        padding: '13px 16px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 14,
-        flexWrap: 'wrap',
-      }}
-    >
-      <div style={{ flex: 1, minWidth: 190 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontWeight: 800, fontSize: 13 }}>{isPublic ? 'Public' : 'Private'}</span>
-          <span
-            className="mono"
-            style={{
-              fontSize: 9,
-              letterSpacing: '0.1em',
-              color: isPublic ? 'var(--acc-text)' : 'var(--mut)',
-              border: `1px solid ${isPublic ? 'color-mix(in srgb, var(--acc) 45%, transparent)' : 'var(--line2)'}`,
-              borderRadius: 5,
-              padding: '1px 6px',
-            }}
-          >
-            VISIBILITY
-          </span>
-        </div>
-        <div className="mono" style={{ fontSize: 10.5, color: 'var(--mut)', marginTop: 4, lineHeight: 1.6 }}>
-          {isPublic
-            ? 'Listed on the home page and findable in search. Your balances are visible to everyone.'
-            : 'Not listed and not findable. Only someone you give the link to can open it.'}
-        </div>
-      </div>
-
-      <button
-        onClick={isPublic ? onGoPrivate : onGoPublic}
-        disabled={busy}
-        aria-pressed={isPublic}
-        title={isPublic ? 'Make private' : 'Make public'}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
+      <div
+        role="group"
+        aria-label="Portfolio visibility"
         style={{
-          width: 52,
-          height: 28,
-          borderRadius: 999,
-          border: `1px solid ${isPublic ? 'transparent' : 'var(--line2)'}`,
-          background: isPublic ? 'var(--acc)' : 'var(--surf2)',
-          padding: 2,
-          cursor: busy ? 'default' : 'pointer',
-          opacity: busy ? 0.5 : 1,
           display: 'flex',
-          justifyContent: isPublic ? 'flex-end' : 'flex-start',
-          transition: 'background 0.15s ease',
-          flexShrink: 0,
+          gap: 2,
+          border: '1px solid var(--line)',
+          borderRadius: 999,
+          padding: 2,
+          opacity: busy ? 0.5 : 1,
         }}
       >
-        <span
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: '50%',
-            background: isPublic ? 'var(--acc-ink)' : 'var(--mut)',
-            transition: 'background 0.15s ease',
-          }}
-        />
-      </button>
+        <Half label="PRIVATE" icon={LOCK} active={!isPublic} onClick={onGoPrivate} busy={busy} />
+        <Half label="PUBLIC" icon={GLOBE} active={isPublic} accent onClick={onGoPublic} busy={busy} />
+      </div>
+      <span className="mono" style={{ fontSize: 9.5, color: 'var(--mut)', letterSpacing: '0.04em' }}>
+        {isPublic ? 'Listed on the home page' : 'Only people with the link'}
+      </span>
     </div>
+  );
+}
+
+function Half({
+  label,
+  icon,
+  active,
+  accent,
+  busy,
+  onClick,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  active: boolean;
+  accent?: boolean;
+  busy: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className="period"
+      aria-pressed={active}
+      disabled={busy || active}
+      onClick={onClick}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        cursor: busy || active ? 'default' : 'pointer',
+        color: active ? (accent ? 'var(--acc-text)' : 'var(--text)') : 'var(--mut)',
+        background: active ? (accent ? 'var(--acc-soft)' : 'var(--surf2)') : 'transparent',
+      }}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 
@@ -142,11 +149,7 @@ export function GoPublicModal({ onCancel, onConfirm }: { onCancel: () => void; o
           >
             CANCEL
           </button>
-          <button
-            className="btn-acc"
-            style={{ flex: 1, height: 42, fontSize: 13 }}
-            onClick={onConfirm}
-          >
+          <button className="btn-acc" style={{ flex: 1, height: 42, fontSize: 13 }} onClick={onConfirm}>
             Make public
           </button>
         </div>

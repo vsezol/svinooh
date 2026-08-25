@@ -22,7 +22,7 @@ import type {
   WalletDto,
   WalletSyncStatus,
 } from '@svinooh/shared';
-import { randomSlug, round2, shortAddress } from '../common/util';
+import { randomSlug, round2 } from '../common/util';
 import { config } from '../config';
 import { PrismaService } from '@svinooh/db';
 import { detectChain } from '../scanners/detect';
@@ -163,7 +163,7 @@ export class PortfolioService {
       .filter(
         (p) =>
           !q ||
-          p.name.toLowerCase().includes(q) ||
+          (p.name ?? '').toLowerCase().includes(q) ||
           p.slug.includes(q) ||
           p.addresses.some((address) => address.includes(q)),
       )
@@ -199,10 +199,10 @@ export class PortfolioService {
 
     const portfolio = await this.prisma.portfolio.create({
       data: {
+        // No name: a portfolio is identified by its slug. Naming it after the
+        // wallet it currently holds would be wrong the moment a second wallet
+        // joins — the whole point of a portfolio is that it aggregates.
         slug: randomSlug(),
-        // An address is public chain data — unlike a handle, it identifies the
-        // wallet rather than the person, and it is what someone searched for
-        name: shortAddress(address),
         wallets: { create: { address, chain } },
       },
       include: { wallets: true },
@@ -302,10 +302,10 @@ export class PortfolioService {
     return { visibility: isPublic ? 'public' : 'private' };
   }
 
-  async rename(slug: string, userId: string, nameRaw: string): Promise<{ name: string }> {
+  /** Set or clear the portfolio's name. Empty clears it — back to just the slug. */
+  async rename(slug: string, userId: string, nameRaw: string): Promise<{ name: string | null }> {
     const portfolio = await this.requireOwned(slug, userId);
-    const name = String(nameRaw || '').trim().slice(0, 64);
-    if (!name) throw new BadRequestException('Empty name');
+    const name = String(nameRaw || '').trim().slice(0, 64) || null;
     await this.prisma.portfolio.update({ where: { id: portfolio.id }, data: { name } });
     await this.cache.del(cacheKey(slug));
     return { name };

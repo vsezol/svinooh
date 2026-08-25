@@ -30,7 +30,11 @@ model User {
 model Portfolio {
   id        String              @id @default(cuid())
   slug      String              @unique
-  name      String
+  // Optional, and empty by default: the slug is what identifies a portfolio.
+  // An auto-generated name would either say nothing ("My portfolio", first
+  // person, shown to strangers) or name a wallet, which defeats the point of
+  // grouping several of them.
+  name      String?
   wallets   Wallet[]
   snapshots PortfolioSnapshot[]
   owner     PortfolioOwner?

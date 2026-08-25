@@ -65,6 +65,16 @@ const CHAIN_META: Record<Chain, { label: string; color: string; name: string }> 
 
 export const chainMeta = (chain: Chain) => CHAIN_META[chain];
 
+/**
+ * How a portfolio is labelled. Its id is the identity; a name is optional and
+ * only exists if the owner set one. Never invent one — a made-up name either
+ * says nothing to a stranger or names a single wallet, which misrepresents a
+ * group of them.
+ */
+export function portfolioLabel(name: string | null, slug: string): string {
+  return name?.trim() || slug;
+}
+
 /** Displayed wallet name: user-defined or the chain default */
 export function walletName(label: string | null, chain: Chain): string {
   return label || CHAIN_META[chain].name;

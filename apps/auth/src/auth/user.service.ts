@@ -40,10 +40,10 @@ export class UserService {
    * The portfolio is created on first sign-in. Just one for now; the schema
    * allows several.
    *
-   * It is created PRIVATE (`PortfolioOwner.isPublic` defaults to false) and with
-   * a name that says nothing about who owns it — the name is public whenever the
-   * portfolio is, so putting a handle in it would leak identity the moment the
-   * owner publishes.
+   * It is created PRIVATE (`PortfolioOwner.isPublic` defaults to false) and
+   * WITHOUT a name: the slug identifies it. An auto-generated name is public the
+   * moment the owner publishes, so it must never be derived from who they are —
+   * and a placeholder like "My portfolio" reads as nonsense to everyone else.
    */
   async ensurePortfolio(user: User): Promise<Portfolio> {
     const existing = await this.prisma.portfolioOwner.findFirst({
@@ -55,7 +55,6 @@ export class UserService {
     return this.prisma.portfolio.create({
       data: {
         slug: randomSlug(),
-        name: 'My portfolio',
         owner: { create: { userId: user.id } },
       },
     });
