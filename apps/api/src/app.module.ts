@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthModule } from './auth/auth.module';
+import { CacheModule } from './cache/cache.module';
 import { config } from './config';
 import { HealthController } from './health.controller';
 import { PortfolioModule } from './portfolio/portfolio.module';
@@ -10,6 +11,7 @@ import { SyncModule } from './sync/sync.module';
 @Module({
   imports: [
     PrismaModule,
+    CacheModule,
     JwtModule.register({
       global: true,
       secret: config.jwtSecret,

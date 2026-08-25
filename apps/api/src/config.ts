@@ -39,6 +39,21 @@ export const config = {
   // кошелька, прежде чем мы ему поверим. Разовые просадки (частичный ответ
   // источника, глюк Chrome) так не попадают в историю и не рисуют «пилу».
   dropConfirmCycles: int(process.env.SYNC_DROP_CONFIRM_CYCLES, 3),
+  // Очередь сканов (RabbitMQ) и кэш (Redis). Пусто — работаем без брокера:
+  // скан идёт in-process тем же паровозом, кэш становится in-memory. Так
+  // локальная разработка не требует поднимать Rabbit/Redis.
+  rabbitUrl: process.env.RABBITMQ_URL || null,
+  redisUrl: process.env.REDIS_URL || null,
+  scanQueueName: process.env.SCAN_QUEUE_NAME || 'wallet.scan',
+  // Пейсинг: пауза после каждого скана — «потихоньку», чтобы реже ловить 429.
+  scanJobDelayMs: int(process.env.SCAN_JOB_DELAY_MS, 1500),
+  // Сколько адресов разгребать одновременно. 1 = строго по одному (мягче всего
+  // к лимитам). Можно поднять, когда HTTP-путь перестанет ловить 429.
+  scanPrefetch: int(process.env.SCAN_PREFETCH, 1),
+  // Как часто проверять, что очередь опустела, и заливать кошельки заново.
+  scanReloadSec: int(process.env.SCAN_RELOAD_SEC, 15),
+  // TTL кэша собранного портфеля в Redis (сек).
+  cacheTtlSec: int(process.env.CACHE_TTL_SEC, 60),
   webOrigin: process.env.WEB_ORIGIN || '*',
   httpTimeoutMs: int(process.env.HTTP_TIMEOUT_MS, 15_000),
   evmTimeoutMs: int(process.env.EVM_TIMEOUT_MS, 90_000),
