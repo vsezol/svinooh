@@ -21,9 +21,8 @@ import type {
 import { round2 } from '../common/util';
 import { config } from '../config';
 import { PrismaService } from '@svinooh/db';
-import { detectChain } from '../scanners';
+import { detectChain } from '../scanners/detect';
 import { CacheService } from '../cache/cache.service';
-import { SyncService } from '../sync/sync.service';
 
 type WalletWithPositions = Wallet & { positions: Position[] };
 
@@ -101,7 +100,6 @@ function cacheKey(slug: string): string {
 export class PortfolioService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly sync: SyncService,
     private readonly cache: CacheService,
   ) {}
 
@@ -235,7 +233,12 @@ export class PortfolioService {
     // The scan is async: the endpoint responds immediately (status=pending) and
     // the frontend polls. An EVM scan takes 20–40 seconds — we can't hold an
     // HTTP request open that long.
-    void this.sync.scanWalletNow(wallet.id).catch(() => {});
+    void fetch(`${config.walletServiceUrl}/internal/scan`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ walletId: wallet.id }),
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => {});
     await this.cache.del(cacheKey(slug));
     return this.toWalletDto({ ...wallet, positions: [] }, 0);
   }
@@ -265,7 +268,6 @@ export class PortfolioService {
     });
     if (!wallet) throw new NotFoundException('Wallet not found');
     await this.prisma.wallet.delete({ where: { id: wallet.id } });
-    await this.sync.snapshotPortfolio(portfolio.id);
     await this.cache.del(cacheKey(slug));
     return { ok: true };
   }

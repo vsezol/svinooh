@@ -5,7 +5,6 @@ import { scanSol } from './sol';
 import { scanTron } from './tron';
 import type { ScanResult } from './types';
 
-export { detectChain } from './detect';
 export type { ScanPosition, ScanResult } from './types';
 
 export function scanAddress(chain: Chain, address: string): Promise<ScanResult> {

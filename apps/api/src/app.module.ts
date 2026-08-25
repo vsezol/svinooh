@@ -7,7 +7,6 @@ import { HealthController } from './health.controller';
 import { MetricsModule } from '@svinooh/common';
 import { PortfolioModule } from './portfolio/portfolio.module';
 import { PrismaModule } from '@svinooh/db';
-import { SyncModule } from './sync/sync.module';
 
 @Module({
   imports: [
@@ -21,7 +20,6 @@ import { SyncModule } from './sync/sync.module';
     }),
     AuthProxyModule,
     PortfolioModule,
-    SyncModule,
   ],
   controllers: [HealthController],
 })

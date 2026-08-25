@@ -36,6 +36,8 @@ export const config = {
   syncIntervalMin: int(process.env.SYNC_INTERVAL_MIN, 5),
   // Internal URL of the auth service — the gateway forwards /auth/* to it.
   authServiceUrl: (process.env.AUTH_SERVICE_URL || 'http://localhost:3001').replace(/\/+$/, ''),
+  // Internal URL of the wallet service — scan-on-add is delegated to it.
+  walletServiceUrl: (process.env.WALLET_SERVICE_URL || 'http://localhost:3002').replace(/\/+$/, ''),
   // Public URL of the web app — for the "back to site" button in the bot.
   webUrl: (process.env.WEB_URL || 'https://svinooh.com').replace(/\/+$/, ''),
   // How many cycles in a row must confirm a sharp drop in a wallet's value
