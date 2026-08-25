@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import type { TelegramAuthPayload } from '@svinooh/shared';
 import { CurrentUserId, RequiredAuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
@@ -15,6 +15,16 @@ export class AuthController {
   @Post('telegram')
   telegram(@Body() body: TelegramAuthPayload) {
     return this.auth.telegramLogin(body);
+  }
+
+  @Post('telegram/start')
+  telegramStart() {
+    return this.auth.telegramStart();
+  }
+
+  @Get('telegram/poll')
+  telegramPoll(@Query('token') token?: string) {
+    return this.auth.telegramPoll(token ?? '');
   }
 
   @Post('dev')

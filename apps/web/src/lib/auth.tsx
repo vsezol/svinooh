@@ -9,6 +9,8 @@ interface AuthState {
   loading: boolean;
   loginTelegram: (payload: TelegramAuthPayload) => Promise<void>;
   loginDev: (name: string) => Promise<void>;
+  /** Применить готовый ответ авторизации (например из поллинга бота) */
+  applyAuth: (res: AuthResponseDto) => void;
   logout: () => void;
 }
 
@@ -18,6 +20,7 @@ const AuthContext = createContext<AuthState>({
   loading: true,
   loginTelegram: async () => {},
   loginDev: async () => {},
+  applyAuth: () => {},
   logout: () => {},
 });
 
@@ -69,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ me, config, loading, loginTelegram, loginDev, logout }}>
+    <AuthContext.Provider value={{ me, config, loading, loginTelegram, loginDev, applyAuth: finish, logout }}>
       {children}
     </AuthContext.Provider>
   );

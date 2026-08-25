@@ -104,6 +104,16 @@ export interface AuthResponseDto {
   me: MeDto;
 }
 
+/** Старт входа через бота: ссылка, открывающая приложение Telegram */
+export interface TelegramStartDto {
+  token: string;
+  botUsername: string;
+  deepLink: string;
+}
+
+/** Опрос статуса входа через бота: либо ещё ждём, либо готовый логин */
+export type TelegramPollDto = { pending: true } | AuthResponseDto;
+
 /** Что присылает Telegram Login Widget в onauth */
 export interface TelegramAuthPayload {
   id: number;

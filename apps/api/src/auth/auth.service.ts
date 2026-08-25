@@ -5,19 +5,29 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import type { Portfolio, User } from '@prisma/client';
-import type { AuthConfigDto, AuthResponseDto, MeDto, TelegramAuthPayload } from '@svinooh/shared';
+import type {
+  AuthConfigDto,
+  AuthResponseDto,
+  MeDto,
+  TelegramAuthPayload,
+  TelegramPollDto,
+  TelegramStartDto,
+} from '@svinooh/shared';
 import { randomSlug } from '../common/util';
 import { config } from '../config';
 import { PrismaService } from '../prisma.service';
 import { verifyTelegramLogin } from './telegram';
+import { TelegramBotService } from './telegram-bot.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly bot: TelegramBotService,
   ) {}
 
   getConfig(): AuthConfigDto {
@@ -40,19 +50,67 @@ export class AuthService {
     const problem = verifyTelegramLogin(payload, config.botToken);
     if (problem) throw new UnauthorizedException(`Данные Telegram не прошли проверку: ${problem}`);
 
-    const telegramId = BigInt(payload.id);
-    const profile = {
-      firstName: payload.first_name ?? null,
-      lastName: payload.last_name ?? null,
-      username: payload.username ?? null,
-      photoUrl: payload.photo_url ?? null,
+    return this.finishLogin(
+      await this.upsertTelegram({
+        id: payload.id,
+        firstName: payload.first_name,
+        lastName: payload.last_name,
+        username: payload.username,
+        photoUrl: payload.photo_url,
+      }),
+    );
+  }
+
+  /** Старт входа через бота — ссылка, открывающая приложение Telegram */
+  telegramStart(): TelegramStartDto {
+    if (!config.botToken || !config.botUsername) {
+      throw new ServiceUnavailableException('Вход через Telegram не настроен');
+    }
+    const token = randomBytes(24).toString('base64url');
+    this.bot.create(token);
+    return {
+      token,
+      botUsername: config.botUsername,
+      deepLink: `https://t.me/${config.botUsername}?start=${token}`,
     };
-    const user = await this.prisma.user.upsert({
+  }
+
+  /** Опрос статуса входа через бота */
+  async telegramPoll(token: string): Promise<TelegramPollDto> {
+    const entry = this.bot.get(token);
+    if (!entry) throw new UnauthorizedException('Сессия входа истекла, начни заново');
+    if (entry.status !== 'authenticated' || !entry.user) return { pending: true };
+    this.bot.consume(token); // одноразово
+    return this.finishLogin(
+      await this.upsertTelegram({
+        id: entry.user.id,
+        firstName: entry.user.first_name,
+        lastName: entry.user.last_name,
+        username: entry.user.username,
+      }),
+    );
+  }
+
+  private upsertTelegram(p: {
+    id: number;
+    firstName?: string;
+    lastName?: string;
+    username?: string;
+    photoUrl?: string;
+  }): Promise<User> {
+    const telegramId = BigInt(p.id);
+    const profile = {
+      firstName: p.firstName ?? null,
+      lastName: p.lastName ?? null,
+      username: p.username ?? null,
+      // фото из бота не приходит — не затираем уже сохранённое из веб-виджета
+      ...(p.photoUrl !== undefined ? { photoUrl: p.photoUrl ?? null } : {}),
+    };
+    return this.prisma.user.upsert({
       where: { telegramId },
       create: { telegramId, ...profile },
       update: profile,
     });
-    return this.finishLogin(user);
   }
 
   /** Локальная разработка без бота: включается AUTH_DEV_MODE=true */
