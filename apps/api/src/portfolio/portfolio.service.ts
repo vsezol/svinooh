@@ -20,7 +20,7 @@ import type {
 } from '@svinooh/shared';
 import { round2 } from '../common/util';
 import { config } from '../config';
-import { PrismaService } from '../prisma.service';
+import { PrismaService } from '@svinooh/db';
 import { detectChain } from '../scanners';
 import { CacheService } from '../cache/cache.service';
 import { SyncService } from '../sync/sync.service';

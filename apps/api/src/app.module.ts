@@ -6,7 +6,7 @@ import { config } from './config';
 import { HealthController } from './health.controller';
 import { MetricsModule } from './metrics/metrics.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
-import { PrismaModule } from './prisma.module';
+import { PrismaModule } from '@svinooh/db';
 import { SyncModule } from './sync/sync.module';
 
 @Module({
