@@ -18,17 +18,12 @@
     "@svinooh/common": "*",
     "@svinooh/db": "*",
     "@svinooh/shared": "*",
-    "amqplib": "^0.10.4",
-    "impit": "^0.7.6",
     "ioredis": "^5.4.1",
-    "prom-client": "^15.1.3",
-    "puppeteer": "^24.10.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",
-    "@types/amqplib": "^0.10.5",
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
     "tsx": "^4.19.0",

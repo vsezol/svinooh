@@ -3,8 +3,6 @@
 
 FROM node:22-slim AS build
 WORKDIR /app
-# Chrome isn't needed at build time — puppeteer doesn't download it
-ENV PUPPETEER_SKIP_DOWNLOAD=1
 
 COPY package.json package-lock.json nx.json tsconfig.base.json ./
 COPY apps/api/package.json apps/api/
@@ -23,21 +21,7 @@ RUN npm run -w @svinooh/db build \
   && npm run -w apps/api build
 
 FROM node:22-slim
-# System chromium for puppeteer: it doesn't download its own Chrome, and
-# the container sandbox is disabled via a flag (CHROME_NO_SANDBOX)
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
-    chromium \
-    ca-certificates \
-    fonts-liberation \
-    fonts-noto-color-emoji \
-  && rm -rf /var/lib/apt/lists/*
-
-ENV NODE_ENV=production \
-  PUPPETEER_SKIP_DOWNLOAD=1 \
-  PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
-  CHROME_NO_SANDBOX=1
-
+ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/package.json ./
