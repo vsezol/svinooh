@@ -1,4 +1,6 @@
-# Локальная разработка: только Postgres. API и web запускаются через `npm run dev`.
+# Local development: Postgres only. The services and web run via `npm run dev`.
+# RabbitMQ, Redis, Loki and Tempo are optional — without their variables the
+# services fall back to in-process scanning, an in-memory cache and stdout logs.
 services:
   db:
     image: postgres:16-alpine

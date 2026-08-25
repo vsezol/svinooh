@@ -19,6 +19,7 @@ import { ExpressInstrumentation } from '@opentelemetry/instrumentation-express';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { IORedisInstrumentation } from '@opentelemetry/instrumentation-ioredis';
 import { NestInstrumentation } from '@opentelemetry/instrumentation-nestjs-core';
+import { UndiciInstrumentation } from '@opentelemetry/instrumentation-undici';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import {
@@ -28,6 +29,14 @@ import {
 import { PrismaInstrumentation } from '@prisma/instrumentation';
 
 const endpoint = (process.env.OTEL_EXPORTER_OTLP_ENDPOINT || '').replace(/\/+$/, '');
+
+/**
+ * Traffic that runs every few seconds and says nothing about user activity:
+ * health checks, the Prometheus scrape, shipping log batches to Loki. Left in,
+ * it would outnumber the real traces several times over.
+ */
+const isNoise = (path: string): boolean =>
+  path.includes('/health') || path.includes('/metrics') || path.includes('/loki/api/');
 
 if (endpoint) {
   if (process.env.OTEL_DEBUG) diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
@@ -43,13 +52,17 @@ if (endpoint) {
       new HttpInstrumentation({
         // Health checks and the metrics scrape run every few seconds and say
         // nothing about user traffic — they'd bury the real traces
-        ignoreIncomingRequestHook: (req) => {
-          const url = req.url || '';
-          return url.startsWith('/health') || url.includes('/metrics');
-        },
+        ignoreIncomingRequestHook: (req) => isNoise(req.url || ''),
         // Same on the way out: shipping logs to Loki must not create a span per batch
         ignoreOutgoingRequestHook: (options) =>
-          String((options as { path?: string }).path || '').includes('/loki/api/'),
+          isNoise(String((options as { path?: string }).path || '')),
+      }),
+      // The gateway calls auth and wallet with global fetch, which runs on
+      // undici — a different code path from the `http` module, and the one that
+      // carries the traceparent header onward. Without this a request stops at
+      // the api and never joins up with the service it called.
+      new UndiciInstrumentation({
+        ignoreRequestHook: (request) => isNoise(request.path || ''),
       }),
       new ExpressInstrumentation(),
       new NestInstrumentation(),
