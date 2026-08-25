@@ -9,3 +9,5 @@ RUN mkdir -p /var/tempo/wal /var/tempo/blocks && chown -R 10001:10001 /var/tempo
 USER 10001:10001
 ENTRYPOINT ["/tempo"]
 CMD ["-config.file=/etc/tempo.yaml"]
+
+# build trigger
