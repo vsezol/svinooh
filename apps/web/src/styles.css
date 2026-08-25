@@ -420,9 +420,9 @@ button {
 }
 .infotip .infotip-pop {
   position: absolute;
-  bottom: calc(100% + 8px);
+  top: calc(100% + 8px);
   left: 50%;
-  transform: translateX(-50%) translateY(4px);
+  transform: translateX(-50%) translateY(-4px);
   width: min(260px, 78vw);
   background: var(--surf2);
   border: 1px solid var(--line2);
@@ -449,6 +449,17 @@ button {
   opacity: 1;
   visibility: visible;
   transform: translateX(-50%) translateY(0);
+}
+@media (max-width: 719px) {
+  /* у левого края экрана — прижимаем поповер влево, чтобы не обрезался */
+  .infotip .infotip-pop {
+    left: 0;
+    transform: translateX(-30%) translateY(-4px);
+  }
+  .infotip:hover .infotip-pop,
+  .infotip:focus-visible .infotip-pop {
+    transform: translateX(-30%) translateY(0);
+  }
 }
 
 /* скрыть на мобиле */
