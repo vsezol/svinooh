@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { config } from './config';
-import { LokiLogger } from './logging/loki-logger';
+import { LokiLogger } from '@svinooh/common';
 
 async function bootstrap() {
   // bufferLogs — so that bootstrap logs also go to Loki

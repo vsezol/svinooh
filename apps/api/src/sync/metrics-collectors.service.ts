@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Gauge } from 'prom-client';
-import { MetricsService } from '../metrics/metrics.service';
+import { MetricsService } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import { RabbitService } from '../queue/rabbit.service';
 

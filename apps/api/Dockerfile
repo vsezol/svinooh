@@ -10,13 +10,16 @@ COPY package.json package-lock.json nx.json tsconfig.base.json ./
 COPY apps/api/package.json apps/api/
 COPY libs/shared/package.json libs/shared/
 COPY libs/db/package.json libs/db/
-RUN npm ci -w apps/api -w @svinooh/db --no-audit --no-fund
+COPY libs/common/package.json libs/common/
+RUN npm ci -w apps/api -w @svinooh/db -w @svinooh/common --no-audit --no-fund
 
 COPY libs/shared libs/shared
 COPY libs/db libs/db
+COPY libs/common libs/common
 COPY apps/api apps/api
-# Build the shared db package first (prisma generate + tsc), then the api
+# Build the shared libs first (db: prisma generate + tsc; common: tsc), then the api
 RUN npm run -w @svinooh/db build \
+  && npm run -w @svinooh/common build \
   && npm run -w apps/api build
 
 FROM node:22-slim

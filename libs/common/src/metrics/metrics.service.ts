@@ -48,7 +48,7 @@ export class MetricsService {
   });
 
   constructor() {
-    this.registry.setDefaultLabels({ app: 'svinooh-api' });
+    this.registry.setDefaultLabels({ app: process.env.SERVICE_NAME || 'svinooh' });
     collectDefaultMetrics({ register: this.registry, prefix: 'svinooh_node_' });
   }
 

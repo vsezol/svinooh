@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
 import { config } from '../config';
-import { MetricsService } from '../metrics/metrics.service';
+import { MetricsService } from '@svinooh/common';
 
 /**
  * Cache of collected portfolio data. With Redis it's shared and survives restarts;
