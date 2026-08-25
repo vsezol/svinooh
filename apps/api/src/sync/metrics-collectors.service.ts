@@ -5,10 +5,9 @@ import { PrismaService } from '../prisma.service';
 import { RabbitService } from '../queue/rabbit.service';
 
 /**
- * Бизнес-гейджи, которые считаются на момент скрейпа (async collect):
- * сколько кошельков по статусам, сколько портфелей, глубина очереди сканов.
- * Живут здесь, потому что нужны Prisma и Rabbit — MetricsService держать
- * без зависимостей.
+ * Business gauges computed at scrape time (async collect): how many wallets by
+ * status, how many portfolios, the scan queue depth. They live here because they
+ * need Prisma and Rabbit — MetricsService is kept dependency-free.
  */
 @Injectable()
 export class MetricsCollectorsService implements OnModuleInit {
@@ -34,7 +33,7 @@ export class MetricsCollectorsService implements OnModuleInit {
           this.reset();
           for (const r of rows) this.set({ status: r.status }, r._count._all);
         } catch {
-          /* БД недоступна на момент скрейпа — пропускаем */
+          /* DB unavailable at scrape time — skip */
         }
       },
     });

@@ -1,4 +1,4 @@
-# Prometheus для svinooh. Скрейпит api по внутренней сети Railway.
+# Prometheus for svinooh. Scrapes the api over Railway's internal network.
 global:
   scrape_interval: 15s
   evaluation_interval: 15s

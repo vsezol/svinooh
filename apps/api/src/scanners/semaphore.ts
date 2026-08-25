@@ -1,4 +1,4 @@
-/** Ограничитель конкурентности: не больше `limit` задач одновременно. */
+/** Concurrency limiter: no more than `limit` tasks at once. */
 export class Semaphore {
   private readonly waiters: Array<() => void> = [];
   private active = 0;

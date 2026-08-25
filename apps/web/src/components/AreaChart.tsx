@@ -5,7 +5,7 @@ import { fmtUsd, fmtUsd0 } from '../lib/format';
 
 interface Props {
   values: number[];
-  times: number[]; // ms, той же длины
+  times: number[]; // ms, same length
   period: HistoryRange;
   height: string;
   variant?: 'full' | 'mini';
@@ -21,7 +21,7 @@ function dateLabel(ms: number, period: HistoryRange): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-/** Кастомный SVG-график: площадь + линия + сетка + hover-курсор. 1-в-1 из дизайна. */
+/** Custom SVG chart: area + line + grid + hover cursor. Pixel-for-pixel from the design. */
 export function AreaChart({ values, times, period, height, variant = 'full' }: Props) {
   const gradId = useId().replace(/:/g, '');
   const [hover, setHover] = useState<number | null>(null);
@@ -42,7 +42,7 @@ export function AreaChart({ values, times, period, height, variant = 'full' }: P
   }, [values]);
 
   if (!geom) {
-    // мини-вариант (демо-карта) — просто пустое место, без текста
+    // mini variant (demo card) — just empty space, no text
     if (variant === 'mini') return <div style={{ height }} />;
     return (
       <div

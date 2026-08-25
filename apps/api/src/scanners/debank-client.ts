@@ -4,18 +4,18 @@ import { config } from '../config';
 import { sleep } from '../common/util';
 
 /**
- * Клиент публичного веб-API debank.com. Веб-страница DeBank подписывает
- * каждый свой запрос (x-api-nonce / x-api-sign / x-api-ts, свежие на каждый
- * вызов) — тем же алгоритмом, что воспроизведён здесь. Это ровно те запросы,
- * которые делает браузер любого анонимного посетителя profile-страницы:
- * данные там бесплатны и видны без входа. Отдельный платный Portfolio API
- * (api.debank.com c API-ключом) мы НЕ трогаем — ключа нет и он не нужен.
+ * Client for the public debank.com web API. The DeBank web page signs each of
+ * its requests (x-api-nonce / x-api-sign / x-api-ts, fresh on every call) with
+ * the same algorithm reproduced here. These are exactly the requests the
+ * browser of any anonymous visitor to a profile page makes: the data there is
+ * free and visible without logging in. We do NOT touch the separate paid
+ * Portfolio API (api.debank.com with an API key) — we have no key and don't need one.
  *
- * Порт debank-re (LuKks, MIT) на TypeScript. impit нужен ради TLS-отпечатка
- * Chrome: обычный fetch из Node Cloudflare режет по JA3, impit — нет.
+ * A TypeScript port of debank-re (LuKks, MIT). impit is needed for Chrome's TLS
+ * fingerprint: a plain fetch from Node gets cut off by Cloudflare on JA3, impit doesn't.
  *
- * Сделано первичным путём EVM-сканера (быстро, без headless-браузера); при
- * любой осечке — фоллбэк на чтение отрисованной страницы через Chrome.
+ * Set up as the EVM scanner's primary path (fast, no headless browser); on any
+ * miss, fall back to reading the rendered page via Chrome.
  */
 
 const API_URL = 'https://api.debank.com';
@@ -36,7 +36,7 @@ export class DebankError extends Error {
   }
 }
 
-/** Инкрементный PRNG (pcg32) → 40-символьный nonce, как в вебе DeBank */
+/** Incremental PRNG (pcg32) → 40-char nonce, as on the DeBank web page */
 class DebankNonce {
   private static readonly ABC =
     '0123456789ABCDEFGHIJKLMNOPQRSTUVWXTZabcdefghiklmnopqrstuvwxyz';
@@ -60,7 +60,7 @@ class DebankNonce {
 
 const sha256 = (data: string | Buffer): Buffer => createHash('sha256').update(data).digest();
 
-/** Двойной SHA256 с XOR-подмешиванием nonce/ts — подпись x-api-sign */
+/** Double SHA256 with XOR-mixed nonce/ts — the x-api-sign signature */
 class DebankSigner {
   sign(
     req: { method: string; pathname: string; query: string },
@@ -124,9 +124,9 @@ class DebankClient {
   }
 
   async get<T>(pathname: string, params: Record<string, string | number>): Promise<T> {
-    // Каждая попытка — со свежими nonce/ts/подписью (они одноразовые).
-    // Ретраим только транзиентное (429/5xx/сеть); 4xx и error_code — сразу
-    // наружу, чтобы evm.ts откатился на Chrome без лишних кругов.
+    // Each attempt uses a fresh nonce/ts/signature (they're single-use).
+    // We retry only transient failures (429/5xx/network); 4xx and error_code go
+    // straight out so evm.ts falls back to Chrome without extra round-trips.
     const tries = 3;
     let lastError: unknown;
     for (let attempt = 0; attempt < tries; attempt++) {
@@ -135,9 +135,9 @@ class DebankClient {
         return await this.attempt<T>(pathname, params);
       } catch (error) {
         lastError = error;
-        // 429 НЕ ретраим: это «сбавь темп», повтор только продлевает бан.
-        // Отдаём наружу сразу — пусть сработает circuit breaker + Chrome.
-        // Ретраим лишь 5xx и сетевые сбои (реально транзиентное).
+        // We do NOT retry 429: it means "slow down", and retrying only extends the ban.
+        // Pass it straight out — let the circuit breaker + Chrome kick in.
+        // We retry only 5xx and network failures (genuinely transient).
         const retryable =
           error instanceof DebankError &&
           error.status !== 429 &&
@@ -149,8 +149,8 @@ class DebankClient {
   }
 
   private async attempt<T>(pathname: string, params: Record<string, string | number>): Promise<T> {
-    // Порядок параметров в query ДОЛЖЕН совпадать с тем, что ушло в подпись:
-    // DeBank ждёт их в обратном порядке добавления
+    // The parameter order in the query MUST match what went into the signature:
+    // DeBank expects them in reverse insertion order
     const search = new URLSearchParams(
       Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])),
     );
@@ -173,12 +173,12 @@ class DebankClient {
     try {
       body = (await res.json()) as DebankBody<T>;
     } catch {
-      // 200, но не JSON — это HTML-заглушка Cloudflare/nginx, не наш формат
+      // 200 but not JSON — an HTML stub from Cloudflare/nginx, not our format
       throw new DebankError(`non-JSON response on ${pathname}`, res.status);
     }
     if (body.error_code) {
       throw new DebankError(
-        `DeBank ${body.error_code}: ${body.error_msg || ''} на ${pathname}`,
+        `DeBank ${body.error_code}: ${body.error_msg || ''} on ${pathname}`,
         res.status,
         body.error_code,
       );
@@ -187,7 +187,7 @@ class DebankClient {
   }
 }
 
-// Один клиент на сервис: переиспользуем TLS-соединение и UID.
+// One client per service: we reuse the TLS connection and UID.
 let client: DebankClient | null = null;
 export function debank(): DebankClient {
   return (client ??= new DebankClient());

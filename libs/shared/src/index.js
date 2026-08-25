@@ -1,3 +1,3 @@
-// Пакет содержит только типы (index.d.ts). Импортировать из него можно
-// исключительно через `import type` — этот файл существует лишь для резолвера.
+// The package contains only types (index.d.ts). It can be imported
+// exclusively via `import type` — this file exists solely for the resolver.
 export {};

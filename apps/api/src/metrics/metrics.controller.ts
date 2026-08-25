@@ -2,8 +2,8 @@ import { Controller, Get, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { MetricsService } from './metrics.service';
 
-// Прометей скрейпит это по внутренней сети (api.railway.internal). Путь с
-// глобальным префиксом — /api/metrics.
+// Prometheus scrapes this over the internal network (api.railway.internal). With
+// the global prefix, the path is /api/metrics.
 @Controller('metrics')
 export class MetricsController {
   constructor(private readonly metrics: MetricsService) {}

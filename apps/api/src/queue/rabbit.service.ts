@@ -9,10 +9,10 @@ export interface ScanJob {
 }
 
 /**
- * Тонкая обёртка над RabbitMQ (amqplib): одна долговечная очередь сканов
- * кошельков. Продюсер льёт в неё адреса, консьюмер разбирает по одному.
- * Без RABBITMQ_URL сервис выключен — скан идёт in-process (см. ScanProducer).
- * Переподключается сам при обрыве.
+ * A thin wrapper over RabbitMQ (amqplib): a single durable queue of wallet
+ * scans. The producer pours addresses into it, the consumer works through them
+ * one by one. Without RABBITMQ_URL the service is disabled — scanning runs
+ * in-process (see ScanProducer). It reconnects on its own when the connection drops.
  */
 @Injectable()
 export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -30,7 +30,7 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
 
   async onApplicationBootstrap() {
     if (!this.enabled) {
-      this.logger.log('RABBITMQ_URL не задан — очередь выключена (скан in-process)');
+      this.logger.log('RABBITMQ_URL not set — queue disabled (scanning in-process)');
       return;
     }
     await this.connect();
@@ -46,7 +46,7 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
         this.channel = null;
         this.conn = null;
         this.consuming = false;
-        this.logger.warn('RabbitMQ соединение закрыто — переподключаюсь');
+        this.logger.warn('RabbitMQ connection closed — reconnecting');
         void this.reconnect();
       });
       this.channel = await this.conn.createChannel();
@@ -55,7 +55,7 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
       this.logger.log('RabbitMQ connected');
       if (this.handler) await this.startConsuming();
     } catch (e) {
-      this.logger.warn(`RabbitMQ connect не удался: ${e instanceof Error ? e.message : e}`);
+      this.logger.warn(`RabbitMQ connect failed: ${e instanceof Error ? e.message : e}`);
       await this.reconnect();
     }
   }
@@ -73,7 +73,7 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
     });
   }
 
-  /** Сколько сообщений ждёт в очереди (0 при обрыве соединения) */
+  /** How many messages are waiting in the queue (0 if the connection is down) */
   async messageCount(): Promise<number> {
     if (!this.channel) return 0;
     try {
@@ -104,17 +104,17 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
     try {
       job = JSON.parse(msg.content.toString()) as ScanJob;
     } catch {
-      this.channel?.ack(msg); // мусор — выкидываем
+      this.channel?.ack(msg); // garbage — drop it
       return;
     }
     try {
       await this.handler?.(job);
     } catch (e) {
       this.logger.warn(
-        `Job ${job.chain}:${job.address} упал: ${e instanceof Error ? e.message : e}`,
+        `Job ${job.chain}:${job.address} failed: ${e instanceof Error ? e.message : e}`,
       );
     } finally {
-      this.channel?.ack(msg); // ack всегда — следующая дозаливка пересканирует
+      this.channel?.ack(msg); // always ack — the next top-up will re-scan
     }
   }
 

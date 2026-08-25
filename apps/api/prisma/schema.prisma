@@ -1,7 +1,7 @@
 generator client {
   provider = "prisma-client-js"
-  // native — для локальной разработки (macOS); debian-openssl-3.0.x — рантайм
-  // Docker-образа на Railway (node:22-slim = Debian bookworm, OpenSSL 3.0)
+  // native — for local development (macOS); debian-openssl-3.0.x — the runtime
+  // of the Docker image on Railway (node:22-slim = Debian bookworm, OpenSSL 3.0)
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
@@ -13,7 +13,7 @@ datasource db {
 model User {
   id         String      @id @default(cuid())
   telegramId BigInt?     @unique
-  // Идентификатор для dev-логина (AUTH_DEV_MODE=true), в проде не используется
+  // Identifier for dev login (AUTH_DEV_MODE=true), not used in production
   devKey     String?     @unique
   firstName  String?
   lastName   String?
@@ -40,11 +40,11 @@ model Wallet {
   portfolio    Portfolio        @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
   address      String
   chain        String // BTC | EVM | SOL | TRON
-  // Пользовательское имя кошелька (владелец задаёт inline). null — показываем дефолт по сети
+  // User-defined wallet name (the owner sets it inline). null — show the default per network
   label        String?
   status       String           @default("pending") // pending | ok | failed
-  // Кэш последнего УСПЕШНОГО скана: при ошибке не затирается, чтобы
-  // отдавать устаревшее значение с явным признаком stale, а не терять его
+  // Cache of the last SUCCESSFUL scan: not overwritten on error, so we can
+  // serve the stale value with an explicit stale flag instead of losing it
   lastTotalUsd Float?
   lastSyncedAt DateTime?
   lastError    String?

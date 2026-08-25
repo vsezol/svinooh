@@ -3,7 +3,7 @@ interface Props {
   onClick?: () => void;
 }
 
-/** Логотип svin[oo]h — две «o» как обведённые кружки-глаза */
+/** svin[oo]h logo — the two "o"s as outlined circle eyes */
 export function Logo({ size = 21, onClick }: Props) {
   return (
     <div className="logo" style={{ fontSize: size }} onClick={onClick}>

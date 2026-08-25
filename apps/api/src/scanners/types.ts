@@ -15,8 +15,8 @@ export interface ScanResult {
   address: string;
   totalUsd: number;
   positions: ScanPosition[];
-  /** Например { defi, gmtrade } для SOL или разбивка по EVM-сетям */
+  /** For example { defi, gmtrade } for SOL, or a per-chain breakdown for EVM */
   breakdown?: Record<string, number>;
-  /** Активы без цены: логируем и показываем, а не молча съедаем */
+  /** Assets without a price: we log and surface them rather than silently swallowing them */
   unpriced?: string[];
 }

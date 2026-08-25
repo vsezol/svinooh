@@ -1,7 +1,7 @@
 import type { ApiErrorDto } from '@svinooh/shared';
 
-// Пусто — same-origin (dev-прокси Vite или общий домен);
-// в проде на Railway задаётся VITE_API_URL при сборке
+// Empty — same-origin (Vite dev proxy or shared domain);
+// in production on Railway, VITE_API_URL is set at build time
 const API_URL: string = import.meta.env.VITE_API_URL || '';
 const TOKEN_KEY = 'svinooh_token';
 
@@ -39,7 +39,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     try {
       body = await res.json();
     } catch {
-      // не JSON — оставим дефолтное сообщение
+      // not JSON — keep the default message
     }
     const message = Array.isArray(body.message) ? body.message.join(', ') : body.message;
     throw new ApiError(res.status, message || `Error ${res.status}`, body.code);

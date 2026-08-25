@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 const SLUG_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
-/** Короткий публичный идентификатор портфеля для ссылки /p/:slug */
+/** Short public portfolio identifier for the /p/:slug link */
 export function randomSlug(length = 10): string {
   const bytes = randomBytes(length);
   let slug = '';

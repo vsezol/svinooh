@@ -18,12 +18,12 @@ interface LoginToken {
 const TOKEN_TTL_MS = 5 * 60_000;
 
 /**
- * Вход через бота по deep-link: сайт создаёт токен и открывает
- * t.me/<bot>?start=<token> → у пользователя открывается приложение Telegram
- * на боте, он жмёт Start → Telegram присылает боту "/start <token>". Апдейты
- * читаем long-polling'ом getUpdates (один потребитель на бот; сервис в 1
- * реплике). Апдейт приходит от Telegram по нашему токену бота, поэтому
- * `from` уже аутентичен — HMAC, как в веб-виджете, тут не нужен.
+ * Bot sign-in via deep link: the site creates a token and opens
+ * t.me/<bot>?start=<token> → the Telegram app opens for the user on the
+ * bot, they tap Start → Telegram sends the bot "/start <token>". We read
+ * updates via getUpdates long-polling (one consumer per bot; the service runs
+ * as a single replica). The update comes from Telegram under our bot token, so
+ * `from` is already authentic — HMAC, as in the web widget, isn't needed here.
  */
 @Injectable()
 export class TelegramBotService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -46,13 +46,13 @@ export class TelegramBotService implements OnApplicationBootstrap, OnModuleDestr
     this.running = false;
   }
 
-  /** Создать pending-токен для нового логина */
+  /** Create a pending token for a new login */
   create(token: string): void {
     this.cleanup();
     this.tokens.set(token, { status: 'pending', createdAt: Date.now() });
   }
 
-  /** Текущее состояние токена (null — нет или протух) */
+  /** Current token state (null — missing or expired) */
   get(token: string): LoginToken | null {
     const entry = this.tokens.get(token);
     if (!entry) return null;
@@ -63,7 +63,7 @@ export class TelegramBotService implements OnApplicationBootstrap, OnModuleDestr
     return entry;
   }
 
-  /** Забрать аутентифицированный токен (одноразово) */
+  /** Take the authenticated token (one-time use) */
   consume(token: string): LoginToken | null {
     const entry = this.get(token);
     if (entry) this.tokens.delete(token);
@@ -92,7 +92,7 @@ export class TelegramBotService implements OnApplicationBootstrap, OnModuleDestr
           this.handleUpdate(update);
         }
       } catch {
-        // таймаут long-poll или сетевой сбой — просто продолжаем
+        // long-poll timeout or network failure — just keep going
         await sleep(1000);
       }
     }
@@ -116,8 +116,8 @@ export class TelegramBotService implements OnApplicationBootstrap, OnModuleDestr
       username: msg.from.username,
     };
     this.logger.log(`Login confirmed by bot: @${msg.from.username ?? msg.from.id}`);
-    // Кнопка возврата несёт тот же токен: сайт при открытии по ?tg_login=<token>
-    // сам добьёт логин — даже если это новая вкладка или страница перезагрузилась.
+    // The return button carries the same token: when opened via ?tg_login=<token> the site
+    // completes the login itself — even in a new tab or after the page reloaded.
     void this.reply(msg.chat.id, "✅ You're signed in! Tap below to return to svinooh.", {
       inline_keyboard: [[{ text: 'Return to svinooh →', url: `${config.webUrl}/?tg_login=${payload}` }]],
     });
@@ -136,7 +136,7 @@ export class TelegramBotService implements OnApplicationBootstrap, OnModuleDestr
         signal: AbortSignal.timeout(10_000),
       });
     } catch {
-      // не критично
+      // not critical
     }
   }
 }

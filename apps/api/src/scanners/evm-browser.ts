@@ -5,27 +5,27 @@ import { Semaphore } from './semaphore';
 import type { ScanPosition, ScanResult } from './types';
 
 /**
- * EVM-ФОЛЛБЭК: headless Chrome читает отрисованную страницу debank.com —
- * ровно ту же, что видит любой анонимный посетитель. Первичный путь —
- * evm-http.ts (те же данные, но напрямую по API); сюда откатываемся, если
- * HTTP осёкся (подпись протухла, Cloudflare/IP-бан, недобор суммы).
+ * EVM FALLBACK: headless Chrome reads the rendered debank.com page — exactly
+ * the one any anonymous visitor sees. The primary path is evm-http.ts (same
+ * data, but straight over the API); we fall back here when the HTTP path fails
+ * (stale signature, Cloudflare/IP ban, undercounted total).
  *
- * Читать отрисованную страницу — это ровно то, что делает человек в
- * браузере; здесь не подделывается никакая подпись, весь код исполняется на
- * стороне debank.com. Медленно (20–40с), но переживает смену их API.
+ * Reading the rendered page is exactly what a person does in a browser; no
+ * signature is forged here, and all the code runs on debank.com's side. Slow
+ * (20–40s), but it survives changes to their API.
  *
- * НИКОГДА не запускать два headless Chrome разом: параллельные инстансы
- * душат друг друга и МОЛЧА возвращают $0 вместо реального баланса. Ниже —
- * browserLock (Semaphore 1), поэтому сколько бы EVM-сканов ни откатилось на
- * Chrome одновременно, в браузере всегда ровно один.
+ * NEVER launch two headless Chrome instances at once: parallel instances choke
+ * each other and SILENTLY return $0 instead of the real balance. Below is
+ * browserLock (Semaphore 1), so no matter how many EVM scans fall back to
+ * Chrome at the same time, there is always exactly one in the browser.
  *
- * Код для странички передаётся СТРОКАМИ, а не функциями: esbuild/tsx с
- * keepNames вставляет в сериализованные функции хелпер __name, которого нет
- * в контексте страницы — evaluate тогда молча падает. Строки от
- * транспилятора не зависят.
+ * The page code is passed as STRINGS, not functions: esbuild/tsx with keepNames
+ * injects a __name helper into serialized functions that isn't present in the
+ * page context — evaluate then fails silently. Strings don't depend on the
+ * transpiler.
  */
 
-// Единственный на весь сервис лок браузера — гарантия «не два Chrome разом»
+// The one service-wide browser lock — guarantees "never two Chrome at once"
 const browserLock = new Semaphore(1);
 
 const READ_TOTAL_SCRIPT = String.raw`(() => {
@@ -34,7 +34,7 @@ const READ_TOTAL_SCRIPT = String.raw`(() => {
   return match ? parseFloat(match[1].replace(/,/g, '')) : 0;
 })()`;
 
-// Раскрыть свёрнутые сети ("Unfold N chains"), чтобы разбивка была полной
+// Expand collapsed chains ("Unfold N chains") so the breakdown is complete
 const UNFOLD_CHAINS_SCRIPT = String.raw`(() => {
   for (const el of document.querySelectorAll('[class*="AssetsOnChain"]')) {
     if (/^Unfold/i.test((el.textContent || '').trim())) {
@@ -97,16 +97,16 @@ interface ExtractedData {
 }
 
 export function scanEvmBrowser(address: string): Promise<ScanResult> {
-  // Лок — снаружи собственно работы: пока один скан держит браузер, остальные
-  // ждут здесь, а не запускают второй Chrome
+  // The lock wraps the actual work: while one scan holds the browser, the rest
+  // wait here instead of launching a second Chrome
   return browserLock.run(() => scanEvmBrowserLocked(address));
 }
 
 async function scanEvmBrowserLocked(address: string): Promise<ScanResult> {
   const browser = await getBrowser();
   const page = await browser.newPage();
-  // Страховка от зависшей страницы: по таймауту закрываем её, и все висящие
-  // операции отклоняются
+  // Safeguard against a hung page: on timeout we close it, and all pending
+  // operations are rejected
   const watchdog = setTimeout(() => void page.close().catch(() => {}), config.evmTimeoutMs);
 
   try {
@@ -120,9 +120,9 @@ async function scanEvmBrowserLocked(address: string): Promise<ScanResult> {
     });
     await page.waitForSelector('[class*="HeaderInfo_totalAssetInner"]', { timeout: 25_000 });
 
-    // DeBank догружает сети по очереди, и тотал растёт по мере резолва каждой.
-    // Читать сразу после waitForSelector — получить заниженное число:
-    // ждём 5 одинаковых ненулевых замеров подряд с шагом 500мс.
+    // DeBank loads chains one at a time, and the total grows as each resolves.
+    // Reading right after waitForSelector yields an understated number:
+    // we wait for 5 identical non-zero readings in a row, 500ms apart.
     let totalUsd = 0;
     let last = -1;
     let stable = 0;
@@ -137,8 +137,8 @@ async function scanEvmBrowserLocked(address: string): Promise<ScanResult> {
       last = totalUsd;
     }
 
-    // Позиции и разбивка по сетям — best-effort: если DeBank поменяет вёрстку,
-    // тотал всё равно останется корректным, просто позиций не будет
+    // Positions and the per-chain breakdown are best-effort: if DeBank changes
+    // its markup, the total stays correct, there just won't be any positions
     let positions: ScanPosition[] = [];
     let breakdown: Record<string, number> | undefined;
     try {
@@ -167,7 +167,7 @@ async function scanEvmBrowserLocked(address: string): Promise<ScanResult> {
         for (const chain of data.chains) breakdown[chain.name] = chain.usd;
       }
     } catch {
-      // вёрстка уехала — работаем с одним тоталом
+      // markup drifted — work with the total alone
     }
 
     return { chain: 'EVM', address, totalUsd, positions, breakdown };

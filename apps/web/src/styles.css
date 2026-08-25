@@ -1,5 +1,5 @@
-/* Дизайн-система Svinooh — перенос 1-в-1 из Claude Design (Svinooh Portfolio.dc.html).
-   Токены, тёмная/светлая темы, шрифты Manrope + IBM Plex Mono. */
+/* Svinooh design system — a pixel-for-pixel port from Claude Design (Svinooh Portfolio.dc.html).
+   Tokens, dark/light themes, Manrope + IBM Plex Mono fonts. */
 
 :root,
 body {
@@ -110,7 +110,7 @@ button {
   background: transparent;
 }
 
-/* ───────── переиспользуемые примитивы ───────── */
+/* ───────── reusable primitives ───────── */
 
 .mono {
   font-family: var(--mono);
@@ -123,7 +123,7 @@ button {
   padding: 0 clamp(14px, 3.5vw, 28px);
 }
 
-/* лого svin[oo]h */
+/* svin[oo]h logo */
 .logo {
   display: inline-flex;
   align-items: baseline;
@@ -154,7 +154,7 @@ button {
   margin-left: 0.05em;
 }
 
-/* pill-кнопки в хедере */
+/* pill buttons in the header */
 .pill {
   font-family: var(--mono);
   font-size: 10.5px;
@@ -215,7 +215,7 @@ button {
   color: var(--mut);
 }
 
-/* auth-модалка */
+/* auth modal */
 .auth-btn:not([disabled]):hover {
   border-color: var(--acc);
   background: var(--acc-soft);
@@ -226,7 +226,7 @@ button {
   background: var(--surf2);
 }
 
-/* строки/карточки с hover-подсветкой из дизайна */
+/* rows/cards with a hover highlight from the design */
 .row-hover:hover {
   background: var(--surf2);
 }
@@ -344,7 +344,7 @@ button {
   background: color-mix(in srgb, var(--down) 10%, transparent);
 }
 
-/* таблица позиций внутри кошелька */
+/* positions table inside a wallet */
 .pos-head,
 .pos-grid {
   display: grid;
@@ -393,7 +393,7 @@ button {
   }
 }
 
-/* инфо-иконка с тултипом (объяснение расчёта прибыли) */
+/* info icon with a tooltip (explains the profit calculation) */
 .infotip {
   position: relative;
   display: inline-flex;
@@ -451,7 +451,7 @@ button {
   transform: translateX(-50%) translateY(0);
 }
 @media (max-width: 719px) {
-  /* у левого края экрана — прижимаем поповер влево, чтобы не обрезался */
+  /* near the left edge of the screen — pin the popover left so it doesn't get clipped */
   .infotip .infotip-pop {
     left: 0;
     transform: translateX(-30%) translateY(-4px);
@@ -462,7 +462,7 @@ button {
   }
 }
 
-/* скрыть на мобиле */
+/* hide on mobile */
 @media (max-width: 719px) {
   .hide-mobile {
     display: none !important;

@@ -16,8 +16,8 @@ import { normalizeRange, PortfolioService } from './portfolio.service';
 export class PortfolioController {
   constructor(private readonly portfolios: PortfolioService) {}
 
-  // ВАЖНО: литеральный маршрут объявлен до ':slug', иначе Nest сматчит
-  // "public" как slug
+  // IMPORTANT: the literal route is declared before ':slug', otherwise Nest
+  // would match "public" as a slug
   @Get('public')
   listPublic(@Query('limit') limit?: string, @Query('q') q?: string) {
     return this.portfolios.listPublic(Number(limit) || 20, q ?? '');

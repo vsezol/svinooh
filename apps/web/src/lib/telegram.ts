@@ -1,9 +1,9 @@
 import type { AuthResponseDto, TelegramPollDto } from '@svinooh/shared';
 import { api, ApiError } from './api';
 
-// Токен входа через бота, переживающий уход в приложение Telegram и возврат:
-// на телефоне вкладка уходит в фон (таймеры засыпают), пользователь может
-// вернуться на ту же вкладку или по кнопке из бота (новая вкладка с ?tg_login).
+// Bot sign-in token that survives leaving for the Telegram app and coming back:
+// on mobile the tab goes to the background (timers sleep), and the user may
+// return to the same tab or via the bot's button (a new tab with ?tg_login).
 const KEY = 'svinooh_tg_pending';
 
 export const pendingTgToken = {
@@ -18,7 +18,7 @@ export const pendingTgToken = {
     try {
       sessionStorage.setItem(KEY, token);
     } catch {
-      /* приватный режим — просто без персиста */
+      /* private mode — just skip persistence */
     }
   },
   clear(): void {
@@ -37,9 +37,9 @@ interface PollOpts {
 }
 
 /**
- * Опрашивает /auth/telegram/poll до готового логина. Устойчив к засыпанию
- * фоновой вкладки: при возврате фокуса тикает немедленно, не дожидаясь таймера.
- * Возвращает функцию отмены.
+ * Polls /auth/telegram/poll until the login is ready. Resilient to a
+ * backgrounded tab going to sleep: on regaining focus it ticks immediately,
+ * without waiting for the timer. Returns a cancel function.
  */
 export function pollTelegramLogin(token: string, opts: PollOpts): () => void {
   const timeoutMs = opts.timeoutMs ?? 180_000;

@@ -2,12 +2,12 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { TelegramAuthPayload } from '@svinooh/shared';
 
 /**
- * Проверка подписи Telegram Login Widget:
- * data_check_string — все поля кроме hash, отсортированные по ключу,
- * склеенные через \n; ключ HMAC — SHA256(bot_token).
+ * Verifies the Telegram Login Widget signature:
+ * data_check_string — all fields except hash, sorted by key,
+ * joined with \n; the HMAC key is SHA256(bot_token).
  * https://core.telegram.org/widgets/login#checking-authorization
  *
- * Возвращает null, если всё хорошо, иначе — причину отказа.
+ * Returns null if everything checks out, otherwise the reason for rejection.
  */
 export function verifyTelegramLogin(payload: TelegramAuthPayload, botToken: string): string | null {
   const { hash, ...rest } = payload as unknown as Record<string, unknown> & { hash?: unknown };

@@ -2,23 +2,23 @@ import { fetchJson } from './http';
 import type { ScanPosition, ScanResult } from './types';
 
 /**
- * SOL: Jupiter portfolio API — полноценный DeFi-агрегатор (231 фетчер по
- * ~118 платформам: Kamino, Meteora, MarginFi, Drift, Orca…), плюс GM-пулы
- * GMTrade, которые Jupiter видит, но не оценивает.
+ * SOL: Jupiter portfolio API — a full DeFi aggregator (231 fetchers across
+ * ~118 platforms: Kamino, Meteora, MarginFi, Drift, Orca…), plus GMTrade GM
+ * pools, which Jupiter sees but doesn't price.
  *
- * Solana RPC не используется намеренно: Jupiter отдаёт всё нужное одним
- * запросом без ключа, RPC добавил бы только зависимость и rate-limit.
+ * Solana RPC is deliberately not used: Jupiter returns everything needed in a
+ * single keyless request; RPC would only add a dependency and a rate limit.
  *
- * Цена GM-токена — это NAV пула (депозиты за вычетом открытого PnL
- * трейдеров), а НЕ pool TVL / supply: вариант с TVL стабильно завышал на
- * 8–12%. Правильный источник — gmPriceNow из индексатора GMX-Solana,
- * делить на 1e11. Сверено с подключённым кошельком, расхождение 0.4%.
- * Не «упрощать» обратно на TVL/supply.
+ * A GM token's price is the pool's NAV (deposits net of traders' open PnL),
+ * NOT pool TVL / supply: the TVL variant consistently overstated by 8–12%.
+ * The correct source is gmPriceNow from the GMX-Solana indexer, divided by
+ * 1e11. Verified against the connected wallet, 0.4% deviation. Don't "simplify"
+ * it back to TVL/supply.
  */
 
 const JUP_PORTFOLIO_API = 'https://api.jup.ag/portfolio/v2/positions';
-// Публичный ключ из JS-бандла портфельной страницы самого Jupiter —
-// не секрет и не обход платного доступа.
+// Public key from the JS bundle of Jupiter's own portfolio page —
+// not a secret and not a bypass of paid access.
 const JUP_API_KEY =
   process.env.JUP_API_KEY || 'jup_103f2da0530554e4eb01d8f4af2fcda75b309d2b71aa1bcdfd17e411c59056d8';
 const JUP_BALANCES_API = 'https://lite-api.jup.ag/ultra/v1/balances';
@@ -59,7 +59,7 @@ async function fetchGmPrices(mints: string[]): Promise<Record<string, number>> {
 }
 
 export async function scanSol(address: string): Promise<ScanResult> {
-  // 1) DeFi-портфель Jupiter: сумма value всех элементов всех фетчеров
+  // 1) Jupiter DeFi portfolio: the sum of value across all elements of all fetchers
   const portfolio = await fetchJson<{ fetcherResults?: Array<{ elements?: JupElement[] }> }>(
     `${JUP_PORTFOLIO_API}/${address}?unpriced=false`,
     { headers: { accept: 'application/json', 'x-api-key': JUP_API_KEY } },
@@ -75,7 +75,7 @@ export async function scanSol(address: string): Promise<ScanResult> {
     }
   }
 
-  // 2) Балансы токенов + метаданные: нужны для GM-пулов и для тикеров позиций
+  // 2) Token balances + metadata: needed for GM pools and for position tickers
   const balancesRaw = await fetchJson<Record<string, { uiAmount?: number }>>(
     `${JUP_BALANCES_API}/${address}`,
   );
@@ -92,9 +92,9 @@ export async function scanSol(address: string): Promise<ScanResult> {
     for (const asset of Array.isArray(assets) ? assets : []) assetInfo.set(asset.id, asset);
   }
 
-  // 3) GM-пулы: в списке платформ Jupiter gmtrade есть, но его фетчер
-  //    возвращает 0 элементов — поэтому GM считается отдельно поверх,
-  //    это не дубль, суммировать можно смело.
+  // 3) GM pools: gmtrade is in Jupiter's platform list, but its fetcher
+  //    returns 0 elements — so GM is counted separately on top;
+  //    it's not a duplicate and can safely be summed.
   const gmHoldings = mints
     .filter((mint) => {
       const asset = assetInfo.get(mint);
@@ -110,21 +110,21 @@ export async function scanSol(address: string): Promise<ScanResult> {
   }));
   const gmtrade = pools.reduce((sum, p) => sum + p.usd, 0);
 
-  // Позиции для отображения (тотал считается выше — ровно как в референсе)
+  // Positions for display (the total is computed above — exactly as in the reference)
   const positions: ScanPosition[] = [];
   const unpriced: string[] = [];
 
   for (const element of elements) {
     const assets = element.data?.assets;
     if ((element.serviceId || '').startsWith('wallet-tokens') && Array.isArray(assets)) {
-      // Токены на балансе разворачиваем поштучно
+      // Expand held tokens one by one
       for (const asset of assets) {
         const d = asset?.data;
         if (!d?.amount?.raw || !d.address) continue;
         const amount = Number(d.amount.raw) / 10 ** (d.amount.decimals ?? 0);
         const price = typeof d.price === 'number' ? d.price : 0;
         const valueUsd = amount * price;
-        if (valueUsd < 0.01) continue; // пыль
+        if (valueUsd < 0.01) continue; // dust
         const info = assetInfo.get(d.address);
         const symbol =
           d.address === SOL_NATIVE_MINT
@@ -136,7 +136,7 @@ export async function scanSol(address: string): Promise<ScanResult> {
       const value = typeof element.value === 'number' && isFinite(element.value) ? element.value : 0;
       if (value < 0.01) continue;
       positions.push({
-        symbol: element.name || element.label || element.serviceId || 'Позиция',
+        symbol: element.name || element.label || element.serviceId || 'Position',
         name: element.name && element.label && element.name !== element.label ? element.label : null,
         valueUsd: value,
         platform: element.platformId || null,
@@ -156,7 +156,7 @@ export async function scanSol(address: string): Promise<ScanResult> {
         category: 'defi',
       });
     } else {
-      unpriced.push(`GM-пул ${pool.name}`);
+      unpriced.push(`GM pool ${pool.name}`);
     }
   }
 

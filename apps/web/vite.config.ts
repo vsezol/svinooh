@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    // Локально ходим на API без CORS; в проде адрес задаётся VITE_API_URL
+    // Locally we hit the API without CORS; in production the address is set via VITE_API_URL
     proxy: {
       '/api': { target: 'http://localhost:3000', changeOrigin: true },
     },

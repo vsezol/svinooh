@@ -4,9 +4,10 @@ import { config } from '../config';
 import { MetricsService } from '../metrics/metrics.service';
 
 /**
- * Кэш собранных данных портфеля. С Redis — общий и переживает рестарты; без
- * REDIS_URL (локально) — in-memory Map с TTL, чтобы дев не тянул Redis.
- * Любая ошибка кэша не роняет запрос — это ускоритель, а не источник правды.
+ * Cache of collected portfolio data. With Redis it's shared and survives restarts;
+ * without REDIS_URL (locally) it's an in-memory Map with TTL so dev doesn't need
+ * Redis. A cache error never breaks the request — it's an accelerator, not a
+ * source of truth.
  */
 @Injectable()
 export class CacheService implements OnModuleDestroy {
@@ -17,14 +18,14 @@ export class CacheService implements OnModuleDestroy {
   constructor(private readonly metrics: MetricsService) {
     if (config.redisUrl) {
       this.redis = new Redis(config.redisUrl, {
-        family: 0, // приватная сеть Railway — IPv6
+        family: 0, // Railway private network — IPv6
         maxRetriesPerRequest: 3,
         enableOfflineQueue: true,
       });
       this.redis.on('error', (e) => this.logger.warn(`Redis: ${e.message}`));
       this.redis.on('connect', () => this.logger.log('Redis connected'));
     } else {
-      this.logger.log('REDIS_URL не задан — кэш in-memory');
+      this.logger.log('REDIS_URL not set — cache is in-memory');
     }
   }
 
@@ -58,7 +59,7 @@ export class CacheService implements OnModuleDestroy {
       if (this.redis) await this.redis.set(key, raw, 'EX', ttlSec);
       else this.mem.set(key, { v: raw, exp: Date.now() + ttlSec * 1000 });
     } catch {
-      // не критично
+      // non-critical
     }
   }
 
@@ -67,7 +68,7 @@ export class CacheService implements OnModuleDestroy {
       if (this.redis) await this.redis.del(key);
       else this.mem.delete(key);
     } catch {
-      // не критично
+      // non-critical
     }
   }
 
