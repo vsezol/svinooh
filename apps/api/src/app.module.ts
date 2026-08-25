@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
-import { AuthModule } from './auth/auth.module';
+import { AuthProxyModule } from './auth-proxy/auth-proxy.module';
 import { CacheModule } from './cache/cache.module';
 import { config } from './config';
 import { HealthController } from './health.controller';
@@ -19,7 +19,7 @@ import { SyncModule } from './sync/sync.module';
       secret: config.jwtSecret,
       signOptions: { expiresIn: '30d' },
     }),
-    AuthModule,
+    AuthProxyModule,
     PortfolioModule,
     SyncModule,
   ],
