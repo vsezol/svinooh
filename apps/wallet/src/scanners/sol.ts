@@ -39,9 +39,17 @@ interface JupAsset {
   usdPrice?: number;
 }
 
+interface JupAmount {
+  /** true — `raw` holds an integer in the token's smallest unit; false — `value` is already scaled */
+  fixed?: boolean;
+  raw?: string;
+  value?: number;
+  decimals?: number;
+}
+
 interface JupPositionAsset {
   value?: number;
-  data?: { address?: string; price?: number; amount?: { raw?: string; decimals?: number } };
+  data?: { address?: string; price?: number; amount?: JupAmount };
 }
 
 interface JupElement {
@@ -98,6 +106,19 @@ function toHealthFactor(headroom: number | undefined): number | null {
 }
 
 const shortMint = (mint: string): string => `${mint.slice(0, 4)}…${mint.slice(-4)}`;
+
+/**
+ * Jupiter reports an amount in one of two shapes, and which one it uses varies
+ * by fetcher: `{fixed: true, raw}` needs scaling by decimals, `{fixed: false,
+ * value}` is already scaled. Reading only `raw` loses the amount on every
+ * position that uses the other shape — and drops wallet tokens entirely.
+ */
+function uiAmount(amount: JupAmount | undefined): number | null {
+  if (!amount) return null;
+  if (amount.raw !== undefined) return Number(amount.raw) / 10 ** (amount.decimals ?? 0);
+  if (typeof amount.value === 'number') return amount.value;
+  return null;
+}
 
 async function fetchGmPrices(mints: string[]): Promise<Record<string, number>> {
   if (!mints.length) return {};
@@ -193,10 +214,9 @@ export async function scanSol(address: string): Promise<ScanResult> {
         if (!d?.address) continue;
         const usd = typeof asset.value === 'number' ? asset.value : 0;
         if (Math.abs(usd) < 0.01) continue; // dust leg — noise, not detail
-        const amount = d.amount?.raw ? Number(d.amount.raw) / 10 ** (d.amount.decimals ?? 0) : null;
         legs.push({
           symbol: symbolOf(d.address),
-          amount,
+          amount: uiAmount(d.amount),
           priceUsd: typeof d.price === 'number' ? d.price : null,
           valueUsd: role === 'borrow' ? -usd : usd,
           role,
@@ -216,8 +236,8 @@ export async function scanSol(address: string): Promise<ScanResult> {
       // Expand held tokens one by one
       for (const asset of assets) {
         const d = asset?.data;
-        if (!d?.amount?.raw || !d.address) continue;
-        const amount = Number(d.amount.raw) / 10 ** (d.amount.decimals ?? 0);
+        const amount = uiAmount(d?.amount);
+        if (amount === null || !d?.address) continue;
         const price = typeof d.price === 'number' ? d.price : 0;
         const valueUsd = amount * price;
         if (valueUsd < 0.01) continue; // dust
