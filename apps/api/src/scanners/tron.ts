@@ -54,7 +54,7 @@ export async function scanTron(address: string): Promise<ScanResult> {
   if (staked > 0) {
     positions.push({
       symbol: 'TRX',
-      name: 'В стейке (Stake 2.0)',
+      name: 'Staked (Stake 2.0)',
       amount: staked,
       priceUsd: trxPrice,
       valueUsd: staked * trxPrice,

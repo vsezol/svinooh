@@ -43,12 +43,10 @@ export class AuthService {
 
   async telegramLogin(payload: TelegramAuthPayload): Promise<AuthResponseDto> {
     if (!config.botToken) {
-      throw new ServiceUnavailableException(
-        'Вход через Telegram не настроен: нет TELEGRAM_BOT_TOKEN',
-      );
+      throw new ServiceUnavailableException('Telegram sign-in is not configured');
     }
     const problem = verifyTelegramLogin(payload, config.botToken);
-    if (problem) throw new UnauthorizedException(`Данные Telegram не прошли проверку: ${problem}`);
+    if (problem) throw new UnauthorizedException(`Telegram data check failed: ${problem}`);
 
     return this.finishLogin(
       await this.upsertTelegram({
@@ -64,7 +62,7 @@ export class AuthService {
   /** Старт входа через бота — ссылка, открывающая приложение Telegram */
   telegramStart(): TelegramStartDto {
     if (!config.botToken || !config.botUsername) {
-      throw new ServiceUnavailableException('Вход через Telegram не настроен');
+      throw new ServiceUnavailableException('Telegram sign-in is not configured');
     }
     const token = randomBytes(24).toString('base64url');
     this.bot.create(token);
@@ -78,7 +76,7 @@ export class AuthService {
   /** Опрос статуса входа через бота */
   async telegramPoll(token: string): Promise<TelegramPollDto> {
     const entry = this.bot.get(token);
-    if (!entry) throw new UnauthorizedException('Сессия входа истекла, начни заново');
+    if (!entry) throw new UnauthorizedException('Sign-in session expired, start again');
     if (entry.status !== 'authenticated' || !entry.user) return { pending: true };
     this.bot.consume(token); // одноразово
     return this.finishLogin(
@@ -115,14 +113,14 @@ export class AuthService {
 
   /** Локальная разработка без бота: включается AUTH_DEV_MODE=true */
   async devLogin(nameRaw: string): Promise<AuthResponseDto> {
-    if (!config.devMode) throw new ForbiddenException('Dev-вход выключен');
+    if (!config.devMode) throw new ForbiddenException('Dev sign-in is disabled');
     const name = String(nameRaw || '')
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9_-]/g, '')
       .slice(0, 32);
     if (name.length < 2) {
-      throw new BadRequestException('Имя: латиница/цифры/дефис, минимум 2 символа');
+      throw new BadRequestException('Name: latin letters/digits/dash, at least 2 chars');
     }
     const user = await this.prisma.user.upsert({
       where: { devKey: name },
@@ -152,9 +150,9 @@ export class AuthService {
       orderBy: { createdAt: 'asc' },
     });
     if (existing) return existing;
-    const display = user.username ? `@${user.username}` : user.firstName || 'без имени';
+    const display = user.username ? `@${user.username}` : user.firstName || 'no name';
     return this.prisma.portfolio.create({
-      data: { userId: user.id, slug: randomSlug(), name: `Портфель ${display}` },
+      data: { userId: user.id, slug: randomSlug(), name: `${display}'s portfolio` },
     });
   }
 
@@ -162,7 +160,7 @@ export class AuthService {
     return {
       id: user.id,
       name:
-        [user.firstName, user.lastName].filter(Boolean).join(' ') || user.username || 'Аноним',
+        [user.firstName, user.lastName].filter(Boolean).join(' ') || user.username || 'Anonymous',
       username: user.username,
       photoUrl: user.photoUrl,
       portfolioSlug,

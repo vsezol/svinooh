@@ -164,17 +164,17 @@ class DebankClient {
         headers: { source: 'web', account: JSON.stringify(this.account), ...headers },
       });
     } catch (error) {
-      throw new DebankError(`сеть недоступна: ${error instanceof Error ? error.message : error}`);
+      throw new DebankError(`network unavailable: ${error instanceof Error ? error.message : error}`);
     }
 
-    if (!res.ok) throw new DebankError(`HTTP ${res.status} на ${pathname}`, res.status);
+    if (!res.ok) throw new DebankError(`HTTP ${res.status} on ${pathname}`, res.status);
 
     let body: DebankBody<T>;
     try {
       body = (await res.json()) as DebankBody<T>;
     } catch {
       // 200, но не JSON — это HTML-заглушка Cloudflare/nginx, не наш формат
-      throw new DebankError(`не-JSON ответ на ${pathname}`, res.status);
+      throw new DebankError(`non-JSON response on ${pathname}`, res.status);
     }
     if (body.error_code) {
       throw new DebankError(

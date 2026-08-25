@@ -31,7 +31,7 @@ export class RequiredAuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<AuthedRequest>();
     const userId = await extractUserId(req, this.jwt);
-    if (!userId) throw new UnauthorizedException('Нужен вход');
+    if (!userId) throw new UnauthorizedException('Sign in required');
     req.userId = userId;
     return true;
   }

@@ -34,12 +34,12 @@ export class TelegramBotService implements OnApplicationBootstrap, OnModuleDestr
 
   onApplicationBootstrap() {
     if (!config.botToken) {
-      this.logger.log('TELEGRAM_BOT_TOKEN не задан — вход через бота выключен');
+      this.logger.log('TELEGRAM_BOT_TOKEN not set — bot sign-in disabled');
       return;
     }
     this.running = true;
     void this.pollLoop();
-    this.logger.log('Long-polling бота запущен');
+    this.logger.log('Bot long-polling started');
   }
 
   onModuleDestroy() {
@@ -115,8 +115,8 @@ export class TelegramBotService implements OnApplicationBootstrap, OnModuleDestr
       last_name: msg.from.last_name,
       username: msg.from.username,
     };
-    this.logger.log(`Логин подтверждён ботом: @${msg.from.username ?? msg.from.id}`);
-    void this.reply(msg.chat.id, '✅ Готово! Возвращайся на сайт — ты вошёл в svinooh.');
+    this.logger.log(`Login confirmed by bot: @${msg.from.username ?? msg.from.id}`);
+    void this.reply(msg.chat.id, "✅ Done! Head back to the site — you're signed in to svinooh.");
   }
 
   private async reply(chatId: number, text: string): Promise<void> {

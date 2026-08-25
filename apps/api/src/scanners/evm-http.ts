@@ -72,7 +72,7 @@ export async function scanEvmHttp(rawAddress: string): Promise<ScanResult> {
 
   // DeBank не смог догрузить часть приложений → наша сумма неполна → откат
   if (appList?.error_apps?.length) {
-    throw new DebankError(`app_list вернул ${appList.error_apps.length} error_apps — сумма неполна`);
+    throw new DebankError(`app_list returned ${appList.error_apps.length} error_apps — total is incomplete`);
   }
 
   const positions: ScanPosition[] = [];

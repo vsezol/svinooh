@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { AuthResponseDto, TelegramPollDto, TelegramStartDto } from '@svinooh/shared';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -31,6 +32,7 @@ const TG_ICON = (
 
 export function AuthModal({ onClose }: { onClose: () => void }) {
   const { config, loginDev, applyAuth } = useAuth();
+  const navigate = useNavigate();
   const [devName, setDevName] = useState('');
   const [busy, setBusy] = useState(false);
   const [waiting, setWaiting] = useState(false);
@@ -52,20 +54,21 @@ export function AuthModal({ onClose }: { onClose: () => void }) {
         const res = await api<TelegramPollDto>(`/auth/telegram/poll?token=${encodeURIComponent(token)}`);
         if (cancelled.current) return;
         if ('token' in res) {
-          applyAuth(res as AuthResponseDto);
+          const authed = applyAuth(res as AuthResponseDto);
           onClose();
+          navigate(`/p/${authed.portfolioSlug}`);
           return;
         }
         if (Date.now() - startedAt > 180_000) {
           setWaiting(false);
-          setError('Время ожидания истекло — попробуй ещё раз');
+          setError('Timed out — please try again');
           return;
         }
         setTimeout(() => void tick(), 2000);
       } catch (err) {
         if (cancelled.current) return;
         setWaiting(false);
-        setError(err instanceof ApiError ? err.message : 'Сессия истекла — попробуй ещё раз');
+        setError(err instanceof ApiError ? err.message : 'Session expired — please try again');
       }
     };
     setTimeout(() => void tick(), 1500);
@@ -82,7 +85,7 @@ export function AuthModal({ onClose }: { onClose: () => void }) {
       setWaiting(true);
       poll(s.token);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Не удалось начать вход');
+      setError(err instanceof ApiError ? err.message : "Couldn't start sign-in");
     } finally {
       setBusy(false);
     }
@@ -94,10 +97,11 @@ export function AuthModal({ onClose }: { onClose: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      await loginDev(devName.trim());
+      const authed = await loginDev(devName.trim());
       onClose();
+      navigate(`/p/${authed.portfolioSlug}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось войти');
+      setError(err instanceof Error ? err.message : 'Sign-in failed');
       setBusy(false);
     }
   };
@@ -137,12 +141,12 @@ export function AuthModal({ onClose }: { onClose: () => void }) {
         {waiting ? (
           <div style={{ marginTop: 22, textAlign: 'center' }}>
             <span className="spin" style={{ width: 22, height: 22 }} />
-            <div style={{ marginTop: 14, fontSize: 13.5, fontWeight: 700 }}>Открыли Telegram…</div>
+            <div style={{ marginTop: 14, fontSize: 13.5, fontWeight: 700 }}>Opening Telegram…</div>
             <div style={{ marginTop: 6, fontSize: 12.5, color: 'var(--mut)', lineHeight: 1.55 }}>
-              Нажми <b>Start</b> у бота и вернись сюда — вход подтвердится сам.
+              Tap <b>Start</b> in the bot and come back — you'll be signed in automatically.
             </div>
             <a href={deepLink} target="_blank" rel="noopener noreferrer" className="mono" style={{ display: 'inline-block', marginTop: 14, fontSize: 11.5, color: 'var(--acc-text)' }}>
-              Не открылся Telegram? Открыть снова →
+              Telegram didn't open? Open again →
             </a>
           </div>
         ) : (
