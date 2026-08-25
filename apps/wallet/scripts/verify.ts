@@ -61,8 +61,9 @@ async function main() {
           `       ${p.symbol.slice(0, 26).padEnd(26)} $${p.valueUsd.toFixed(2).padStart(11)}  ${kind}${extra ? '  ' + extra : ''}`,
         );
         for (const leg of p.tokens || []) {
+          const qty = leg.amount != null ? `${leg.amount.toPrecision(6)} × $${(leg.priceUsd ?? 0).toPrecision(6)}` : '—';
           console.log(
-            `         └ ${leg.role.padEnd(6)} ${leg.symbol.slice(0, 24).padEnd(24)} $${leg.valueUsd.toFixed(2)}`,
+            `         └ ${leg.role.padEnd(6)} ${leg.symbol.slice(0, 20).padEnd(20)} $${leg.valueUsd.toFixed(2).padStart(11)}  ${qty}`,
           );
         }
       }
