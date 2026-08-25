@@ -22,6 +22,7 @@ import { round2 } from '../common/util';
 import { config } from '../config';
 import { PrismaService } from '../prisma.service';
 import { detectChain } from '../scanners';
+import { CacheService } from '../cache/cache.service';
 import { SyncService } from '../sync/sync.service';
 
 type WalletWithPositions = Wallet & { positions: Position[] };
@@ -90,11 +91,17 @@ function downsample(points: HistoryPointDto[], max: number): HistoryPointDto[] {
   return out;
 }
 
+/** Ключ кэша собранного портфеля в Redis */
+function cacheKey(slug: string): string {
+  return `pf:${slug}`;
+}
+
 @Injectable()
 export class PortfolioService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sync: SyncService,
+    private readonly cache: CacheService,
   ) {}
 
   /**
@@ -134,8 +141,23 @@ export class PortfolioService {
     return rows;
   }
 
-  /** Публичный просмотр: портфель по ссылке виден без входа */
+  /**
+   * Публичный просмотр: портфель по ссылке виден без входа. Отдаётся из кэша
+   * (Redis) — кэшируется owner-независимая часть, флаг isOwner накладывается
+   * на чтении. Кэш инвалидируется при правках владельца; фоновые обновления
+   * подхватываются по TTL (config.cacheTtlSec).
+   */
   async getBySlug(slug: string, userId: string | null): Promise<PortfolioDto> {
+    const key = cacheKey(slug);
+    let view = await this.cache.get<{ ownerUserId: string; dto: PortfolioDto }>(key);
+    if (!view) {
+      view = await this.buildView(slug);
+      await this.cache.set(key, view, config.cacheTtlSec);
+    }
+    return { ...view.dto, isOwner: userId !== null && view.ownerUserId === userId };
+  }
+
+  private async buildView(slug: string): Promise<{ ownerUserId: string; dto: PortfolioDto }> {
     const portfolio = await this.prisma.portfolio.findUnique({
       where: { slug },
       include: { user: true, wallets: { include: { positions: true } } },
@@ -153,21 +175,22 @@ export class PortfolioService {
     );
 
     const owner = portfolio.user;
-    return {
+    const dto: PortfolioDto = {
       slug: portfolio.slug,
       name: portfolio.name,
       owner: {
         name:
-          [owner.firstName, owner.lastName].filter(Boolean).join(' ') || owner.username || 'Аноним',
+          [owner.firstName, owner.lastName].filter(Boolean).join(' ') || owner.username || 'Anonymous',
         username: owner.username,
         photoUrl: owner.photoUrl,
       },
       totalUsd: round2(wallets.reduce((sum, w) => sum + (w.totalUsd ?? 0), 0)),
       wallets,
-      isOwner: userId !== null && portfolio.userId === userId,
+      isOwner: false,
       updatedAt,
       createdAt: portfolio.createdAt.toISOString(),
     };
+    return { ownerUserId: portfolio.userId, dto };
   }
 
   async rename(slug: string, userId: string, nameRaw: string): Promise<{ name: string }> {
@@ -175,6 +198,7 @@ export class PortfolioService {
     const name = String(nameRaw || '').trim().slice(0, 64);
     if (!name) throw new BadRequestException('Empty name');
     await this.prisma.portfolio.update({ where: { id: portfolio.id }, data: { name } });
+    await this.cache.del(cacheKey(slug));
     return { name };
   }
 
@@ -209,6 +233,7 @@ export class PortfolioService {
     // Скан асинхронный: ручка отвечает сразу (status=pending), фронт поллит.
     // EVM-скан занимает 20–40 секунд — держать HTTP-запрос столько нельзя.
     void this.sync.scanWalletNow(wallet.id).catch(() => {});
+    await this.cache.del(cacheKey(slug));
     return this.toWalletDto({ ...wallet, positions: [] }, 0);
   }
 
@@ -226,6 +251,7 @@ export class PortfolioService {
     // Пустое имя — сброс к дефолту (null)
     const label = String(labelRaw || '').trim().slice(0, 40) || null;
     await this.prisma.wallet.update({ where: { id: wallet.id }, data: { label } });
+    await this.cache.del(cacheKey(slug));
     return { label };
   }
 
@@ -237,6 +263,7 @@ export class PortfolioService {
     if (!wallet) throw new NotFoundException('Wallet not found');
     await this.prisma.wallet.delete({ where: { id: wallet.id } });
     await this.sync.snapshotPortfolio(portfolio.id);
+    await this.cache.del(cacheKey(slug));
     return { ok: true };
   }
 

@@ -1,18 +1,17 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import type { Wallet } from '@prisma/client';
 import type { Chain } from '@svinooh/shared';
 import { config } from '../config';
 import { PrismaService } from '../prisma.service';
+import type { ScanJob } from '../queue/rabbit.service';
 import { scanAddress } from '../scanners';
 import { closeBrowser } from '../scanners/browser';
 import type { ScanResult } from '../scanners/types';
 import { scanQueue } from './scan-queue';
 
 @Injectable()
-export class SyncService implements OnApplicationBootstrap, OnModuleDestroy {
+export class SyncService implements OnModuleDestroy {
   private readonly logger = new Logger(SyncService.name);
-  private timer: NodeJS.Timeout | null = null;
-  private cycleRunning = false;
   /** `${chain}:${address}` сканов в полёте — чтобы цикл и «скан при добавлении» не дублировались */
   private readonly inFlight = new Set<string>();
   /** Счётчик подряд идущих подозрительных просадок по каждому адресу */
@@ -20,19 +19,34 @@ export class SyncService implements OnApplicationBootstrap, OnModuleDestroy {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  onApplicationBootstrap() {
-    const intervalMs = config.syncIntervalMin * 60_000;
-    this.timer = setInterval(() => void this.runCycle(), intervalMs);
-    this.timer.unref?.();
-    // Первый прогон вскоре после старта — подхватывает кошельки, застрявшие
-    // в pending после рестарта
-    setTimeout(() => void this.runCycle(), 10_000).unref?.();
-    this.logger.log(`Background wallet sync every ${config.syncIntervalMin} min`);
+  async onModuleDestroy() {
+    await closeBrowser();
   }
 
-  async onModuleDestroy() {
-    if (this.timer) clearInterval(this.timer);
-    await closeBrowser();
+  /** Все уникальные адреса (chain:address) как задания для очереди */
+  async listGroups(): Promise<ScanJob[]> {
+    const wallets = await this.prisma.wallet.findMany({ select: { chain: true, address: true } });
+    const seen = new Set<string>();
+    const jobs: ScanJob[] = [];
+    for (const w of wallets) {
+      const key = `${w.chain}:${w.address}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        jobs.push({ chain: w.chain, address: w.address });
+      }
+    }
+    return jobs;
+  }
+
+  /** Скан одного адреса из очереди: сам скан + снапшот задетых портфелей */
+  async scanOne(job: ScanJob): Promise<void> {
+    const wallets = await this.prisma.wallet.findMany({
+      where: { chain: job.chain, address: job.address },
+    });
+    if (!wallets.length) return;
+    await this.scanGroup(job.chain as Chain, job.address, wallets);
+    const portfolioIds = [...new Set(wallets.map((w) => w.portfolioId))];
+    for (const portfolioId of portfolioIds) await this.snapshotPortfolio(portfolioId);
   }
 
   /** Немедленный скан только что добавленного кошелька */
@@ -41,42 +55,6 @@ export class SyncService implements OnApplicationBootstrap, OnModuleDestroy {
     if (!wallet) return;
     await this.scanGroup(wallet.chain as Chain, wallet.address, [wallet]);
     await this.snapshotPortfolio(wallet.portfolioId);
-  }
-
-  async runCycle(): Promise<void> {
-    if (this.cycleRunning) return;
-    this.cycleRunning = true;
-    const startedAt = Date.now();
-    try {
-      const wallets = await this.prisma.wallet.findMany();
-      if (!wallets.length) return;
-
-      // Один адрес может лежать в нескольких портфелях — сканируем один раз
-      const groups = new Map<string, Wallet[]>();
-      for (const wallet of wallets) {
-        const key = `${wallet.chain}:${wallet.address}`;
-        const group = groups.get(key) ?? [];
-        group.push(wallet);
-        groups.set(key, group);
-      }
-
-      await Promise.allSettled(
-        [...groups.values()].map((group) =>
-          this.scanGroup(group[0].chain as Chain, group[0].address, group),
-        ),
-      );
-
-      const portfolioIds = [...new Set(wallets.map((w) => w.portfolioId))];
-      for (const portfolioId of portfolioIds) await this.snapshotPortfolio(portfolioId);
-
-      this.logger.log(
-        `Cycle: ${groups.size} addresses in ${Math.round((Date.now() - startedAt) / 1000)}s`,
-      );
-    } catch (error) {
-      this.logger.error(`Sync cycle failed: ${error}`);
-    } finally {
-      this.cycleRunning = false;
-    }
   }
 
   private async scanGroup(chain: Chain, address: string, group: Wallet[]): Promise<void> {
