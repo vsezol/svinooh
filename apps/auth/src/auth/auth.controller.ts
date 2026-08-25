@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import type { TelegramAuthPayload } from '@svinooh/shared';
-import { CurrentUserId, RequiredAuthGuard } from './auth.guard';
+import { CurrentUserId, RequiredAuthGuard } from '@svinooh/common';
 import { AuthService } from './auth.service';
 
 @Controller('auth')

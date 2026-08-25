@@ -9,7 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { CurrentUserId, OptionalAuthGuard, RequiredAuthGuard } from '../auth/auth.guard';
+import { CurrentUserId, OptionalAuthGuard, RequiredAuthGuard } from '@svinooh/common';
 import { normalizeRange, PortfolioService } from './portfolio.service';
 
 @Controller('portfolios')
