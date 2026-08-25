@@ -1,4 +1,4 @@
-# Prometheus for svinooh. Scrapes the api over Railway's internal network.
+# Prometheus for svinooh. Scrapes the services over Railway's internal network.
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
@@ -15,4 +15,12 @@ scrape_configs:
     static_configs:
       - targets: ['api.railway.internal:3000']
 
-# rebuild trigger
+  - job_name: svinooh-auth
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['auth.railway.internal:3000']
+
+  - job_name: svinooh-wallet
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['wallet.railway.internal:3000']
