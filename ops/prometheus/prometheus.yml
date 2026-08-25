@@ -1,0 +1,16 @@
+# Prometheus для svinooh. Скрейпит api по внутренней сети Railway.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    project: svinooh
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: svinooh-api
+    metrics_path: /api/metrics
+    static_configs:
+      - targets: ['api.railway.internal:3000']
