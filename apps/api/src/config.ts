@@ -33,6 +33,12 @@ export const config = {
   botUsername: process.env.TELEGRAM_BOT_USERNAME || null,
   devMode: bool(process.env.AUTH_DEV_MODE, false),
   syncIntervalMin: int(process.env.SYNC_INTERVAL_MIN, 5),
+  // Публичный URL веб-приложения — для кнопки «вернуться на сайт» в боте.
+  webUrl: (process.env.WEB_URL || 'https://svinooh.com').replace(/\/+$/, ''),
+  // Сколько циклов подряд должно подтвердиться резкое падение стоимости
+  // кошелька, прежде чем мы ему поверим. Разовые просадки (частичный ответ
+  // источника, глюк Chrome) так не попадают в историю и не рисуют «пилу».
+  dropConfirmCycles: int(process.env.SYNC_DROP_CONFIRM_CYCLES, 3),
   webOrigin: process.env.WEB_ORIGIN || '*',
   httpTimeoutMs: int(process.env.HTTP_TIMEOUT_MS, 15_000),
   evmTimeoutMs: int(process.env.EVM_TIMEOUT_MS, 90_000),

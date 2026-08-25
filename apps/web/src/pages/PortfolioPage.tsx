@@ -179,6 +179,11 @@ export function PortfolioPage() {
     : null;
   const syncLabel = syncMins === null ? '—' : syncMins < 1 ? 'JUST NOW' : `${syncMins}M AGO`;
 
+  const changeHelp =
+    scope === 'all'
+      ? `Change over ${period.toUpperCase()}. For each wallet: its value now minus its value at the start of the period; summed across wallets, then divided by the combined value at the start. Adding a wallet doesn't count as profit.`
+      : `Change over ${period.toUpperCase()}: this wallet's value now minus its value at the start of the period.`;
+
   const scopeChips = [
     { id: 'all', label: 'ALL WALLETS' },
     ...data.wallets
@@ -311,14 +316,22 @@ export function PortfolioPage() {
                 {fmtUsd(headlineTotal)}
               </div>
               {change ? (
-                <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: change.up ? 'var(--up)' : 'var(--down)' }}>
-                  {(change.up ? '+$' : '−$') +
-                    Math.abs(change.chg).toLocaleString('en-US', { maximumFractionDigits: 0 }) +
-                    ' (' +
-                    (change.up ? '+' : '') +
-                    change.pct.toFixed(2) +
-                    '%) · ' +
-                    period.toUpperCase()}
+                <div
+                  className="mono"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 600, color: change.up ? 'var(--up)' : 'var(--down)' }}
+                >
+                  <span>
+                    {(change.up ? '+$' : '−$') +
+                      Math.abs(change.chg).toLocaleString('en-US', { maximumFractionDigits: 0 }) +
+                      ' (' +
+                      (change.up ? '+' : '') +
+                      change.pct.toFixed(2) +
+                      '%) · ' +
+                      period.toUpperCase()}
+                  </span>
+                  <span className="infotip" tabIndex={0} role="note" aria-label="How the change is calculated">
+                    i<span className="infotip-pop">{changeHelp}</span>
+                  </span>
                 </div>
               ) : null}
             </div>

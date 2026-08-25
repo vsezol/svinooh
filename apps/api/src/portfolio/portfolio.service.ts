@@ -236,6 +236,21 @@ export class PortfolioService {
     const baseline = new Map<string, number>();
     for (const s of snaps) if (!baseline.has(s.walletId)) baseline.set(s.walletId, s.totalUsd);
 
+    // кошельки без снапшота в диапазоне (весь период не синхронизировались) —
+    // берём их последнее известное значение до начала диапазона, чтобы итог
+    // включал все кошельки, а линия не занижалась и не «пилила»
+    if (since) {
+      const missing = walletIds.filter((id) => !baseline.has(id));
+      if (missing.length) {
+        const prior = await this.prisma.walletSnapshot.findMany({
+          where: { walletId: { in: missing }, createdAt: { lt: since } },
+          orderBy: { createdAt: 'desc' },
+          select: { walletId: true, totalUsd: true },
+        });
+        for (const p of prior) if (!baseline.has(p.walletId)) baseline.set(p.walletId, p.totalUsd);
+      }
+    }
+
     // идём по событиям во времени, сумма = Σ последних известных значений
     // (изначально = стартовые, поэтому «новый» кошелёк присутствует с t0)
     const current = new Map<string, number>(baseline);

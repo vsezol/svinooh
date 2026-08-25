@@ -116,15 +116,23 @@ export class TelegramBotService implements OnApplicationBootstrap, OnModuleDestr
       username: msg.from.username,
     };
     this.logger.log(`Login confirmed by bot: @${msg.from.username ?? msg.from.id}`);
-    void this.reply(msg.chat.id, "✅ Done! Head back to the site — you're signed in to svinooh.");
+    // Кнопка возврата несёт тот же токен: сайт при открытии по ?tg_login=<token>
+    // сам добьёт логин — даже если это новая вкладка или страница перезагрузилась.
+    void this.reply(msg.chat.id, "✅ You're signed in! Tap below to return to svinooh.", {
+      inline_keyboard: [[{ text: 'Return to svinooh →', url: `${config.webUrl}/?tg_login=${payload}` }]],
+    });
   }
 
-  private async reply(chatId: number, text: string): Promise<void> {
+  private async reply(chatId: number, text: string, replyMarkup?: unknown): Promise<void> {
     try {
       await fetch(`https://api.telegram.org/bot${config.botToken}/sendMessage`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text }),
+        body: JSON.stringify({
+          chat_id: chatId,
+          text,
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+        }),
         signal: AbortSignal.timeout(10_000),
       });
     } catch {
