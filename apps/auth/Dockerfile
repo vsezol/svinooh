@@ -31,3 +31,5 @@ COPY --from=build /app/apps/auth/dist apps/auth/dist
 
 EXPOSE 3000
 CMD ["node", "apps/auth/dist/main.js"]
+
+# build trigger
