@@ -37,11 +37,12 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 COPY --from=build /app/node_modules node_modules
+COPY --from=build /app/package.json ./
 COPY --from=build /app/libs libs
 COPY --from=build /app/apps/api/package.json apps/api/
 COPY --from=build /app/apps/api/dist apps/api/dist
 
 EXPOSE 3000
-# Migrations run on start (schema lives in libs/db). npm -w runs from the repo
-# root so it resolves the workspace; the DB is only reachable at runtime.
-CMD ["sh", "-c", "npm run -w @svinooh/db migrate:deploy && node apps/api/dist/main.js"]
+# Migrations run on start (schema lives in libs/db). The DB is only reachable
+# at runtime, so this can't happen at build time.
+CMD ["sh", "-c", "npx prisma migrate deploy --schema libs/db/prisma/schema.prisma && node apps/api/dist/main.js"]
