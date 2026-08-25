@@ -4,9 +4,10 @@ import type { HistoryDto, PortfolioDto, PublicPortfolioDto } from '@svinooh/shar
 import { AreaChart } from '../components/AreaChart';
 import { AuthModal } from '../components/AuthModal';
 import { Logo } from '../components/Logo';
+import { SearchDropdown } from '../components/SearchDropdown';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { fmtUsd, fmtUsd0 } from '../lib/format';
+import { fmtUsd, fmtUsd0, portfolioLabel } from '../lib/format';
 import { useTheme } from '../lib/theme';
 
 const CHAIN_BADGES = [
@@ -34,18 +35,30 @@ export function Landing() {
   const [demo, setDemo] = useState<PortfolioDto | null>(null);
   const [demoHistory, setDemoHistory] = useState<{ values: number[]; times: number[] } | null>(null);
   const [search, setSearch] = useState('');
+  const [results, setResults] = useState<PublicPortfolioDto[] | null>(null);
+  const [open, setOpen] = useState(false);
   const [tracking, setTracking] = useState(false);
   const [trackErr, setTrackErr] = useState<string | null>(null);
 
-  // Search runs on the server: an anonymous portfolio is found by the wallet
-  // address it holds, which the client never sees in the list payload.
+  // The list below the fold is a fixed top-N and stays put while you type
+  useEffect(() => {
+    void api<PublicPortfolioDto[]>('/portfolios/public?limit=12').then(setPubs).catch(() => {});
+  }, []);
+
+  // Typing searches on the server and fills the dropdown under the input: an
+  // anonymous portfolio is found by the wallet address it holds, which the
+  // client never sees in the list payload.
   useEffect(() => {
     const q = search.trim();
+    if (!q) {
+      setResults(null);
+      return;
+    }
     const timer = setTimeout(() => {
-      void api<PublicPortfolioDto[]>(`/portfolios/public?limit=12&q=${encodeURIComponent(q)}`)
-        .then(setPubs)
-        .catch(() => {});
-    }, q ? 250 : 0);
+      void api<PublicPortfolioDto[]>(`/portfolios/public?limit=6&q=${encodeURIComponent(q)}`)
+        .then(setResults)
+        .catch(() => setResults([]));
+    }, 220);
     return () => clearTimeout(timer);
   }, [search]);
 
@@ -60,8 +73,6 @@ export function Landing() {
       .catch(() => {});
   }, [topSlug]);
 
-  const filtered = pubs;
-
   // Anything long enough to be an address is offered as "track this" — the
   // backend is the one that decides whether the network is recognized
   const looksLikeAddress = /^[A-Za-z0-9]{26,64}$/.test(search.trim());
@@ -75,6 +86,7 @@ export function Landing() {
         method: 'POST',
         body: JSON.stringify({ address: search.trim() }),
       });
+      setOpen(false);
       navigate(`/p/${slug}`);
     } catch (err) {
       setTrackErr(err instanceof ApiError ? err.message : 'Could not open this address');
@@ -132,17 +144,43 @@ export function Landing() {
             Tokens, LP, staking, lending, farming — the DeFi positions other trackers miss, counted at full value.
           </div>
           <div style={{ marginTop: 26, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <input
-              className="mono field hide-mobile"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && looksLikeAddress) void trackAddress();
-              }}
-              placeholder="Search a portfolio or paste a wallet address"
-              spellCheck={false}
-              style={{ flex: '1 1 240px', minWidth: 0, height: 46, padding: '0 18px', fontSize: 12.5 }}
-            />
+            {/* Typing opens a dropdown of matches right here, rather than
+                quietly re-filtering a list further down the page. */}
+            <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 0 }}>
+              <input
+                className="mono field hide-mobile"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setOpen(true);
+                  setTrackErr(null);
+                }}
+                onFocus={() => setOpen(true)}
+                // A click inside the dropdown blurs the input first, so closing
+                // is deferred long enough for that click to land
+                onBlur={() => setTimeout(() => setOpen(false), 150)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setOpen(false);
+                  if (e.key === 'Enter' && looksLikeAddress) void trackAddress();
+                }}
+                placeholder="Search a portfolio or paste a wallet address"
+                spellCheck={false}
+                style={{ width: '100%', height: 46, padding: '0 18px', fontSize: 12.5 }}
+              />
+              {open && search.trim() ? (
+                <SearchDropdown
+                  results={results}
+                  looksLikeAddress={looksLikeAddress}
+                  tracking={tracking}
+                  error={trackErr}
+                  onPick={(slug) => {
+                    setOpen(false);
+                    navigate(`/p/${slug}`);
+                  }}
+                  onTrack={() => void trackAddress()}
+                />
+              ) : null}
+            </div>
             <button
               className="btn-acc"
               style={{ height: 46, fontSize: 14, padding: '0 22px' }}
@@ -202,7 +240,7 @@ export function Landing() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 18px 0' }}>
               {/* The portfolio's own name, never its owner's */}
               <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.14em', color: 'var(--mut)' }}>
-                {demo ? `${demo.name.toUpperCase()} · PUBLIC` : 'PUBLIC'}
+                {demo ? `${portfolioLabel(demo.name, demo.slug).toUpperCase()} · PUBLIC` : 'PUBLIC'}
               </span>
               <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9.5, letterSpacing: '0.14em', color: 'var(--acc-text)' }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--acc)', animation: 'svpulse 2.4s ease infinite' }} />
@@ -250,39 +288,19 @@ export function Landing() {
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
             <div className="eyebrow">PUBLIC PORTFOLIOS</div>
             <div className="mono" style={{ fontSize: 10, color: 'var(--mut)' }}>
-              {filtered.length} {filtered.length === 1 ? 'PORTFOLIO' : 'PORTFOLIOS'}
+              {pubs.length} {pubs.length === 1 ? 'PORTFOLIO' : 'PORTFOLIOS'}
             </div>
           </div>
+          {/* A plain list of what is public. Searching happens in the dropdown
+              under the hero input, so this one never shifts under you. */}
           <div className="card" style={{ position: 'relative', marginTop: 14, overflow: 'hidden' }}>
             <div style={{ maxHeight: 328, overflowY: 'auto' }}>
-              {filtered.length === 0 ? (
-                <div style={{ padding: '26px 16px', textAlign: 'center' }}>
-                  <div className="mono" style={{ fontSize: 11.5, color: 'var(--mut)' }}>
-                    {search ? `Nothing tracked for “${search}”` : 'No public portfolios yet — be the first.'}
-                  </div>
-                  {looksLikeAddress ? (
-                    <>
-                      <button
-                        className="btn-acc"
-                        style={{ height: 38, fontSize: 12.5, padding: '0 18px', marginTop: 14 }}
-                        onClick={() => void trackAddress()}
-                        disabled={tracking}
-                      >
-                        {tracking ? <span className="spin" style={{ width: 13, height: 13, borderTopColor: 'var(--acc-ink)' }} /> : 'Track this address →'}
-                      </button>
-                      <div className="mono" style={{ fontSize: 10, color: 'var(--mut)', marginTop: 10, lineHeight: 1.7 }}>
-                        Opens a portfolio for this wallet that belongs to nobody — public, no sign-in.
-                      </div>
-                    </>
-                  ) : null}
-                  {trackErr ? (
-                    <div className="mono" style={{ fontSize: 10.5, color: 'var(--down)', marginTop: 10 }}>
-                      {trackErr}
-                    </div>
-                  ) : null}
+              {pubs.length === 0 ? (
+                <div className="mono" style={{ padding: '28px 16px', textAlign: 'center', fontSize: 11.5, color: 'var(--mut)' }}>
+                  No public portfolios yet — be the first.
                 </div>
               ) : (
-                filtered.map((p, i) => (
+                pubs.map((p, i) => (
                   <div
                     key={p.slug}
                     onClick={() => navigate(`/p/${p.slug}`)}
@@ -292,10 +310,13 @@ export function Landing() {
                     <span className="mono" style={{ fontSize: 10, color: 'var(--mut)', width: 22, flexShrink: 0 }}>
                       {String(i + 1).padStart(2, '0')}
                     </span>
-                    {/* The name and the wallets — never who owns them. */}
+                    {/* The portfolio's own identity and its wallets — never who owns them. */}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {p.name}
+                      <div
+                        className={p.name ? undefined : 'mono'}
+                        style={{ fontWeight: 700, fontSize: p.name ? 13.5 : 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      >
+                        {portfolioLabel(p.name, p.slug)}
                       </div>
                       <div className="mono" style={{ fontSize: 10, color: 'var(--mut)', marginTop: 2 }}>
                         {p.walletCount} {p.walletCount === 1 ? 'wallet' : 'wallets'} · {p.chains.join(' + ') || '—'}

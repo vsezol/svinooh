@@ -2,50 +2,47 @@ import type { RewardsTotals } from '../lib/blocks';
 import { fmtUsd } from '../lib/format';
 
 /**
- * One compact line above the wallets: what has accrued and is sitting there
- * unclaimed, split into pool fees and everything else. It is a view onto money
- * already counted in the total, not an addition to it — hence "available to
- * claim" rather than a second balance.
+ * What has accrued and is sitting there unclaimed. Two lines rather than one
+ * long row: the total is the number people look for, the split is context. A
+ * single row of five labels and figures wraps into mush on a phone.
+ *
+ * It is a view onto money already counted in the total, not an addition to it —
+ * hence "claimable" rather than a second balance.
  */
 export function RewardsStrip({ totals }: { totals: RewardsTotals }) {
   if (totals.total <= 0) return null;
+
+  const parts = [
+    totals.pools > 0 ? `pool fees ${fmtUsd(totals.pools)}` : null,
+    totals.other > 0 ? `rewards ${fmtUsd(totals.other)}` : null,
+  ].filter(Boolean);
 
   return (
     <div
       className="card"
       style={{
         marginTop: 14,
-        padding: '10px 16px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 18,
-        flexWrap: 'wrap',
+        padding: '10px 14px',
+        display: 'inline-flex',
+        flexDirection: 'column',
+        gap: 2,
         borderColor: 'color-mix(in srgb, var(--acc) 26%, var(--line))',
       }}
     >
-      <span className="eyebrow" style={{ color: 'var(--acc-text)' }}>
-        AVAILABLE TO CLAIM
-      </span>
-      <div style={{ flex: 1 }} />
-      <Item label="POOL FEES" value={totals.pools} />
-      <Item label="OTHER REWARDS" value={totals.other} />
-      <Item label="TOTAL" value={totals.total} accent />
-    </div>
-  );
-}
-
-function Item({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
-      <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.1em', color: 'var(--mut)' }}>
-        {label}
-      </span>
-      <span
-        className="mono"
-        style={{ fontSize: 12.5, fontWeight: 600, color: accent ? 'var(--up)' : 'var(--text)' }}
-      >
-        {fmtUsd(value)}
-      </span>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <span className="eyebrow" style={{ color: 'var(--acc-text)' }}>
+          CLAIMABLE
+        </span>
+        <span className="mono" style={{ fontSize: 14, fontWeight: 600, color: 'var(--up)' }}>
+          {fmtUsd(totals.total)}
+        </span>
+      </div>
+      {/* Only shown when the split says something the total doesn't */}
+      {parts.length > 1 ? (
+        <div className="mono" style={{ fontSize: 10.5, color: 'var(--mut)' }}>
+          {parts.join(' · ')}
+        </div>
+      ) : null}
     </div>
   );
 }

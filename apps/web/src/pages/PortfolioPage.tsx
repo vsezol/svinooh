@@ -95,7 +95,7 @@ function useHistory(slug: string, scope: string, period: HistoryRange, refreshKe
 export function PortfolioPage() {
   const { slug = '' } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { me, config, logout } = useAuth();
+  const { me, logout } = useAuth();
   const { theme, toggle } = useTheme();
   const { data, error, reload } = usePortfolio(slug, me?.id ?? null);
 
@@ -203,10 +203,10 @@ export function PortfolioPage() {
   const walletCount = data.wallets.filter((w) => w.status !== 'pending').length;
   const selectedWallet = scope === 'all' ? null : data.wallets.find((w) => w.id === scope);
   const headlineTotal = selectedWallet ? (selectedWallet.totalUsd ?? 0) : data.totalUsd;
-  const syncMins = data.updatedAt
-    ? Math.max(0, Math.floor((Date.now() - new Date(data.updatedAt).getTime()) / 60000))
-    : null;
-  const syncLabel = syncMins === null ? '—' : syncMins < 1 ? 'JUST NOW' : `${syncMins}M AGO`;
+  // An empty chart frame with "history shows up later" in it is worse than no
+  // chart: on a fresh portfolio it is the biggest thing on the page and says
+  // nothing. It appears once a wallet has synced AND there are points to plot.
+  const hasChart = data.wallets.some((w) => w.totalUsd !== null) && (history?.values.length ?? 0) >= 2;
 
   const changeHelp =
     scope === 'all'
@@ -363,19 +363,18 @@ export function PortfolioPage() {
               ) : null}
             </div>
           </div>
-          <div
-            className="mono"
-            style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, color: 'var(--mut)', letterSpacing: '0.04em', paddingBottom: 6 }}
-          >
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--acc)', animation: 'svpulse 2.4s ease infinite' }} />
-            <span>
-              AUTO-TRACKED · {config?.syncIntervalMin ?? 5} MIN · SYNCED {syncLabel}
-            </span>
-          </div>
+          {isOwner ? (
+            <VisibilityCard
+              visibility={data.visibility}
+              busy={savingVisibility}
+              onGoPublic={() => setConfirmPublic(true)}
+              onGoPrivate={() => void setVisibility(false)}
+            />
+          ) : null}
         </div>
 
-        {/* chips + periods */}
-        {data.wallets.length > 0 ? (
+        {/* chips + periods + chart — only once there is a line to draw */}
+        {hasChart ? (
           <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 22 }}>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -433,16 +432,6 @@ export function PortfolioPage() {
               </div>
             ) : null}
           </div>
-        ) : null}
-
-        {/* visibility — the first thing an owner sees about their portfolio */}
-        {isOwner ? (
-          <VisibilityCard
-            visibility={data.visibility}
-            busy={savingVisibility}
-            onGoPublic={() => setConfirmPublic(true)}
-            onGoPrivate={() => void setVisibility(false)}
-          />
         ) : null}
 
         {/* unclaimed rewards across every wallet */}
