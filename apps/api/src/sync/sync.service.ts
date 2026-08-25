@@ -25,7 +25,7 @@ export class SyncService implements OnApplicationBootstrap, OnModuleDestroy {
     // Первый прогон вскоре после старта — подхватывает кошельки, застрявшие
     // в pending после рестарта
     setTimeout(() => void this.runCycle(), 10_000).unref?.();
-    this.logger.log(`Фоновое обновление кошельков каждые ${config.syncIntervalMin} мин`);
+    this.logger.log(`Background wallet sync every ${config.syncIntervalMin} min`);
   }
 
   async onModuleDestroy() {
@@ -68,10 +68,10 @@ export class SyncService implements OnApplicationBootstrap, OnModuleDestroy {
       for (const portfolioId of portfolioIds) await this.snapshotPortfolio(portfolioId);
 
       this.logger.log(
-        `Цикл: ${groups.size} адресов за ${Math.round((Date.now() - startedAt) / 1000)}с`,
+        `Cycle: ${groups.size} addresses in ${Math.round((Date.now() - startedAt) / 1000)}s`,
       );
     } catch (error) {
-      this.logger.error(`Цикл обновления упал: ${error}`);
+      this.logger.error(`Sync cycle failed: ${error}`);
     } finally {
       this.cycleRunning = false;
     }
@@ -87,7 +87,7 @@ export class SyncService implements OnApplicationBootstrap, OnModuleDestroy {
       await this.applyResult(group, result);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`Скан ${key} не удался: ${message}`);
+      this.logger.warn(`Scan ${key} failed: ${message}`);
       await this.markFailed(group, message);
     } finally {
       this.inFlight.delete(key);
@@ -112,7 +112,7 @@ export class SyncService implements OnApplicationBootstrap, OnModuleDestroy {
     if (!suspicious) return first;
 
     this.logger.warn(
-      `Подозрительное падение ${chain}:${address}: $${previousTotal.toFixed(2)} → $${first.totalUsd.toFixed(2)}, перепроверяю`,
+      `Suspicious drop ${chain}:${address}: $${previousTotal.toFixed(2)} → $${first.totalUsd.toFixed(2)}, re-checking`,
     );
     const second = await scanQueue.run(chain, () => scanAddress(chain, address));
     if (second.totalUsd >= previousTotal * 0.05) return second; // первый замер был глюком
@@ -121,7 +121,7 @@ export class SyncService implements OnApplicationBootstrap, OnModuleDestroy {
       Math.max(1, 0.2 * Math.max(first.totalUsd, second.totalUsd));
     if (agree) return second;
     throw new Error(
-      `Подозрительный результат: было $${previousTotal.toFixed(2)}, замеры дали $${first.totalUsd.toFixed(2)} и $${second.totalUsd.toFixed(2)}`,
+      `Suspicious result: was $${previousTotal.toFixed(2)}, measurements gave $${first.totalUsd.toFixed(2)} and $${second.totalUsd.toFixed(2)}`,
     );
   }
 

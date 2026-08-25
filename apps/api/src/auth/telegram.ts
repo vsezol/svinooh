@@ -11,7 +11,7 @@ import type { TelegramAuthPayload } from '@svinooh/shared';
  */
 export function verifyTelegramLogin(payload: TelegramAuthPayload, botToken: string): string | null {
   const { hash, ...rest } = payload as unknown as Record<string, unknown> & { hash?: unknown };
-  if (typeof hash !== 'string' || !hash) return 'нет поля hash';
+  if (typeof hash !== 'string' || !hash) return 'missing hash field';
 
   const checkString = Object.keys(rest)
     .filter((key) => rest[key] !== undefined && rest[key] !== null)
@@ -24,11 +24,11 @@ export function verifyTelegramLogin(payload: TelegramAuthPayload, botToken: stri
 
   const a = Buffer.from(expected);
   const b = Buffer.from(hash);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return 'подпись не сошлась';
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return 'signature mismatch';
 
   const ageSeconds = Date.now() / 1000 - Number(payload.auth_date);
   if (!Number.isFinite(ageSeconds) || ageSeconds > 86_400 || ageSeconds < -300) {
-    return 'auth_date устарел';
+    return 'auth_date is stale';
   }
   return null;
 }

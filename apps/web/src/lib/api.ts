@@ -31,7 +31,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   try {
     res = await fetch(`${API_URL}/api${path}`, { ...init, headers });
   } catch {
-    throw new ApiError(0, 'Сервер недоступен');
+    throw new ApiError(0, 'Server unavailable');
   }
 
   if (!res.ok) {
@@ -42,7 +42,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       // не JSON — оставим дефолтное сообщение
     }
     const message = Array.isArray(body.message) ? body.message.join(', ') : body.message;
-    throw new ApiError(res.status, message || `Ошибка ${res.status}`, body.code);
+    throw new ApiError(res.status, message || `Error ${res.status}`, body.code);
   }
   return res.json() as Promise<T>;
 }

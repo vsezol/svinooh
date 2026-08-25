@@ -37,6 +37,17 @@ export function normalizeRange(raw: string | undefined): HistoryRange {
   return raw === '7d' || raw === '30d' || raw === 'all' ? raw : '24h';
 }
 
+/** Прореживание ряда до max точек (всегда сохраняя последнюю) */
+function downsample(points: HistoryPointDto[], max: number): HistoryPointDto[] {
+  if (points.length <= max) return points;
+  const step = Math.ceil(points.length / max);
+  const out: HistoryPointDto[] = [];
+  for (let i = 0; i < points.length; i += step) out.push(points[i]);
+  const last = points[points.length - 1];
+  if (out[out.length - 1] !== last) out.push(last);
+  return out;
+}
+
 @Injectable()
 export class PortfolioService {
   constructor(
@@ -87,7 +98,7 @@ export class PortfolioService {
       where: { slug },
       include: { user: true, wallets: { include: { positions: true } } },
     });
-    if (!portfolio) throw new NotFoundException('Портфель не найден');
+    if (!portfolio) throw new NotFoundException('Portfolio not found');
 
     const staleBefore = Date.now() - 3 * config.syncIntervalMin * 60_000;
     const wallets = portfolio.wallets
@@ -120,7 +131,7 @@ export class PortfolioService {
   async rename(slug: string, userId: string, nameRaw: string): Promise<{ name: string }> {
     const portfolio = await this.requireOwned(slug, userId);
     const name = String(nameRaw || '').trim().slice(0, 64);
-    if (!name) throw new BadRequestException('Пустое имя');
+    if (!name) throw new BadRequestException('Empty name');
     await this.prisma.portfolio.update({ where: { id: portfolio.id }, data: { name } });
     return { name };
   }
@@ -128,14 +139,14 @@ export class PortfolioService {
   async addWallet(slug: string, userId: string, addressRaw: string): Promise<WalletDto> {
     const portfolio = await this.requireOwned(slug, userId);
     const address = String(addressRaw || '').trim();
-    if (!address) throw new BadRequestException('Пустой адрес');
+    if (!address) throw new BadRequestException('Empty address');
 
     const chain = detectChain(address);
     if (!chain) {
       throw new BadRequestException({
         statusCode: 400,
         code: 'UNSUPPORTED_NETWORK',
-        message: 'Не удалось определить сеть адреса. Поддерживаются BTC, EVM (0x…), SOL и TRON.',
+        message: 'Could not detect the address network. Supported: BTC, EVM (0x…), SOL and TRON.',
       });
     }
 
@@ -146,7 +157,7 @@ export class PortfolioService {
       throw new ConflictException({
         statusCode: 409,
         code: 'WALLET_EXISTS',
-        message: 'Этот кошелёк уже добавлен в портфель',
+        message: 'This wallet is already in the portfolio',
       });
     }
 
@@ -169,7 +180,7 @@ export class PortfolioService {
     const wallet = await this.prisma.wallet.findFirst({
       where: { id: walletId, portfolioId: portfolio.id },
     });
-    if (!wallet) throw new NotFoundException('Кошелёк не найден');
+    if (!wallet) throw new NotFoundException('Wallet not found');
     // Пустое имя — сброс к дефолту (null)
     const label = String(labelRaw || '').trim().slice(0, 40) || null;
     await this.prisma.wallet.update({ where: { id: wallet.id }, data: { label } });
@@ -181,32 +192,76 @@ export class PortfolioService {
     const wallet = await this.prisma.wallet.findFirst({
       where: { id: walletId, portfolioId: portfolio.id },
     });
-    if (!wallet) throw new NotFoundException('Кошелёк не найден');
+    if (!wallet) throw new NotFoundException('Wallet not found');
     await this.prisma.wallet.delete({ where: { id: wallet.id } });
     await this.sync.snapshotPortfolio(portfolio.id);
     return { ok: true };
   }
 
   async history(slug: string, range: HistoryRange): Promise<HistoryDto> {
-    const portfolio = await this.prisma.portfolio.findUnique({ where: { slug } });
-    if (!portfolio) throw new NotFoundException('Портфель не найден');
-    const points = await this.series('PortfolioSnapshot', 'portfolioId', portfolio.id, range);
+    const portfolio = await this.prisma.portfolio.findUnique({
+      where: { slug },
+      include: { wallets: { select: { id: true } } },
+    });
+    if (!portfolio) throw new NotFoundException('Portfolio not found');
+    const points = await this.reconstructPortfolioSeries(
+      portfolio.wallets.map((w) => w.id),
+      range,
+    );
     return { range, points };
+  }
+
+  /**
+   * Ряд стоимости портфеля без «скачков» от добавления кошельков: собираем из
+   * снапшотов кошельков, где стоимость каждого кошелька перенесена (carry-back)
+   * его самым ранним известным значением на весь диапазон. Поэтому добавление
+   * кошелька не выглядит как прибыль: change = Σ(текущая) − Σ(стартовая) =
+   * сумма реальной прибыли по кошелькам, а change% = Σприбыль / Σстартовая.
+   */
+  private async reconstructPortfolioSeries(
+    walletIds: string[],
+    range: HistoryRange,
+  ): Promise<HistoryPointDto[]> {
+    if (!walletIds.length) return [];
+    const { sinceMs } = RANGES[range];
+    const since = sinceMs ? new Date(Date.now() - sinceMs) : null;
+    const snaps = await this.prisma.walletSnapshot.findMany({
+      where: { walletId: { in: walletIds }, ...(since ? { createdAt: { gte: since } } : {}) },
+      orderBy: { createdAt: 'asc' },
+      select: { walletId: true, createdAt: true, totalUsd: true },
+    });
+    if (!snaps.length) return [];
+
+    // стартовое значение каждого кошелька — его самый ранний снапшот в диапазоне
+    const baseline = new Map<string, number>();
+    for (const s of snaps) if (!baseline.has(s.walletId)) baseline.set(s.walletId, s.totalUsd);
+
+    // идём по событиям во времени, сумма = Σ последних известных значений
+    // (изначально = стартовые, поэтому «новый» кошелёк присутствует с t0)
+    const current = new Map<string, number>(baseline);
+    const points: HistoryPointDto[] = [];
+    for (const s of snaps) {
+      current.set(s.walletId, s.totalUsd);
+      let sum = 0;
+      for (const v of current.values()) sum += v;
+      points.push({ t: s.createdAt.toISOString(), usd: round2(sum) });
+    }
+    return downsample(points, 220);
   }
 
   async walletHistory(slug: string, walletId: string, range: HistoryRange): Promise<HistoryDto> {
     const wallet = await this.prisma.wallet.findFirst({
       where: { id: walletId, portfolio: { slug } },
     });
-    if (!wallet) throw new NotFoundException('Кошелёк не найден');
+    if (!wallet) throw new NotFoundException('Wallet not found');
     const points = await this.series('WalletSnapshot', 'walletId', wallet.id, range);
     return { range, points };
   }
 
   private async requireOwned(slug: string, userId: string): Promise<Portfolio> {
     const portfolio = await this.prisma.portfolio.findUnique({ where: { slug } });
-    if (!portfolio) throw new NotFoundException('Портфель не найден');
-    if (portfolio.userId !== userId) throw new ForbiddenException('Это не твой портфель');
+    if (!portfolio) throw new NotFoundException('Portfolio not found');
+    if (portfolio.userId !== userId) throw new ForbiddenException("This isn't your portfolio");
     return portfolio;
   }
 

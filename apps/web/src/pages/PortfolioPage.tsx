@@ -88,7 +88,7 @@ export function PortfolioPage() {
   const { data, error, reload } = usePortfolio(slug);
 
   const [scope, setScope] = useState<string>('all');
-  const [period, setPeriod] = useState<HistoryRange>('30d');
+  const [period, setPeriod] = useState<HistoryRange>('24h');
   const [authOpen, setAuthOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [input, setInput] = useState('');

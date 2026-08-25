@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import type { HistoryDto, PortfolioDto, PublicPortfolioDto } from '@svinooh/shared';
 import { AreaChart } from '../components/AreaChart';
 import { AuthModal } from '../components/AuthModal';
@@ -64,7 +64,8 @@ export function Landing() {
       .slice(0, 3);
   }, [demo]);
 
-  if (me) return <Navigate to={`/p/${me.portfolioSlug}`} replace />;
+  const primary = () => (me ? navigate(`/p/${me.portfolioSlug}`) : setAuthOpen(true));
+  const primaryLabel = me ? 'My portfolio' : 'Create portfolio';
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -75,8 +76,8 @@ export function Landing() {
           <button className="pill" onClick={toggle}>
             {theme === 'dark' ? 'LIGHT' : 'DARK'}
           </button>
-          <button className="btn-acc" style={{ height: 32, fontSize: 12, padding: '0 14px' }} onClick={() => setAuthOpen(true)}>
-            Create portfolio
+          <button className="btn-acc" style={{ height: 32, fontSize: 12, padding: '0 14px' }} onClick={primary}>
+            {primaryLabel}
           </button>
         </div>
       </div>
@@ -115,9 +116,9 @@ export function Landing() {
             <button
               className="btn-acc"
               style={{ height: 46, fontSize: 14, padding: '0 22px' }}
-              onClick={() => setAuthOpen(true)}
+              onClick={primary}
             >
-              Create portfolio
+              {primaryLabel}
             </button>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 28 }}>
@@ -279,9 +280,9 @@ export function Landing() {
             <button
               className="btn-acc"
               style={{ height: 46, fontSize: 14, padding: '0 26px', marginTop: 22 }}
-              onClick={() => setAuthOpen(true)}
+              onClick={primary}
             >
-              Create portfolio
+              {primaryLabel}
             </button>
             <div style={{ marginTop: 12, fontSize: 12, color: 'var(--mut)' }}>Sign in with Telegram or X</div>
           </div>

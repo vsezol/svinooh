@@ -7,10 +7,10 @@ interface AuthState {
   me: MeDto | null;
   config: AuthConfigDto | null;
   loading: boolean;
-  loginTelegram: (payload: TelegramAuthPayload) => Promise<void>;
-  loginDev: (name: string) => Promise<void>;
+  loginTelegram: (payload: TelegramAuthPayload) => Promise<MeDto>;
+  loginDev: (name: string) => Promise<MeDto>;
   /** Применить готовый ответ авторизации (например из поллинга бота) */
-  applyAuth: (res: AuthResponseDto) => void;
+  applyAuth: (res: AuthResponseDto) => MeDto;
   logout: () => void;
 }
 
@@ -18,9 +18,9 @@ const AuthContext = createContext<AuthState>({
   me: null,
   config: null,
   loading: true,
-  loginTelegram: async () => {},
-  loginDev: async () => {},
-  applyAuth: () => {},
+  loginTelegram: async () => ({}) as MeDto,
+  loginDev: async () => ({}) as MeDto,
+  applyAuth: () => ({}) as MeDto,
   logout: () => {},
 });
 
@@ -47,22 +47,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  const finish = useCallback((res: AuthResponseDto) => {
+  const finish = useCallback((res: AuthResponseDto): MeDto => {
     tokenStore.set(res.token);
     setMe(res.me);
+    return res.me;
   }, []);
 
   const loginTelegram = useCallback(
-    async (payload: TelegramAuthPayload) => {
-      finish(await api<AuthResponseDto>('/auth/telegram', { method: 'POST', body: JSON.stringify(payload) }));
-    },
+    async (payload: TelegramAuthPayload) =>
+      finish(await api<AuthResponseDto>('/auth/telegram', { method: 'POST', body: JSON.stringify(payload) })),
     [finish],
   );
 
   const loginDev = useCallback(
-    async (name: string) => {
-      finish(await api<AuthResponseDto>('/auth/dev', { method: 'POST', body: JSON.stringify({ name }) }));
-    },
+    async (name: string) =>
+      finish(await api<AuthResponseDto>('/auth/dev', { method: 'POST', body: JSON.stringify({ name }) })),
     [finish],
   );
 
