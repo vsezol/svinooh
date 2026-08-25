@@ -47,3 +47,5 @@ COPY --from=build /app/apps/wallet/dist apps/wallet/dist
 
 EXPOSE 3000
 CMD ["node", "apps/wallet/dist/main.js"]
+
+# build trigger
