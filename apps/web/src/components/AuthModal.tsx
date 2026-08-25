@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { AuthResponseDto, TelegramPollDto, TelegramStartDto } from '@svinooh/shared';
+import type { TelegramStartDto } from '@svinooh/shared';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { pendingTgToken, pollTelegramLogin } from '../lib/telegram';
 import { Logo } from './Logo';
 
 const modalBtn: CSSProperties = {
@@ -38,41 +39,13 @@ export function AuthModal({ onClose }: { onClose: () => void }) {
   const [waiting, setWaiting] = useState(false);
   const [deepLink, setDeepLink] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const cancelled = useRef(false);
+  const stopPoll = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     return () => {
-      cancelled.current = true;
+      stopPoll.current?.();
     };
   }, []);
-
-  const poll = (token: string) => {
-    const startedAt = Date.now();
-    const tick = async () => {
-      if (cancelled.current) return;
-      try {
-        const res = await api<TelegramPollDto>(`/auth/telegram/poll?token=${encodeURIComponent(token)}`);
-        if (cancelled.current) return;
-        if ('token' in res) {
-          const authed = applyAuth(res as AuthResponseDto);
-          onClose();
-          navigate(`/p/${authed.portfolioSlug}`);
-          return;
-        }
-        if (Date.now() - startedAt > 180_000) {
-          setWaiting(false);
-          setError('Timed out — please try again');
-          return;
-        }
-        setTimeout(() => void tick(), 2000);
-      } catch (err) {
-        if (cancelled.current) return;
-        setWaiting(false);
-        setError(err instanceof ApiError ? err.message : 'Session expired — please try again');
-      }
-    };
-    setTimeout(() => void tick(), 1500);
-  };
 
   const startTelegram = async () => {
     if (busy) return;
@@ -81,9 +54,20 @@ export function AuthModal({ onClose }: { onClose: () => void }) {
     try {
       const s = await api<TelegramStartDto>('/auth/telegram/start', { method: 'POST' });
       setDeepLink(s.deepLink);
+      pendingTgToken.set(s.token);
       window.open(s.deepLink, '_blank', 'noopener');
       setWaiting(true);
-      poll(s.token);
+      stopPoll.current = pollTelegramLogin(s.token, {
+        onResult: (res) => {
+          const authed = applyAuth(res);
+          onClose();
+          navigate(`/p/${authed.portfolioSlug}`);
+        },
+        onError: (message) => {
+          setWaiting(false);
+          setError(message);
+        },
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't start sign-in");
     } finally {

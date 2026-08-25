@@ -15,6 +15,8 @@ export class SyncService implements OnApplicationBootstrap, OnModuleDestroy {
   private cycleRunning = false;
   /** `${chain}:${address}` сканов в полёте — чтобы цикл и «скан при добавлении» не дублировались */
   private readonly inFlight = new Set<string>();
+  /** Счётчик подряд идущих подозрительных просадок по каждому адресу */
+  private readonly dropStreak = new Map<string, number>();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -83,7 +85,7 @@ export class SyncService implements OnApplicationBootstrap, OnModuleDestroy {
     this.inFlight.add(key);
     try {
       const previousTotal = group.map((w) => w.lastTotalUsd).find((v) => v !== null) ?? null;
-      const result = await this.scanWithSanityCheck(chain, address, previousTotal);
+      const result = await this.scanWithSanityCheck(key, chain, address, previousTotal);
       await this.applyResult(group, result);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -95,33 +97,53 @@ export class SyncService implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   /**
-   * Тихо неверная цифра хуже упавшего запроса. Резкое падение почти до нуля
-   * чаще означает сбой источника (задушенный Chrome, недоступный API), а не
-   * опустевший кошелёк — поэтому перепроверяем вторым сканом. Сходятся два
-   * независимых замера — принимаем (кошелёк правда опустел); расходятся —
-   * прогон помечается failed и история НЕ пишется, кэш остаётся со stale.
+   * Тихо неверная цифра хуже упавшего запроса. Источник может отдать частичные
+   * данные (TronGrid без frozenV2, Chrome-скрейп с $0) — визуально это резкая
+   * просадка, которая через цикл сама «восстанавливается», рисуя пилу на графике.
+   * Поэтому: (1) при падении больше чем на 25% сразу перепроверяем вторым сканом;
+   * (2) если и он низкий — верим падению только когда оно держится
+   * `dropConfirmCycles` циклов подряд, иначе бросаем (кошелёк остаётся stale со
+   * старым значением, снапшот НЕ пишется). Реальный вывод средств так всё равно
+   * зафиксируется — просто не мгновенно; разовый глюк — никогда.
    */
   private async scanWithSanityCheck(
+    key: string,
     chain: Chain,
     address: string,
     previousTotal: number | null,
   ): Promise<ScanResult> {
     const first = await scanQueue.run(chain, () => scanAddress(chain, address));
-    const suspicious =
-      previousTotal !== null && previousTotal > 10 && first.totalUsd < previousTotal * 0.05;
-    if (!suspicious) return first;
+
+    // не с чем сравнивать (первый успешный скан или почти пустой кошелёк)
+    if (previousTotal === null || previousTotal <= 10) {
+      this.dropStreak.delete(key);
+      return first;
+    }
+
+    const FLOOR = previousTotal * 0.75; // падение больше 25% за цикл — подозрительно
+    if (first.totalUsd >= FLOOR) {
+      this.dropStreak.delete(key); // норма или рост
+      return first;
+    }
 
     this.logger.warn(
       `Suspicious drop ${chain}:${address}: $${previousTotal.toFixed(2)} → $${first.totalUsd.toFixed(2)}, re-checking`,
     );
     const second = await scanQueue.run(chain, () => scanAddress(chain, address));
-    if (second.totalUsd >= previousTotal * 0.05) return second; // первый замер был глюком
-    const agree =
-      Math.abs(first.totalUsd - second.totalUsd) <=
-      Math.max(1, 0.2 * Math.max(first.totalUsd, second.totalUsd));
-    if (agree) return second;
+    if (second.totalUsd >= FLOOR) {
+      this.dropStreak.delete(key); // первый замер был глюком, второй в норме
+      return second;
+    }
+
+    // оба замера низкие: либо реальный вывод, либо устойчивый сбой источника
+    const streak = (this.dropStreak.get(key) ?? 0) + 1;
+    if (streak >= config.dropConfirmCycles) {
+      this.dropStreak.delete(key);
+      return second.totalUsd >= first.totalUsd ? second : first; // консервативно — больший
+    }
+    this.dropStreak.set(key, streak);
     throw new Error(
-      `Suspicious result: was $${previousTotal.toFixed(2)}, measurements gave $${first.totalUsd.toFixed(2)} and $${second.totalUsd.toFixed(2)}`,
+      `Unconfirmed drop ${chain}:${address}: $${previousTotal.toFixed(2)} → $${first.totalUsd.toFixed(2)} (${streak}/${config.dropConfirmCycles}), keeping last known`,
     );
   }
 

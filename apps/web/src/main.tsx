@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './lib/auth';
 import { ThemeProvider } from './lib/theme';
+import { TelegramResume } from './components/TelegramResume';
 import { Landing } from './pages/Landing';
 import { PortfolioPage } from './pages/PortfolioPage';
 import './styles.css';
@@ -12,6 +13,7 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
+          <TelegramResume />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/p/:slug" element={<PortfolioPage />} />
