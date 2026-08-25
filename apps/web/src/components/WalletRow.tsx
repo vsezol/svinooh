@@ -184,9 +184,34 @@ export function WalletRow({ wallet, isOwner, total, onRemove, onRename }: Props)
             <div key={i} style={{ border: '1px solid var(--line)', borderRadius: 12, background: 'var(--surf2)', overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '10px 14px', flexWrap: 'wrap' }}>
                 <span style={{ fontWeight: 800, fontSize: 12.5 }}>{b.proto}</span>
+                {b.count > 1 ? (
+                  <span className="mono" title={`${b.count} positions folded together`} style={{ fontSize: 9.5, color: 'var(--mut)' }}>
+                    ×{b.count}
+                  </span>
+                ) : null}
                 {b.typeLabel ? (
                   <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.12em', color: 'var(--mut)' }}>
                     {b.typeLabel}
+                  </span>
+                ) : null}
+                {b.range ? (
+                  <span
+                    className="mono"
+                    title={
+                      b.range === 'in'
+                        ? 'The price is inside the position range — it is earning fees'
+                        : 'The price has left the position range — it sits in one token and earns nothing'
+                    }
+                    style={{
+                      fontSize: 9,
+                      letterSpacing: '0.1em',
+                      color: b.range === 'in' ? 'var(--up)' : 'var(--down)',
+                      border: `1px solid ${b.range === 'in' ? 'var(--up)' : 'var(--down)'}`,
+                      borderRadius: 5,
+                      padding: '1px 5px',
+                    }}
+                  >
+                    {b.range === 'in' ? 'IN RANGE' : 'OUT OF RANGE'}
                   </span>
                 ) : null}
                 {b.meta ? (

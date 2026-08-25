@@ -54,6 +54,7 @@ async function main() {
         const extra = [
           p.apy != null ? `${(p.apy * 100).toFixed(1)}% APY` : null,
           p.healthRate != null ? `HF ${p.healthRate.toFixed(2)}` : null,
+          p.range ? (p.range === 'in' ? 'IN RANGE' : 'OUT OF RANGE') : null,
         ]
           .filter(Boolean)
           .join(' ');

@@ -1,5 +1,6 @@
 import type { PositionTokenRole } from '@svinooh/shared';
 import { fetchJson } from './http';
+import { rangeFromLegs } from './range';
 import type { ScanPosition, ScanPositionToken, ScanResult } from './types';
 
 /**
@@ -79,6 +80,13 @@ const ASSET_BUCKETS: Array<{ key: 'assets' | 'suppliedAssets' | 'rewardAssets' |
 
 /** Element labels that are staking rather than "generic DeFi" */
 const STAKED_LABELS = /^(staked|staking|farming|vesting|locked|deposit)$/i;
+
+/**
+ * Pool kinds that have a price range. Jupiter names them in `element.name`
+ * (Meteora DLMM, Raydium CLMM, Orca Whirlpool); a constant-product pool has no
+ * range and must not get a badge.
+ */
+const RANGED_POOLS = /\b(dlmm|clmm|whirlpool|concentrated)\b/i;
 
 const isGmPoolToken = (name?: string | null): boolean => /^GM:\S+\[\w+\]$/.test(name || '');
 
@@ -254,6 +262,7 @@ export async function scanSol(address: string): Promise<ScanResult> {
       const value = typeof element.value === 'number' && isFinite(element.value) ? element.value : 0;
       if (value < 0.01) continue;
       const platform = element.platformId || null;
+      const tokens = elementTokens(element);
       positions.push({
         symbol: platform ? platformTitle(platform) : element.name || element.label || 'Position',
         name: element.label ? humanizeLabel(element.label) : element.type || null,
@@ -264,7 +273,8 @@ export async function scanSol(address: string): Promise<ScanResult> {
         category: STAKED_LABELS.test(element.label || '') ? 'staked' : 'defi',
         apy: typeof element.netApy === 'number' && element.netApy !== 0 ? element.netApy : null,
         healthRate: toHealthFactor(element.data?.healthRatio),
-        tokens: elementTokens(element),
+        range: RANGED_POOLS.test(element.name || '') ? rangeFromLegs(tokens) : null,
+        tokens,
       });
     }
   }
