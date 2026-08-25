@@ -18,8 +18,12 @@ export function fmtPrice(p: number | null | undefined): string {
 /** Token amount (_fmtAmt) */
 export function fmtAmount(a: number | null | undefined): string {
   if (a === null || a === undefined) return '';
-  if (a >= 1000) return a.toLocaleString('en-US', { maximumFractionDigits: 0 });
-  if (a < 1) return a.toLocaleString('en-US', { maximumFractionDigits: 4 });
+  const abs = Math.abs(a);
+  if (abs >= 1000) return a.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  // Below 4 decimals everything collapses to a bare "0" — and accrued LP fees
+  // in a token like cbBTC genuinely live down there
+  if (abs > 0 && abs < 0.0001) return a.toPrecision(2);
+  if (abs < 1) return a.toLocaleString('en-US', { maximumFractionDigits: 4 });
   return a.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
