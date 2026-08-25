@@ -1,5 +1,5 @@
 import { ConsoleLogger } from '@nestjs/common';
-import { config } from '../config';
+import { serviceName } from './env';
 
 type LokiLevel = 'debug' | 'info' | 'warn' | 'error';
 interface Entry {
@@ -24,7 +24,9 @@ export class LokiLogger extends ConsoleLogger {
   private buffer: Entry[] = [];
   private lastMs = 0;
   private seq = 0;
-  private readonly enabled = !!config.lokiUrl;
+  private readonly lokiUrl = process.env.LOKI_URL || null;
+  private readonly app = serviceName();
+  private readonly enabled = !!this.lokiUrl;
 
   constructor() {
     super();
@@ -95,13 +97,13 @@ export class LokiLogger extends ConsoleLogger {
       const key = `${e.level} ${e.context}`;
       let s = streams.get(key);
       if (!s) {
-        s = { stream: { app: 'svinooh-api', level: e.level, context: e.context }, values: [] };
+        s = { stream: { app: this.app, level: e.level, context: e.context }, values: [] };
         streams.set(key, s);
       }
       s.values.push([e.ts, e.line]);
     }
     try {
-      await fetch(`${config.lokiUrl}/loki/api/v1/push`, {
+      await fetch(`${this.lokiUrl}/loki/api/v1/push`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ streams: [...streams.values()] }),

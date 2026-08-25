@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import type { Wallet } from '@prisma/client';
 import type { Chain } from '@svinooh/shared';
 import { config } from '../config';
-import { MetricsService } from '../metrics/metrics.service';
+import { MetricsService } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import type { ScanJob } from '../queue/rabbit.service';
 import { scanAddress } from '../scanners';
