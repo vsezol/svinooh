@@ -3,7 +3,7 @@ import type { Wallet } from '@prisma/client';
 import type { Chain } from '@svinooh/shared';
 import { config } from '../config';
 import { MetricsService } from '../metrics/metrics.service';
-import { PrismaService } from '../prisma.service';
+import { PrismaService } from '@svinooh/db';
 import type { ScanJob } from '../queue/rabbit.service';
 import { scanAddress } from '../scanners';
 import { closeBrowser } from '../scanners/browser';

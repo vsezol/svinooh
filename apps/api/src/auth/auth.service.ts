@@ -18,7 +18,7 @@ import type {
 } from '@svinooh/shared';
 import { randomSlug } from '../common/util';
 import { config } from '../config';
-import { PrismaService } from '../prisma.service';
+import { PrismaService } from '@svinooh/db';
 import { verifyTelegramLogin } from './telegram';
 import { TelegramBotService } from './telegram-bot.service';
 
