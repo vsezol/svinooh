@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type { Wallet } from '@prisma/client';
 import type { Chain } from '@svinooh/shared';
 import { config } from '../config';
@@ -144,11 +145,17 @@ export class SyncService implements OnModuleDestroy {
             walletId: wallet.id,
             symbol: p.symbol.slice(0, 120),
             name: p.name?.slice(0, 200) ?? null,
+            note: p.note?.slice(0, 300) ?? null,
             amount: p.amount ?? null,
             priceUsd: p.priceUsd ?? null,
             valueUsd: p.valueUsd,
             platform: p.platform ?? null,
             category: p.category,
+            apy: p.apy ?? null,
+            healthRate: p.healthRate ?? null,
+            // Prisma types JSON columns structurally; our leg array has to be
+            // handed over as an opaque JSON value
+            tokens: p.tokens?.length ? (p.tokens as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
           })),
         }),
         this.prisma.wallet.update({

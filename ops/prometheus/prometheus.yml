@@ -24,3 +24,13 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ['wallet.railway.internal:3000']
+
+  # The observability stack watches itself too — if log or trace ingestion
+  # breaks, that should be visible here rather than by noticing missing data
+  - job_name: loki
+    static_configs:
+      - targets: ['loki.railway.internal:3100']
+
+  - job_name: tempo
+    static_configs:
+      - targets: ['tempo.railway.internal:3200']

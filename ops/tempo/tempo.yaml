@@ -1,0 +1,42 @@
+# Tempo for svinooh — single-binary mode, local block storage.
+#
+# The services push spans over OTLP/HTTP to tempo.railway.internal:4318 (the
+# gRPC receiver is on 4317 for anything that prefers it). Grafana reads traces
+# from the HTTP API on 3200.
+#
+# The listen addresses are "[::]" rather than "0.0.0.0": Railway's private
+# network is IPv6, and a Go listener on "[::]" is dual-stack, so both work.
+server:
+  http_listen_port: 3200
+  http_listen_address: '::'
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: '[::]:4318'
+        grpc:
+          endpoint: '[::]:4317'
+
+ingester:
+  # Flush blocks often — a short-lived container should not sit on hours of
+  # unwritten spans
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    # We keep traces for two days: enough to investigate yesterday's incident,
+    # small enough to live on a modest disk
+    block_retention: 48h
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+
+usage_report:
+  reporting_enabled: false

@@ -1,4 +1,5 @@
 import { ConsoleLogger } from '@nestjs/common';
+import { trace } from '@opentelemetry/api';
 import { serviceName } from './env';
 
 type LokiLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -19,6 +20,12 @@ const ANSI = /\[[0-9;]*m/g;
  * ConsoleLogger. Not a Nest provider: installed in main.ts via app.useLogger so
  * it also captures bootstrap logs. Every shipped line is prefixed with the
  * writing service's context, e.g. "[SyncService] ...".
+ *
+ * When a line is written inside a traced request it also carries
+ * `trace_id=<id>`. Grafana turns that into a link to the trace in Tempo (a
+ * derived field on the Loki datasource), so a log line leads to the whole
+ * request across services. It is appended to the text rather than added as a
+ * label on purpose: a label per trace would explode Loki's stream cardinality.
  */
 export class LokiLogger extends ConsoleLogger {
   private buffer: Entry[] = [];
@@ -72,8 +79,10 @@ export class LokiLogger extends ConsoleLogger {
     );
     const text = [message, ...extra].map((p) => fmt(p)).join(' ').replace(ANSI, '').trim();
     if (!text) return;
-    // Prefix every line with the writing service's name
-    const line = `[${context}] ${text}`;
+    // Prefix every line with the writing service's name, and — inside a traced
+    // request — the trace it belongs to
+    const traceId = trace.getActiveSpan()?.spanContext().traceId;
+    const line = `[${context}] ${text}${traceId ? ` trace_id=${traceId}` : ''}`;
     this.buffer.push({ ts: this.tsNs(), level, context, line });
     if (this.buffer.length >= MAX_BUFFER) void this.flush();
   }

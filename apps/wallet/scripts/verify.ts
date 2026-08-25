@@ -11,20 +11,24 @@
  * EVM tries HTTP (debank reverse signature), and on failure — Chrome; which path
  * was taken is visible in the EvmScanner log lines.
  */
-import { scanAddress, detectChain } from '../src/scanners';
+import type { Chain } from '@svinooh/shared';
+import { scanAddress } from '../src/scanners';
 import { closeBrowser } from '../src/scanners/browser';
 
-const CONTROL: Array<{ address: string; hint: string }> = [
-  { address: 'bc1qlggpznpwv0e5nuc5lmgdcugd64lrjkspcgkyam', hint: '~$1.4k' },
+const CONTROL: Array<{ chain: Chain; address: string; hint: string }> = [
+  { chain: 'BTC', address: 'bc1qlggpznpwv0e5nuc5lmgdcugd64lrjkspcgkyam', hint: '~$1.4k' },
   {
+    chain: 'SOL',
     address: 'EiN7zKfhj7TAwibNDRDhWqELSv9bgMcRsmG6Kz8DcYNL',
     hint: '~$13.8k; gmtrade ~$1.5k (if ~$1.7k — we are counting TVL/supply, pitfall #1)',
   },
   {
+    chain: 'TRON',
     address: 'TEF8gN62a3v8cH956eGe2NNfPoZQsrZfi3',
     hint: '~$3.7k (if ~$3 — the TRX stake is lost, pitfall #2)',
   },
   {
+    chain: 'EVM',
     address: '0xe2dd4d99f7fc9d0acbc73f52c4dc86a2dafdb53e',
     hint: '~$27k (if $0 — headless Chrome race condition, pitfall #3)',
   },
@@ -34,12 +38,7 @@ async function main() {
   const only = process.argv[2]?.toUpperCase();
   let total = 0;
 
-  for (const { address, hint } of CONTROL) {
-    const chain = detectChain(address);
-    if (!chain) {
-      console.log(`✗ ${address}: network not recognized`);
-      continue;
-    }
+  for (const { chain, address, hint } of CONTROL) {
     if (only && chain !== only) continue;
 
     try {
@@ -50,8 +49,22 @@ async function main() {
       console.log(
         `${chain.padEnd(4)} ${address}  $${result.totalUsd.toFixed(2)}  (${((Date.now() - startedAt) / 1000).toFixed(1)}s, positions: ${result.positions.length})${extras}`,
       );
-      for (const p of [...result.positions].sort((a, b) => b.valueUsd - a.valueUsd).slice(0, 8)) {
-        console.log(`       ${p.symbol.slice(0, 30).padEnd(30)} $${p.valueUsd.toFixed(2)}`);
+      for (const p of [...result.positions].sort((a, b) => b.valueUsd - a.valueUsd).slice(0, 10)) {
+        const kind = [p.name, p.note].filter(Boolean).join(' · ');
+        const extra = [
+          p.apy != null ? `${(p.apy * 100).toFixed(1)}% APY` : null,
+          p.healthRate != null ? `HF ${p.healthRate.toFixed(2)}` : null,
+        ]
+          .filter(Boolean)
+          .join(' ');
+        console.log(
+          `       ${p.symbol.slice(0, 26).padEnd(26)} $${p.valueUsd.toFixed(2).padStart(11)}  ${kind}${extra ? '  ' + extra : ''}`,
+        );
+        for (const leg of p.tokens || []) {
+          console.log(
+            `         └ ${leg.role.padEnd(6)} ${leg.symbol.slice(0, 24).padEnd(24)} $${leg.valueUsd.toFixed(2)}`,
+          );
+        }
       }
       if (result.unpriced?.length) console.log(`       unpriced: ${result.unpriced.join(', ')}`);
       console.log(`       expected: ${hint}\n`);

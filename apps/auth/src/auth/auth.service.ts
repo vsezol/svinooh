@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
-import type { Portfolio, User } from '@prisma/client';
+import type { User } from '@prisma/client';
 import type {
   AuthConfigDto,
   AuthResponseDto,
@@ -16,11 +16,11 @@ import type {
   TelegramPollDto,
   TelegramStartDto,
 } from '@svinooh/shared';
-import { randomSlug } from '../common/util';
 import { config } from '../config';
 import { PrismaService } from '@svinooh/db';
 import { verifyTelegramLogin } from './telegram';
 import { TelegramBotService } from './telegram-bot.service';
+import { UserService } from './user.service';
 
 @Injectable()
 export class AuthService {
@@ -28,6 +28,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly bot: TelegramBotService,
+    private readonly users: UserService,
   ) {}
 
   getConfig(): AuthConfigDto {
@@ -49,7 +50,7 @@ export class AuthService {
     if (problem) throw new UnauthorizedException(`Telegram data check failed: ${problem}`);
 
     return this.finishLogin(
-      await this.upsertTelegram({
+      await this.users.upsertTelegram({
         id: payload.id,
         firstName: payload.first_name,
         lastName: payload.last_name,
@@ -80,35 +81,13 @@ export class AuthService {
     if (entry.status !== 'authenticated' || !entry.user) return { pending: true };
     this.bot.consume(token); // one-time use
     return this.finishLogin(
-      await this.upsertTelegram({
+      await this.users.upsertTelegram({
         id: entry.user.id,
         firstName: entry.user.first_name,
         lastName: entry.user.last_name,
         username: entry.user.username,
       }),
     );
-  }
-
-  private upsertTelegram(p: {
-    id: number;
-    firstName?: string;
-    lastName?: string;
-    username?: string;
-    photoUrl?: string;
-  }): Promise<User> {
-    const telegramId = BigInt(p.id);
-    const profile = {
-      firstName: p.firstName ?? null,
-      lastName: p.lastName ?? null,
-      username: p.username ?? null,
-      // the bot doesn't send a photo — don't overwrite the one already saved from the web widget
-      ...(p.photoUrl !== undefined ? { photoUrl: p.photoUrl ?? null } : {}),
-    };
-    return this.prisma.user.upsert({
-      where: { telegramId },
-      create: { telegramId, ...profile },
-      update: profile,
-    });
   }
 
   /** Local development without the bot: enabled via AUTH_DEV_MODE=true */
@@ -133,27 +112,14 @@ export class AuthService {
   async me(userId: string): Promise<MeDto> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
-    const portfolio = await this.ensurePortfolio(user);
+    const portfolio = await this.users.ensurePortfolio(user);
     return this.toMe(user, portfolio.slug);
   }
 
   private async finishLogin(user: User): Promise<AuthResponseDto> {
-    const portfolio = await this.ensurePortfolio(user);
+    const portfolio = await this.users.ensurePortfolio(user);
     const token = await this.jwt.signAsync({ sub: user.id });
     return { token, me: this.toMe(user, portfolio.slug) };
-  }
-
-  /** The portfolio is created on first sign-in. Just one for now; the schema allows several. */
-  private async ensurePortfolio(user: User): Promise<Portfolio> {
-    const existing = await this.prisma.portfolio.findFirst({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'asc' },
-    });
-    if (existing) return existing;
-    const display = user.username ? `@${user.username}` : user.firstName || 'no name';
-    return this.prisma.portfolio.create({
-      data: { userId: user.id, slug: randomSlug(), name: `${display}'s portfolio` },
-    });
   }
 
   private toMe(user: User, portfolioSlug: string): MeDto {

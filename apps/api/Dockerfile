@@ -32,4 +32,8 @@ COPY --from=build /app/apps/api/dist apps/api/dist
 EXPOSE 3000
 # Migrations run on start (schema lives in libs/db). The DB is only reachable
 # at runtime, so this can't happen at build time.
-CMD ["sh", "-c", "npx prisma migrate deploy --schema libs/db/prisma/schema.prisma && node apps/api/dist/main.js"]
+# `-r @svinooh/common/dist/tracing` starts OpenTelemetry BEFORE the app: the
+# instrumentation patches modules as they are required, so anything already
+# loaded would never be traced. With OTEL_EXPORTER_OTLP_ENDPOINT unset it is a
+# no-op.
+CMD ["sh", "-c", "npx prisma migrate deploy --schema libs/db/prisma/schema.prisma && node -r @svinooh/common/dist/tracing apps/api/dist/main.js"]

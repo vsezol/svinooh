@@ -17,7 +17,13 @@ const PERIODS: Array<{ key: HistoryRange; label: string }> = [
   { key: 'all', label: 'ALL' },
 ];
 
-function usePortfolio(slug: string) {
+/**
+ * `viewerId` is not used in the request — it's a reload trigger. The bot's
+ * button lands straight on /p/<slug>, so the page first loads as a guest and
+ * signs in a moment later; without refetching, `isOwner` would stay false and
+ * the owner's controls wouldn't appear until a manual refresh.
+ */
+function usePortfolio(slug: string, viewerId: string | null) {
   const [data, setData] = useState<PortfolioDto | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -31,10 +37,13 @@ function usePortfolio(slug: string) {
   }, [slug]);
 
   useEffect(() => {
+    void reload();
+  }, [reload, viewerId]);
+
+  useEffect(() => {
     setData(null);
     setError(null);
-    void reload();
-  }, [reload]);
+  }, [slug]);
 
   useEffect(() => {
     const hasPending = data?.wallets.some((w) => w.status === 'pending') ?? false;
@@ -85,7 +94,7 @@ export function PortfolioPage() {
   const navigate = useNavigate();
   const { me, config, logout } = useAuth();
   const { theme, toggle } = useTheme();
-  const { data, error, reload } = usePortfolio(slug);
+  const { data, error, reload } = usePortfolio(slug, me?.id ?? null);
 
   const [scope, setScope] = useState<string>('all');
   const [period, setPeriod] = useState<HistoryRange>('24h');

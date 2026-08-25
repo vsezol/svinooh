@@ -30,6 +30,10 @@ COPY --from=build /app/apps/auth/package.json apps/auth/
 COPY --from=build /app/apps/auth/dist apps/auth/dist
 
 EXPOSE 3000
-CMD ["node", "apps/auth/dist/main.js"]
+# `-r @svinooh/common/dist/tracing` starts OpenTelemetry BEFORE the app: the
+# instrumentation patches modules as they are required, so anything already
+# loaded would never be traced. With OTEL_EXPORTER_OTLP_ENDPOINT unset it is a
+# no-op.
+CMD ["node", "-r", "@svinooh/common/dist/tracing", "apps/auth/dist/main.js"]
 
 # build trigger
