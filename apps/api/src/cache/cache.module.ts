@@ -1,7 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { CacheService } from './cache.service';
 
-// Глобальный — CacheService доступен всем модулям без повторного импорта.
+// Global — CacheService is available to all modules without re-importing.
 @Global()
 @Module({
   providers: [CacheService],

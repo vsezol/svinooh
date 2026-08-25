@@ -1,5 +1,5 @@
-// Детерминированный цвет иконки из строки — как в дизайне
-// (linear-gradient 135deg по hue из seed).
+// Deterministic icon color derived from a string — as in the design
+// (linear-gradient 135deg with hue from the seed).
 
 function hashSeed(input: string): number {
   let seed = 0;
@@ -7,13 +7,13 @@ function hashSeed(input: string): number {
   return seed;
 }
 
-/** Градиентная плитка кошелька/аватара (из адреса/хэндла) */
+/** Gradient wallet/avatar tile (from address/handle) */
 export function gradientFor(input: string): string {
   const hue = (hashSeed(input) * 137) % 360;
   return `linear-gradient(135deg, hsl(${hue},42%,38%) 50%, hsl(${(hue + 40) % 360},46%,26%) 50%)`;
 }
 
-// Известные тикеры — фирменные цвета, остальное из хэша
+// Known tickers use brand colors, everything else comes from the hash
 const TOKEN_COLORS: Record<string, string> = {
   BTC: '#F7931A',
   ETH: '#627EEA',
@@ -37,7 +37,7 @@ const TOKEN_COLORS: Record<string, string> = {
   GMX: '#2D42FC',
 };
 
-/** Цвет кружка позиции по тикеру */
+/** Position dot color by ticker */
 export function tokenColor(symbol: string): string {
   const key = symbol.toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (TOKEN_COLORS[key]) return TOKEN_COLORS[key];
@@ -45,7 +45,7 @@ export function tokenColor(symbol: string): string {
   return `hsl(${hue},48%,42%)`;
 }
 
-/** 1–2 буквы для кружка позиции */
+/** 1–2 letters for the position dot */
 export function tokenInitials(symbol: string): string {
   const clean = symbol.replace(/^[^A-Za-z0-9]+/, '');
   return clean.slice(0, clean.length > 3 ? 2 : 1).toUpperCase() || '?';

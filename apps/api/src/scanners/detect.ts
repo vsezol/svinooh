@@ -20,7 +20,7 @@ export function base58Decode(input: string): Uint8Array | null {
       carry >>= 8;
     }
   }
-  // Ведущие '1' кодируют нулевые байты
+  // Leading '1's encode zero bytes
   for (const char of input) {
     if (char !== '1') break;
     bytes.push(0);
@@ -31,9 +31,9 @@ export function base58Decode(input: string): Uint8Array | null {
 const sha256 = (data: Uint8Array): Uint8Array => createHash('sha256').update(data).digest();
 
 /**
- * TRON — base58check: 25 байт, префикс 0x41, последние 4 байта — контрольная
- * сумма double-SHA256. Именно контрольная сумма надёжно отличает TRON от
- * SOL-адреса, случайно начавшегося с 'T' (оба — base58 подходящей длины).
+ * TRON — base58check: 25 bytes, 0x41 prefix, and the last 4 bytes are a
+ * double-SHA256 checksum. The checksum is what reliably tells TRON apart from a
+ * SOL address that happens to start with 'T' (both are base58 of a fitting length).
  */
 export function isTronAddress(address: string): boolean {
   if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address)) return false;
@@ -51,10 +51,10 @@ export function isSolAddress(address: string): boolean {
 }
 
 /**
- * Порядок проверок важен:
- * - BTC bech32 и EVM оба бывают по 42 символа — различаются только префиксом;
- * - TRON-адрес (T + 33 base58) попадает в диапазон длины SOL (32–44 base58),
- *   поэтому TRON проверяется контрольной суммой, а SOL — последним.
+ * Check order matters:
+ * - BTC bech32 and EVM can both be 42 chars — they differ only by prefix;
+ * - a TRON address (T + 33 base58) falls within SOL's length range (32–44 base58),
+ *   so TRON is verified by checksum, and SOL is checked last.
  */
 export function detectChain(raw: string): Chain | null {
   const address = raw.trim();

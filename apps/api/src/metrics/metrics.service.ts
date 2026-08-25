@@ -2,10 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { Counter, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
 
 /**
- * Реестр Prometheus-метрик приложения. Счётчики/гистограммы дёргаются из кода
- * (HTTP, сканы, кэш, ошибки); бизнес-гейджи (кошельки, глубина очереди) —
- * в MetricsCollectorsService через async collect(). Node-метрики (CPU/RAM/
- * event loop) собираются автоматически.
+ * The application's Prometheus metrics registry. Counters/histograms are called
+ * from code (HTTP, scans, cache, errors); business gauges (wallets, queue depth)
+ * live in MetricsCollectorsService via async collect(). Node metrics (CPU/RAM/
+ * event loop) are collected automatically.
  */
 @Injectable()
 export class MetricsService {

@@ -4,10 +4,10 @@ import { useAuth } from '../lib/auth';
 import { pendingTgToken, pollTelegramLogin } from '../lib/telegram';
 
 /**
- * Добивает вход через Telegram при возврате на сайт. Срабатывает, когда
- * пользователь пришёл по кнопке из бота (`?tg_login=<token>`) или просто
- * перезагрузил вкладку с незавершённым входом (токен в sessionStorage).
- * Ничего не рендерит.
+ * Completes the Telegram sign-in when the user returns to the site. Fires when
+ * the user arrives via the bot's button (`?tg_login=<token>`) or simply
+ * reloads a tab with an unfinished sign-in (token in sessionStorage).
+ * Renders nothing.
  */
 export function TelegramResume() {
   const { me, loading, applyAuth } = useAuth();
@@ -22,7 +22,7 @@ export function TelegramResume() {
     const token = urlToken || pendingTgToken.get();
     if (!token) return;
 
-    // убираем tg_login из адреса, чтобы он не «прилипал» и не делился в ссылке
+    // strip tg_login from the URL so it doesn't linger or get shared in a link
     if (urlToken) {
       params.delete('tg_login');
       const qs = params.toString();
@@ -30,7 +30,7 @@ export function TelegramResume() {
     }
 
     if (me) {
-      pendingTgToken.clear(); // уже вошли
+      pendingTgToken.clear(); // already signed in
       return;
     }
 

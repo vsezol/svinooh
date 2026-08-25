@@ -28,7 +28,7 @@ import { SyncService } from '../sync/sync.service';
 type WalletWithPositions = Wallet & { positions: Position[] };
 
 const RANGES: Record<HistoryRange, { sinceMs: number | null; bucket: string | null }> = {
-  '24h': { sinceMs: 24 * 3600e3, bucket: null }, // сырые 5-минутные точки
+  '24h': { sinceMs: 24 * 3600e3, bucket: null }, // raw 5-minute points
   '7d': { sinceMs: 7 * 86400e3, bucket: '30 minutes' },
   '30d': { sinceMs: 30 * 86400e3, bucket: '2 hours' },
   all: { sinceMs: null, bucket: '6 hours' },
@@ -39,23 +39,24 @@ export function normalizeRange(raw: string | undefined): HistoryRange {
 }
 
 /**
- * Убирает провалы стоимости кошелька, которые сами восстанавливаются — это
- * почти всегда глюк источника (TronGrid без стейка, Chrome-скрейп с $0), а не
- * реальное движение. Просадку глубже 10% считаем кандидатом; если в пределах
- * окна значение возвращается почти точно к прежнему (98%+) — это выброс,
- * держим последнее хорошее значение (график не «пилит»). Реальное движение так
- * точно назад не отскакивает и проходит как есть.
+ * Removes wallet value dips that recover on their own — this is almost always a
+ * source glitch (TronGrid without staking, a Chrome scrape returning $0) rather
+ * than real movement. A drawdown deeper than 10% is treated as a candidate; if
+ * the value returns almost exactly to its previous level (98%+) within the
+ * window, it's an outlier and we hold the last good value (so the chart doesn't
+ * jitter). Real movement doesn't bounce back that precisely and passes through
+ * as-is.
  */
 function smoothSeries(
   series: Array<{ t: number; v: number }>,
 ): Array<{ t: number; v: number }> {
-  // Отличаем глюк от реального движения не по глубине, а по возврату: цена
-  // проваливается и возвращается почти точно к прежнему значению (данные по
-  // кошельку восстановились, реально ничего не менялось). Настоящее движение
-  // так точно назад не отскакивает.
-  const DROP = 0.9; // просадка глубже 10% — кандидат в выброс
-  const RECOVER = 0.98; // если вернулось к 98%+ прежнего — это был выброс
-  const WINDOW = 90; // как далеко вперёд ищем восстановление (~1.5ч при 1-мин синке)
+  // We tell a glitch from real movement not by depth but by recovery: the price
+  // dips and returns almost exactly to its previous value (the wallet data
+  // recovered, nothing actually changed). Real movement doesn't bounce back
+  // that precisely.
+  const DROP = 0.9; // a drawdown deeper than 10% is an outlier candidate
+  const RECOVER = 0.98; // if it returned to 98%+ of the previous value, it was an outlier
+  const WINDOW = 90; // how far ahead we look for recovery (~1.5h at a 1-min sync)
   const out = series.map((s) => ({ t: s.t, v: s.v }));
   let lastGood = series[0].v;
   for (let i = 0; i < out.length; i++) {
@@ -70,7 +71,7 @@ function smoothSeries(
         }
       }
       if (recovers) {
-        out[i].v = lastGood; // спурьёзный провал — держим прошлое значение
+        out[i].v = lastGood; // spurious dip — hold the previous value
         continue;
       }
     }
@@ -80,7 +81,7 @@ function smoothSeries(
   return out;
 }
 
-/** Прореживание ряда до max точек (всегда сохраняя последнюю) */
+/** Downsamples the series to max points (always keeping the last one) */
 function downsample(points: HistoryPointDto[], max: number): HistoryPointDto[] {
   if (points.length <= max) return points;
   const step = Math.ceil(points.length / max);
@@ -91,7 +92,7 @@ function downsample(points: HistoryPointDto[], max: number): HistoryPointDto[] {
   return out;
 }
 
-/** Ключ кэша собранного портфеля в Redis */
+/** Redis cache key for the assembled portfolio */
 function cacheKey(slug: string): string {
   return `pf:${slug}`;
 }
@@ -105,8 +106,9 @@ export class PortfolioService {
   ) {}
 
   /**
-   * Лидерборд/поиск для лендинга: публичные портфели по убыванию стоимости.
-   * Портфели и так открыты по ссылке — тут они просто перечислены.
+   * Leaderboard/search for the landing page: public portfolios ordered by
+   * descending value. Portfolios are already open via their link — here they're
+   * simply listed.
    */
   async listPublic(limit: number, query: string): Promise<PublicPortfolioDto[]> {
     const portfolios = await this.prisma.portfolio.findMany({
@@ -142,10 +144,10 @@ export class PortfolioService {
   }
 
   /**
-   * Публичный просмотр: портфель по ссылке виден без входа. Отдаётся из кэша
-   * (Redis) — кэшируется owner-независимая часть, флаг isOwner накладывается
-   * на чтении. Кэш инвалидируется при правках владельца; фоновые обновления
-   * подхватываются по TTL (config.cacheTtlSec).
+   * Public view: a portfolio is visible via its link without signing in. Served
+   * from cache (Redis) — the owner-independent part is cached, and the isOwner
+   * flag is applied on read. The cache is invalidated on owner edits; background
+   * updates are picked up via TTL (config.cacheTtlSec).
    */
   async getBySlug(slug: string, userId: string | null): Promise<PortfolioDto> {
     const key = cacheKey(slug);
@@ -230,8 +232,9 @@ export class PortfolioService {
     const wallet = await this.prisma.wallet.create({
       data: { portfolioId: portfolio.id, address, chain },
     });
-    // Скан асинхронный: ручка отвечает сразу (status=pending), фронт поллит.
-    // EVM-скан занимает 20–40 секунд — держать HTTP-запрос столько нельзя.
+    // The scan is async: the endpoint responds immediately (status=pending) and
+    // the frontend polls. An EVM scan takes 20–40 seconds — we can't hold an
+    // HTTP request open that long.
     void this.sync.scanWalletNow(wallet.id).catch(() => {});
     await this.cache.del(cacheKey(slug));
     return this.toWalletDto({ ...wallet, positions: [] }, 0);
@@ -248,7 +251,7 @@ export class PortfolioService {
       where: { id: walletId, portfolioId: portfolio.id },
     });
     if (!wallet) throw new NotFoundException('Wallet not found');
-    // Пустое имя — сброс к дефолту (null)
+    // An empty name resets to the default (null)
     const label = String(labelRaw || '').trim().slice(0, 40) || null;
     await this.prisma.wallet.update({ where: { id: wallet.id }, data: { label } });
     await this.cache.del(cacheKey(slug));
@@ -281,11 +284,11 @@ export class PortfolioService {
   }
 
   /**
-   * Ряд стоимости портфеля без «скачков» от добавления кошельков: собираем из
-   * снапшотов кошельков, где стоимость каждого кошелька перенесена (carry-back)
-   * его самым ранним известным значением на весь диапазон. Поэтому добавление
-   * кошелька не выглядит как прибыль: change = Σ(текущая) − Σ(стартовая) =
-   * сумма реальной прибыли по кошелькам, а change% = Σприбыль / Σстартовая.
+   * Portfolio value series without the "jumps" caused by adding wallets: we
+   * assemble it from wallet snapshots, where each wallet's value is carried back
+   * across the whole range by its earliest known value. This way adding a wallet
+   * doesn't look like a profit: change = Σ(current) − Σ(starting) = the sum of
+   * real per-wallet profit, and change% = Σprofit / Σstarting.
    */
   private async reconstructPortfolioSeries(
     walletIds: string[],
@@ -301,8 +304,8 @@ export class PortfolioService {
     });
     if (!snaps.length) return [];
 
-    // группируем снапшоты по кошельку (уже отсортированы по времени) и сглаживаем
-    // каждый — убирая кратковременные провалы-глюки, которые сами восстанавливаются
+    // group snapshots by wallet (already sorted by time) and smooth each one —
+    // removing short-lived glitch dips that recover on their own
     const byWallet = new Map<string, Array<{ t: number; v: number }>>();
     for (const s of snaps) {
       const arr = byWallet.get(s.walletId) ?? [];
@@ -310,7 +313,7 @@ export class PortfolioService {
       byWallet.set(s.walletId, arr);
     }
 
-    // старт каждого кошелька (carry-back) — первое сглаженное значение в диапазоне
+    // each wallet's starting point (carry-back) — the first smoothed value in the range
     const baseline = new Map<string, number>();
     const events: Array<{ t: number; id: string; v: number }> = [];
     for (const [id, series] of byWallet) {
@@ -319,9 +322,9 @@ export class PortfolioService {
       for (const p of smooth) events.push({ t: p.t, id, v: p.v });
     }
 
-    // кошельки без снапшота в диапазоне (весь период не синхронизировались) —
-    // берём их последнее известное значение до начала диапазона, чтобы итог
-    // включал все кошельки, а линия не занижалась
+    // wallets with no snapshot in the range (never synced during the whole
+    // period) — we take their last known value before the range starts, so the
+    // total includes every wallet and the line isn't understated
     if (since) {
       const missing = walletIds.filter((id) => !baseline.has(id));
       if (missing.length) {
@@ -334,8 +337,8 @@ export class PortfolioService {
       }
     }
 
-    // идём по событиям во времени, сумма = Σ последних известных значений
-    // (изначально = стартовые, поэтому «новый» кошелёк присутствует с t0)
+    // walk the events in time order, sum = Σ of the last known values
+    // (initially = the starting ones, so a "new" wallet is present from t0)
     events.sort((a, b) => a.t - b.t);
     const current = new Map<string, number>(baseline);
     const points: HistoryPointDto[] = [];
@@ -365,8 +368,8 @@ export class PortfolioService {
   }
 
   /**
-   * Ряды для графиков. 24h — сырые точки (шаг = интервалу синка), длинные
-   * диапазоны агрегируются в бакеты date_bin на стороне Postgres.
+   * Series for the charts. 24h uses raw points (step = sync interval); longer
+   * ranges are aggregated into date_bin buckets on the Postgres side.
    */
   private async series(
     table: 'PortfolioSnapshot' | 'WalletSnapshot',
@@ -440,7 +443,7 @@ export class PortfolioService {
   }
 }
 
-/** Кошельки — по убыванию стоимости; ещё не сосканированные — в конец */
+/** Wallets ordered by descending value; not-yet-scanned ones go to the end */
 function walletOrder(a: WalletDto, b: WalletDto): number {
   if (a.totalUsd === null && b.totalUsd === null) return a.createdAt < b.createdAt ? -1 : 1;
   if (a.totalUsd === null) return 1;

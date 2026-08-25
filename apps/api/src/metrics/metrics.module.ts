@@ -4,7 +4,7 @@ import { HttpMetricsInterceptor } from './http-metrics.interceptor';
 import { MetricsController } from './metrics.controller';
 import { MetricsService } from './metrics.service';
 
-// Глобальный: MetricsService инжектится в любой сервис (кэш, синк, сборщики).
+// Global: MetricsService is injected into any service (cache, sync, collectors).
 @Global()
 @Module({
   controllers: [MetricsController],

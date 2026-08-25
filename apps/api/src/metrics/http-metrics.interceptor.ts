@@ -4,10 +4,10 @@ import type { Observable } from 'rxjs';
 import { MetricsService } from './metrics.service';
 
 /**
- * Меряет каждый HTTP-запрос: счётчик + гистограмма длительности, метки
- * method/route/status. Роут берём из совпавшего паттерна (напр.
- * /api/portfolios/:slug), а не из конкретного URL — иначе кардинальность
- * меток взорвётся. Считаем на событии finish, когда статус уже финальный.
+ * Measures every HTTP request: a counter + a duration histogram, with
+ * method/route/status labels. The route comes from the matched pattern (e.g.
+ * /api/portfolios/:slug), not the concrete URL — otherwise label cardinality
+ * would explode. We record on the finish event, once the status is final.
  */
 @Injectable()
 export class HttpMetricsInterceptor implements NestInterceptor {

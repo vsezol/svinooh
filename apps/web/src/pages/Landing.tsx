@@ -69,7 +69,7 @@ export function Landing() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* хедер */}
+      {/* header */}
       <div className="shell" style={{ height: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Logo size={19} />
         <div style={{ display: 'flex', gap: 8 }}>
@@ -166,7 +166,7 @@ export function Landing() {
           </div>
         </div>
 
-        {/* демо-карта из топ публичного портфеля */}
+        {/* demo card from the top public portfolio */}
         <div>
           <div className="card" style={{ overflow: 'hidden', boxShadow: '0 30px 80px -40px color-mix(in srgb, var(--acc) 35%, transparent)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 18px 0' }}>
@@ -213,7 +213,7 @@ export function Landing() {
         </div>
       </div>
 
-      {/* публичные портфели */}
+      {/* public portfolios */}
       <div className="shell" style={{ width: '100%', padding: '0 clamp(14px,3.5vw,28px) 52px' }}>
         <div style={{ borderTop: '1px solid var(--line)', paddingTop: 22 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>

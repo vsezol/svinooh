@@ -7,29 +7,30 @@ import type { ScanResult } from './types';
 const logger = new Logger('EvmScanner');
 
 /**
- * Первично — быстрый HTTP к debank.com (реверс-подпись, evm-http.ts). При
- * ЛЮБОЙ осечке — прозрачный откат на чтение отрисованной страницы через
- * headless Chrome (evm-browser.ts). Так задумал пользователь: HTTP дешёвый,
- * но хрупкий; браузер — медленный, но переживает смену их API.
+ * Primary path is a fast HTTP call to debank.com (reverse-engineered signature,
+ * evm-http.ts). On ANY miss, transparently fall back to reading the rendered
+ * page via headless Chrome (evm-browser.ts). This is by design: HTTP is cheap
+ * but fragile; the browser is slow but survives changes to their API.
  *
- * Circuit breaker: если datacenter-IP словил софт-бан DeBank (стабильные
- * 429), нет смысла каждый скан тратить ~2с на HTTP-осечку И продолжать долбить
- * забаненный эндпоинт, продлевая бан. После N подряд осечек HTTP «размыкается»
- * на cooldown — сканы идут СРАЗУ в Chrome. По истечении cooldown один пробный
- * HTTP: успех — замыкаем обратно, осечка — снова пауза.
+ * Circuit breaker: if a datacenter IP catches a DeBank soft-ban (persistent
+ * 429s), there's no point spending ~2s per scan on an HTTP miss AND continuing
+ * to hammer the banned endpoint, extending the ban. After N consecutive misses
+ * the HTTP path "opens" for a cooldown — scans go STRAIGHT to Chrome. Once the
+ * cooldown expires, one probe HTTP call: on success we close it again, on a
+ * miss we pause once more.
  */
 
-const BREAKER_THRESHOLD = 3; // столько подряд осечек HTTP размыкают цепь
-const BREAKER_COOLDOWN_MS = 30 * 60_000; // на сколько отключаем HTTP
+const BREAKER_THRESHOLD = 3; // this many consecutive HTTP misses open the circuit
+const BREAKER_COOLDOWN_MS = 30 * 60_000; // how long we disable HTTP for
 
 let consecutiveFailures = 0;
-let openedUntil = 0; // timestamp, до которого HTTP пропускаем
+let openedUntil = 0; // timestamp until which we skip HTTP
 
 function httpAllowedNow(): boolean {
   if (!config.evmHttpEnabled) return false;
   if (openedUntil === 0) return true;
   if (Date.now() >= openedUntil) {
-    // half-open: даём одну пробную попытку
+    // half-open: allow one probe attempt
     openedUntil = 0;
     return true;
   }
@@ -46,7 +47,7 @@ function noteHttpFailure(): void {
   if (consecutiveFailures >= BREAKER_THRESHOLD && openedUntil === 0) {
     openedUntil = Date.now() + BREAKER_COOLDOWN_MS;
     logger.warn(
-      `HTTP-путь DeBank размкнут на ${BREAKER_COOLDOWN_MS / 60_000} мин после ${consecutiveFailures} осечек подряд — сканы идут через Chrome`,
+      `DeBank HTTP path opened for ${BREAKER_COOLDOWN_MS / 60_000} min after ${consecutiveFailures} consecutive misses — scans go via Chrome`,
     );
   }
 }
@@ -61,7 +62,7 @@ export async function scanEvm(address: string): Promise<ScanResult> {
     } catch (error) {
       noteHttpFailure();
       const message = error instanceof Error ? error.message : String(error);
-      logger.warn(`${address}: HTTP-путь осёкся (${message}) → фоллбэк на Chrome`);
+      logger.warn(`${address}: HTTP path failed (${message}) → falling back to Chrome`);
     }
   }
   const result = await scanEvmBrowser(address);

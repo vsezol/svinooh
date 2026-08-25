@@ -13,9 +13,9 @@ import { scanQueue } from './scan-queue';
 @Injectable()
 export class SyncService implements OnModuleDestroy {
   private readonly logger = new Logger(SyncService.name);
-  /** `${chain}:${address}` сканов в полёте — чтобы цикл и «скан при добавлении» не дублировались */
+  /** In-flight scans keyed by `${chain}:${address}` — keeps the loop and the "scan on add" from running the same address twice */
   private readonly inFlight = new Set<string>();
-  /** Счётчик подряд идущих подозрительных просадок по каждому адресу */
+  /** Counter of consecutive suspicious drops per address */
   private readonly dropStreak = new Map<string, number>();
 
   constructor(
@@ -27,7 +27,7 @@ export class SyncService implements OnModuleDestroy {
     await closeBrowser();
   }
 
-  /** Все уникальные адреса (chain:address) как задания для очереди */
+  /** All unique addresses (chain:address) as queue jobs */
   async listGroups(): Promise<ScanJob[]> {
     const wallets = await this.prisma.wallet.findMany({ select: { chain: true, address: true } });
     const seen = new Set<string>();
@@ -42,7 +42,7 @@ export class SyncService implements OnModuleDestroy {
     return jobs;
   }
 
-  /** Скан одного адреса из очереди: сам скан + снапшот задетых портфелей */
+  /** Scan a single address from the queue: the scan itself plus a snapshot of affected portfolios */
   async scanOne(job: ScanJob): Promise<void> {
     const wallets = await this.prisma.wallet.findMany({
       where: { chain: job.chain, address: job.address },
@@ -53,7 +53,7 @@ export class SyncService implements OnModuleDestroy {
     for (const portfolioId of portfolioIds) await this.snapshotPortfolio(portfolioId);
   }
 
-  /** Немедленный скан только что добавленного кошелька */
+  /** Immediate scan of a just-added wallet */
   async scanWalletNow(walletId: string): Promise<void> {
     const wallet = await this.prisma.wallet.findUnique({ where: { id: walletId } });
     if (!wallet) return;
@@ -72,7 +72,7 @@ export class SyncService implements OnModuleDestroy {
       this.metrics.scans.inc({ chain, result: 'ok' });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      // подавленная просадка — это защита от «пилы», а не настоящий сбой
+      // a suppressed drop is protection against the "sawtooth", not a real failure
       const suppressed = message.startsWith('Unconfirmed drop');
       this.metrics.scans.inc({ chain, result: suppressed ? 'suppressed' : 'failed' });
       if (!suppressed) this.metrics.errors.inc({ type: 'scan' });
@@ -84,14 +84,14 @@ export class SyncService implements OnModuleDestroy {
   }
 
   /**
-   * Тихо неверная цифра хуже упавшего запроса. Источник может отдать частичные
-   * данные (TronGrid без frozenV2, Chrome-скрейп с $0) — визуально это резкая
-   * просадка, которая через цикл сама «восстанавливается», рисуя пилу на графике.
-   * Поэтому: (1) при падении больше чем на 25% сразу перепроверяем вторым сканом;
-   * (2) если и он низкий — верим падению только когда оно держится
-   * `dropConfirmCycles` циклов подряд, иначе бросаем (кошелёк остаётся stale со
-   * старым значением, снапшот НЕ пишется). Реальный вывод средств так всё равно
-   * зафиксируется — просто не мгновенно; разовый глюк — никогда.
+   * A silently wrong number is worse than a failed request. A source may return
+   * partial data (TronGrid without frozenV2, a Chrome scrape reading $0) — visually
+   * this is a sharp drop that "recovers" on its own a cycle later, drawing a sawtooth
+   * on the chart. So: (1) on a drop of more than 25% we immediately re-check with a
+   * second scan; (2) if that one is low too, we trust the drop only when it holds for
+   * `dropConfirmCycles` cycles in a row, otherwise we throw (the wallet stays stale
+   * with its old value and NO snapshot is written). A real withdrawal still gets
+   * recorded this way — just not instantly; a one-off glitch never does.
    */
   private async scanWithSanityCheck(
     key: string,
@@ -101,15 +101,15 @@ export class SyncService implements OnModuleDestroy {
   ): Promise<ScanResult> {
     const first = await scanQueue.run(chain, () => scanAddress(chain, address));
 
-    // не с чем сравнивать (первый успешный скан или почти пустой кошелёк)
+    // nothing to compare against (first successful scan or a nearly empty wallet)
     if (previousTotal === null || previousTotal <= 10) {
       this.dropStreak.delete(key);
       return first;
     }
 
-    const FLOOR = previousTotal * 0.75; // падение больше 25% за цикл — подозрительно
+    const FLOOR = previousTotal * 0.75; // a drop of more than 25% in one cycle is suspicious
     if (first.totalUsd >= FLOOR) {
-      this.dropStreak.delete(key); // норма или рост
+      this.dropStreak.delete(key); // normal or up
       return first;
     }
 
@@ -118,15 +118,15 @@ export class SyncService implements OnModuleDestroy {
     );
     const second = await scanQueue.run(chain, () => scanAddress(chain, address));
     if (second.totalUsd >= FLOOR) {
-      this.dropStreak.delete(key); // первый замер был глюком, второй в норме
+      this.dropStreak.delete(key); // the first reading was a glitch, the second is normal
       return second;
     }
 
-    // оба замера низкие: либо реальный вывод, либо устойчивый сбой источника
+    // both readings are low: either a real withdrawal or a persistent source failure
     const streak = (this.dropStreak.get(key) ?? 0) + 1;
     if (streak >= config.dropConfirmCycles) {
       this.dropStreak.delete(key);
-      return second.totalUsd >= first.totalUsd ? second : first; // консервативно — больший
+      return second.totalUsd >= first.totalUsd ? second : first; // conservative — pick the larger
     }
     this.dropStreak.set(key, streak);
     throw new Error(
@@ -169,7 +169,7 @@ export class SyncService implements OnModuleDestroy {
     }
   }
 
-  /** Кэш последнего успешного значения сознательно не трогаем — он отдаётся со stale-флагом */
+  /** We deliberately leave the last successful cached value untouched — it's served with a stale flag */
   private async markFailed(group: Wallet[], message: string): Promise<void> {
     await this.prisma.wallet.updateMany({
       where: { id: { in: group.map((w) => w.id) } },
@@ -180,12 +180,12 @@ export class SyncService implements OnModuleDestroy {
   async snapshotPortfolio(portfolioId: string): Promise<void> {
     const wallets = await this.prisma.wallet.findMany({ where: { portfolioId } });
     if (!wallets.length) {
-      // последний кошелёк удалён — фиксируем ноль, чтобы график это отразил
+      // the last wallet was removed — record a zero so the chart reflects it
       await this.prisma.portfolioSnapshot.create({ data: { portfolioId, totalUsd: 0 } });
       return;
     }
     const known = wallets.filter((w) => w.lastTotalUsd !== null);
-    if (!known.length) return; // ещё ничего не сосканировано
+    if (!known.length) return; // nothing has been scanned yet
     const totalUsd = known.reduce((sum, w) => sum + (w.lastTotalUsd ?? 0), 0);
     await this.prisma.portfolioSnapshot.create({ data: { portfolioId, totalUsd } });
   }

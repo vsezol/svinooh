@@ -2,10 +2,10 @@ import puppeteer, { Browser } from 'puppeteer';
 import { config } from '../config';
 
 /**
- * Один инстанс Chrome на весь сервис, страницы — по одной на скан.
- * Параллельные инстансы душат друг друга и МОЛЧА возвращают $0 вместо
- * реального баланса — без единой ошибки в логах. Поэтому браузер общий,
- * а конкурентность EVM-сканов жёстко ограничена единицей (см. ScanQueue).
+ * One Chrome instance for the whole service, one page per scan.
+ * Parallel instances choke each other and SILENTLY return $0 instead of the
+ * real balance — without a single error in the logs. So the browser is shared,
+ * and EVM scan concurrency is hard-capped at one (see ScanQueue).
  */
 let browserPromise: Promise<Browser> | null = null;
 
@@ -28,7 +28,7 @@ export async function getBrowser(): Promise<Browser> {
       if (browser.connected) return browser;
       await browser.close().catch(() => {});
     } catch {
-      // прошлый запуск не удался — пробуем заново
+      // the previous launch failed — try again
     }
   }
   browserPromise = launch();
@@ -42,6 +42,6 @@ export async function closeBrowser(): Promise<void> {
   try {
     await (await pending).close();
   } catch {
-    // уже закрыт или не поднялся
+    // already closed or never came up
   }
 }

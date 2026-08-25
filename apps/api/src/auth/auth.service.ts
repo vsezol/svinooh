@@ -33,8 +33,8 @@ export class AuthService {
   getConfig(): AuthConfigDto {
     return {
       botUsername: config.botUsername,
-      // bot_id — числовой префикс токена (публичный), нужен фронту для
-      // Telegram.Login.auth со своей кнопкой
+      // bot_id — the numeric token prefix (public), needed by the frontend for
+      // Telegram.Login.auth with a custom button
       botId: config.botToken ? config.botToken.split(':')[0] : null,
       devMode: config.devMode,
       syncIntervalMin: config.syncIntervalMin,
@@ -59,7 +59,7 @@ export class AuthService {
     );
   }
 
-  /** Старт входа через бота — ссылка, открывающая приложение Telegram */
+  /** Start bot sign-in — a link that opens the Telegram app */
   telegramStart(): TelegramStartDto {
     if (!config.botToken || !config.botUsername) {
       throw new ServiceUnavailableException('Telegram sign-in is not configured');
@@ -73,12 +73,12 @@ export class AuthService {
     };
   }
 
-  /** Опрос статуса входа через бота */
+  /** Poll the bot sign-in status */
   async telegramPoll(token: string): Promise<TelegramPollDto> {
     const entry = this.bot.get(token);
     if (!entry) throw new UnauthorizedException('Sign-in session expired, start again');
     if (entry.status !== 'authenticated' || !entry.user) return { pending: true };
-    this.bot.consume(token); // одноразово
+    this.bot.consume(token); // one-time use
     return this.finishLogin(
       await this.upsertTelegram({
         id: entry.user.id,
@@ -101,7 +101,7 @@ export class AuthService {
       firstName: p.firstName ?? null,
       lastName: p.lastName ?? null,
       username: p.username ?? null,
-      // фото из бота не приходит — не затираем уже сохранённое из веб-виджета
+      // the bot doesn't send a photo — don't overwrite the one already saved from the web widget
       ...(p.photoUrl !== undefined ? { photoUrl: p.photoUrl ?? null } : {}),
     };
     return this.prisma.user.upsert({
@@ -111,7 +111,7 @@ export class AuthService {
     });
   }
 
-  /** Локальная разработка без бота: включается AUTH_DEV_MODE=true */
+  /** Local development without the bot: enabled via AUTH_DEV_MODE=true */
   async devLogin(nameRaw: string): Promise<AuthResponseDto> {
     if (!config.devMode) throw new ForbiddenException('Dev sign-in is disabled');
     const name = String(nameRaw || '')
@@ -143,7 +143,7 @@ export class AuthService {
     return { token, me: this.toMe(user, portfolio.slug) };
   }
 
-  /** Портфель создаётся при первом входе. Пока один; схема допускает несколько. */
+  /** The portfolio is created on first sign-in. Just one for now; the schema allows several. */
   private async ensurePortfolio(user: User): Promise<Portfolio> {
     const existing = await this.prisma.portfolio.findFirst({
       where: { userId: user.id },

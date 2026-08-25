@@ -1,6 +1,6 @@
 import type { Chain } from '@svinooh/shared';
 
-/** $12,345.60 — как в дизайне (_fmt$) */
+/** $12,345.60 — as in the design (_fmt$) */
 export function fmtUsd(value: number | null | undefined, dec = 2): string {
   if (value === null || value === undefined) return '—';
   return (
@@ -9,13 +9,13 @@ export function fmtUsd(value: number | null | undefined, dec = 2): string {
   );
 }
 
-/** Цена: мелкие — с 7 знаками, иначе обычно (_fmtPrice) */
+/** Price: small values with 7 decimals, otherwise normal (_fmtPrice) */
 export function fmtPrice(p: number | null | undefined): string {
   if (p === null || p === undefined) return '—';
   return p < 0.01 && p > 0 ? '$' + p.toFixed(7) : fmtUsd(p);
 }
 
-/** Количество токенов (_fmtAmt) */
+/** Token amount (_fmtAmt) */
 export function fmtAmount(a: number | null | undefined): string {
   if (a === null || a === undefined) return '';
   if (a >= 1000) return a.toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -23,7 +23,7 @@ export function fmtAmount(a: number | null | undefined): string {
   return a.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
-/** Компактно со знаком $ для больших сумм лидерборда */
+/** Compact $ formatting for large leaderboard amounts */
 export function fmtUsd0(value: number): string {
   return '$' + Math.round(value).toLocaleString('en-US');
 }
@@ -51,7 +51,7 @@ const CHAIN_META: Record<Chain, { label: string; color: string; name: string }> 
 
 export const chainMeta = (chain: Chain) => CHAIN_META[chain];
 
-/** Отображаемое имя кошелька: пользовательское или дефолт по сети */
+/** Displayed wallet name: user-defined or the chain default */
 export function walletName(label: string | null, chain: Chain): string {
   return label || CHAIN_META[chain].name;
 }

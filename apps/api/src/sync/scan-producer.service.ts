@@ -5,9 +5,9 @@ import { RabbitService } from '../queue/rabbit.service';
 import { SyncService } from './sync.service';
 
 /**
- * Заливает адреса кошельков в очередь и, как только она опустела, заливает
- * заново — бесконечный «потихоньку» цикл. Без RabbitMQ гоняет тот же скан
- * in-process (последовательно, с паузой), чтобы дев работал без брокера.
+ * Fills the queue with wallet addresses and, as soon as it drains, fills it
+ * again — an endless "slow and steady" loop. Without RabbitMQ it runs the same
+ * scan in-process (sequentially, with a pause) so dev works without a broker.
  */
 @Injectable()
 export class ScanProducerService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -23,34 +23,34 @@ export class ScanProducerService implements OnApplicationBootstrap, OnModuleDest
 
   onApplicationBootstrap() {
     if (this.rabbit.enabled) {
-      // дать брокеру/консьюмеру подняться, затем первая заливка + периодическая дозаливка
+      // let the broker/consumer come up, then the first fill + periodic top-ups
       setTimeout(() => void this.topUp(), 8000).unref?.();
       this.timer = setInterval(() => void this.topUp(), config.scanReloadSec * 1000);
       this.timer.unref?.();
-      this.logger.log(`Producer: дозаливка очереди при опустошении, проверка каждые ${config.scanReloadSec}с`);
+      this.logger.log(`Producer: refilling the queue when it drains, checking every ${config.scanReloadSec}s`);
     } else {
       setTimeout(() => void this.inProcessLoop(), 8000).unref?.();
-      this.logger.log(`Producer: RabbitMQ выкл — скан in-process, пауза ${config.scanJobDelayMs}мс`);
+      this.logger.log(`Producer: RabbitMQ off — scanning in-process, pause ${config.scanJobDelayMs}ms`);
     }
   }
 
-  /** Очередь пуста → залить все адреса заново */
+  /** Queue is empty → re-enqueue all addresses */
   private async topUp(): Promise<void> {
     if (this.toppingUp || this.stopped) return;
     this.toppingUp = true;
     try {
-      if ((await this.rabbit.messageCount()) > 0) return; // ещё разгребаем
+      if ((await this.rabbit.messageCount()) > 0) return; // still working through it
       const groups = await this.sync.listGroups();
       for (const job of groups) await this.rabbit.enqueue(job);
-      if (groups.length) this.logger.log(`Залил в очередь ${groups.length} адресов`);
+      if (groups.length) this.logger.log(`Enqueued ${groups.length} addresses`);
     } catch (e) {
-      this.logger.warn(`topUp упал: ${e instanceof Error ? e.message : e}`);
+      this.logger.warn(`topUp failed: ${e instanceof Error ? e.message : e}`);
     } finally {
       this.toppingUp = false;
     }
   }
 
-  /** Фоллбэк без брокера: тот же паровоз, но последовательно и с паузой */
+  /** Broker-less fallback: the same pipeline, but sequential and with a pause */
   private async inProcessLoop(): Promise<void> {
     while (!this.stopped) {
       try {
@@ -62,7 +62,7 @@ export class ScanProducerService implements OnApplicationBootstrap, OnModuleDest
         }
         if (!groups.length) await sleep(5000);
       } catch (e) {
-        this.logger.warn(`in-process цикл: ${e instanceof Error ? e.message : e}`);
+        this.logger.warn(`in-process loop: ${e instanceof Error ? e.message : e}`);
         await sleep(3000);
       }
     }

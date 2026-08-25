@@ -7,7 +7,7 @@ export interface BlockRow {
   value: number;
 }
 
-/** Группа позиций по протоколу — как в дизайне (Wallet + отдельный блок на каждую DeFi-позицию) */
+/** Positions grouped by protocol — as in the design (Wallet + a separate block for each DeFi position) */
 export interface Block {
   proto: string;
   typeLabel: string | null;
@@ -17,8 +17,8 @@ export interface Block {
 }
 
 /**
- * Токены (category 'token') собираются в один блок «Wallet» построчно;
- * каждая DeFi/стейк-позиция — отдельный блок с заголовком-протоколом.
+ * Tokens (category 'token') are collected row by row into a single "Wallet" block;
+ * each DeFi/staking position becomes a separate block with a protocol heading.
  */
 export function buildBlocks(positions: PositionDto[]): Block[] {
   const walletRows: BlockRow[] = [];

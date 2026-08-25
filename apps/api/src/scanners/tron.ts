@@ -2,14 +2,14 @@ import { fetchJson } from './http';
 import type { ScanPosition, ScanResult } from './types';
 
 /**
- * TRON: TronGrid (официальный публичный API) для балансов, DefiLlama для цен.
+ * TRON: TronGrid (the official public API) for balances, DefiLlama for prices.
  *
- * Главная грабля: застейканный TRX (Stake 2.0) не лежит в `balance` вообще —
- * у контрольного кошелька 99.9% баланса было в стейке, и без этих полей он
- * показывал $3.54 вместо $3 749. Принципал хранится в frozenV2 +
- * delegated_frozenV2_*. Поля acquired_delegated_* исключены сознательно:
- * это ресурсы, одолженные ИЗВНЕ, чужой TRX. Сверять против Tronscan
- * («Available + Staked»).
+ * The main gotcha: staked TRX (Stake 2.0) doesn't sit in `balance` at all —
+ * on the reference wallet 99.9% of the balance was staked, and without these
+ * fields it showed $3.54 instead of $3,749. The principal lives in frozenV2 +
+ * delegated_frozenV2_*. The acquired_delegated_* fields are excluded on purpose:
+ * those are resources borrowed from OUTSIDE, someone else's TRX. Reconcile
+ * against Tronscan ("Available + Staked").
  */
 export async function scanTron(address: string): Promise<ScanResult> {
   const { data } = await fetchJson<{ data?: Array<Record<string, any>> }>(
@@ -68,7 +68,7 @@ export async function scanTron(address: string): Promise<ScanResult> {
     const [contract, rawAmount] = Object.entries(entry)[0];
     const coin = coins[`tron:${contract}`];
     if (!coin) {
-      // Нет бесплатного источника цены — не молча съедаем, а показываем
+      // No free price source — instead of silently swallowing it, we surface it
       unpriced.push(`TRC20 ${contract}`);
       continue;
     }
@@ -82,8 +82,8 @@ export async function scanTron(address: string): Promise<ScanResult> {
       category: 'token',
     });
   }
-  // Legacy TRC10 — только числовой ID, без contract address: бесплатного
-  // источника цен нет, логируем факт пропуска
+  // Legacy TRC10 — only a numeric ID, no contract address: there's no free
+  // price source, so we log the fact that it was skipped
   for (const asset of trc10) unpriced.push(`TRC10 #${asset.key}`);
 
   const totalUsd = positions.reduce((sum, p) => sum + p.valueUsd, 0);

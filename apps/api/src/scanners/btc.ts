@@ -12,16 +12,16 @@ interface AddressResponse {
 }
 
 /**
- * BTC: mempool.space — публичный API без ключей. С датацентровых IP (Railway)
- * mempool.space иногда недоступен (fetch failed), поэтому есть запасной
- * источник с идентичным форматом — blockstream.info. Цена BTC: сначала
- * mempool /prices, при сбое — DefiLlama (тот же источник, что для TRON).
+ * BTC: mempool.space — a keyless public API. From datacenter IPs (Railway)
+ * mempool.space is sometimes unreachable (fetch failed), so there's a fallback
+ * source with an identical format — blockstream.info. BTC price: mempool
+ * /prices first, and on failure DefiLlama (the same source used for TRON).
  */
 async function fetchAddress(address: string): Promise<AddressResponse> {
   try {
     return await fetchJson<AddressResponse>(`https://mempool.space/api/address/${address}`);
   } catch {
-    // запасной: идентичный формат ответа
+    // fallback: identical response format
     return fetchJson<AddressResponse>(`https://blockstream.info/api/address/${address}`);
   }
 }
@@ -31,7 +31,7 @@ async function fetchBtcUsd(): Promise<number> {
     const prices = await fetchJson<{ USD: number }>('https://mempool.space/api/v1/prices');
     if (prices.USD > 0) return prices.USD;
   } catch {
-    // ниже — запасной источник цены
+    // fallback price source below
   }
   const { coins } = await fetchJson<{ coins: Record<string, { price: number }> }>(
     'https://coins.llama.fi/prices/current/coingecko:bitcoin',
@@ -42,7 +42,7 @@ async function fetchBtcUsd(): Promise<number> {
 export async function scanBtc(address: string): Promise<ScanResult> {
   const [addr, btcUsd] = await Promise.all([fetchAddress(address), fetchBtcUsd()]);
 
-  // Подтверждённое + из мемпула — то, что кошельки показывают как «баланс»
+  // Confirmed + mempool — what wallets show as the "balance"
   const sats =
     (addr.chain_stats.funded_txo_sum - addr.chain_stats.spent_txo_sum) +
     (addr.mempool_stats.funded_txo_sum - addr.mempool_stats.spent_txo_sum);

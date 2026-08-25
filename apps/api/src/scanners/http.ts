@@ -13,9 +13,9 @@ export class HttpError extends Error {
 const isRetryableStatus = (status: number) => status >= 500 || status === 429;
 
 /**
- * fetch с JSON, таймаутом и ретраями с экспоненциальным бэкоффом.
- * Внешние API без ключей — значит без гарантий: 5xx/429 и сетевые ошибки
- * ретраим, 4xx — нет (это наша ошибка, повтор не поможет).
+ * fetch with JSON, a timeout, and retries with exponential backoff.
+ * Keyless external APIs come with no guarantees: we retry 5xx/429 and network
+ * errors, but not 4xx (that's our own error — retrying won't help).
  */
 export async function fetchJson<T = unknown>(
   url: string,

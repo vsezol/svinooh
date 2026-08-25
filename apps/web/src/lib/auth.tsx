@@ -9,7 +9,7 @@ interface AuthState {
   loading: boolean;
   loginTelegram: (payload: TelegramAuthPayload) => Promise<MeDto>;
   loginDev: (name: string) => Promise<MeDto>;
-  /** Применить готовый ответ авторизации (например из поллинга бота) */
+  /** Apply a ready-made auth response (e.g. from bot polling) */
   applyAuth: (res: AuthResponseDto) => MeDto;
   logout: () => void;
 }
@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         setConfig(await api<AuthConfigDto>('/auth/config'));
       } catch {
-        // API лежит — страница всё равно отрисуется
+        // API is down — the page still renders anyway
       }
       if (tokenStore.get()) {
         try {

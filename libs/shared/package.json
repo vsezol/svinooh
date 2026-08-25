@@ -2,7 +2,7 @@
   "name": "@svinooh/shared",
   "version": "0.0.1",
   "private": true,
-  "description": "Типы API-контракта, общие для api и web. Только типы — рантайм-кода нет, сборка не нужна.",
+  "description": "API contract types shared between api and web. Types only — there is no runtime code, no build required.",
   "main": "./src/index.js",
   "types": "./src/index.d.ts",
   "exports": {

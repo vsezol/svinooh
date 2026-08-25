@@ -50,7 +50,7 @@ function usePortfolio(slug: string) {
   return { data, error, reload };
 }
 
-/** История для выбранного scope (весь портфель / конкретный кошелёк) и периода */
+/** History for the selected scope (whole portfolio / a specific wallet) and period */
 function useHistory(slug: string, scope: string, period: HistoryRange, refreshKey: string | null) {
   const [points, setPoints] = useState<{ values: number[]; times: number[] } | null>(null);
 
@@ -97,7 +97,7 @@ export function PortfolioPage() {
 
   const history = useHistory(slug, scope, period, data?.updatedAt ?? null);
 
-  // выбранный кошелёк удалили — назад к «всему портфелю»
+  // the selected wallet was deleted — fall back to "all wallets"
   useEffect(() => {
     if (scope !== 'all' && data && !data.wallets.some((w) => w.id === scope)) setScope('all');
   }, [data, scope]);
@@ -147,7 +147,7 @@ export function PortfolioPage() {
       await api(`/portfolios/${slug}/wallets/${walletId}`, { method: 'PATCH', body: JSON.stringify({ label }) });
       await reload();
     } catch {
-      // не сохранилось — вернётся прежнее имя при следующем reload
+      // didn't save — the previous name comes back on the next reload
     }
   };
 
@@ -193,7 +193,7 @@ export function PortfolioPage() {
 
   return (
     <div>
-      {/* публичный баннер */}
+      {/* public banner */}
       {!isOwner ? (
         <div
           style={{
@@ -233,7 +233,7 @@ export function PortfolioPage() {
         </div>
       ) : null}
 
-      {/* хедер */}
+      {/* header */}
       <div
         style={{
           position: 'sticky',
@@ -304,7 +304,7 @@ export function PortfolioPage() {
       </div>
 
       <div className="shell" style={{ padding: 'clamp(20px,4vw,36px) clamp(14px,3.5vw,28px) 60px' }}>
-        {/* тотал */}
+        {/* total */}
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <div>
             <div className="eyebrow">
@@ -347,7 +347,7 @@ export function PortfolioPage() {
           </div>
         </div>
 
-        {/* чипы + периоды */}
+        {/* chips + periods */}
         {data.wallets.length > 0 ? (
           <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 22 }}>
@@ -378,7 +378,7 @@ export function PortfolioPage() {
           </>
         ) : null}
 
-        {/* добавить кошелёк */}
+        {/* add wallet */}
         {isOwner ? (
           <div style={{ marginTop: 30 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -408,7 +408,7 @@ export function PortfolioPage() {
           </div>
         ) : null}
 
-        {/* кошельки */}
+        {/* wallets */}
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 30, marginBottom: 10 }}>
           <div className="eyebrow">WALLETS · SORTED BY VALUE</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--mut)' }}>

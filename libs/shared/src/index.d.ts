@@ -1,5 +1,5 @@
-// Контракт API «Свиноуха». Используется и бэкендом (NestJS), и фронтом (React).
-// Только типы: пакет не собирается и не имеет рантайм-кода.
+// The Svinooh API contract. Used by both the backend (NestJS) and the frontend (React).
+// Types only: the package isn't built and has no runtime code.
 
 export type Chain = 'BTC' | 'EVM' | 'SOL' | 'TRON';
 
@@ -9,14 +9,14 @@ export type PositionCategory = 'token' | 'defi' | 'staked' | 'unpriced';
 
 export interface PositionDto {
   id: string;
-  /** Тикер или имя позиции: "BTC", "USDT", "GM:SOL[WSOL-USDC]", "Lending" */
+  /** Position ticker or name: "BTC", "USDT", "GM:SOL[WSOL-USDC]", "Lending" */
   symbol: string;
-  /** Вторая строка: имя рынка/пула, если есть */
+  /** Second line: market/pool name, if any */
   name?: string | null;
   amount?: number | null;
   priceUsd?: number | null;
   valueUsd: number;
-  /** Платформа: 'wallet' | 'kamino' | 'meteora' | 'gmtrade' | 'debank' | ... */
+  /** Platform: 'wallet' | 'kamino' | 'meteora' | 'gmtrade' | 'debank' | ... */
   platform?: string | null;
   category: PositionCategory;
 }
@@ -25,19 +25,19 @@ export interface WalletDto {
   id: string;
   address: string;
   chain: Chain;
-  /** Пользовательское имя (владелец задаёт). null — фронт показывает дефолт по сети */
+  /** User-defined name (set by the owner). null — the frontend shows the chain default */
   label: string | null;
-  /** null — ещё ни одного успешного скана */
+  /** null — no successful scan yet */
   totalUsd: number | null;
   status: WalletSyncStatus;
-  /** Последний успешный скан старше 3× интервала обновления */
+  /** Last successful scan is older than 3× the refresh interval */
   stale: boolean;
   lastSyncedAt: string | null;
   lastError?: string | null;
-  /** Например { defi, gmtrade } для SOL или разбивка по EVM-сетям */
+  /** For example { defi, gmtrade } for SOL, or a breakdown by EVM chains */
   breakdown?: Record<string, number> | null;
   positions: PositionDto[];
-  /** Активы, для которых не нашлось цены (не потеряны, просто не оценены) */
+  /** Assets with no price found (not lost, just not valued) */
   unpriced?: string[];
   createdAt: string;
 }
@@ -53,10 +53,10 @@ export interface PortfolioDto {
   name: string;
   owner: PortfolioOwnerDto;
   totalUsd: number;
-  /** Отсортированы по totalUsd по убыванию; pending — в конце */
+  /** Sorted by totalUsd descending; pending ones at the end */
   wallets: WalletDto[];
   isOwner: boolean;
-  /** Самый свежий lastSyncedAt среди кошельков */
+  /** The most recent lastSyncedAt among the wallets */
   updatedAt: string | null;
   createdAt: string;
 }
@@ -85,7 +85,7 @@ export interface HistoryDto {
 
 export interface AuthConfigDto {
   botUsername: string | null;
-  /** Числовой id бота (публичный, префикс токена) — для Telegram.Login.auth */
+  /** Numeric bot id (public, the token prefix) — for Telegram.Login.auth */
   botId: string | null;
   devMode: boolean;
   syncIntervalMin: number;
@@ -104,17 +104,17 @@ export interface AuthResponseDto {
   me: MeDto;
 }
 
-/** Старт входа через бота: ссылка, открывающая приложение Telegram */
+/** Start bot sign-in: a link that opens the Telegram app */
 export interface TelegramStartDto {
   token: string;
   botUsername: string;
   deepLink: string;
 }
 
-/** Опрос статуса входа через бота: либо ещё ждём, либо готовый логин */
+/** Poll the bot sign-in status: either still waiting, or a completed login */
 export type TelegramPollDto = { pending: true } | AuthResponseDto;
 
-/** Что присылает Telegram Login Widget в onauth */
+/** What the Telegram Login Widget sends to onauth */
 export interface TelegramAuthPayload {
   id: number;
   first_name?: string;
@@ -128,6 +128,6 @@ export interface TelegramAuthPayload {
 export interface ApiErrorDto {
   statusCode: number;
   message: string;
-  /** Машиночитаемый код: UNSUPPORTED_NETWORK, WALLET_EXISTS, ... */
+  /** Machine-readable code: UNSUPPORTED_NETWORK, WALLET_EXISTS, ... */
   code?: string;
 }

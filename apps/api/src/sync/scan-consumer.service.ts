@@ -6,8 +6,8 @@ import { RabbitService } from '../queue/rabbit.service';
 import { SyncService } from './sync.service';
 
 /**
- * Разбирает очередь по одному адресу за раз (prefetch=1) и держит паузу после
- * каждого скана — ровный «потихоньку», без всплесков запросов к источникам.
+ * Works through the queue one address at a time (prefetch=1) and pauses after
+ * each scan — a steady "slow and steady", without bursts of requests to sources.
  */
 @Injectable()
 export class ScanConsumerService implements OnApplicationBootstrap {
@@ -22,12 +22,12 @@ export class ScanConsumerService implements OnApplicationBootstrap {
     if (!this.rabbit.enabled) return;
     this.rabbit.registerConsumer((job) => this.handle(job), config.scanPrefetch);
     this.logger.log(
-      `Consumer: prefetch=${config.scanPrefetch}, пауза ${config.scanJobDelayMs}мс между сканами`,
+      `Consumer: prefetch=${config.scanPrefetch}, ${config.scanJobDelayMs}ms pause between scans`,
     );
   }
 
   private async handle(job: ScanJob): Promise<void> {
     await this.sync.scanOne(job);
-    await sleep(config.scanJobDelayMs); // держим слот занятым, пока пауза — это и есть пейсинг
+    await sleep(config.scanJobDelayMs); // keep the slot busy during the pause — that's the pacing
   }
 }

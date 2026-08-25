@@ -2,21 +2,21 @@ import { debank, DebankError } from './debank-client';
 import type { ScanPosition, ScanResult } from './types';
 
 /**
- * EVM-баланс через веб-API debank.com (реверс-подпись, см. debank-client.ts).
- * Быстрый первичный путь; при любой осечке evm.ts откатывается на Chrome.
+ * EVM balance via the debank.com web API (reverse-engineered signature, see
+ * debank-client.ts). Fast primary path; on any miss evm.ts falls back to Chrome.
  *
- * Хедерный тотал DeBank = сумма ТРЁХ непересекающихся источников, ровно как
- * их складывает фронт DeBank:
- *   1) project_list — ончейн-DeFi (Aave, GMX, Pendle…)      user_addr
- *   2) app_list     — «приложения» (Hyperliquid и пр.)       user_id
- *   3) cache_balance_list — токены на балансе                user_addr
- * Пропусти app_list — тихо потеряешь Hyperliquid (у контрольного кошелька
- * это $3 512 из $27 485). Поэтому все три обязательны, а не «на выбор».
+ * DeBank's header total = the sum of THREE non-overlapping sources, exactly the
+ * way the DeBank front end adds them up:
+ *   1) project_list — on-chain DeFi (Aave, GMX, Pendle…)    user_addr
+ *   2) app_list     — "apps" (Hyperliquid, etc.)            user_id
+ *   3) cache_balance_list — tokens held                     user_addr
+ * Skip app_list and you silently lose Hyperliquid (on the reference wallet
+ * that's $3,512 of $27,485). So all three are required, not "pick one".
  *
- * Кросс-чек: total_net_curve (историческая кривая, приложения в неё не
- * входят). Если наша сумма МЕНЬШЕ последней точки кривой на >10% — значит
- * потеряли ончейн-стоимость, которую DeBank видит → это осечка, откат на
- * Chrome, а не запись заниженного числа в историю.
+ * Cross-check: total_net_curve (the historical curve, which excludes apps).
+ * If our sum is more than 10% below the curve's last point, we've dropped
+ * on-chain value that DeBank can see → that's a miss, fall back to Chrome
+ * rather than writing an understated number into the history.
  */
 
 interface DebankToken {
@@ -60,17 +60,17 @@ function addChain(breakdown: Record<string, number>, chain: string | undefined, 
 }
 
 export async function scanEvmHttp(rawAddress: string): Promise<ScanResult> {
-  const address = rawAddress.toLowerCase(); // API DeBank отвергает checksummed-регистр
+  const address = rawAddress.toLowerCase(); // the DeBank API rejects checksummed casing
   const client = debank();
 
-  // Последовательно, а не Promise.all: три одновременных подписанных запроса
-  // ловят burst-лимит api.debank.com (429 стабильно на третьем, cache_balance),
-  // особенно с датацентрового IP. Латентность фонового скана некритична.
+  // Sequentially, not Promise.all: three concurrent signed requests hit
+  // api.debank.com's burst limit (a reliable 429 on the third, cache_balance),
+  // especially from a datacenter IP. A background scan's latency isn't critical.
   const projects = await client.get<DebankProject[]>('/portfolio/project_list', { user_addr: address });
   const appList = await client.get<AppListResponse>('/portfolio/app_list', { user_id: address });
   const tokens = await client.get<DebankToken[]>('/token/cache_balance_list', { user_addr: address });
 
-  // DeBank не смог догрузить часть приложений → наша сумма неполна → откат
+  // DeBank couldn't finish loading some apps → our sum is incomplete → fall back
   if (appList?.error_apps?.length) {
     throw new DebankError(`app_list returned ${appList.error_apps.length} error_apps — total is incomplete`);
   }
@@ -78,7 +78,7 @@ export async function scanEvmHttp(rawAddress: string): Promise<ScanResult> {
   const positions: ScanPosition[] = [];
   const breakdown: Record<string, number> = {};
 
-  // 1) Ончейн-DeFi по протоколам — одна позиция на протокол
+  // 1) On-chain DeFi by protocol — one position per protocol
   let defiProjects = 0;
   for (const project of projects || []) {
     const usd = projectNetUsd(project);
@@ -95,7 +95,7 @@ export async function scanEvmHttp(rawAddress: string): Promise<ScanResult> {
     });
   }
 
-  // 2) Приложения (Hyperliquid и пр.) — тоже одна позиция на приложение
+  // 2) Apps (Hyperliquid, etc.) — likewise one position per app
   let defiApps = 0;
   for (const app of appList?.apps || []) {
     const usd = projectNetUsd(app);
@@ -111,7 +111,7 @@ export async function scanEvmHttp(rawAddress: string): Promise<ScanResult> {
     });
   }
 
-  // 3) Токены на балансе (scam исключаем — DeBank их в тотал не кладёт)
+  // 3) Tokens held (we exclude scams — DeBank doesn't count them in the total)
   let tokenUsd = 0;
   for (const token of tokens || []) {
     if (token.is_scam) continue;
@@ -133,22 +133,22 @@ export async function scanEvmHttp(rawAddress: string): Promise<ScanResult> {
 
   const totalUsd = defiProjects + defiApps + tokenUsd;
 
-  // Кросс-чек против исторической кривой (best-effort — её осечка не критична)
+  // Cross-check against the historical curve (best-effort — a miss here isn't critical)
   let curveLast: number | null = null;
   try {
     const curve = await client.get<NetCurve>('/asset/total_net_curve', { user_addr: address, days: 1 });
     const list = curve?.usd_value_list || [];
     curveLast = list.length ? list[list.length - 1][1] : null;
   } catch {
-    // кривая не обязательна; если основные три источника пришли — доверяем сумме
+    // the curve is optional; if the main three sources came back, we trust the sum
   }
   if (curveLast !== null && curveLast > 1 && totalUsd < curveLast * 0.9) {
     throw new DebankError(
-      `сумма $${totalUsd.toFixed(2)} ниже кривой $${curveLast.toFixed(2)} на >10% — вероятен недобор, откат на Chrome`,
+      `sum $${totalUsd.toFixed(2)} is >10% below the curve's $${curveLast.toFixed(2)} — likely undercount, fall back to Chrome`,
     );
   }
 
-  // Чистим нулевые бакеты и округляем
+  // Clear out empty buckets and round
   const cleanBreakdown: Record<string, number> = {};
   for (const [key, usd] of Object.entries(breakdown)) {
     if (usd > 0.5) cleanBreakdown[key] = Math.round(usd * 100) / 100;

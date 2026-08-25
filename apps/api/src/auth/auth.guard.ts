@@ -23,7 +23,7 @@ async function extractUserId(req: AuthedRequest, jwt: JwtService): Promise<strin
   }
 }
 
-/** Роуты, требующие входа (мутации портфеля) */
+/** Routes that require sign-in (portfolio mutations) */
 @Injectable()
 export class RequiredAuthGuard implements CanActivate {
   constructor(private readonly jwt: JwtService) {}
@@ -37,7 +37,7 @@ export class RequiredAuthGuard implements CanActivate {
   }
 }
 
-/** Публичные роуты, где вход опционален (просмотр портфеля: isOwner) */
+/** Public routes where sign-in is optional (portfolio viewing: isOwner) */
 @Injectable()
 export class OptionalAuthGuard implements CanActivate {
   constructor(private readonly jwt: JwtService) {}

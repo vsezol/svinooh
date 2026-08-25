@@ -1,9 +1,9 @@
-# Контекст сборки — КОРЕНЬ монорепы (Railway: dockerfilePath задан в
-# apps/web/railway.json, Root Directory оставить «/»).
+# Build context — the ROOT of the monorepo (Railway: dockerfilePath is set in
+# apps/web/railway.json, leave Root Directory as "/").
 #
-# VITE_API_URL зашивается в статику при сборке: на Railway достаточно
-# завести переменную VITE_API_URL у сервиса web (публичный URL api),
-# Railway прокинет её в docker build как ARG.
+# VITE_API_URL is baked into the static assets at build time: on Railway it is
+# enough to define the VITE_API_URL variable on the web service (the public api URL),
+# and Railway will pass it into the docker build as an ARG.
 
 FROM node:22-alpine AS build
 WORKDIR /app
@@ -24,5 +24,5 @@ RUN npm i -g serve@14
 COPY --from=build /app/apps/web/dist /app/dist
 ENV PORT=4173
 EXPOSE 4173
-# -s: SPA-фолбэк на index.html для маршрутов вида /p/:slug
+# -s: SPA fallback to index.html for routes like /p/:slug
 CMD ["sh", "-c", "serve -s /app/dist -l tcp://0.0.0.0:${PORT}"]

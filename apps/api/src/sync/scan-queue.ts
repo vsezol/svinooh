@@ -3,10 +3,10 @@ import { config } from '../config';
 import { Semaphore } from '../scanners/semaphore';
 
 /**
- * EVM теперь первично ходит по HTTP (debank реверс-подпись), поэтому его
- * можно гнать небольшим пулом, а не строго по одному. Гарантию «никогда не
- * два headless Chrome разом» держит отдельный лок внутри evm-browser.ts —
- * он и был причиной молчаливых $0 при параллельных инстансах.
+ * EVM now goes primarily over HTTP (debank reverse-signature), so it can run
+ * with a small pool rather than strictly one at a time. The "never two headless
+ * Chrome at once" guarantee is held by a separate lock inside evm-browser.ts —
+ * which was the cause of the silent $0 with parallel instances.
  */
 class ScanQueue {
   private readonly evm = new Semaphore(config.evmHttpConcurrency);
