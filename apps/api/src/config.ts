@@ -54,6 +54,8 @@ export const config = {
   scanReloadSec: int(process.env.SCAN_RELOAD_SEC, 15),
   // TTL кэша собранного портфеля в Redis (сек).
   cacheTtlSec: int(process.env.CACHE_TTL_SEC, 60),
+  // Loki для логов. Пусто — шлём только в stdout (Railway), без Loki.
+  lokiUrl: process.env.LOKI_URL || null,
   webOrigin: process.env.WEB_ORIGIN || '*',
   httpTimeoutMs: int(process.env.HTTP_TIMEOUT_MS, 15_000),
   evmTimeoutMs: int(process.env.EVM_TIMEOUT_MS, 90_000),
