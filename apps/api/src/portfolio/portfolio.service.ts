@@ -37,6 +37,44 @@ export function normalizeRange(raw: string | undefined): HistoryRange {
   return raw === '7d' || raw === '30d' || raw === 'all' ? raw : '24h';
 }
 
+/**
+ * Убирает провалы стоимости кошелька, которые сами восстанавливаются — это
+ * почти всегда глюк источника (TronGrid без стейка, Chrome-скрейп с $0), а не
+ * реальное движение. Просадку глубже 40% считаем подозрительной; если в
+ * пределах окна значение возвращается к 90%+ прежнего — держим последнее
+ * хорошее значение (график не «пилит»). Реальный вывод средств не
+ * восстанавливается — он проходит как есть.
+ */
+function smoothSeries(
+  series: Array<{ t: number; v: number }>,
+): Array<{ t: number; v: number }> {
+  const DROP = 0.6; // ниже 60% от последнего хорошего — подозрительно
+  const RECOVER = 0.9; // возврат к 90%+ = «восстановилось» → это был выброс
+  const WINDOW = 90; // как далеко вперёд ищем восстановление (~1.5ч при 1-мин синке)
+  const out = series.map((s) => ({ t: s.t, v: s.v }));
+  let lastGood = series[0].v;
+  for (let i = 0; i < out.length; i++) {
+    const cur = series[i].v;
+    if (lastGood > 10 && cur < lastGood * DROP) {
+      let recovers = false;
+      const end = Math.min(series.length - 1, i + WINDOW);
+      for (let j = i + 1; j <= end; j++) {
+        if (series[j].v >= lastGood * RECOVER) {
+          recovers = true;
+          break;
+        }
+      }
+      if (recovers) {
+        out[i].v = lastGood; // спурьёзный провал — держим прошлое значение
+        continue;
+      }
+    }
+    out[i].v = cur;
+    lastGood = cur;
+  }
+  return out;
+}
+
 /** Прореживание ряда до max точек (всегда сохраняя последнюю) */
 function downsample(points: HistoryPointDto[], max: number): HistoryPointDto[] {
   if (points.length <= max) return points;
@@ -232,13 +270,27 @@ export class PortfolioService {
     });
     if (!snaps.length) return [];
 
-    // стартовое значение каждого кошелька — его самый ранний снапшот в диапазоне
+    // группируем снапшоты по кошельку (уже отсортированы по времени) и сглаживаем
+    // каждый — убирая кратковременные провалы-глюки, которые сами восстанавливаются
+    const byWallet = new Map<string, Array<{ t: number; v: number }>>();
+    for (const s of snaps) {
+      const arr = byWallet.get(s.walletId) ?? [];
+      arr.push({ t: s.createdAt.getTime(), v: s.totalUsd });
+      byWallet.set(s.walletId, arr);
+    }
+
+    // старт каждого кошелька (carry-back) — первое сглаженное значение в диапазоне
     const baseline = new Map<string, number>();
-    for (const s of snaps) if (!baseline.has(s.walletId)) baseline.set(s.walletId, s.totalUsd);
+    const events: Array<{ t: number; id: string; v: number }> = [];
+    for (const [id, series] of byWallet) {
+      const smooth = smoothSeries(series);
+      baseline.set(id, smooth[0].v);
+      for (const p of smooth) events.push({ t: p.t, id, v: p.v });
+    }
 
     // кошельки без снапшота в диапазоне (весь период не синхронизировались) —
     // берём их последнее известное значение до начала диапазона, чтобы итог
-    // включал все кошельки, а линия не занижалась и не «пилила»
+    // включал все кошельки, а линия не занижалась
     if (since) {
       const missing = walletIds.filter((id) => !baseline.has(id));
       if (missing.length) {
@@ -253,13 +305,14 @@ export class PortfolioService {
 
     // идём по событиям во времени, сумма = Σ последних известных значений
     // (изначально = стартовые, поэтому «новый» кошелёк присутствует с t0)
+    events.sort((a, b) => a.t - b.t);
     const current = new Map<string, number>(baseline);
     const points: HistoryPointDto[] = [];
-    for (const s of snaps) {
-      current.set(s.walletId, s.totalUsd);
+    for (const e of events) {
+      current.set(e.id, e.v);
       let sum = 0;
       for (const v of current.values()) sum += v;
-      points.push({ t: s.createdAt.toISOString(), usd: round2(sum) });
+      points.push({ t: new Date(e.t).toISOString(), usd: round2(sum) });
     }
     return downsample(points, 220);
   }
