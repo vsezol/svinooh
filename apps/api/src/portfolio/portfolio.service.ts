@@ -1,0 +1,295 @@
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import type { Portfolio, Position, Wallet } from '@prisma/client';
+import type {
+  Chain,
+  HistoryDto,
+  HistoryPointDto,
+  HistoryRange,
+  PortfolioDto,
+  PositionCategory,
+  PublicPortfolioDto,
+  WalletDto,
+  WalletSyncStatus,
+} from '@svinooh/shared';
+import { round2 } from '../common/util';
+import { config } from '../config';
+import { PrismaService } from '../prisma.service';
+import { detectChain } from '../scanners';
+import { SyncService } from '../sync/sync.service';
+
+type WalletWithPositions = Wallet & { positions: Position[] };
+
+const RANGES: Record<HistoryRange, { sinceMs: number | null; bucket: string | null }> = {
+  '24h': { sinceMs: 24 * 3600e3, bucket: null }, // сырые 5-минутные точки
+  '7d': { sinceMs: 7 * 86400e3, bucket: '30 minutes' },
+  '30d': { sinceMs: 30 * 86400e3, bucket: '2 hours' },
+  all: { sinceMs: null, bucket: '6 hours' },
+};
+
+export function normalizeRange(raw: string | undefined): HistoryRange {
+  return raw === '7d' || raw === '30d' || raw === 'all' ? raw : '24h';
+}
+
+@Injectable()
+export class PortfolioService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sync: SyncService,
+  ) {}
+
+  /**
+   * Лидерборд/поиск для лендинга: публичные портфели по убыванию стоимости.
+   * Портфели и так открыты по ссылке — тут они просто перечислены.
+   */
+  async listPublic(limit: number, query: string): Promise<PublicPortfolioDto[]> {
+    const portfolios = await this.prisma.portfolio.findMany({
+      include: { user: true, wallets: true },
+    });
+
+    const q = query.trim().toLowerCase().replace(/^@/, '');
+    const rows = portfolios
+      .map((portfolio) => {
+        const known = portfolio.wallets.filter((w) => w.lastTotalUsd !== null);
+        const totalUsd = round2(known.reduce((sum, w) => sum + (w.lastTotalUsd ?? 0), 0));
+        const chains = [...new Set(portfolio.wallets.map((w) => w.chain as Chain))];
+        const handle =
+          portfolio.user.username ||
+          [portfolio.user.firstName, portfolio.user.lastName].filter(Boolean).join(' ') ||
+          'anon';
+        return {
+          slug: portfolio.slug,
+          name: portfolio.name,
+          handle,
+          photoUrl: portfolio.user.photoUrl,
+          totalUsd,
+          walletCount: portfolio.wallets.length,
+          chains,
+        };
+      })
+      .filter((p) => p.walletCount > 0)
+      .filter((p) => !q || p.handle.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.slug.includes(q))
+      .sort((a, b) => b.totalUsd - a.totalUsd)
+      .slice(0, Math.min(Math.max(limit, 1), 100));
+
+    return rows;
+  }
+
+  /** Публичный просмотр: портфель по ссылке виден без входа */
+  async getBySlug(slug: string, userId: string | null): Promise<PortfolioDto> {
+    const portfolio = await this.prisma.portfolio.findUnique({
+      where: { slug },
+      include: { user: true, wallets: { include: { positions: true } } },
+    });
+    if (!portfolio) throw new NotFoundException('Портфель не найден');
+
+    const staleBefore = Date.now() - 3 * config.syncIntervalMin * 60_000;
+    const wallets = portfolio.wallets
+      .map((wallet) => this.toWalletDto(wallet, staleBefore))
+      .sort(walletOrder);
+
+    const updatedAt = wallets.reduce<string | null>(
+      (latest, w) => (w.lastSyncedAt && (!latest || w.lastSyncedAt > latest) ? w.lastSyncedAt : latest),
+      null,
+    );
+
+    const owner = portfolio.user;
+    return {
+      slug: portfolio.slug,
+      name: portfolio.name,
+      owner: {
+        name:
+          [owner.firstName, owner.lastName].filter(Boolean).join(' ') || owner.username || 'Аноним',
+        username: owner.username,
+        photoUrl: owner.photoUrl,
+      },
+      totalUsd: round2(wallets.reduce((sum, w) => sum + (w.totalUsd ?? 0), 0)),
+      wallets,
+      isOwner: userId !== null && portfolio.userId === userId,
+      updatedAt,
+      createdAt: portfolio.createdAt.toISOString(),
+    };
+  }
+
+  async rename(slug: string, userId: string, nameRaw: string): Promise<{ name: string }> {
+    const portfolio = await this.requireOwned(slug, userId);
+    const name = String(nameRaw || '').trim().slice(0, 64);
+    if (!name) throw new BadRequestException('Пустое имя');
+    await this.prisma.portfolio.update({ where: { id: portfolio.id }, data: { name } });
+    return { name };
+  }
+
+  async addWallet(slug: string, userId: string, addressRaw: string): Promise<WalletDto> {
+    const portfolio = await this.requireOwned(slug, userId);
+    const address = String(addressRaw || '').trim();
+    if (!address) throw new BadRequestException('Пустой адрес');
+
+    const chain = detectChain(address);
+    if (!chain) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'UNSUPPORTED_NETWORK',
+        message: 'Не удалось определить сеть адреса. Поддерживаются BTC, EVM (0x…), SOL и TRON.',
+      });
+    }
+
+    const existing = await this.prisma.wallet.findUnique({
+      where: { portfolioId_address: { portfolioId: portfolio.id, address } },
+    });
+    if (existing) {
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'WALLET_EXISTS',
+        message: 'Этот кошелёк уже добавлен в портфель',
+      });
+    }
+
+    const wallet = await this.prisma.wallet.create({
+      data: { portfolioId: portfolio.id, address, chain },
+    });
+    // Скан асинхронный: ручка отвечает сразу (status=pending), фронт поллит.
+    // EVM-скан занимает 20–40 секунд — держать HTTP-запрос столько нельзя.
+    void this.sync.scanWalletNow(wallet.id).catch(() => {});
+    return this.toWalletDto({ ...wallet, positions: [] }, 0);
+  }
+
+  async renameWallet(
+    slug: string,
+    userId: string,
+    walletId: string,
+    labelRaw: string,
+  ): Promise<{ label: string | null }> {
+    const portfolio = await this.requireOwned(slug, userId);
+    const wallet = await this.prisma.wallet.findFirst({
+      where: { id: walletId, portfolioId: portfolio.id },
+    });
+    if (!wallet) throw new NotFoundException('Кошелёк не найден');
+    // Пустое имя — сброс к дефолту (null)
+    const label = String(labelRaw || '').trim().slice(0, 40) || null;
+    await this.prisma.wallet.update({ where: { id: wallet.id }, data: { label } });
+    return { label };
+  }
+
+  async removeWallet(slug: string, userId: string, walletId: string): Promise<{ ok: true }> {
+    const portfolio = await this.requireOwned(slug, userId);
+    const wallet = await this.prisma.wallet.findFirst({
+      where: { id: walletId, portfolioId: portfolio.id },
+    });
+    if (!wallet) throw new NotFoundException('Кошелёк не найден');
+    await this.prisma.wallet.delete({ where: { id: wallet.id } });
+    await this.sync.snapshotPortfolio(portfolio.id);
+    return { ok: true };
+  }
+
+  async history(slug: string, range: HistoryRange): Promise<HistoryDto> {
+    const portfolio = await this.prisma.portfolio.findUnique({ where: { slug } });
+    if (!portfolio) throw new NotFoundException('Портфель не найден');
+    const points = await this.series('PortfolioSnapshot', 'portfolioId', portfolio.id, range);
+    return { range, points };
+  }
+
+  async walletHistory(slug: string, walletId: string, range: HistoryRange): Promise<HistoryDto> {
+    const wallet = await this.prisma.wallet.findFirst({
+      where: { id: walletId, portfolio: { slug } },
+    });
+    if (!wallet) throw new NotFoundException('Кошелёк не найден');
+    const points = await this.series('WalletSnapshot', 'walletId', wallet.id, range);
+    return { range, points };
+  }
+
+  private async requireOwned(slug: string, userId: string): Promise<Portfolio> {
+    const portfolio = await this.prisma.portfolio.findUnique({ where: { slug } });
+    if (!portfolio) throw new NotFoundException('Портфель не найден');
+    if (portfolio.userId !== userId) throw new ForbiddenException('Это не твой портфель');
+    return portfolio;
+  }
+
+  /**
+   * Ряды для графиков. 24h — сырые точки (шаг = интервалу синка), длинные
+   * диапазоны агрегируются в бакеты date_bin на стороне Postgres.
+   */
+  private async series(
+    table: 'PortfolioSnapshot' | 'WalletSnapshot',
+    fkColumn: 'portfolioId' | 'walletId',
+    id: string,
+    range: HistoryRange,
+  ): Promise<HistoryPointDto[]> {
+    const { sinceMs, bucket } = RANGES[range];
+    const since = sinceMs ? new Date(Date.now() - sinceMs) : null;
+
+    if (!bucket) {
+      const where = { [fkColumn]: id, ...(since ? { createdAt: { gte: since } } : {}) };
+      const rows =
+        table === 'PortfolioSnapshot'
+          ? await this.prisma.portfolioSnapshot.findMany({
+              where: where as Prisma.PortfolioSnapshotWhereInput,
+              orderBy: { createdAt: 'asc' },
+              select: { createdAt: true, totalUsd: true },
+            })
+          : await this.prisma.walletSnapshot.findMany({
+              where: where as Prisma.WalletSnapshotWhereInput,
+              orderBy: { createdAt: 'asc' },
+              select: { createdAt: true, totalUsd: true },
+            });
+      return rows.map((row) => ({ t: row.createdAt.toISOString(), usd: round2(row.totalUsd) }));
+    }
+
+    const rows = await this.prisma.$queryRaw<Array<{ bucket: Date; usd: number }>>(Prisma.sql`
+      SELECT date_bin(${bucket}::interval, "createdAt", TIMESTAMP '2020-01-01') AS bucket,
+             AVG("totalUsd")::float8 AS usd
+      FROM ${Prisma.raw(`"${table}"`)}
+      WHERE ${Prisma.raw(`"${fkColumn}"`)} = ${id}
+        ${since ? Prisma.sql`AND "createdAt" >= ${since}` : Prisma.empty}
+      GROUP BY bucket
+      ORDER BY bucket ASC
+    `);
+    return rows.map((row) => ({ t: row.bucket.toISOString(), usd: round2(Number(row.usd)) }));
+  }
+
+  private toWalletDto(wallet: WalletWithPositions, staleBefore: number): WalletDto {
+    const positions = [...wallet.positions]
+      .sort((a, b) => b.valueUsd - a.valueUsd)
+      .map((p) => ({
+        id: p.id,
+        symbol: p.symbol,
+        name: p.name,
+        amount: p.amount,
+        priceUsd: p.priceUsd,
+        valueUsd: round2(p.valueUsd),
+        platform: p.platform,
+        category: p.category as PositionCategory,
+      }));
+
+    return {
+      id: wallet.id,
+      address: wallet.address,
+      chain: wallet.chain as Chain,
+      label: wallet.label,
+      totalUsd: wallet.lastTotalUsd === null ? null : round2(wallet.lastTotalUsd),
+      status: wallet.status as WalletSyncStatus,
+      stale:
+        wallet.status !== 'pending' &&
+        (wallet.lastSyncedAt === null || wallet.lastSyncedAt.getTime() < staleBefore),
+      lastSyncedAt: wallet.lastSyncedAt?.toISOString() ?? null,
+      lastError: wallet.lastError,
+      breakdown: (wallet.breakdown as Record<string, number> | null) ?? null,
+      positions,
+      unpriced: (wallet.unpriced as string[] | null) ?? undefined,
+      createdAt: wallet.createdAt.toISOString(),
+    };
+  }
+}
+
+/** Кошельки — по убыванию стоимости; ещё не сосканированные — в конец */
+function walletOrder(a: WalletDto, b: WalletDto): number {
+  if (a.totalUsd === null && b.totalUsd === null) return a.createdAt < b.createdAt ? -1 : 1;
+  if (a.totalUsd === null) return 1;
+  if (b.totalUsd === null) return -1;
+  return b.totalUsd - a.totalUsd;
+}

@@ -1,0 +1,86 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { CurrentUserId, OptionalAuthGuard, RequiredAuthGuard } from '../auth/auth.guard';
+import { normalizeRange, PortfolioService } from './portfolio.service';
+
+@Controller('portfolios')
+export class PortfolioController {
+  constructor(private readonly portfolios: PortfolioService) {}
+
+  // ВАЖНО: литеральный маршрут объявлен до ':slug', иначе Nest сматчит
+  // "public" как slug
+  @Get('public')
+  listPublic(@Query('limit') limit?: string, @Query('q') q?: string) {
+    return this.portfolios.listPublic(Number(limit) || 20, q ?? '');
+  }
+
+  @Get(':slug')
+  @UseGuards(OptionalAuthGuard)
+  get(@Param('slug') slug: string, @CurrentUserId() userId: string | null) {
+    return this.portfolios.getBySlug(slug, userId);
+  }
+
+  @Patch(':slug')
+  @UseGuards(RequiredAuthGuard)
+  rename(
+    @Param('slug') slug: string,
+    @CurrentUserId() userId: string,
+    @Body() body: { name?: string },
+  ) {
+    return this.portfolios.rename(slug, userId, body?.name ?? '');
+  }
+
+  @Get(':slug/history')
+  history(@Param('slug') slug: string, @Query('range') range?: string) {
+    return this.portfolios.history(slug, normalizeRange(range));
+  }
+
+  @Post(':slug/wallets')
+  @UseGuards(RequiredAuthGuard)
+  addWallet(
+    @Param('slug') slug: string,
+    @CurrentUserId() userId: string,
+    @Body() body: { address?: string },
+  ) {
+    return this.portfolios.addWallet(slug, userId, body?.address ?? '');
+  }
+
+  @Patch(':slug/wallets/:walletId')
+  @UseGuards(RequiredAuthGuard)
+  renameWallet(
+    @Param('slug') slug: string,
+    @CurrentUserId() userId: string,
+    @Param('walletId') walletId: string,
+    @Body() body: { label?: string },
+  ) {
+    return this.portfolios.renameWallet(slug, userId, walletId, body?.label ?? '');
+  }
+
+  @Delete(':slug/wallets/:walletId')
+  @UseGuards(RequiredAuthGuard)
+  removeWallet(
+    @Param('slug') slug: string,
+    @CurrentUserId() userId: string,
+    @Param('walletId') walletId: string,
+  ) {
+    return this.portfolios.removeWallet(slug, userId, walletId);
+  }
+
+  @Get(':slug/wallets/:walletId/history')
+  walletHistory(
+    @Param('slug') slug: string,
+    @Param('walletId') walletId: string,
+    @Query('range') range?: string,
+  ) {
+    return this.portfolios.walletHistory(slug, walletId, normalizeRange(range));
+  }
+}

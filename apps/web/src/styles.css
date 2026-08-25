@@ -1,0 +1,400 @@
+/* Дизайн-система Svinooh — перенос 1-в-1 из Claude Design (Svinooh Portfolio.dc.html).
+   Токены, тёмная/светлая темы, шрифты Manrope + IBM Plex Mono. */
+
+:root,
+body {
+  --bg: #08090c;
+  --surf: #0d0f14;
+  --surf2: #12151c;
+  --line: #1b1f28;
+  --line2: #262c38;
+  --text: #e9ebf0;
+  --mut: #8b93a1;
+  --acc: #2bd576;
+  --acc-text: var(--acc);
+  --acc-soft: color-mix(in srgb, var(--acc) 13%, transparent);
+  --acc-ink: #07130c;
+  --up: #2bd576;
+  --down: #f6465d;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --sans: 'Manrope', system-ui, -apple-system, sans-serif;
+}
+
+body[data-theme='light'] {
+  --bg: #f3f4f6;
+  --surf: #ffffff;
+  --surf2: #f7f8fa;
+  --line: #e5e7ec;
+  --line2: #d6dae2;
+  --text: #14171d;
+  --mut: #68707e;
+  --acc-text: color-mix(in srgb, var(--acc) 62%, #063018);
+  --up: #0e9f54;
+  --down: #d9304e;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  color: var(--text);
+  font-family: var(--sans);
+  transition: background 0.25s ease;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+a {
+  color: var(--acc-text);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--acc-text);
+  text-decoration: underline;
+}
+
+input {
+  font-family: inherit;
+}
+
+input::placeholder {
+  color: var(--mut);
+  opacity: 0.65;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--acc) 30%, transparent);
+}
+
+@keyframes svspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes svpulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line2);
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ───────── переиспользуемые примитивы ───────── */
+
+.mono {
+  font-family: var(--mono);
+}
+
+.shell {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 clamp(14px, 3.5vw, 28px);
+}
+
+/* лого svin[oo]h */
+.logo {
+  display: inline-flex;
+  align-items: baseline;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text);
+}
+
+.logo .eye {
+  display: inline-block;
+  width: 0.56em;
+  height: 0.56em;
+  border: 0.135em solid var(--acc);
+  border-radius: 50%;
+}
+
+.logo .eye-1 {
+  margin-left: 0.06em;
+}
+
+.logo .eye-2 {
+  margin-left: -0.14em;
+}
+
+.logo .h {
+  margin-left: 0.05em;
+}
+
+/* pill-кнопки в хедере */
+.pill {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
+  color: var(--mut);
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.pill:hover {
+  color: var(--text);
+  border-color: var(--mut);
+}
+
+.btn-acc {
+  background: var(--acc);
+  color: var(--acc-ink);
+  font-weight: 800;
+  border: none;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  transition: filter 0.15s ease;
+}
+
+.btn-acc:hover {
+  filter: brightness(1.08);
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surf);
+}
+
+.spin {
+  display: inline-block;
+  border: 2px solid var(--line2);
+  border-top-color: var(--acc);
+  border-radius: 50%;
+  animation: svspin 0.8s linear infinite;
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--mut);
+}
+
+/* auth-модалка */
+.auth-btn:not([disabled]):hover {
+  border-color: var(--acc);
+  background: var(--acc-soft);
+}
+
+.auth-close:hover {
+  color: var(--text);
+  background: var(--surf2);
+}
+
+/* строки/карточки с hover-подсветкой из дизайна */
+.row-hover:hover {
+  background: var(--surf2);
+}
+
+.chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  border: 1px solid var(--line);
+  color: var(--mut);
+  background: transparent;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.chip:hover {
+  color: var(--text);
+}
+
+.chip.active {
+  border-color: color-mix(in srgb, var(--acc) 50%, transparent);
+  color: var(--acc-text);
+  background: var(--acc-soft);
+}
+
+.period {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  border: none;
+  color: var(--mut);
+  background: transparent;
+}
+
+.period.active {
+  color: var(--text);
+  background: var(--surf2);
+}
+
+.field {
+  background: var(--surf);
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.field:focus {
+  border-color: var(--acc);
+}
+
+.add-input {
+  flex: 1;
+  min-width: 220px;
+  height: 44px;
+  background: var(--surf);
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  padding: 0 18px;
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.add-input:focus {
+  border-color: var(--acc);
+}
+
+.copy-link:hover {
+  color: var(--acc-text);
+}
+
+.wallet-edit {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: var(--mut);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+
+.wallet-edit:hover {
+  opacity: 1;
+  color: var(--acc-text);
+}
+
+.wallet-x {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mut);
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.55;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.wallet-x:hover {
+  opacity: 1;
+  color: var(--down);
+  background: color-mix(in srgb, var(--down) 10%, transparent);
+}
+
+/* таблица позиций внутри кошелька */
+.pos-head,
+.pos-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px 150px 140px;
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+}
+
+.pos-head {
+  padding: 9px 16px 7px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  color: var(--mut);
+}
+
+.pos-grid {
+  padding: 10px 16px;
+}
+
+.pos-cell {
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--mut);
+}
+
+.pos-sub-mobile {
+  display: none;
+}
+
+@media (max-width: 719px) {
+  .pos-head,
+  .pos-grid {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .pos-cell {
+    display: none;
+  }
+  .pos-sub-desktop {
+    display: none;
+  }
+  .pos-sub-mobile {
+    display: block;
+  }
+}
+
+/* скрыть на мобиле */
+@media (max-width: 719px) {
+  .hide-mobile {
+    display: none !important;
+  }
+}

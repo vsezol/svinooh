@@ -1,0 +1,298 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
+import type { HistoryDto, PortfolioDto, PublicPortfolioDto } from '@svinooh/shared';
+import { AreaChart } from '../components/AreaChart';
+import { AuthModal } from '../components/AuthModal';
+import { Logo } from '../components/Logo';
+import { api } from '../lib/api';
+import { useAuth } from '../lib/auth';
+import { fmtUsd, fmtUsd0 } from '../lib/format';
+import { useTheme } from '../lib/theme';
+
+const CHAIN_BADGES = [
+  { label: 'EVM · 50+ CHAINS', icon: <path d="M5 0.6 L8.7 5 L5 9.4 L1.3 5 Z" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinejoin="round" /> },
+  {
+    label: 'SOLANA',
+    icon: (
+      <g fill="currentColor">
+        <rect x="1" y="1.4" width="8" height="1.7" rx="0.85" />
+        <rect x="1" y="4.15" width="8" height="1.7" rx="0.85" />
+        <rect x="1" y="6.9" width="8" height="1.7" rx="0.85" />
+      </g>
+    ),
+  },
+  { label: 'TRON', icon: <path d="M1.2 1.4 L8.8 2.8 L4.6 8.8 Z" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinejoin="round" /> },
+];
+
+export function Landing() {
+  const { me } = useAuth();
+  const { theme, toggle } = useTheme();
+  const navigate = useNavigate();
+
+  const [authOpen, setAuthOpen] = useState(false);
+  const [pubs, setPubs] = useState<PublicPortfolioDto[]>([]);
+  const [demo, setDemo] = useState<PortfolioDto | null>(null);
+  const [demoHistory, setDemoHistory] = useState<{ values: number[]; times: number[] } | null>(null);
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    void api<PublicPortfolioDto[]>('/portfolios/public?limit=12').then(setPubs).catch(() => {});
+  }, []);
+
+  const topSlug = pubs[0]?.slug;
+  useEffect(() => {
+    if (!topSlug) return;
+    void api<PortfolioDto>(`/portfolios/${topSlug}`).then(setDemo).catch(() => {});
+    void api<HistoryDto>(`/portfolios/${topSlug}/history?range=30d`)
+      .then((h) =>
+        setDemoHistory({ values: h.points.map((p) => p.usd), times: h.points.map((p) => new Date(p.t).getTime()) }),
+      )
+      .catch(() => {});
+  }, [topSlug]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase().replace(/^@/, '');
+    if (!q) return pubs;
+    return pubs.filter((p) => p.handle.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.slug.includes(q));
+  }, [pubs, search]);
+
+  const demoPositions = useMemo(() => {
+    if (!demo) return [];
+    return demo.wallets
+      .flatMap((w) => w.positions)
+      .sort((a, b) => b.valueUsd - a.valueUsd)
+      .slice(0, 3);
+  }, [demo]);
+
+  if (me) return <Navigate to={`/p/${me.portfolioSlug}`} replace />;
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* хедер */}
+      <div className="shell" style={{ height: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Logo size={19} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="pill" onClick={toggle}>
+            {theme === 'dark' ? 'LIGHT' : 'DARK'}
+          </button>
+          <button className="btn-acc" style={{ height: 32, fontSize: 12, padding: '0 14px' }} onClick={() => setAuthOpen(true)}>
+            Create portfolio
+          </button>
+        </div>
+      </div>
+
+      {/* hero */}
+      <div
+        className="shell"
+        style={{
+          flex: 1,
+          width: '100%',
+          padding: 'clamp(36px,6vw,80px) clamp(14px,3.5vw,28px) clamp(28px,4vw,48px)',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))',
+          gap: 'clamp(28px,5vw,60px)',
+          alignItems: 'center',
+        }}
+      >
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 'clamp(30px,4.6vw,52px)', letterSpacing: '-0.04em', lineHeight: 1.08 }}>
+            <span style={{ whiteSpace: 'nowrap' }}>Every DeFi position.</span>
+            <br />
+            <span style={{ color: 'var(--acc-text)', whiteSpace: 'nowrap' }}>No exceptions.</span>
+          </div>
+          <div style={{ maxWidth: 430, marginTop: 18, fontSize: 15, lineHeight: 1.65, color: 'var(--mut)', textWrap: 'pretty' }}>
+            Tokens, LP, staking, lending, farming — the DeFi positions other trackers miss, counted at full value.
+          </div>
+          <div style={{ marginTop: 26, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input
+              className="mono field hide-mobile"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search public portfolios"
+              spellCheck={false}
+              style={{ flex: '1 1 240px', minWidth: 0, height: 46, padding: '0 18px', fontSize: 12.5 }}
+            />
+            <button
+              className="btn-acc"
+              style={{ height: 46, fontSize: 14, padding: '0 22px' }}
+              onClick={() => setAuthOpen(true)}
+            >
+              Create portfolio
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 28 }}>
+            {CHAIN_BADGES.map((b) => (
+              <span
+                key={b.label}
+                className="mono"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  border: '1px solid var(--line)',
+                  background: 'var(--surf)',
+                  borderRadius: 999,
+                  padding: '7px 13px',
+                  fontSize: 9.5,
+                  letterSpacing: '0.1em',
+                  color: 'var(--mut)',
+                }}
+              >
+                <svg width="11" height="11" viewBox="0 0 10 10">
+                  {b.icon}
+                </svg>
+                {b.label}
+              </span>
+            ))}
+            <span
+              className="mono"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                border: '1px solid var(--line)',
+                background: 'var(--surf)',
+                borderRadius: 999,
+                padding: '7px 13px',
+                fontSize: 9.5,
+                letterSpacing: '0.1em',
+                color: 'var(--mut)',
+              }}
+            >
+              <span style={{ fontWeight: 800, fontSize: 11.5, lineHeight: 1 }}>₿</span>
+              BITCOIN
+            </span>
+          </div>
+        </div>
+
+        {/* демо-карта из топ публичного портфеля */}
+        <div>
+          <div className="card" style={{ overflow: 'hidden', boxShadow: '0 30px 80px -40px color-mix(in srgb, var(--acc) 35%, transparent)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 18px 0' }}>
+              <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.14em', color: 'var(--mut)' }}>
+                {demo ? `@${demo.owner.username || demo.owner.name} · PUBLIC` : 'PUBLIC'}
+              </span>
+              <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9.5, letterSpacing: '0.14em', color: 'var(--acc-text)' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--acc)', animation: 'svpulse 2.4s ease infinite' }} />
+                LIVE
+              </span>
+            </div>
+            <div style={{ padding: '10px 18px 0', display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+              <span className="mono" style={{ fontWeight: 600, fontSize: 30, letterSpacing: '-0.02em' }}>
+                {fmtUsd(demo?.totalUsd ?? pubs[0]?.totalUsd ?? 0)}
+              </span>
+            </div>
+            <div style={{ padding: '4px 0 0' }}>
+              <AreaChart values={demoHistory?.values ?? []} times={demoHistory?.times ?? []} period="30d" height="132px" variant="mini" />
+            </div>
+            {demoPositions.map((p) => (
+              <div key={p.id} style={{ borderTop: '1px solid var(--line)', padding: '11px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {p.symbol}
+                  {p.name && p.name !== p.symbol ? ` · ${p.name}` : ''}
+                </div>
+                <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.12em', color: 'var(--mut)' }}>
+                  {p.category === 'staked' ? 'STAKING' : p.category === 'defi' ? 'DEFI' : 'TOKEN'}
+                </span>
+                <span className="mono" style={{ fontSize: 12, fontWeight: 600 }}>
+                  {fmtUsd0(p.valueUsd)}
+                </span>
+              </div>
+            ))}
+            {demo ? (
+              <div
+                onClick={() => navigate(`/p/${demo.slug}`)}
+                className="row-hover mono"
+                style={{ borderTop: '1px solid var(--line)', padding: '11px 18px', textAlign: 'center', fontSize: 10, letterSpacing: '0.12em', color: 'var(--acc-text)', cursor: 'pointer', userSelect: 'none' }}
+              >
+                OPEN LIVE EXAMPLE →
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      {/* публичные портфели */}
+      <div className="shell" style={{ width: '100%', padding: '0 clamp(14px,3.5vw,28px) 52px' }}>
+        <div style={{ borderTop: '1px solid var(--line)', paddingTop: 22 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+            <div className="eyebrow">PUBLIC PORTFOLIOS</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--mut)' }}>
+              {filtered.length} {filtered.length === 1 ? 'PORTFOLIO' : 'PORTFOLIOS'}
+            </div>
+          </div>
+          <div className="card" style={{ position: 'relative', marginTop: 14, overflow: 'hidden' }}>
+            <div style={{ maxHeight: 328, overflowY: 'auto' }}>
+              {filtered.length === 0 ? (
+                <div className="mono" style={{ padding: '28px 16px', textAlign: 'center', fontSize: 11.5, color: 'var(--mut)' }}>
+                  {search ? `Nothing found for “${search}”` : 'No public portfolios yet — be the first.'}
+                </div>
+              ) : (
+                filtered.map((p, i) => (
+                  <div
+                    key={p.slug}
+                    onClick={() => navigate(`/p/${p.slug}`)}
+                    className="row-hover"
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderTop: i ? '1px solid var(--line)' : 'none', cursor: 'pointer' }}
+                  >
+                    <span className="mono" style={{ fontSize: 10, color: 'var(--mut)', width: 22, flexShrink: 0 }}>
+                      {String(i + 1).padStart(2, '0')}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        @{p.handle}
+                      </div>
+                      <div className="mono" style={{ fontSize: 10, color: 'var(--mut)', marginTop: 2 }}>
+                        {p.walletCount} {p.walletCount === 1 ? 'wallet' : 'wallets'} · {p.chains.join(' + ') || '—'}
+                      </div>
+                    </div>
+                    <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
+                      {fmtUsd0(p.totalUsd)}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div style={{ position: 'absolute', left: 1, right: 1, bottom: 0, height: 30, background: 'linear-gradient(to top, var(--surf), transparent)', pointerEvents: 'none' }} />
+          </div>
+        </div>
+
+        {/* CTA */}
+        <div
+          style={{
+            marginTop: 44,
+            border: '1px solid var(--line)',
+            borderRadius: 20,
+            background: 'var(--surf)',
+            padding: 'clamp(30px,5vw,48px) 24px',
+            textAlign: 'center',
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+        >
+          <div style={{ position: 'absolute', inset: '-40%', background: 'radial-gradient(ellipse at 50% 130%, var(--acc-soft), transparent 60%)', pointerEvents: 'none' }} />
+          <div style={{ position: 'relative' }}>
+            <div style={{ fontWeight: 800, fontSize: 'clamp(22px,4vw,32px)', letterSpacing: '-0.03em' }}>Get your own link</div>
+            <div className="mono" style={{ fontSize: 13, color: 'var(--mut)', marginTop: 10 }}>
+              {window.location.host}/p/<span style={{ color: 'var(--acc-text)' }}>you</span>
+            </div>
+            <button
+              className="btn-acc"
+              style={{ height: 46, fontSize: 14, padding: '0 26px', marginTop: 22 }}
+              onClick={() => setAuthOpen(true)}
+            >
+              Create portfolio
+            </button>
+            <div style={{ marginTop: 12, fontSize: 12, color: 'var(--mut)' }}>Sign in with Telegram or X</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mono" style={{ textAlign: 'center', padding: '0 20px 28px', fontSize: 10, color: 'var(--mut)' }}>
+        © 2026 svinooh
+      </div>
+
+      {authOpen ? <AuthModal onClose={() => setAuthOpen(false)} /> : null}
+    </div>
+  );
+}

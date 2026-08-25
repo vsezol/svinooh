@@ -1,0 +1,19 @@
+{
+  "name": "svinooh",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "libs/*"
+  ],
+  "scripts": {
+    "dev": "nx run-many -t dev --projects=@svinooh/api,@svinooh/web --output-style=stream",
+    "build": "nx run-many -t build",
+    "db:up": "docker compose up -d db",
+    "db:migrate": "npm run -w apps/api migrate:dev",
+    "verify:scanners": "npm run -w apps/api verify:scanners"
+  },
+  "devDependencies": {
+    "nx": "^21.4.0",
+    "typescript": "^5.6.3"
+  }
+}
