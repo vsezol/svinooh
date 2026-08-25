@@ -1,4 +1,4 @@
-import type { Chain, PositionCategory, PositionTokenRole } from '@svinooh/shared';
+import type { Chain, PositionCategory, PositionRange, PositionTokenRole } from '@svinooh/shared';
 
 /** One underlying leg of a DeFi position (supplied / accrued / borrowed) */
 export interface ScanPositionToken {
@@ -26,6 +26,8 @@ export interface ScanPosition {
   apy?: number | null;
   /** Health factor of a lending position */
   healthRate?: number | null;
+  /** Concentrated liquidity only: is the price still inside the position's band */
+  range?: PositionRange | null;
   tokens?: ScanPositionToken[] | null;
 }
 

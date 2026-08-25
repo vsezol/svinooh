@@ -1,5 +1,44 @@
 # Agent Instructions
 
+## 🔒 Project rule #1 — user privacy is non-negotiable
+
+Svinooh shows how much money people hold. Tying that to a person is a
+deanonymization risk with real-world consequences, so **anything that identifies
+a user is visible to that user alone — never to anyone else, anywhere.**
+
+Hard rules. They outrank convenience, design and "it's just a small label":
+
+- **Never render a user's handle, name or photo to anyone but that user.** Not on
+  the landing page, not in a leaderboard, not on a portfolio page, not in an OG
+  image, not in a page title, not in an error message. A public portfolio shows
+  its balances — never who owns it.
+- **Wallet labels belong to the owner only.** A label is user-written text ("Main
+  Ledger", "Wife's cold wallet") and leaks intent and identity. Non-owners get
+  the network default name.
+- **Auto-generated names must not embed identity.** No `@handle`'s portfolio, no
+  first names. If a default name needs to be public, it must be derivable from
+  public chain data (an address) or be generic.
+- **Private by default.** A portfolio someone creates from their account starts
+  private: absent from the landing and from search, reachable only by its link.
+  Going public is an explicit, confirmed action by the owner.
+- **When adding any field to a public response, ask who can see it.** Default to
+  not returning it unless the request is authenticated as the owner. Don't return
+  the data and hide it in the frontend — that's still a leak over the API.
+
+### The data model this rests on
+
+A `Portfolio` is a standalone thing: a group of wallets with a slug. Who owns it
+and whether it is public live in a separate table, `PortfolioOwner`:
+
+- **No owner row → an anonymous portfolio.** Created when someone searches for a
+  wallet on the landing. It belongs to nobody, is inherently public and
+  searchable, and carries no user data at all.
+- **An owner row → someone's portfolio.** `isPublic` defaults to `false`.
+  Visibility is a property of the *ownership*, not of the portfolio, because an
+  ownerless portfolio has no one to be private from.
+
+## Issue tracking
+
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
 ## Quick Reference

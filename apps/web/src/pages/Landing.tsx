@@ -4,7 +4,7 @@ import type { HistoryDto, PortfolioDto, PublicPortfolioDto } from '@svinooh/shar
 import { AreaChart } from '../components/AreaChart';
 import { AuthModal } from '../components/AuthModal';
 import { Logo } from '../components/Logo';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { fmtUsd, fmtUsd0 } from '../lib/format';
 import { useTheme } from '../lib/theme';
@@ -34,10 +34,20 @@ export function Landing() {
   const [demo, setDemo] = useState<PortfolioDto | null>(null);
   const [demoHistory, setDemoHistory] = useState<{ values: number[]; times: number[] } | null>(null);
   const [search, setSearch] = useState('');
+  const [tracking, setTracking] = useState(false);
+  const [trackErr, setTrackErr] = useState<string | null>(null);
 
+  // Search runs on the server: an anonymous portfolio is found by the wallet
+  // address it holds, which the client never sees in the list payload.
   useEffect(() => {
-    void api<PublicPortfolioDto[]>('/portfolios/public?limit=12').then(setPubs).catch(() => {});
-  }, []);
+    const q = search.trim();
+    const timer = setTimeout(() => {
+      void api<PublicPortfolioDto[]>(`/portfolios/public?limit=12&q=${encodeURIComponent(q)}`)
+        .then(setPubs)
+        .catch(() => {});
+    }, q ? 250 : 0);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const topSlug = pubs[0]?.slug;
   useEffect(() => {
@@ -50,11 +60,28 @@ export function Landing() {
       .catch(() => {});
   }, [topSlug]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase().replace(/^@/, '');
-    if (!q) return pubs;
-    return pubs.filter((p) => p.handle.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.slug.includes(q));
-  }, [pubs, search]);
+  const filtered = pubs;
+
+  // Anything long enough to be an address is offered as "track this" — the
+  // backend is the one that decides whether the network is recognized
+  const looksLikeAddress = /^[A-Za-z0-9]{26,64}$/.test(search.trim());
+
+  const trackAddress = async () => {
+    if (tracking) return;
+    setTracking(true);
+    setTrackErr(null);
+    try {
+      const { slug } = await api<{ slug: string }>('/portfolios/anonymous', {
+        method: 'POST',
+        body: JSON.stringify({ address: search.trim() }),
+      });
+      navigate(`/p/${slug}`);
+    } catch (err) {
+      setTrackErr(err instanceof ApiError ? err.message : 'Could not open this address');
+    } finally {
+      setTracking(false);
+    }
+  };
 
   const demoPositions = useMemo(() => {
     if (!demo) return [];
@@ -109,7 +136,10 @@ export function Landing() {
               className="mono field hide-mobile"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search public portfolios"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && looksLikeAddress) void trackAddress();
+              }}
+              placeholder="Search a portfolio or paste a wallet address"
               spellCheck={false}
               style={{ flex: '1 1 240px', minWidth: 0, height: 46, padding: '0 18px', fontSize: 12.5 }}
             />
@@ -170,8 +200,9 @@ export function Landing() {
         <div>
           <div className="card" style={{ overflow: 'hidden', boxShadow: '0 30px 80px -40px color-mix(in srgb, var(--acc) 35%, transparent)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 18px 0' }}>
+              {/* The portfolio's own name, never its owner's */}
               <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.14em', color: 'var(--mut)' }}>
-                {demo ? `@${demo.owner.username || demo.owner.name} · PUBLIC` : 'PUBLIC'}
+                {demo ? `${demo.name.toUpperCase()} · PUBLIC` : 'PUBLIC'}
               </span>
               <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9.5, letterSpacing: '0.14em', color: 'var(--acc-text)' }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--acc)', animation: 'svpulse 2.4s ease infinite' }} />
@@ -225,8 +256,30 @@ export function Landing() {
           <div className="card" style={{ position: 'relative', marginTop: 14, overflow: 'hidden' }}>
             <div style={{ maxHeight: 328, overflowY: 'auto' }}>
               {filtered.length === 0 ? (
-                <div className="mono" style={{ padding: '28px 16px', textAlign: 'center', fontSize: 11.5, color: 'var(--mut)' }}>
-                  {search ? `Nothing found for “${search}”` : 'No public portfolios yet — be the first.'}
+                <div style={{ padding: '26px 16px', textAlign: 'center' }}>
+                  <div className="mono" style={{ fontSize: 11.5, color: 'var(--mut)' }}>
+                    {search ? `Nothing tracked for “${search}”` : 'No public portfolios yet — be the first.'}
+                  </div>
+                  {looksLikeAddress ? (
+                    <>
+                      <button
+                        className="btn-acc"
+                        style={{ height: 38, fontSize: 12.5, padding: '0 18px', marginTop: 14 }}
+                        onClick={() => void trackAddress()}
+                        disabled={tracking}
+                      >
+                        {tracking ? <span className="spin" style={{ width: 13, height: 13, borderTopColor: 'var(--acc-ink)' }} /> : 'Track this address →'}
+                      </button>
+                      <div className="mono" style={{ fontSize: 10, color: 'var(--mut)', marginTop: 10, lineHeight: 1.7 }}>
+                        Opens a portfolio for this wallet that belongs to nobody — public, no sign-in.
+                      </div>
+                    </>
+                  ) : null}
+                  {trackErr ? (
+                    <div className="mono" style={{ fontSize: 10.5, color: 'var(--down)', marginTop: 10 }}>
+                      {trackErr}
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 filtered.map((p, i) => (
@@ -239,9 +292,10 @@ export function Landing() {
                     <span className="mono" style={{ fontSize: 10, color: 'var(--mut)', width: 22, flexShrink: 0 }}>
                       {String(i + 1).padStart(2, '0')}
                     </span>
+                    {/* The name and the wallets — never who owns them. */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 700, fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        @{p.handle}
+                        {p.name}
                       </div>
                       <div className="mono" style={{ fontSize: 10, color: 'var(--mut)', marginTop: 2 }}>
                         {p.walletCount} {p.walletCount === 1 ? 'wallet' : 'wallets'} · {p.chains.join(' + ') || '—'}

@@ -1,0 +1,28 @@
+import type { PositionRange } from '@svinooh/shared';
+import type { ScanPositionToken } from './types';
+
+/**
+ * Whether a concentrated-liquidity position is still in range.
+ *
+ * DERIVED, not reported: neither DeBank nor Jupiter exposes a range flag. It
+ * follows from how concentrated liquidity works — inside its band a position
+ * holds both sides of the pair, and once the price crosses a bound it is
+ * converted entirely into one side and stops earning fees. A single-sided
+ * position is therefore out of range by definition, which is also exactly how a
+ * one-sided "limit order" position behaves.
+ *
+ * Only ever call this for positions that actually have a range (see the callers:
+ * DeBank marks them with `position_index`, Jupiter names them DLMM/CLMM/
+ * Whirlpool). On a full-range V2-style pool the answer would always be "in",
+ * which is true but meaningless — and a meaningless badge is worse than none.
+ */
+const EMPTY_SIDE = 0.005; // a side under 0.5% of the position has effectively been converted away
+
+export function rangeFromLegs(legs: ScanPositionToken[]): PositionRange | null {
+  const supplied = legs.filter((leg) => leg.role === 'supply');
+  if (supplied.length !== 2) return null; // not a pair — we can't tell, so we don't guess
+  const values = supplied.map((leg) => Math.abs(leg.valueUsd));
+  const total = values[0] + values[1];
+  if (total <= 0) return null;
+  return Math.min(...values) / total < EMPTY_SIDE ? 'out' : 'in';
+}

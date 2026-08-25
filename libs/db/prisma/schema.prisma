@@ -11,27 +11,45 @@ datasource db {
 }
 
 model User {
-  id         String      @id @default(cuid())
-  telegramId BigInt?     @unique
+  id         String           @id @default(cuid())
+  telegramId BigInt?          @unique
   // Identifier for dev login (AUTH_DEV_MODE=true), not used in production
-  devKey     String?     @unique
+  devKey     String?          @unique
   firstName  String?
   lastName   String?
   username   String?
   photoUrl   String?
-  createdAt  DateTime    @default(now())
-  portfolios Portfolio[]
+  createdAt  DateTime         @default(now())
+  owned      PortfolioOwner[]
 }
 
+/// A portfolio is a standalone thing: a group of wallets behind a slug. It holds
+/// no reference to a user — who owns it, and whether it may be listed, live in
+/// PortfolioOwner. Without an owner row it is an anonymous portfolio: it belongs
+/// to nobody, is public by nature and carries no user data at all.
 model Portfolio {
   id        String              @id @default(cuid())
   slug      String              @unique
   name      String
-  userId    String
-  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   wallets   Wallet[]
   snapshots PortfolioSnapshot[]
+  owner     PortfolioOwner?
   createdAt DateTime            @default(now())
+}
+
+/// Ownership of a portfolio, and its visibility. Visibility is a property of the
+/// ownership rather than of the portfolio, because a portfolio nobody owns has
+/// no one to be private from. `isPublic` defaults to false: what a person
+/// creates from their account is private until they say otherwise.
+model PortfolioOwner {
+  portfolioId String    @id
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isPublic    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model Wallet {
@@ -76,6 +94,8 @@ model Position {
   apy      Float?
   // Health factor of a lending position (below 1 — liquidation)
   healthRate Float?
+  // Concentrated liquidity only: "in" | "out" of the position's price range
+  range      String?
   // The underlying legs — PositionTokenDto[]: what's supplied, accrued, borrowed
   tokens   Json?
 }

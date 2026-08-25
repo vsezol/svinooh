@@ -15,6 +15,13 @@ export type PositionCategory = 'token' | 'defi' | 'staked' | 'unpriced';
  */
 export type PositionTokenRole = 'supply' | 'reward' | 'borrow';
 
+/**
+ * Whether a concentrated-liquidity position is still earning. Out of range means
+ * the price left the position's band, so it sits entirely in one side of the
+ * pair and collects no fees.
+ */
+export type PositionRange = 'in' | 'out';
+
 /** One underlying leg of a DeFi position — what the position actually holds */
 export interface PositionTokenDto {
   symbol: string;
@@ -43,6 +50,12 @@ export interface PositionDto {
   apy?: number | null;
   /** Health factor of a lending position (below 1 — liquidation) */
   healthRate?: number | null;
+  /**
+   * Concentrated liquidity only (Uniswap V3-style, Meteora DLMM): whether the
+   * price is still inside the position's range. null — not applicable, or
+   * unknown.
+   */
+  range?: PositionRange | null;
   /** Underlying legs: what's supplied, what's accrued, what's borrowed */
   tokens?: PositionTokenDto[] | null;
 }
@@ -51,7 +64,11 @@ export interface WalletDto {
   id: string;
   address: string;
   chain: Chain;
-  /** User-defined name (set by the owner). null — the frontend shows the chain default */
+  /**
+   * User-defined name. Returned to the OWNER ONLY — a label is the owner's own
+   * words and can identify them; everyone else gets null and sees the chain
+   * default.
+   */
   label: string | null;
   /** null — no successful scan yet */
   totalUsd: number | null;
@@ -74,10 +91,23 @@ export interface PortfolioOwnerDto {
   photoUrl?: string | null;
 }
 
+/**
+ * anonymous — belongs to nobody (created from a wallet search); always listed.
+ * private  — someone's portfolio, not listed and not searchable; link only.
+ * public   — someone's portfolio they chose to list.
+ */
+export type PortfolioVisibility = 'anonymous' | 'private' | 'public';
+
 export interface PortfolioDto {
   slug: string;
   name: string;
-  owner: PortfolioOwnerDto;
+  /**
+   * The owner's profile — sent to the OWNER ONLY, null for everyone else.
+   * Showing who a balance belongs to is a deanonymization risk, so this never
+   * leaves the API for a third party.
+   */
+  owner: PortfolioOwnerDto | null;
+  visibility: PortfolioVisibility;
   totalUsd: number;
   /** Sorted by totalUsd descending; pending ones at the end */
   wallets: WalletDto[];
@@ -87,14 +117,19 @@ export interface PortfolioDto {
   createdAt: string;
 }
 
+/**
+ * A row in the landing list. Deliberately carries NOTHING about a person — no
+ * handle, no photo, no name of an owner: these are listed publicly, and a
+ * balance next to an identity is exactly what must never happen.
+ */
 export interface PublicPortfolioDto {
   slug: string;
   name: string;
-  handle: string;
-  photoUrl?: string | null;
   totalUsd: number;
   walletCount: number;
   chains: Chain[];
+  /** true — belongs to nobody; false — someone published it */
+  anonymous: boolean;
 }
 
 export type HistoryRange = '24h' | '7d' | '30d' | 'all';

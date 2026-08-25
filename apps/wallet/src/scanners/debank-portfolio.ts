@@ -1,4 +1,5 @@
 import type { PositionTokenRole } from '@svinooh/shared';
+import { rangeFromLegs } from './range';
 import type { ScanPosition, ScanPositionToken } from './types';
 
 /**
@@ -30,6 +31,12 @@ export interface PortfolioItem {
   stats?: { asset_usd_value?: number; debt_usd_value?: number; net_usd_value?: number };
   detail?: Record<string, unknown>;
   pool?: { id?: string; chain?: string };
+  /**
+   * Present only on NFT-based concentrated-liquidity positions (Uniswap V3 and
+   * its forks) — DeBank's own marker for "this position has a price range".
+   * A plain AMM pool like GMX V2 has no such field.
+   */
+  position_index?: string;
 }
 
 export interface DebankProject {
@@ -113,6 +120,7 @@ export function itemPositions(project: DebankProject): ScanPosition[] {
     const usd = item.stats?.net_usd_value || 0;
     if (usd < 0.01) continue; // dust item — kept in the total, not worth a row
     const detail = item.detail || {};
+    const tokens = itemTokens(detail);
     positions.push({
       symbol: project.name || project.id || 'DeFi',
       name: item.name || item.detail_types?.[0] || null,
@@ -121,7 +129,8 @@ export function itemPositions(project: DebankProject): ScanPosition[] {
       platform: project.id || 'debank',
       category: STAKED_KINDS.test(item.name || '') ? 'staked' : 'defi',
       healthRate: typeof detail.health_rate === 'number' ? detail.health_rate : null,
-      tokens: itemTokens(detail),
+      range: item.position_index !== undefined ? rangeFromLegs(tokens) : null,
+      tokens,
     });
   }
   return positions;

@@ -7,6 +7,9 @@ import { Logo } from '../components/Logo';
 import { WalletRow } from '../components/WalletRow';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { GoPublicModal, VisibilityCard } from '../components/PortfolioVisibility';
+import { RewardsStrip } from '../components/RewardsStrip';
+import { rewardsTotals } from '../lib/blocks';
 import { fmtUsd, walletName } from '../lib/format';
 import { useTheme } from '../lib/theme';
 
@@ -103,6 +106,8 @@ export function PortfolioPage() {
   const [input, setInput] = useState('');
   const [addErr, setAddErr] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [confirmPublic, setConfirmPublic] = useState(false);
+  const [savingVisibility, setSavingVisibility] = useState(false);
 
   const history = useHistory(slug, scope, period, data?.updatedAt ?? null);
 
@@ -110,6 +115,8 @@ export function PortfolioPage() {
   useEffect(() => {
     if (scope !== 'all' && data && !data.wallets.some((w) => w.id === scope)) setScope('all');
   }, [data, scope]);
+
+  const rewards = useMemo(() => rewardsTotals(data?.wallets ?? []), [data]);
 
   const change = useMemo(() => {
     if (!history || history.values.length < 2) return null;
@@ -148,6 +155,19 @@ export function PortfolioPage() {
       await reload();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not remove');
+    }
+  };
+
+  const setVisibility = async (isPublic: boolean) => {
+    setSavingVisibility(true);
+    setConfirmPublic(false);
+    try {
+      await api(`/portfolios/${slug}/visibility`, { method: 'PATCH', body: JSON.stringify({ isPublic }) });
+      await reload();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not change visibility');
+    } finally {
+      setSavingVisibility(false);
     }
   };
 
@@ -216,12 +236,10 @@ export function PortfolioPage() {
             flexWrap: 'wrap',
           }}
         >
+          {/* Never name the owner here: a balance next to a handle is exactly
+              the deanonymization we refuse to ship. */}
           <div className="mono" style={{ fontSize: 11, color: 'var(--mut)', letterSpacing: '0.03em' }}>
-            Viewing{' '}
-            <span style={{ color: 'var(--text)', fontWeight: 600 }}>
-              {data.owner.username ? `@${data.owner.username}` : data.owner.name}
-            </span>
-            ’s public portfolio · read-only
+            Viewing a shared portfolio · read-only
           </div>
           <div
             onClick={() => setAuthOpen(true)}
@@ -417,6 +435,19 @@ export function PortfolioPage() {
           </div>
         ) : null}
 
+        {/* visibility — the first thing an owner sees about their portfolio */}
+        {isOwner ? (
+          <VisibilityCard
+            visibility={data.visibility}
+            busy={savingVisibility}
+            onGoPublic={() => setConfirmPublic(true)}
+            onGoPrivate={() => void setVisibility(false)}
+          />
+        ) : null}
+
+        {/* unclaimed rewards across every wallet */}
+        <RewardsStrip totals={rewards} />
+
         {/* wallets */}
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 30, marginBottom: 10 }}>
           <div className="eyebrow">WALLETS · SORTED BY VALUE</div>
@@ -447,10 +478,16 @@ export function PortfolioPage() {
         )}
 
         <div className="mono" style={{ marginTop: 36, textAlign: 'center', fontSize: 10.5, color: 'var(--mut)', lineHeight: 1.8 }}>
-          public link · <a href={window.location.href}>{window.location.host}/p/{data.slug}</a> · anyone can view without signing in
+          <a href={window.location.href}>{window.location.host}/p/{data.slug}</a> ·{' '}
+          {data.visibility === 'private'
+            ? 'private — not listed anywhere; anyone with this link can view it'
+            : 'anyone can view without signing in'}
         </div>
       </div>
 
+      {confirmPublic ? (
+        <GoPublicModal onCancel={() => setConfirmPublic(false)} onConfirm={() => void setVisibility(true)} />
+      ) : null}
       {authOpen ? <AuthModal onClose={() => setAuthOpen(false)} /> : null}
     </div>
   );

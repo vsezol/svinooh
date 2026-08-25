@@ -23,6 +23,16 @@ export class PortfolioController {
     return this.portfolios.listPublic(Number(limit) || 20, q ?? '');
   }
 
+  /**
+   * Open a wallet address as a portfolio, creating an ownerless one if nobody is
+   * tracking it yet. No sign-in: the result belongs to nobody and carries no
+   * user data.
+   */
+  @Post('anonymous')
+  trackAddress(@Body() body: { address?: string }) {
+    return this.portfolios.findOrCreateAnonymous(body?.address ?? '');
+  }
+
   @Get(':slug')
   @UseGuards(OptionalAuthGuard)
   get(@Param('slug') slug: string, @CurrentUserId() userId: string | null) {
@@ -37,6 +47,16 @@ export class PortfolioController {
     @Body() body: { name?: string },
   ) {
     return this.portfolios.rename(slug, userId, body?.name ?? '');
+  }
+
+  @Patch(':slug/visibility')
+  @UseGuards(RequiredAuthGuard)
+  setVisibility(
+    @Param('slug') slug: string,
+    @CurrentUserId() userId: string,
+    @Body() body: { isPublic?: boolean },
+  ) {
+    return this.portfolios.setVisibility(slug, userId, body?.isPublic === true);
   }
 
   @Get(':slug/history')

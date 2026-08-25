@@ -153,6 +153,7 @@ export class SyncService implements OnModuleDestroy {
             category: p.category,
             apy: p.apy ?? null,
             healthRate: p.healthRate ?? null,
+            range: p.range ?? null,
             // Prisma types JSON columns structurally; our leg array has to be
             // handed over as an opaque JSON value
             tokens: p.tokens?.length ? (p.tokens as unknown as Prisma.InputJsonValue) : Prisma.DbNull,

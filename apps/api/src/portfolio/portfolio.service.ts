@@ -13,13 +13,16 @@ import type {
   HistoryPointDto,
   HistoryRange,
   PortfolioDto,
+  PortfolioOwnerDto,
+  PortfolioVisibility,
   PositionCategory,
+  PositionRange,
   PositionTokenDto,
   PublicPortfolioDto,
   WalletDto,
   WalletSyncStatus,
 } from '@svinooh/shared';
-import { round2 } from '../common/util';
+import { randomSlug, round2, shortAddress } from '../common/util';
 import { config } from '../config';
 import { PrismaService } from '@svinooh/db';
 import { detectChain } from '../scanners/detect';
@@ -97,6 +100,27 @@ function cacheKey(slug: string): string {
   return `pf:${slug}`;
 }
 
+function unsupportedNetwork(): BadRequestException {
+  return new BadRequestException({
+    statusCode: 400,
+    code: 'UNSUPPORTED_NETWORK',
+    message: 'Could not detect the address network. Supported: BTC, EVM (0x…), SOL and TRON.',
+  });
+}
+
+/**
+ * What we keep in Redis. `dto` is the PUBLIC view and nothing else — the owner's
+ * profile and their wallet labels sit beside it and are only ever merged in for
+ * a request authenticated as the owner. Keeping them out of `dto` means a cache
+ * hit cannot accidentally hand someone else's identity to a stranger.
+ */
+interface CachedView {
+  ownerUserId: string | null;
+  owner: PortfolioOwnerDto | null;
+  labels: Record<string, string | null>;
+  dto: PortfolioDto;
+}
+
 @Injectable()
 export class PortfolioService {
   constructor(
@@ -105,41 +129,86 @@ export class PortfolioService {
   ) {}
 
   /**
-   * Leaderboard/search for the landing page: public portfolios ordered by
-   * descending value. Portfolios are already open via their link — here they're
-   * simply listed.
+   * The landing list and search. Only two kinds of portfolio are listed:
+   * anonymous ones (no owner at all) and ones an owner explicitly published.
+   * Anything else stays off this list entirely — a private portfolio must not be
+   * discoverable, only reachable by its link.
+   *
+   * Nothing about a person is returned here, by construction: the query never
+   * loads a User, so there is no handle or photo to leak even by accident.
+   * Search matches the portfolio name, its slug and its wallet addresses —
+   * addresses being how someone looks up a wallet they care about.
    */
   async listPublic(limit: number, query: string): Promise<PublicPortfolioDto[]> {
     const portfolios = await this.prisma.portfolio.findMany({
-      include: { user: true, wallets: true },
+      where: { OR: [{ owner: null }, { owner: { isPublic: true } }] },
+      include: { owner: { select: { portfolioId: true } }, wallets: true },
     });
 
     const q = query.trim().toLowerCase().replace(/^@/, '');
-    const rows = portfolios
+    return portfolios
       .map((portfolio) => {
         const known = portfolio.wallets.filter((w) => w.lastTotalUsd !== null);
-        const totalUsd = round2(known.reduce((sum, w) => sum + (w.lastTotalUsd ?? 0), 0));
-        const chains = [...new Set(portfolio.wallets.map((w) => w.chain as Chain))];
-        const handle =
-          portfolio.user.username ||
-          [portfolio.user.firstName, portfolio.user.lastName].filter(Boolean).join(' ') ||
-          'anon';
         return {
           slug: portfolio.slug,
           name: portfolio.name,
-          handle,
-          photoUrl: portfolio.user.photoUrl,
-          totalUsd,
+          totalUsd: round2(known.reduce((sum, w) => sum + (w.lastTotalUsd ?? 0), 0)),
           walletCount: portfolio.wallets.length,
-          chains,
+          chains: [...new Set(portfolio.wallets.map((w) => w.chain as Chain))],
+          anonymous: portfolio.owner === null,
+          addresses: portfolio.wallets.map((w) => w.address.toLowerCase()),
         };
       })
       .filter((p) => p.walletCount > 0)
-      .filter((p) => !q || p.handle.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.slug.includes(q))
+      .filter(
+        (p) =>
+          !q ||
+          p.name.toLowerCase().includes(q) ||
+          p.slug.includes(q) ||
+          p.addresses.some((address) => address.includes(q)),
+      )
       .sort((a, b) => b.totalUsd - a.totalUsd)
-      .slice(0, Math.min(Math.max(limit, 1), 100));
+      .slice(0, Math.min(Math.max(limit, 1), 100))
+      .map(({ addresses: _addresses, ...row }) => row);
+  }
 
-    return rows;
+  /**
+   * Look up a wallet address as a portfolio, creating one if it isn't tracked
+   * yet. This is what the landing search offers when nothing matched: the result
+   * is a portfolio that belongs to NOBODY — public, searchable, with no user
+   * attached — so it can be shared and revisited without involving an account.
+   *
+   * Re-running it for the same address returns the existing anonymous portfolio
+   * rather than piling up duplicates.
+   */
+  async findOrCreateAnonymous(addressRaw: string): Promise<{ slug: string }> {
+    const raw = String(addressRaw || '').trim();
+    const chain = detectChain(raw);
+    if (!chain) throw unsupportedNetwork();
+    // EVM addresses are case-insensitive, so the same wallet typed with and
+    // without checksum casing must not spawn two portfolios. Base58 chains are
+    // left alone — there case is part of the address.
+    const address = chain === 'EVM' ? raw.toLowerCase() : raw;
+
+    // An existing anonymous portfolio for exactly this one wallet, nothing else
+    const existing = await this.prisma.portfolio.findFirst({
+      where: { owner: null, wallets: { some: { address }, every: { address } } },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (existing) return { slug: existing.slug };
+
+    const portfolio = await this.prisma.portfolio.create({
+      data: {
+        slug: randomSlug(),
+        // An address is public chain data — unlike a handle, it identifies the
+        // wallet rather than the person, and it is what someone searched for
+        name: shortAddress(address),
+        wallets: { create: { address, chain } },
+      },
+      include: { wallets: true },
+    });
+    this.requestScan(portfolio.wallets[0].id);
+    return { slug: portfolio.slug };
   }
 
   /**
@@ -150,18 +219,32 @@ export class PortfolioService {
    */
   async getBySlug(slug: string, userId: string | null): Promise<PortfolioDto> {
     const key = cacheKey(slug);
-    let view = await this.cache.get<{ ownerUserId: string; dto: PortfolioDto }>(key);
+    let view = await this.cache.get<CachedView>(key);
     if (!view) {
       view = await this.buildView(slug);
       await this.cache.set(key, view, config.cacheTtlSec);
     }
-    return { ...view.dto, isOwner: userId !== null && view.ownerUserId === userId };
+    const isOwner = userId !== null && view.ownerUserId === userId;
+    // The cached view is the PUBLIC one. Owner-only fields — their own profile
+    // and the labels they gave their wallets — are grafted on here, for the
+    // owner alone, so a cache hit can never serve them to somebody else.
+    return {
+      ...view.dto,
+      isOwner,
+      owner: isOwner ? view.owner : null,
+      wallets: isOwner
+        ? view.dto.wallets.map((w) => ({ ...w, label: view!.labels[w.id] ?? null }))
+        : view.dto.wallets,
+    };
   }
 
-  private async buildView(slug: string): Promise<{ ownerUserId: string; dto: PortfolioDto }> {
+  private async buildView(slug: string): Promise<CachedView> {
     const portfolio = await this.prisma.portfolio.findUnique({
       where: { slug },
-      include: { user: true, wallets: { include: { positions: true } } },
+      include: {
+        owner: { include: { user: true } },
+        wallets: { include: { positions: true } },
+      },
     });
     if (!portfolio) throw new NotFoundException('Portfolio not found');
 
@@ -175,23 +258,48 @@ export class PortfolioService {
       null,
     );
 
-    const owner = portfolio.user;
+    const user = portfolio.owner?.user ?? null;
     const dto: PortfolioDto = {
       slug: portfolio.slug,
       name: portfolio.name,
-      owner: {
-        name:
-          [owner.firstName, owner.lastName].filter(Boolean).join(' ') || owner.username || 'Anonymous',
-        username: owner.username,
-        photoUrl: owner.photoUrl,
-      },
+      // Never in the cached (public) view — filled in for the owner in getBySlug
+      owner: null,
+      visibility: !portfolio.owner ? 'anonymous' : portfolio.owner.isPublic ? 'public' : 'private',
       totalUsd: round2(wallets.reduce((sum, w) => sum + (w.totalUsd ?? 0), 0)),
-      wallets,
+      // Labels are stripped here and handed back to the owner separately
+      wallets: wallets.map((w) => ({ ...w, label: null })),
       isOwner: false,
       updatedAt,
       createdAt: portfolio.createdAt.toISOString(),
     };
-    return { ownerUserId: portfolio.userId, dto };
+    return {
+      ownerUserId: portfolio.owner?.userId ?? null,
+      owner: user
+        ? {
+            name:
+              [user.firstName, user.lastName].filter(Boolean).join(' ') || user.username || 'Anonymous',
+            username: user.username,
+            photoUrl: user.photoUrl,
+          }
+        : null,
+      labels: Object.fromEntries(wallets.map((w) => [w.id, w.label])),
+      dto,
+    };
+  }
+
+  /** Publish or unpublish an owned portfolio. Owner-only, by definition. */
+  async setVisibility(
+    slug: string,
+    userId: string,
+    isPublic: boolean,
+  ): Promise<{ visibility: PortfolioVisibility }> {
+    const portfolio = await this.requireOwned(slug, userId);
+    await this.prisma.portfolioOwner.update({
+      where: { portfolioId: portfolio.id },
+      data: { isPublic },
+    });
+    await this.cache.del(cacheKey(slug));
+    return { visibility: isPublic ? 'public' : 'private' };
   }
 
   async rename(slug: string, userId: string, nameRaw: string): Promise<{ name: string }> {
@@ -209,13 +317,7 @@ export class PortfolioService {
     if (!address) throw new BadRequestException('Empty address');
 
     const chain = detectChain(address);
-    if (!chain) {
-      throw new BadRequestException({
-        statusCode: 400,
-        code: 'UNSUPPORTED_NETWORK',
-        message: 'Could not detect the address network. Supported: BTC, EVM (0x…), SOL and TRON.',
-      });
-    }
+    if (!chain) throw unsupportedNetwork();
 
     const existing = await this.prisma.wallet.findUnique({
       where: { portfolioId_address: { portfolioId: portfolio.id, address } },
@@ -231,15 +333,7 @@ export class PortfolioService {
     const wallet = await this.prisma.wallet.create({
       data: { portfolioId: portfolio.id, address, chain },
     });
-    // The scan is async: the endpoint responds immediately (status=pending) and
-    // the frontend polls. An EVM scan takes 20–40 seconds — we can't hold an
-    // HTTP request open that long.
-    void fetch(`${config.walletServiceUrl}/internal/scan`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ walletId: wallet.id }),
-      signal: AbortSignal.timeout(5000),
-    }).catch(() => {});
+    this.requestScan(wallet.id);
     await this.cache.del(cacheKey(slug));
     return this.toWalletDto({ ...wallet, positions: [] }, 0);
   }
@@ -364,10 +458,28 @@ export class PortfolioService {
   }
 
   private async requireOwned(slug: string, userId: string): Promise<Portfolio> {
-    const portfolio = await this.prisma.portfolio.findUnique({ where: { slug } });
+    const portfolio = await this.prisma.portfolio.findUnique({
+      where: { slug },
+      include: { owner: true },
+    });
     if (!portfolio) throw new NotFoundException('Portfolio not found');
-    if (portfolio.userId !== userId) throw new ForbiddenException("This isn't your portfolio");
+    // An anonymous portfolio has no owner, so nobody can claim it either
+    if (portfolio.owner?.userId !== userId) throw new ForbiddenException("This isn't your portfolio");
     return portfolio;
+  }
+
+  /**
+   * The scan is async: the endpoint responds immediately (status=pending) and
+   * the frontend polls. An EVM scan takes 20–40 seconds — we can't hold an HTTP
+   * request open that long.
+   */
+  private requestScan(walletId: string): void {
+    void fetch(`${config.walletServiceUrl}/internal/scan`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ walletId }),
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => {});
   }
 
   /**
@@ -427,6 +539,7 @@ export class PortfolioService {
         category: p.category as PositionCategory,
         apy: p.apy,
         healthRate: p.healthRate,
+        range: (p.range as PositionRange | null) ?? null,
         // Written by the wallet service as PositionTokenDto[]; Prisma types it as
         // opaque JSON, so this is the one place the shape is asserted
         tokens: (p.tokens as PositionTokenDto[] | null) ?? null,

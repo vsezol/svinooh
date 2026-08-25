@@ -36,16 +36,28 @@ export class UserService {
     });
   }
 
-  /** The portfolio is created on first sign-in. Just one for now; the schema allows several. */
+  /**
+   * The portfolio is created on first sign-in. Just one for now; the schema
+   * allows several.
+   *
+   * It is created PRIVATE (`PortfolioOwner.isPublic` defaults to false) and with
+   * a name that says nothing about who owns it — the name is public whenever the
+   * portfolio is, so putting a handle in it would leak identity the moment the
+   * owner publishes.
+   */
   async ensurePortfolio(user: User): Promise<Portfolio> {
-    const existing = await this.prisma.portfolio.findFirst({
+    const existing = await this.prisma.portfolioOwner.findFirst({
       where: { userId: user.id },
       orderBy: { createdAt: 'asc' },
+      include: { portfolio: true },
     });
-    if (existing) return existing;
-    const display = user.username ? `@${user.username}` : user.firstName || 'no name';
+    if (existing) return existing.portfolio;
     return this.prisma.portfolio.create({
-      data: { userId: user.id, slug: randomSlug(), name: `${display}'s portfolio` },
+      data: {
+        slug: randomSlug(),
+        name: 'My portfolio',
+        owner: { create: { userId: user.id } },
+      },
     });
   }
 }
