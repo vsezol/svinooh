@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import type { Wallet } from '@prisma/client';
 import type { Chain } from '@svinooh/shared';
 import { config } from '../config';
+import { MetricsService } from '../metrics/metrics.service';
 import { PrismaService } from '../prisma.service';
 import type { ScanJob } from '../queue/rabbit.service';
 import { scanAddress } from '../scanners';
@@ -17,7 +18,10 @@ export class SyncService implements OnModuleDestroy {
   /** Счётчик подряд идущих подозрительных просадок по каждому адресу */
   private readonly dropStreak = new Map<string, number>();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly metrics: MetricsService,
+  ) {}
 
   async onModuleDestroy() {
     await closeBrowser();
@@ -65,8 +69,13 @@ export class SyncService implements OnModuleDestroy {
       const previousTotal = group.map((w) => w.lastTotalUsd).find((v) => v !== null) ?? null;
       const result = await this.scanWithSanityCheck(key, chain, address, previousTotal);
       await this.applyResult(group, result);
+      this.metrics.scans.inc({ chain, result: 'ok' });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      // подавленная просадка — это защита от «пилы», а не настоящий сбой
+      const suppressed = message.startsWith('Unconfirmed drop');
+      this.metrics.scans.inc({ chain, result: suppressed ? 'suppressed' : 'failed' });
+      if (!suppressed) this.metrics.errors.inc({ type: 'scan' });
       this.logger.warn(`Scan ${key} failed: ${message}`);
       await this.markFailed(group, message);
     } finally {

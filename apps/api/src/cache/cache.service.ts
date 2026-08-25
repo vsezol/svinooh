@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
 import { config } from '../config';
+import { MetricsService } from '../metrics/metrics.service';
 
 /**
  * Кэш собранных данных портфеля. С Redis — общий и переживает рестарты; без
@@ -13,7 +14,7 @@ export class CacheService implements OnModuleDestroy {
   private readonly redis: Redis | null = null;
   private readonly mem = new Map<string, { v: string; exp: number }>();
 
-  constructor() {
+  constructor(private readonly metrics: MetricsService) {
     if (config.redisUrl) {
       this.redis = new Redis(config.redisUrl, {
         family: 0, // приватная сеть Railway — IPv6
@@ -28,6 +29,12 @@ export class CacheService implements OnModuleDestroy {
   }
 
   async get<T>(key: string): Promise<T | null> {
+    const value = await this.read<T>(key);
+    this.metrics.cacheOps.inc({ op: value === null ? 'miss' : 'hit' });
+    return value;
+  }
+
+  private async read<T>(key: string): Promise<T | null> {
     try {
       if (this.redis) {
         const raw = await this.redis.get(key);

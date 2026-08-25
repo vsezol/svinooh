@@ -4,6 +4,7 @@ import { AuthModule } from './auth/auth.module';
 import { CacheModule } from './cache/cache.module';
 import { config } from './config';
 import { HealthController } from './health.controller';
+import { MetricsModule } from './metrics/metrics.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
 import { PrismaModule } from './prisma.module';
 import { SyncModule } from './sync/sync.module';
@@ -11,6 +12,7 @@ import { SyncModule } from './sync/sync.module';
 @Module({
   imports: [
     PrismaModule,
+    MetricsModule,
     CacheModule,
     JwtModule.register({
       global: true,
