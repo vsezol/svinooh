@@ -85,6 +85,8 @@ export interface HistoryDto {
 
 export interface AuthConfigDto {
   botUsername: string | null;
+  /** Числовой id бота (публичный, префикс токена) — для Telegram.Login.auth */
+  botId: string | null;
   devMode: boolean;
   syncIntervalMin: number;
 }

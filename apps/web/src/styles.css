@@ -117,6 +117,7 @@ button {
 }
 
 .shell {
+  width: 100%;
   max-width: 1120px;
   margin: 0 auto;
   padding: 0 clamp(14px, 3.5vw, 28px);

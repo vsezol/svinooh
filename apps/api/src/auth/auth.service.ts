@@ -23,6 +23,9 @@ export class AuthService {
   getConfig(): AuthConfigDto {
     return {
       botUsername: config.botUsername,
+      // bot_id — числовой префикс токена (публичный), нужен фронту для
+      // Telegram.Login.auth со своей кнопкой
+      botId: config.botToken ? config.botToken.split(':')[0] : null,
       devMode: config.devMode,
       syncIntervalMin: config.syncIntervalMin,
     };
