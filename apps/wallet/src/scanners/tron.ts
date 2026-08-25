@@ -1,5 +1,5 @@
 import { fetchJson } from './http';
-import type { ScanPosition, ScanResult } from './types';
+import type { ScanPosition, ScanPositionToken, ScanResult } from './types';
 
 /**
  * TRON: TronGrid (the official public API) for balances, DefiLlama for prices.
@@ -18,14 +18,21 @@ export async function scanTron(address: string): Promise<ScanResult> {
   const account = data?.[0];
   if (!account) return { chain: 'TRON', address, totalUsd: 0, positions: [] };
 
-  const stakedSun =
-    ((account.frozenV2 as Array<{ amount?: number }> | undefined) || []).reduce(
-      (sum, f) => sum + (f.amount || 0),
-      0,
-    ) +
+  // Where the staked TRX sits, kept split so the position can show its legs:
+  // frozen for oneself (by resource) and frozen-and-delegated to someone else
+  const frozenV2 = (account.frozenV2 as Array<{ type?: string; amount?: number }> | undefined) || [];
+  const stakeParts: Array<{ label: string; sun: number }> = [];
+  for (const frozen of frozenV2) {
+    // an entry with no `type` is BANDWIDTH — that's how TronGrid encodes it
+    stakeParts.push({ label: `Frozen for ${(frozen.type || 'BANDWIDTH').toLowerCase()}`, sun: frozen.amount || 0 });
+  }
+  const delegatedSun =
     (account.account_resource?.delegated_frozenV2_balance_for_energy || 0) +
     (account.account_resource?.delegated_frozenV2_balance_for_bandwidth || 0) +
     (account.delegated_frozenV2_balance_for_bandwidth || 0);
+  if (delegatedSun > 0) stakeParts.push({ label: 'Delegated to others', sun: delegatedSun });
+
+  const stakedSun = stakeParts.reduce((sum, p) => sum + p.sun, 0);
   const liquidSun = account.balance || 0;
 
   const trc20: Array<Record<string, string>> = account.trc20 || [];
@@ -52,14 +59,25 @@ export async function scanTron(address: string): Promise<ScanResult> {
     });
   }
   if (staked > 0) {
+    const legs: ScanPositionToken[] = stakeParts
+      .filter((part) => part.sun > 0)
+      .map((part) => ({
+        symbol: `TRX · ${part.label}`,
+        amount: part.sun / 1e6,
+        priceUsd: trxPrice,
+        valueUsd: (part.sun / 1e6) * trxPrice,
+        role: 'supply' as const,
+      }));
     positions.push({
       symbol: 'TRX',
-      name: 'Staked (Stake 2.0)',
+      name: 'Staked',
+      note: 'Stake 2.0',
       amount: staked,
       priceUsd: trxPrice,
       valueUsd: staked * trxPrice,
       platform: 'stake',
       category: 'staked',
+      tokens: legs.length > 1 ? legs : null, // a single leg adds nothing over the header
     });
   }
 

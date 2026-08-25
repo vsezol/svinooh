@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { config } from '../config';
 import { sleep } from '../common/util';
+import { UserService } from './user.service';
 
 export interface TgUser {
   id: number;
@@ -31,6 +32,8 @@ export class TelegramBotService implements OnApplicationBootstrap, OnModuleDestr
   private readonly tokens = new Map<string, LoginToken>();
   private running = false;
   private offset = 0;
+
+  constructor(private readonly users: UserService) {}
 
   onApplicationBootstrap() {
     if (!config.botToken) {
@@ -108,18 +111,45 @@ export class TelegramBotService implements OnApplicationBootstrap, OnModuleDestr
     const entry = this.tokens.get(payload);
     if (!entry || Date.now() - entry.createdAt > TOKEN_TTL_MS) return;
 
+    const from = msg.from;
     entry.status = 'authenticated';
     entry.user = {
-      id: msg.from.id,
-      first_name: msg.from.first_name,
-      last_name: msg.from.last_name,
-      username: msg.from.username,
+      id: from.id,
+      first_name: from.first_name,
+      last_name: from.last_name,
+      username: from.username,
     };
-    this.logger.log(`Login confirmed by bot: @${msg.from.username ?? msg.from.id}`);
-    // The return button carries the same token: when opened via ?tg_login=<token> the site
-    // completes the login itself — even in a new tab or after the page reloaded.
-    void this.reply(msg.chat.id, "✅ You're signed in! Tap below to return to svinooh.", {
-      inline_keyboard: [[{ text: 'Return to svinooh →', url: `${config.webUrl}/?tg_login=${payload}` }]],
+    this.logger.log(`Login confirmed by bot: @${from.username ?? from.id}`);
+    void this.sendReturnButton(msg.chat.id, from, payload);
+  }
+
+  /**
+   * The button takes the user straight to their own portfolio, not the landing
+   * page — which means resolving the account right here, before the site has
+   * polled for the login. The token rides along in the URL: opened via
+   * `?tg_login=<token>` the site finishes signing in by itself, even in a fresh
+   * tab. If the lookup fails we still send a working button, just to the root.
+   */
+  private async sendReturnButton(chatId: number, from: TgFrom, token: string): Promise<void> {
+    let path = '/';
+    try {
+      const user = await this.users.upsertTelegram({
+        id: from.id,
+        firstName: from.first_name,
+        lastName: from.last_name,
+        username: from.username,
+      });
+      const portfolio = await this.users.ensurePortfolio(user);
+      path = `/p/${portfolio.slug}`;
+    } catch (error) {
+      this.logger.warn(
+        `Could not resolve the portfolio for the return button: ${error instanceof Error ? error.message : error}`,
+      );
+    }
+    await this.reply(chatId, "✅ You're signed in! Tap below to return to svinooh.", {
+      inline_keyboard: [
+        [{ text: 'Open my portfolio →', url: `${config.webUrl}${path}?tg_login=${token}` }],
+      ],
     });
   }
 
@@ -141,11 +171,18 @@ export class TelegramBotService implements OnApplicationBootstrap, OnModuleDestr
   }
 }
 
+interface TgFrom {
+  id: number;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+}
+
 interface TgUpdate {
   update_id: number;
   message?: {
     text?: string;
     chat: { id: number };
-    from?: { id: number; first_name?: string; last_name?: string; username?: string };
+    from?: TgFrom;
   };
 }

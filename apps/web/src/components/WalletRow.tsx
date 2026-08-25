@@ -1,8 +1,21 @@
 import { useMemo, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
-import type { WalletDto } from '@svinooh/shared';
+import type { PositionTokenRole, WalletDto } from '@svinooh/shared';
 import { buildBlocks } from '../lib/blocks';
 import { chainMeta, fmtUsd, shortAddress, walletName } from '../lib/format';
+
+/** How a leg of a DeFi position is labelled: accrued LP fees/rewards, and debt */
+const ROLE_LABEL: Record<PositionTokenRole, string> = {
+  supply: 'SUPPLIED',
+  reward: 'REWARDS',
+  borrow: 'DEBT',
+};
+
+const roleColor = (role: PositionTokenRole): string =>
+  role === 'reward' ? 'var(--up)' : role === 'borrow' ? 'var(--down)' : 'var(--mut)';
+
+/** 0.8075 → "80.8% APY" */
+const fmtApy = (apy: number): string => `${(apy * 100).toFixed(apy < 0.1 ? 2 : 1)}% APY`;
 
 interface Props {
   wallet: WalletDto;
@@ -181,6 +194,20 @@ export function WalletRow({ wallet, isOwner, total, onRemove, onRename }: Props)
                     {b.meta}
                   </span>
                 ) : null}
+                {b.apy != null ? (
+                  <span className="mono" style={{ fontSize: 10, color: b.apy >= 0 ? 'var(--up)' : 'var(--down)', letterSpacing: '0.04em' }}>
+                    {fmtApy(b.apy)}
+                  </span>
+                ) : null}
+                {b.healthRate != null ? (
+                  <span
+                    className="mono"
+                    title="Health factor — below 1 the position is liquidated"
+                    style={{ fontSize: 10, color: b.healthRate < 1.5 ? 'var(--down)' : 'var(--mut)', letterSpacing: '0.04em' }}
+                  >
+                    HF {b.healthRate.toFixed(2)}
+                  </span>
+                ) : null}
                 <div style={{ flex: 1 }} />
                 <span className="mono" style={{ fontSize: 12.5, fontWeight: 600 }}>
                   {fmtUsd(b.value)}
@@ -189,11 +216,27 @@ export function WalletRow({ wallet, isOwner, total, onRemove, onRename }: Props)
               {b.rows.map((r, ri) => (
                 <div key={ri} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 14px', borderTop: '1px solid var(--line)' }}>
                   <span style={{ fontWeight: 600, fontSize: 12.5 }}>{r.title}</span>
+                  {r.role && r.role !== 'supply' ? (
+                    <span
+                      className="mono"
+                      style={{
+                        fontSize: 9,
+                        letterSpacing: '0.1em',
+                        color: roleColor(r.role),
+                        border: `1px solid ${roleColor(r.role)}`,
+                        borderRadius: 5,
+                        padding: '1px 5px',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {ROLE_LABEL[r.role]}
+                    </span>
+                  ) : null}
                   <span className="mono" style={{ fontSize: 10.5, color: 'var(--mut)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {r.sub}
                   </span>
                   <div style={{ flex: 1 }} />
-                  <span className="mono" style={{ fontSize: 12, fontWeight: 600 }}>
+                  <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: r.role && r.role !== 'supply' ? roleColor(r.role) : undefined }}>
                     {fmtUsd(r.value)}
                   </span>
                 </div>

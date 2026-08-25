@@ -7,18 +7,44 @@ export type WalletSyncStatus = 'pending' | 'ok' | 'failed';
 
 export type PositionCategory = 'token' | 'defi' | 'staked' | 'unpriced';
 
+/**
+ * What a leg contributes to a DeFi position:
+ *   supply — deposited/provided (counts towards the value)
+ *   reward — accrued but not yet claimed: LP fees, farming rewards
+ *   borrow — debt (`valueUsd` is negative — it subtracts from the position)
+ */
+export type PositionTokenRole = 'supply' | 'reward' | 'borrow';
+
+/** One underlying leg of a DeFi position — what the position actually holds */
+export interface PositionTokenDto {
+  symbol: string;
+  amount?: number | null;
+  priceUsd?: number | null;
+  /** Signed: borrow legs come through negative */
+  valueUsd: number;
+  role: PositionTokenRole;
+}
+
 export interface PositionDto {
   id: string;
-  /** Position ticker or name: "BTC", "USDT", "GM:SOL[WSOL-USDC]", "Lending" */
+  /** Protocol or ticker: "BTC", "USDT", "Pendle V2", "Hyperliquid" */
   symbol: string;
-  /** Second line: market/pool name, if any */
+  /** Position kind: "Lending", "Liquidity Pool", "Deposit", "Staked" */
   name?: string | null;
+  /** Extra detail: chain, pool/market name, the protocol's own description */
+  note?: string | null;
   amount?: number | null;
   priceUsd?: number | null;
   valueUsd: number;
-  /** Platform: 'wallet' | 'kamino' | 'meteora' | 'gmtrade' | 'debank' | ... */
+  /** Platform: 'wallet' | 'kamino' | 'meteora' | 'gmtrade' | 'arb_pendle2' | ... */
   platform?: string | null;
   category: PositionCategory;
+  /** Yield as a fraction (0.42 = 42% APY), when the source reports one */
+  apy?: number | null;
+  /** Health factor of a lending position (below 1 — liquidation) */
+  healthRate?: number | null;
+  /** Underlying legs: what's supplied, what's accrued, what's borrowed */
+  tokens?: PositionTokenDto[] | null;
 }
 
 export interface WalletDto {

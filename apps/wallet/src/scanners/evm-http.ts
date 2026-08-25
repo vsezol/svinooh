@@ -1,4 +1,12 @@
 import { debank, DebankError } from './debank-client';
+import {
+  itemPositions,
+  projectNetUsd,
+  tokenPosition,
+  type AppListResponse,
+  type DebankProject,
+  type DebankToken,
+} from './debank-portfolio';
 import type { ScanPosition, ScanResult } from './types';
 
 /**
@@ -13,46 +21,17 @@ import type { ScanPosition, ScanResult } from './types';
  * Skip app_list and you silently lose Hyperliquid (on the reference wallet
  * that's $3,512 of $27,485). So all three are required, not "pick one".
  *
+ * The payloads are parsed in debank-portfolio.ts, shared with the Chrome path.
+ *
  * Cross-check: total_net_curve (the historical curve, which excludes apps).
  * If our sum is more than 10% below the curve's last point, we've dropped
  * on-chain value that DeBank can see → that's a miss, fall back to Chrome
  * rather than writing an understated number into the history.
  */
 
-interface DebankToken {
-  chain?: string;
-  symbol?: string;
-  optimized_symbol?: string;
-  display_symbol?: string;
-  name?: string;
-  amount?: number;
-  price?: number;
-  is_scam?: boolean;
-}
-
-interface PortfolioItem {
-  name?: string;
-  stats?: { net_usd_value?: number };
-}
-
-interface DebankProject {
-  id?: string;
-  name?: string;
-  chain?: string;
-  portfolio_item_list?: PortfolioItem[];
-}
-
-interface AppListResponse {
-  apps?: DebankProject[];
-  error_apps?: unknown[];
-}
-
 interface NetCurve {
   usd_value_list?: Array<[number, number]>;
 }
-
-const projectNetUsd = (project: DebankProject): number =>
-  (project.portfolio_item_list || []).reduce((sum, item) => sum + (item.stats?.net_usd_value || 0), 0);
 
 function addChain(breakdown: Record<string, number>, chain: string | undefined, usd: number): void {
   const key = chain || 'other';
@@ -78,57 +57,34 @@ export async function scanEvmHttp(rawAddress: string): Promise<ScanResult> {
   const positions: ScanPosition[] = [];
   const breakdown: Record<string, number> = {};
 
-  // 1) On-chain DeFi by protocol — one position per protocol
+  // 1) On-chain DeFi by protocol — expanded down to individual positions
   let defiProjects = 0;
   for (const project of projects || []) {
     const usd = projectNetUsd(project);
     if (usd < 0.01) continue;
     defiProjects += usd;
     addChain(breakdown, project.chain, usd);
-    const kinds = [...new Set((project.portfolio_item_list || []).map((i) => i.name).filter(Boolean))];
-    positions.push({
-      symbol: project.name || project.id || 'DeFi',
-      name: kinds.length ? kinds.join(' · ') : (project.chain ?? null),
-      valueUsd: usd,
-      platform: project.name?.toLowerCase() ?? 'debank',
-      category: 'defi',
-    });
+    positions.push(...itemPositions(project));
   }
 
-  // 2) Apps (Hyperliquid, etc.) — likewise one position per app
+  // 2) Apps (Hyperliquid, etc.) — the same shape, a separate endpoint
   let defiApps = 0;
   for (const app of appList?.apps || []) {
     const usd = projectNetUsd(app);
     if (usd < 0.01) continue;
     defiApps += usd;
     addChain(breakdown, app.chain || app.id, usd);
-    positions.push({
-      symbol: app.name || app.id || 'App',
-      name: app.id ?? null,
-      valueUsd: usd,
-      platform: app.id ?? 'debank',
-      category: 'defi',
-    });
+    positions.push(...itemPositions(app));
   }
 
-  // 3) Tokens held (we exclude scams — DeBank doesn't count them in the total)
+  // 3) Tokens held
   let tokenUsd = 0;
   for (const token of tokens || []) {
-    if (token.is_scam) continue;
-    const amount = token.amount || 0;
-    const price = token.price || 0;
-    const usd = amount * price;
-    if (usd < 0.01) continue;
-    tokenUsd += usd;
-    addChain(breakdown, token.chain, usd);
-    positions.push({
-      symbol: token.optimized_symbol || token.display_symbol || token.symbol || token.name || '???',
-      amount,
-      priceUsd: price,
-      valueUsd: usd,
-      platform: 'wallet',
-      category: 'token',
-    });
+    const position = tokenPosition(token);
+    if (!position) continue;
+    tokenUsd += position.valueUsd;
+    addChain(breakdown, token.chain, position.valueUsd);
+    positions.push(position);
   }
 
   const totalUsd = defiProjects + defiApps + tokenUsd;

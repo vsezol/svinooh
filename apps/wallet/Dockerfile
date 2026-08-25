@@ -46,6 +46,10 @@ COPY --from=build /app/apps/wallet/package.json apps/wallet/
 COPY --from=build /app/apps/wallet/dist apps/wallet/dist
 
 EXPOSE 3000
-CMD ["node", "apps/wallet/dist/main.js"]
+# `-r @svinooh/common/dist/tracing` starts OpenTelemetry BEFORE the app: the
+# instrumentation patches modules as they are required, so anything already
+# loaded would never be traced. With OTEL_EXPORTER_OTLP_ENDPOINT unset it is a
+# no-op.
+CMD ["node", "-r", "@svinooh/common/dist/tracing", "apps/wallet/dist/main.js"]
 
 # build trigger

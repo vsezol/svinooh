@@ -1,6 +1,13 @@
 import { config } from '../config';
 import { sleep } from '../common/util';
 import { getBrowser } from './browser';
+import {
+  itemPositions,
+  tokenPosition,
+  type AppListResponse,
+  type DebankProject,
+  type DebankToken,
+} from './debank-portfolio';
 import { Semaphore } from './semaphore';
 import type { ScanPosition, ScanResult } from './types';
 
@@ -27,6 +34,82 @@ import type { ScanPosition, ScanResult } from './types';
 
 // The one service-wide browser lock — guarantees "never two Chrome at once"
 const browserLock = new Semaphore(1);
+
+/**
+ * Installed before navigation: records the JSON of the portfolio calls the page
+ * makes for itself. That's the same payload the signed HTTP path fetches — with
+ * the per-item legs (supplied / rewards / debt) that the rendered DOM never
+ * shows — obtained without a single extra request or signature of our own. It
+ * matters because from a datacenter IP the direct API call is the thing that
+ * gets rate-limited, while the page's own requests keep working.
+ */
+const INTERCEPT_SCRIPT = String.raw`(() => {
+  const WANTED = ['/portfolio/project_list', '/portfolio/app_list', '/token/cache_balance_list'];
+  const store = (window.__svinooh = { project_list: null, app_list: null, cache_balance_list: null });
+  const keyOf = (url) => {
+    for (const path of WANTED) if (url.indexOf(path) !== -1) return path.split('/').pop();
+    return null;
+  };
+  const save = (url, text) => {
+    const key = keyOf(url);
+    if (!key) return;
+    try {
+      const body = JSON.parse(text);
+      if (body && body.error_code === 0 && 'data' in body) store[key] = body.data;
+    } catch (e) {}
+  };
+
+  const originalFetch = window.fetch;
+  window.fetch = function (...args) {
+    return originalFetch.apply(this, args).then((res) => {
+      try {
+        const url = String((args[0] && args[0].url) || args[0] || '');
+        if (keyOf(url)) res.clone().text().then((t) => save(url, t)).catch(() => {});
+      } catch (e) {}
+      return res;
+    });
+  };
+
+  const originalOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function (method, url) {
+    this.addEventListener('load', () => {
+      try {
+        save(String(url), this.responseText);
+      } catch (e) {}
+    });
+    return originalOpen.apply(this, arguments);
+  };
+})()`;
+
+const READ_CAPTURE_SCRIPT = 'window.__svinooh || null';
+
+interface Capture {
+  project_list: DebankProject[] | null;
+  app_list: AppListResponse | null;
+  cache_balance_list: DebankToken[] | null;
+}
+
+/**
+ * Positions from the intercepted API payloads. Returns null when the page
+ * didn't get far enough (DeBank still loading, markup/endpoints changed) — the
+ * caller then falls back to what it scraped from the DOM.
+ *
+ * The scraped header total stays the authority either way: it's the number
+ * DeBank itself displays, and these payloads only fill in the detail behind it.
+ */
+function positionsFromCapture(capture: Capture | null): ScanPosition[] | null {
+  const projects = capture?.project_list;
+  if (!Array.isArray(projects)) return null;
+
+  const positions: ScanPosition[] = [];
+  for (const project of projects) positions.push(...itemPositions(project));
+  for (const app of capture?.app_list?.apps || []) positions.push(...itemPositions(app));
+  for (const token of capture?.cache_balance_list || []) {
+    const position = tokenPosition(token);
+    if (position) positions.push(position);
+  }
+  return positions.length ? positions : null;
+}
 
 const READ_TOTAL_SCRIPT = String.raw`(() => {
   const el = document.querySelector('[class*="HeaderInfo_totalAssetInner"]');
@@ -114,6 +197,8 @@ async function scanEvmBrowserLocked(address: string): Promise<ScanResult> {
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
     );
     await page.setViewport({ width: 1440, height: 2000 });
+    // Has to be in place before the page's own scripts run
+    await page.evaluateOnNewDocument(INTERCEPT_SCRIPT);
     await page.goto(`https://debank.com/profile/${address}`, {
       waitUntil: 'domcontentloaded',
       timeout: 30_000,
@@ -145,10 +230,14 @@ async function scanEvmBrowserLocked(address: string): Promise<ScanResult> {
       await page.evaluate(UNFOLD_CHAINS_SCRIPT);
       await sleep(500);
       const data = (await page.evaluate(EXTRACT_SCRIPT)) as ExtractedData;
-      positions = [
+      // Preferred: the JSON the page fetched for itself — protocol positions
+      // split by kind, with their supply/reward/borrow legs. The scraped DOM is
+      // the fallback: correct values, but protocol totals only.
+      const captured = positionsFromCapture((await page.evaluate(READ_CAPTURE_SCRIPT)) as Capture | null);
+      positions = captured ?? [
         ...data.projects.map((p) => ({
           symbol: p.name,
-          name: p.chain,
+          note: p.chain,
           valueUsd: p.valueUsd,
           platform: 'debank',
           category: 'defi' as const,

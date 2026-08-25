@@ -61,13 +61,23 @@ model Position {
   id       String  @id @default(cuid())
   walletId String
   wallet   Wallet  @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  // Protocol or ticker: "Pendle V2", "USDT"
   symbol   String
+  // Position kind: "Lending", "Liquidity Pool", "Deposit"
   name     String?
+  // Extra detail: chain, pool/market name, the protocol's own description
+  note     String?
   amount   Float?
   priceUsd Float?
   valueUsd Float
   platform String?
   category String  @default("token") // token | defi | staked | unpriced
+  // Yield as a fraction (0.42 = 42% APY), when the source reports one
+  apy      Float?
+  // Health factor of a lending position (below 1 — liquidation)
+  healthRate Float?
+  // The underlying legs — PositionTokenDto[]: what's supplied, accrued, borrowed
+  tokens   Json?
 }
 
 model WalletSnapshot {
