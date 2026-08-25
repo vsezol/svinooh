@@ -1,0 +1,16 @@
+# Локальная разработка: только Postgres. API и web запускаются через `npm run dev`.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: svinooh
+      POSTGRES_PASSWORD: svinooh
+      POSTGRES_DB: svinooh
+    ports:
+      - "5432:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+
+volumes:
+  dbdata:

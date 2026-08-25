@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String      @id @default(cuid())
+  telegramId BigInt?     @unique
+  // Идентификатор для dev-логина (AUTH_DEV_MODE=true), в проде не используется
+  devKey     String?     @unique
+  firstName  String?
+  lastName   String?
+  username   String?
+  photoUrl   String?
+  createdAt  DateTime    @default(now())
+  portfolios Portfolio[]
+}
+
+model Portfolio {
+  id        String              @id @default(cuid())
+  slug      String              @unique
+  name      String
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallets   Wallet[]
+  snapshots PortfolioSnapshot[]
+  createdAt DateTime            @default(now())
+}
+
+model Wallet {
+  id           String           @id @default(cuid())
+  portfolioId  String
+  portfolio    Portfolio        @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  address      String
+  chain        String // BTC | EVM | SOL | TRON
+  // Пользовательское имя кошелька (владелец задаёт inline). null — показываем дефолт по сети
+  label        String?
+  status       String           @default("pending") // pending | ok | failed
+  // Кэш последнего УСПЕШНОГО скана: при ошибке не затирается, чтобы
+  // отдавать устаревшее значение с явным признаком stale, а не терять его
+  lastTotalUsd Float?
+  lastSyncedAt DateTime?
+  lastError    String?
+  breakdown    Json?
+  unpriced     Json?
+  createdAt    DateTime         @default(now())
+  positions    Position[]
+  snapshots    WalletSnapshot[]
+
+  @@unique([portfolioId, address])
+}
+
+model Position {
+  id       String  @id @default(cuid())
+  walletId String
+  wallet   Wallet  @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  symbol   String
+  name     String?
+  amount   Float?
+  priceUsd Float?
+  valueUsd Float
+  platform String?
+  category String  @default("token") // token | defi | staked | unpriced
+}
+
+model WalletSnapshot {
+  id        String   @id @default(cuid())
+  walletId  String
+  wallet    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  totalUsd  Float
+  breakdown Json?
+  createdAt DateTime @default(now())
+
+  @@index([walletId, createdAt])
+}
+
+model PortfolioSnapshot {
+  id          String    @id @default(cuid())
+  portfolioId String
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  totalUsd    Float
+  createdAt   DateTime  @default(now())
+
+  @@index([portfolioId, createdAt])
+}

@@ -1,0 +1,30 @@
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import type { TelegramAuthPayload } from '@svinooh/shared';
+import { CurrentUserId, RequiredAuthGuard } from './auth.guard';
+import { AuthService } from './auth.service';
+
+@Controller('auth')
+export class AuthController {
+  constructor(private readonly auth: AuthService) {}
+
+  @Get('config')
+  getConfig() {
+    return this.auth.getConfig();
+  }
+
+  @Post('telegram')
+  telegram(@Body() body: TelegramAuthPayload) {
+    return this.auth.telegramLogin(body);
+  }
+
+  @Post('dev')
+  dev(@Body() body: { name?: string }) {
+    return this.auth.devLogin(body?.name ?? '');
+  }
+
+  @Get('me')
+  @UseGuards(RequiredAuthGuard)
+  me(@CurrentUserId() userId: string) {
+    return this.auth.me(userId);
+  }
+}

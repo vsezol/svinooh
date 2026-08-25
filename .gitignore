@@ -1,4 +1,9 @@
-
-# Dolt database files (added by bd init)
-.dolt/
-*.db
+node_modules/
+dist/
+.env
+.env.local
+.nx/cache
+.nx/workspace-data
+*.log
+.DS_Store
+.claude/

@@ -1,0 +1,17 @@
+import { randomBytes } from 'node:crypto';
+
+const SLUG_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
+
+/** Короткий публичный идентификатор портфеля для ссылки /p/:slug */
+export function randomSlug(length = 10): string {
+  const bytes = randomBytes(length);
+  let slug = '';
+  for (let i = 0; i < length; i++) slug += SLUG_ALPHABET[bytes[i] % SLUG_ALPHABET.length];
+  return slug;
+}
+
+export const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+export function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
