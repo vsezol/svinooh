@@ -235,7 +235,7 @@ export function Landing() {
                 className="row-hover mono"
                 style={{ borderTop: '1px solid var(--line)', padding: '11px 18px', textAlign: 'center', fontSize: 10, letterSpacing: '0.12em', color: 'var(--acc-text)', cursor: 'pointer', userSelect: 'none' }}
               >
-                OPEN LIVE EXAMPLE →
+                OPEN THIS PORTFOLIO →
               </div>
             ) : null}
           </div>
