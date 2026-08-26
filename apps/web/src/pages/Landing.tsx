@@ -1,36 +1,53 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { HistoryDto, PortfolioDto, PublicPortfolioDto } from '@svinooh/shared';
+import type { PortfolioDto, PublicPortfolioDto } from '@svinooh/shared';
 import { AnimatedUsd } from '../components/AnimatedUsd';
-import { AreaChart } from '../components/AreaChart';
 import { AuthModal } from '../components/AuthModal';
 import { ChainMarquee } from '../components/ChainMarquee';
 import { Logo } from '../components/Logo';
 import { SearchDropdown } from '../components/SearchDropdown';
+import { Sparkline } from '../components/Sparkline';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { fmtUsd0, portfolioLabel } from '../lib/format';
+import { EMPTY_LANDING, loadLandingData, preloadedLanding, type LandingData } from '../lib/landing-data';
 import { useReplay } from '../lib/replay';
 
 
-export function Landing() {
+export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } = {}) {
   const { me } = useAuth();
   const navigate = useNavigate();
 
+  // The server rendered this page with data already in it; starting from the
+  // same data is what makes hydration silent instead of a second first paint.
+  // Passed in when this *is* the server render, read back off the page when the
+  // browser picks it up.
+  const preloaded = fromServer ?? preloadedLanding() ?? EMPTY_LANDING;
+
   const [authOpen, setAuthOpen] = useState(false);
-  const [pubs, setPubs] = useState<PublicPortfolioDto[]>([]);
-  const [demo, setDemo] = useState<PortfolioDto | null>(null);
-  const [demoHistory, setDemoHistory] = useState<{ values: number[]; times: number[] } | null>(null);
+  const [pubs, setPubs] = useState<PublicPortfolioDto[]>(preloaded.pubs);
+  const [demo, setDemo] = useState<PortfolioDto | null>(preloaded.demo);
+  const [demoHistory, setDemoHistory] = useState(preloaded.history);
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<PublicPortfolioDto[] | null>(null);
   const [open, setOpen] = useState(false);
   const [tracking, setTracking] = useState(false);
   const [trackErr, setTrackErr] = useState<string | null>(null);
 
-  // The list below the fold is a fixed top-N and stays put while you type
+  // Only when the server didn't already hand it over — otherwise the page would
+  // fetch what it is already showing, and move again when it arrived
   useEffect(() => {
-    void api<PublicPortfolioDto[]>('/portfolios/public?limit=12').then(setPubs).catch(() => {});
+    if (preloaded.pubs.length) return;
+    void loadLandingData((path) => api(path))
+      .then((data) => {
+        setPubs(data.pubs);
+        setDemo(data.demo);
+        setDemoHistory(data.history);
+      })
+      .catch(() => {});
+    // Once, on mount: `preloaded` never changes within a page's life
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Typing searches on the server and fills the dropdown under the input: an
@@ -49,17 +66,6 @@ export function Landing() {
     }, 220);
     return () => clearTimeout(timer);
   }, [search]);
-
-  const topSlug = pubs[0]?.slug;
-  useEffect(() => {
-    if (!topSlug) return;
-    void api<PortfolioDto>(`/portfolios/${topSlug}`).then(setDemo).catch(() => {});
-    void api<HistoryDto>(`/portfolios/${topSlug}/history?range=30d`)
-      .then((h) =>
-        setDemoHistory({ values: h.points.map((p) => p.usd), times: h.points.map((p) => new Date(p.t).getTime()) }),
-      )
-      .catch(() => {});
-  }, [topSlug]);
 
   // Anything long enough to be an address is offered as "track this" — the
   // backend is the one that decides whether the network is recognized
@@ -218,8 +224,8 @@ export function Landing() {
                 </span>
               ) : null}
             </div>
-            <div style={{ padding: '4px 0 0' }}>
-              <AreaChart values={demoHistory?.values ?? []} times={demoHistory?.times ?? []} period="30d" height="132px" variant="mini" />
+            <div style={{ padding: '10px 0 0' }}>
+              <Sparkline values={demoHistory?.values ?? []} height={132} />
             </div>
             {demoPositions.map((p) => (
               <div key={p.id} style={{ borderTop: '1px solid var(--line)', padding: '11px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>

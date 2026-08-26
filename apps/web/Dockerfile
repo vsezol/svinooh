@@ -3,7 +3,9 @@
 #
 # VITE_API_URL is baked into the static assets at build time: on Railway it is
 # enough to define the VITE_API_URL variable on the web service (the public api URL),
-# and Railway will pass it into the docker build as an ARG.
+# and Railway will pass it into the docker build as an ARG. The same value is
+# read again at runtime, where the server uses it to fetch the landing it
+# renders — API_INTERNAL_URL overrides it with the private address.
 
 FROM node:22-alpine AS build
 WORKDIR /app
@@ -20,9 +22,14 @@ COPY apps/web apps/web
 RUN npm run -w apps/web build
 
 FROM node:22-alpine
-RUN npm i -g serve@14
-COPY --from=build /app/apps/web/dist /app/dist
+WORKDIR /app
+ENV NODE_ENV=production
+# VITE_API_URL is a service variable, so it is in the environment at runtime
+# too — nothing to copy across the stage boundary here.
+# Two files and no dependency tree: the SSR bundle carries React with it, and
+# the server itself is plain Node.
+COPY --from=build /app/apps/web/dist ./dist
+COPY --from=build /app/apps/web/server.mjs ./server.mjs
 ENV PORT=4173
 EXPOSE 4173
-# -s: SPA fallback to index.html for routes like /p/:slug
-CMD ["sh", "-c", "serve -s /app/dist -l tcp://0.0.0.0:${PORT}"]
+CMD ["node", "server.mjs"]
