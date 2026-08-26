@@ -1,7 +1,7 @@
 import { EMPTY_LANDING, loadLandingData } from '../src/lib/landing-data';
 import { Landing } from '../src/screens/Landing';
 
-const API = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/+$/, '');
+const API = (process.env.NEXT_PUBLIC_API_URL || process.env.DEV_API || '').replace(/\/+$/, '');
 
 // Rebuilt at most once a minute, and served from the cache in between. The card
 // shows a public portfolio's balance, which moves on the scanner's schedule
