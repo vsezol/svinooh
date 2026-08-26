@@ -1,16 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { fmtUsd } from '../lib/format';
 
-const TWEEN_MS = 700;
-const FLASH_MS = 900;
-const easeOut = (t: number): number => 1 - (1 - t) ** 3;
+interface Frame {
+  text: string;
+  /** Per character: is this one different from what was on screen a moment ago */
+  changed: boolean[];
+  dir: 'up' | 'down';
+  /** Bumped on every change, so a character that moves twice animates twice */
+  seq: number;
+}
 
 /**
- * A dollar figure that counts to its new value instead of jumping, and flashes
- * green or red on the way. Reads as a number moving rather than a number
- * replaced — which is what makes a balance feel live.
+ * A dollar figure that animates only the characters that actually changed —
+ * the cents tick over while the millions sit still.
  *
- * Honours prefers-reduced-motion: the value still updates, it just arrives.
+ * Moving the whole number on every update says "all of this is different",
+ * which is both untrue and hard to read. Moving one digit says exactly what
+ * changed, and the rest of the figure stays legible while it happens.
  */
 export function AnimatedUsd({
   value,
@@ -21,64 +27,41 @@ export function AnimatedUsd({
   style?: React.CSSProperties;
   className?: string;
 }) {
-  const [shown, setShown] = useState(value);
-  const [flash, setFlash] = useState<'up' | 'down' | null>(null);
-  const from = useRef(value);
-  const frame = useRef(0);
+  const [frame, setFrame] = useState<Frame>(() => ({ text: fmtUsd(value), changed: [], dir: 'up', seq: 0 }));
+  const prev = useRef(value);
 
   useEffect(() => {
-    const start = from.current;
-    if (start === value) return;
-
-    setFlash(value > start ? 'up' : 'down');
-    const flashTimer = setTimeout(() => setFlash(null), FLASH_MS);
-
-    const settle = () => {
-      cancelAnimationFrame(frame.current);
-      from.current = value;
-      setShown(value);
-    };
-
-    // Nothing to animate into: a hidden tab freezes requestAnimationFrame, and
-    // a stuck tween would leave the old figure on screen for whenever the
-    // visitor comes back.
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduced || document.hidden) {
-      settle();
-      return () => clearTimeout(flashTimer);
-    }
-
-    const began = performance.now();
-    const step = (now: number) => {
-      const t = Math.min(1, (now - began) / TWEEN_MS);
-      setShown(start + (value - start) * easeOut(t));
-      if (t < 1) frame.current = requestAnimationFrame(step);
-      else from.current = value;
-    };
-    frame.current = requestAnimationFrame(step);
-    // Backstop for a throttled tab: if the frames never arrive, land on the number anyway
-    const guard = setTimeout(settle, TWEEN_MS + 250);
-
-    return () => {
-      cancelAnimationFrame(frame.current);
-      clearTimeout(flashTimer);
-      clearTimeout(guard);
-      from.current = value;
-    };
+    if (prev.current === value) return;
+    const before = fmtUsd(prev.current);
+    const after = fmtUsd(value);
+    const dir: 'up' | 'down' = value >= prev.current ? 'up' : 'down';
+    prev.current = value;
+    // A move too small to print ($0.004) leaves the figure exactly as it was
+    if (before === after) return;
+    // A different length means every character shifted along, so none of them
+    // can be compared where it stands — the whole figure is new.
+    const alignable = before.length === after.length;
+    const changed = [...after].map((ch, i) => !alignable || before[i] !== ch);
+    setFrame((f) => ({ text: after, changed, dir, seq: f.seq + 1 }));
   }, [value]);
 
   return (
     <span
       className={className}
-      style={{
-        ...style,
-        color: flash === 'up' ? 'var(--up)' : flash === 'down' ? 'var(--down)' : style?.color,
-        transition: 'color 0.5s ease',
-        // Digits of equal width, so the figure doesn't jitter as it counts
-        fontVariantNumeric: 'tabular-nums',
-      }}
+      // Digits of equal width, so a character landing never nudges its neighbours
+      style={{ ...style, fontVariantNumeric: 'tabular-nums' }}
     >
-      {fmtUsd(shown)}
+      {[...frame.text].map((ch, i) =>
+        frame.changed[i] ? (
+          // Keyed by the frame it belongs to: a new key remounts the character,
+          // which is what replays the animation
+          <span key={`${frame.seq}.${i}`} className={frame.dir === 'up' ? 'digit-up' : 'digit-down'}>
+            {ch}
+          </span>
+        ) : (
+          <span key={`still.${i}`}>{ch}</span>
+        ),
+      )}
     </span>
   );
 }

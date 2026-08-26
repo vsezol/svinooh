@@ -11,7 +11,6 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { fmtUsd0, portfolioLabel } from '../lib/format';
-import { useReplay } from '../lib/replay';
 
 
 export function Landing() {
@@ -91,19 +90,15 @@ export function Landing() {
       .slice(0, 3);
   }, [demo]);
 
-  // The card walks through the portfolio's most recent moves on arrival, then
-  // settles on where it actually stands
   const series = demoHistory?.values ?? [];
-  const replay = useReplay(series);
-  const currentTotal = demo?.totalUsd ?? pubs[0]?.totalUsd ?? 0;
-  // Mid-replay the card walks the history; once it says LIVE again it has to
-  // rest on what the portfolio is actually worth, not on the last plotted point
-  // — the history is smoothed and bucketed, so the two are near but not equal.
-  const shownTotal = replay.live || !series.length ? currentTotal : series[replay.index];
-  const replayChange = (() => {
+  const total = demo?.totalUsd ?? pubs[0]?.totalUsd ?? 0;
+  // Where the portfolio stands against where the chart starts. The total is
+  // what it is worth now, not the last plotted point — history is bucketed and
+  // smoothed, so the two are near but not equal.
+  const change = (() => {
     if (series.length < 2) return null;
     const first = series[0];
-    const chg = shownTotal - first;
+    const chg = total - first;
     return { pct: first ? (chg / first) * 100 : 0, up: chg >= 0 };
   })();
 
@@ -196,28 +191,24 @@ export function Landing() {
         {/* demo card from the top public portfolio */}
         <div>
           <div className="card" style={{ overflow: 'hidden', boxShadow: '0 30px 80px -40px color-mix(in srgb, var(--acc) 35%, transparent)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 18px 0' }}>
+            <div style={{ padding: '15px 18px 0' }}>
               {/* The portfolio's own name, never its owner's */}
               <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.14em', color: 'var(--mut)' }}>
                 {demo ? `${portfolioLabel(demo.name, demo.slug).toUpperCase()} · PUBLIC` : 'PUBLIC'}
-              </span>
-              <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9.5, letterSpacing: '0.14em', color: 'var(--acc-text)' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--acc)', animation: 'svpulse 2.4s ease infinite' }} />
-                {replay.live ? 'LIVE' : 'REPLAY'}
               </span>
             </div>
             <div style={{ padding: '10px 18px 0', display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
               <AnimatedUsd
                 className="mono"
-                value={shownTotal}
+                value={total}
                 style={{ fontWeight: 600, fontSize: 30, letterSpacing: '-0.02em' }}
               />
-              {replayChange ? (
+              {change ? (
                 <span
                   className="mono"
-                  style={{ fontSize: 12, fontWeight: 600, color: replayChange.up ? 'var(--up)' : 'var(--down)' }}
+                  style={{ fontSize: 12, fontWeight: 600, color: change.up ? 'var(--up)' : 'var(--down)' }}
                 >
-                  {(replayChange.up ? '+' : '') + replayChange.pct.toFixed(2)}% · 30D
+                  {(change.up ? '+' : '') + change.pct.toFixed(2)}% · 30D
                 </span>
               ) : null}
             </div>
