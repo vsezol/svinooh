@@ -60,6 +60,15 @@ export function normalizeRange(raw: string | undefined): HistoryRange {
  */
 function smoothSeries(
   series: Array<{ t: number; v: number }>,
+  /**
+   * The wallet's value just before this window. Without it the first sample is
+   * unjudgeable — it *is* `lastGood` — so a scan that glitched low right on the
+   * window edge became the level the whole chart was measured from. That is how
+   * a 24h chart could open at $18.9k on a $84.5k portfolio while the 7d chart,
+   * whose window starts earlier and leaves the same glitch mid-series where the
+   * recovery test can see it, was correct.
+   */
+  seed?: number,
 ): Array<{ t: number; v: number }> {
   // We tell a glitch from real movement not by depth but by recovery: the price
   // dips and returns almost exactly to its previous value (the wallet data
@@ -69,7 +78,7 @@ function smoothSeries(
   const RECOVER = 0.98; // if it returned to 98%+ of the previous value, it was an outlier
   const WINDOW = 90; // how far ahead we look for recovery (~1.5h at a 1-min sync)
   const out = series.map((s) => ({ t: s.t, v: s.v }));
-  let lastGood = series[0].v;
+  let lastGood = seed ?? series[0].v;
   for (let i = 0; i < out.length; i++) {
     const cur = series[i].v;
     if (lastGood > 10 && cur < lastGood * DROP) {
@@ -494,29 +503,22 @@ export class PortfolioService {
       byWallet.set(s.walletId, arr);
     }
 
+    // What each wallet was worth just before the window opened. Two jobs: it
+    // tells the smoothing what level the series arrives at, and it stands in
+    // for wallets that have no snapshot in the range at all (never synced
+    // during the whole period), so the total covers every wallet and the line
+    // isn't understated.
+    const prior = since ? await this.valuesBefore(walletIds, since) : new Map<string, number>();
+
     // each wallet's starting point (carry-back) — the first smoothed value in the range
     const baseline = new Map<string, number>();
     const events: Array<{ t: number; id: string; v: number }> = [];
     for (const [id, series] of byWallet) {
-      const smooth = smoothSeries(series);
+      const smooth = smoothSeries(series, prior.get(id));
       baseline.set(id, smooth[0].v);
       for (const p of smooth) events.push({ t: p.t, id, v: p.v });
     }
-
-    // wallets with no snapshot in the range (never synced during the whole
-    // period) — we take their last known value before the range starts, so the
-    // total includes every wallet and the line isn't understated
-    if (since) {
-      const missing = walletIds.filter((id) => !baseline.has(id));
-      if (missing.length) {
-        const prior = await this.prisma.walletSnapshot.findMany({
-          where: { walletId: { in: missing }, createdAt: { lt: since } },
-          orderBy: { createdAt: 'desc' },
-          select: { walletId: true, totalUsd: true },
-        });
-        for (const p of prior) if (!baseline.has(p.walletId)) baseline.set(p.walletId, p.totalUsd);
-      }
-    }
+    for (const [id, v] of prior) if (!baseline.has(id)) baseline.set(id, v);
 
     // walk the events in time order, sum = Σ of the last known values
     // (initially = the starting ones, so a "new" wallet is present from t0)
@@ -530,6 +532,23 @@ export class PortfolioService {
       points.push({ t: new Date(e.t).toISOString(), usd: round2(sum) });
     }
     return downsample(points, 220);
+  }
+
+  /**
+   * The last value each wallet had before `before` — one row per wallet,
+   * straight off the (walletId, createdAt) index.
+   */
+  private async valuesBefore(walletIds: string[], before: Date): Promise<Map<string, number>> {
+    if (!walletIds.length) return new Map();
+    const rows = await this.prisma.$queryRaw<Array<{ walletId: string; totalUsd: number }>>(
+      Prisma.sql`
+        SELECT DISTINCT ON ("walletId") "walletId", "totalUsd"
+        FROM "WalletSnapshot"
+        WHERE "walletId" IN (${Prisma.join(walletIds)}) AND "createdAt" < ${before}
+        ORDER BY "walletId", "createdAt" DESC
+      `,
+    );
+    return new Map(rows.map((r) => [r.walletId, r.totalUsd]));
   }
 
   async walletHistory(slug: string, walletId: string, range: HistoryRange): Promise<HistoryDto> {

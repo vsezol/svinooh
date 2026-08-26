@@ -11,6 +11,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { fmtUsd0, portfolioLabel } from '../lib/format';
+import { useReplay } from '../lib/replay';
 
 
 export function Landing() {
@@ -90,11 +91,16 @@ export function Landing() {
       .slice(0, 3);
   }, [demo]);
 
+  // On arrival the card walks through the portfolio's most recent moves, then
+  // settles on where it actually stands. Only the digits that differ between
+  // two steps move, so what you read is what changed.
   const series = demoHistory?.values ?? [];
-  const total = demo?.totalUsd ?? pubs[0]?.totalUsd ?? 0;
-  // Where the portfolio stands against where the chart starts. The total is
-  // what it is worth now, not the last plotted point — history is bucketed and
-  // smoothed, so the two are near but not equal.
+  const replay = useReplay(series);
+  const current = demo?.totalUsd ?? pubs[0]?.totalUsd ?? 0;
+  // Once the replay has caught up it must rest on what the portfolio is worth
+  // now, not on the last plotted point — history is bucketed and smoothed, so
+  // the two are near but not equal.
+  const total = replay.live || !series.length ? current : series[replay.index];
   const change = (() => {
     if (series.length < 2) return null;
     const first = series[0];
