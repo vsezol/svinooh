@@ -19,7 +19,16 @@ export function MetricCards({
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10, marginTop: 22 }}>
       <Card label="CLAIMABLE">
         <Figure value={fmtUsd(rewards.total)} accent />
-        <Caption>Fees + staking rewards</Caption>
+        <Caption>
+          {rewards.pools > 0 || rewards.other > 0
+            ? [
+                rewards.pools > 0 ? `Pool fees ${fmtUsd(rewards.pools)}` : null,
+                rewards.other > 0 ? `Rewards ${fmtUsd(rewards.other)}` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            : 'Nothing accrued yet'}
+        </Caption>
       </Card>
 
       <Card label="TOTAL DEBT">
@@ -50,6 +59,13 @@ export function MetricCards({
           <span>Stablecoins {Math.round(stables.stableShare * 100)}%</span>
           <span>Rest {Math.round((1 - stables.stableShare) * 100)}%</span>
         </div>
+        {/* Basket tokens (a GMX GM pool) hold both sides and we can't see the
+            split, so they sit outside the ratio rather than skewing it */}
+        {stables.coverage < 0.995 ? (
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--mut)', marginTop: 4 }}>
+            {fmtUsd(stables.unknown, 0)} in mixed pools, not counted either way
+          </div>
+        ) : null}
       </Card>
     </div>
   );

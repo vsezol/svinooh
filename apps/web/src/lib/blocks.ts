@@ -120,16 +120,16 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
       value: t.valueUsd,
       role: t.role,
     }));
-    // No legs but the position itself is a priced holding (a GM pool, staked TRX)
-    if (!rows.length && p.amount != null && p.priceUsd != null) {
-      rows.push({ title: p.symbol, sub: amountLine(p.amount, p.priceUsd), value: p.valueUsd, role: 'supply' });
-    }
+    // No legs, but the position itself is a priced holding (a GM pool, staked
+    // TRX). Its only "row" would repeat the header word for word, so the
+    // amount goes on the header line instead of below it.
+    const selfLine = rows.length ? '' : amountLine(p.amount, p.priceUsd);
 
     const kind = p.name || (p.category === 'staked' ? 'Staked' : 'DeFi');
     blocks.push({
       proto: p.symbol,
       typeLabel: kind.toUpperCase(),
-      meta: p.note ?? null,
+      meta: join(p.note, selfLine) || null,
       value: p.valueUsd,
       apy: p.apy ?? null,
       healthRate: p.healthRate ?? null,
@@ -192,23 +192,95 @@ export function rewardsTotals(wallets: WalletDto[]): RewardsTotals {
 }
 
 /**
- * Stablecoin tickers. Exact names first, then a shape rule for the endless
- * wrapped variants (sUSDe, wUSDM, USDbC…). Deliberately conservative: an
- * unrecognised token counts as "rest", which understates stables rather than
- * overstating how safe a portfolio is.
+ * Is this ticker a dollar? Three answers, because "no" and "can't tell" are
+ * different things and only one of them should be counted as volatile.
  */
+export type AssetKind = 'stable' | 'volatile' | 'unknown';
+
+/** Dollar tokens whose ticker doesn't spell it out */
 const STABLE_NAMES = new Set([
-  'USDC', 'USDT', 'DAI', 'USDE', 'SUSDE', 'USDS', 'SUSDS', 'FRAX', 'TUSD', 'USDG',
-  'PYUSD', 'LUSD', 'GHO', 'CRVUSD', 'USDD', 'FDUSD', 'USDY', 'BUSD', 'EURC', 'USD0',
-  'DEUSD', 'USDX', 'RLUSD', 'USDB', 'DOLA', 'MIM', 'ALUSD', 'BUIDL', 'USDL', 'USDF',
+  'DAI', 'FRAX', 'TUSD', 'GHO', 'LUSD', 'MIM', 'DOLA', 'BUIDL', 'EURC', 'EURS',
+  'SUSDS', 'SUSDE', 'SFRAX', 'SDAI', 'ALUSD', 'BOLD', 'CRVUSD', 'FXUSD',
 ]);
 
-/** Anything shaped like a dollar token: USDbC, sUSDa, wUSDM, USDai… */
-const STABLE_SHAPE = /^[A-Z]{0,3}USD[A-Z0-9]{0,3}$/;
+/** Anything that spells it out: USDC, sUSDe, apxUSD, USDbC, wUSDM… */
+const STABLE_SHAPE = /^[A-Z]{0,4}USD[A-Z0-9]{0,4}$/;
 
-export function isStable(symbol: string): boolean {
-  const s = symbol.trim().toUpperCase();
-  return STABLE_NAMES.has(s) || STABLE_SHAPE.test(s);
+/**
+ * A basket we can't see inside. A GMX GM token (`GM:SOL/USD[USDC]`) is backed
+ * partly by the index asset and partly by USDC, and nothing in our data says in
+ * what proportion — so it is neither, and gets reported as unclassified rather
+ * than silently lumped in with the volatile half.
+ */
+const BASKET = /^(gm:|glp\b|gmx-lp)/i;
+
+/**
+ * Pendle splits a yield asset into a principal token and a yield token. The
+ * principal, `PT-<asset>-<expiry>`, redeems 1:1 for its underlying at maturity,
+ * so a PT of a stablecoin is a stablecoin — `PT-sUSDai-15OCT2026` is dollars.
+ * The yield token is not: it is a claim on a variable stream.
+ */
+const PENDLE_PT = /^PT-(.+)-\d{1,2}[A-Z]{3}\d{4}$/i;
+
+export function assetKind(symbolRaw: string): AssetKind {
+  const symbol = symbolRaw.trim();
+  if (BASKET.test(symbol)) return 'unknown';
+
+  const pt = PENDLE_PT.exec(symbol);
+  const core = (pt ? pt[1] : symbol).toUpperCase();
+
+  if (STABLE_NAMES.has(core) || STABLE_SHAPE.test(core)) return 'stable';
+  return 'volatile';
+}
+
+export interface StableSplit {
+  stables: number;
+  rest: number;
+  /** Value we could not place either way */
+  unknown: number;
+  /** Share of the CLASSIFIED value held in stablecoins, 0–1 */
+  stableShare: number;
+  /** How much of the portfolio the split actually covers, 0–1 */
+  coverage: number;
+}
+
+/**
+ * How much of the portfolio sits in dollars. Counted from the legs, so a
+ * stablecoin deposited into a lending market still counts as stable — which is
+ * the question being asked. Debt is netted off the side it is denominated in.
+ */
+export function stableSplit(wallets: WalletDto[]): StableSplit {
+  let stables = 0;
+  let rest = 0;
+  let unknown = 0;
+
+  const add = (kind: AssetKind, usd: number) => {
+    if (kind === 'stable') stables += usd;
+    else if (kind === 'volatile') rest += usd;
+    else unknown += usd;
+  };
+
+  for (const wallet of wallets) {
+    for (const position of wallet.positions) {
+      const legs = position.tokens ?? [];
+      // No legs: the position IS the asset — staked TRX, a GM pool token
+      if (!legs.length) add(assetKind(position.symbol), position.valueUsd);
+      else for (const leg of legs) add(assetKind(leg.symbol), leg.valueUsd);
+    }
+  }
+
+  stables = Math.max(0, stables);
+  rest = Math.max(0, rest);
+  unknown = Math.max(0, unknown);
+  const classified = stables + rest;
+  const total = classified + unknown;
+  return {
+    stables,
+    rest,
+    unknown,
+    stableShare: classified > 0 ? stables / classified : 0,
+    coverage: total > 0 ? classified / total : 1,
+  };
 }
 
 export interface DebtTotals {
@@ -250,50 +322,40 @@ export function debtTotals(wallets: WalletDto[]): DebtTotals {
   };
 }
 
-export interface StableSplit {
-  stables: number;
-  rest: number;
-  /** Share of the total held in stablecoins, 0–1 */
-  stableShare: number;
-}
-
-/**
- * How much of the portfolio sits in dollars. Counted from the legs, so a
- * stablecoin deposited into a lending market still counts as stable — which is
- * the question being asked. Debt is netted off the side it is denominated in.
- */
-export function stableSplit(wallets: WalletDto[]): StableSplit {
-  let stables = 0;
-  let total = 0;
-  for (const wallet of wallets) {
-    for (const position of wallet.positions) {
-      total += position.valueUsd;
-      const legs = position.tokens ?? [];
-      if (!legs.length) {
-        if (position.category === 'token' && isStable(position.symbol)) stables += position.valueUsd;
-        continue;
-      }
-      for (const leg of legs) if (isStable(leg.symbol)) stables += leg.valueUsd;
-    }
-  }
-  stables = Math.max(0, stables);
-  const rest = Math.max(0, total - stables);
-  return { stables, rest, stableShare: total > 0 ? stables / total : 0 };
-}
-
 /** Which positions the list is showing */
 export type PositionFilter = 'all' | 'pools' | 'lending';
 
-const FILTER_MATCH: Record<Exclude<PositionFilter, 'all'>, RegExp> = {
-  pools: /pool|liquidity|\blp\b/i,
-  lending: /lend|borrow/i,
-};
+const IS_POOL_KIND = /pool|liquidity|\blp\b/i;
+const IS_LENDING_KIND = /lend|borrow/i;
+
+/**
+ * Money markets, matched on the protocol rather than the position kind.
+ *
+ * The kind alone can't answer "is this lending": DeBank labels an Aave deposit
+ * "Lending" but a Fluid one "Yield", and "Yield" is a catch-all it also uses for
+ * Hyperliquid vaults and an Avantis tranche, which are not lending at all. So
+ * the kind decides when it is explicit, and this list decides when it says
+ * "Yield" or "Deposit".
+ */
+const LENDING_PROTOCOLS =
+  /^(aave|fluid|compound|morpho|spark|venus|radiant|euler|benqi|kamino|marginfi|save\b|solend|lista|silo|moonwell|seamless|zerolend|granary|justlend)/i;
+
+/** Kinds that mean "assets sitting in the protocol", as opposed to staking or farming */
+const DEPOSIT_KIND = /^(yield|deposit|supplied|lending)/i;
+
+function isLending(block: Block): boolean {
+  const kind = block.typeLabel ?? '';
+  if (IS_LENDING_KIND.test(kind)) return true;
+  // Borrowing against a position makes it a loan whatever the source calls it
+  if (block.rows.some((r) => r.role === 'borrow')) return true;
+  return LENDING_PROTOCOLS.test(block.proto) && DEPOSIT_KIND.test(kind);
+}
 
 export function blockMatches(block: Block, filter: PositionFilter): boolean {
   if (filter === 'all') return true;
   // The "Wallet" block is plain holdings — it is neither a pool nor a loan
   if (!block.typeLabel) return false;
-  return FILTER_MATCH[filter].test(block.typeLabel);
+  return filter === 'pools' ? IS_POOL_KIND.test(block.typeLabel) : isLending(block);
 }
 
 /** Total value of everything the filter is currently showing */
