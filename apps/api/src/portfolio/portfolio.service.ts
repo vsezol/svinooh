@@ -38,6 +38,9 @@ type PortfolioWithOwner = Portfolio & { owner: PortfolioOwner | null };
  */
 const ANONYMOUS_WALLET_LIMIT = 10;
 
+/** How many snapshots before a window are averaged into "what it was worth then" */
+const LEVEL_SAMPLES = 12;
+
 const RANGES: Record<HistoryRange, { sinceMs: number | null; bucket: string | null }> = {
   '24h': { sinceMs: 24 * 3600e3, bucket: null }, // raw 5-minute points
   '7d': { sinceMs: 7 * 86400e3, bucket: '30 minutes' },
@@ -61,12 +64,13 @@ export function normalizeRange(raw: string | undefined): HistoryRange {
 function smoothSeries(
   series: Array<{ t: number; v: number }>,
   /**
-   * The wallet's value just before this window. Without it the first sample is
-   * unjudgeable — it *is* `lastGood` — so a scan that glitched low right on the
-   * window edge became the level the whole chart was measured from. That is how
-   * a 24h chart could open at $18.9k on a $84.5k portfolio while the 7d chart,
-   * whose window starts earlier and leaves the same glitch mid-series where the
-   * recovery test can see it, was correct.
+   * The level this wallet arrives at — see levelsBefore. Without it the first
+   * sample is unjudgeable, since it *is* `lastGood`, so a scan that glitched
+   * low right on the window edge became the level the whole chart was measured
+   * from: a 24h chart opening at $18.9k on a $84.5k portfolio, reporting +342%
+   * on a day it had barely moved, while the 7d chart of the same portfolio was
+   * correct because its window starts earlier and leaves the same glitch
+   * mid-series where the recovery test can see it.
    */
   seed?: number,
 ): Array<{ t: number; v: number }> {
@@ -508,7 +512,7 @@ export class PortfolioService {
     // for wallets that have no snapshot in the range at all (never synced
     // during the whole period), so the total covers every wallet and the line
     // isn't understated.
-    const prior = since ? await this.valuesBefore(walletIds, since) : new Map<string, number>();
+    const prior = since ? await this.levelsBefore(walletIds, since) : new Map<string, number>();
 
     // each wallet's starting point (carry-back) — the first smoothed value in the range
     const baseline = new Map<string, number>();
@@ -535,20 +539,43 @@ export class PortfolioService {
   }
 
   /**
-   * The last value each wallet had before `before` — one row per wallet,
-   * straight off the (walletId, createdAt) index.
+   * What each wallet was worth going into `before` — the median of its last
+   * dozen snapshots, not its last one.
+   *
+   * A bad scan is not one sample. The scanner glitches for a few minutes and
+   * writes several understated snapshots in a row, so "the value just before
+   * the window" lands inside the glitch about as often as it lands outside it,
+   * and a level taken from there is the glitch itself. The median of a dozen
+   * only moves if most of them are bad.
+   *
+   * It cannot invent value either: a wallet that genuinely dropped and stayed
+   * down never recovers to its old level, and smoothSeries only holds a sample
+   * that does.
    */
-  private async valuesBefore(walletIds: string[], before: Date): Promise<Map<string, number>> {
+  private async levelsBefore(walletIds: string[], before: Date): Promise<Map<string, number>> {
     if (!walletIds.length) return new Map();
     const rows = await this.prisma.$queryRaw<Array<{ walletId: string; totalUsd: number }>>(
       Prisma.sql`
-        SELECT DISTINCT ON ("walletId") "walletId", "totalUsd"
-        FROM "WalletSnapshot"
-        WHERE "walletId" IN (${Prisma.join(walletIds)}) AND "createdAt" < ${before}
-        ORDER BY "walletId", "createdAt" DESC
+        SELECT "walletId", "totalUsd" FROM (
+          SELECT "walletId", "totalUsd",
+                 row_number() OVER (PARTITION BY "walletId" ORDER BY "createdAt" DESC) AS rn
+          FROM "WalletSnapshot"
+          WHERE "walletId" IN (${Prisma.join(walletIds)}) AND "createdAt" < ${before}
+        ) recent WHERE rn <= ${LEVEL_SAMPLES}
       `,
     );
-    return new Map(rows.map((r) => [r.walletId, r.totalUsd]));
+    const byWallet = new Map<string, number[]>();
+    for (const r of rows) {
+      const arr = byWallet.get(r.walletId) ?? [];
+      arr.push(r.totalUsd);
+      byWallet.set(r.walletId, arr);
+    }
+    return new Map(
+      [...byWallet].map(([id, values]) => {
+        values.sort((a, b) => a - b);
+        return [id, values[Math.floor(values.length / 2)]];
+      }),
+    );
   }
 
   async walletHistory(slug: string, walletId: string, range: HistoryRange): Promise<HistoryDto> {
