@@ -1,8 +1,8 @@
 import type { ApiErrorDto } from '@svinooh/shared';
 
-// Empty — same-origin (Vite dev proxy or shared domain);
-// in production on Railway, VITE_API_URL is set at build time
-const API_URL: string = import.meta.env.VITE_API_URL || '';
+// Empty — same-origin; in production on Railway NEXT_PUBLIC_API_URL is set at
+// build time and inlined into the bundle
+const API_URL: string = process.env.NEXT_PUBLIC_API_URL || '';
 const TOKEN_KEY = 'svinooh_token';
 
 // Telegram's in-app browser, private windows and WebViews with site data

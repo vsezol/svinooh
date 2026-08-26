@@ -1,5 +1,7 @@
+'use client';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import type { HistoryDto, HistoryRange, PortfolioDto } from '@svinooh/shared';
 import { AreaChart } from '../components/AreaChart';
 import { AuthModal } from '../components/AuthModal';
@@ -110,9 +112,8 @@ function useHistory(slug: string, scope: string, period: HistoryRange, refreshKe
   return points;
 }
 
-export function PortfolioPage() {
-  const { slug = '' } = useParams<{ slug: string }>();
-  const navigate = useNavigate();
+export function PortfolioPage({ slug }: { slug: string }) {
+  const router = useRouter();
   const { me, logout } = useAuth();
   const { data, error, reload } = usePortfolio(slug, me?.id ?? null);
 
@@ -228,7 +229,7 @@ export function PortfolioPage() {
     return (
       <div className="shell" style={{ padding: '90px 0', textAlign: 'center', color: 'var(--mut)' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
-          <Logo size={24} onClick={() => navigate('/')} />
+          <Logo size={24} onClick={() => router.push('/')} />
         </div>
         {error.statusCode === 404 ? 'No portfolio at this link' : error.message}
       </div>
@@ -330,7 +331,7 @@ export function PortfolioPage() {
         }}
       >
         <div className="shell" style={{ height: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <Logo size={21} onClick={() => navigate('/')} />
+          <Logo size={21} onClick={() => router.push('/')} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <ThemeToggle />
             {isOwner && me ? (
@@ -365,7 +366,7 @@ export function PortfolioPage() {
                   style={{ border: 'none', padding: '0 6px' }}
                   onClick={() => {
                     logout();
-                    navigate('/');
+                    router.push('/');
                   }}
                 >
                   EXIT

@@ -18,8 +18,8 @@ apps/
             /auth/* proxied to the auth service
   auth/   — sign-in (NestJS): Telegram bot and login widget, issues JWTs, owns User
   wallet/ — scanning (NestJS): RabbitMQ queue, the chain scanners, snapshots
-  web/    — React (Vite): portfolio page, charts, Telegram login. The landing
-            is rendered server-side by a small Node server (apps/web/server.mjs)
+  web/    — Next.js (App Router): the landing is prerendered, the portfolio
+            page is a client render. Charts, Telegram login
 libs/
   shared/ — the API contract (types only, nothing to build)
   db/     — Prisma schema, migrations and PrismaService, shared by the services
@@ -114,10 +114,13 @@ arriving as an empty card that filled in over two chained round trips (the
 public list decides which portfolio the demo card shows, so the second request
 cannot start until the first lands). The page moved twice before it settled.
 
-`apps/web/server.mjs` renders it instead: one Node process that serves the built
-assets, and for `/` returns HTML with the card, the figures and the chart
-already in it, plus the data it used in a `<script>` so the browser hydrates
-against exactly what it was given rather than fetching it again.
+Next.js renders it instead. `/` is a static route (`app/page.tsx`, `revalidate =
+60`): the HTML has the card, the figures and the chart already in it, and the
+browser hydrates against exactly that rather than fetching it again. `/p/[slug]`
+is left as it was, a client render — a portfolio is a live view of somebody's
+money that changes with who is asking, so there is nothing to prerender that
+would be right for the next visitor, and a privacy rule that says never to hand
+one person's page to another.
 
 Three details make it hold together:
 
@@ -133,10 +136,10 @@ Three details make it hold together:
   endpoints: `owner` is null, wallet labels are null, and hydration is what
   turns it into your page if it is yours.
 
-The render is cached for a minute and refreshed behind whoever asks for a stale
-one, so the API sees two requests a minute rather than two per visitor. If it is
-unreachable the server returns the plain shell — which is what every page was
-before it existed, so the site degrades to working rather than to broken.
+The page is rebuilt at most once a minute and served from the cache in between,
+so the API sees a couple of requests a minute rather than a couple per visitor.
+If it is unreachable the landing still renders and fills itself in from the
+browser, which is what it did before any of this — it degrades to working.
 
 ## API
 
@@ -358,12 +361,11 @@ api     DATABASE_URL, JWT_SECRET, REDIS_URL, AUTH_SERVICE_URL, WALLET_SERVICE_UR
 auth    DATABASE_URL, JWT_SECRET (same as api), TELEGRAM_BOT_TOKEN,
         TELEGRAM_BOT_USERNAME, WEB_URL, AUTH_DEV_MODE=false, LOKI_URL, OTEL_…
 wallet  DATABASE_URL, RABBITMQ_URL, CHROME_NO_SANDBOX=1, LOKI_URL, OTEL_…
-web     VITE_API_URL = https://<api domain>   (baked into the browser bundle —
-                                               rebuild after changing it; the
-                                               server reads it again at runtime
-                                               to render the landing)
-        API_INTERNAL_URL                       (optional: the api's private
-                                               address, for that render)
+web     NEXT_PUBLIC_API_URL = https://<api domain>  (inlined into the browser
+                                               bundle at build time — rebuild
+                                               after changing it; the server
+                                               reads it again to render the
+                                               landing)
 ```
 
 The wallet service needs ≥ 1 GB of memory (headless Chrome). Migrations are
