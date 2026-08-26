@@ -64,11 +64,13 @@ export class PortfolioController {
     return this.portfolios.history(slug, normalizeRange(range));
   }
 
+  // Optional auth: an anonymous portfolio accepts wallets from anyone, an owned
+  // one only from its owner — the service decides which applies
   @Post(':slug/wallets')
-  @UseGuards(RequiredAuthGuard)
+  @UseGuards(OptionalAuthGuard)
   addWallet(
     @Param('slug') slug: string,
-    @CurrentUserId() userId: string,
+    @CurrentUserId() userId: string | null,
     @Body() body: { address?: string },
   ) {
     return this.portfolios.addWallet(slug, userId, body?.address ?? '');
