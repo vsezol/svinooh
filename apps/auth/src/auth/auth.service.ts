@@ -22,6 +22,9 @@ import { verifyTelegramLogin } from './telegram';
 import { TelegramBotService } from './telegram-bot.service';
 import { UserService } from './user.service';
 
+/** How many times one sign-in link may be opened — see UserService.issueLoginLink */
+const LINK_MAX_USES = 20;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -88,6 +91,21 @@ export class AuthService {
         username: entry.user.username,
       }),
     );
+  }
+
+  /** Redeem one: the visitor gets the same session a normal sign-in would give */
+  async loginWithLink(token: string): Promise<AuthResponseDto> {
+    const expired = new UnauthorizedException(
+      'This sign-in link has expired — open the bot and press Start for a new one',
+    );
+    if (!token) throw expired;
+    const link = await this.prisma.loginLink.findUnique({
+      where: { token },
+      include: { user: true },
+    });
+    if (!link || link.expiresAt < new Date() || link.uses >= LINK_MAX_USES) throw expired;
+    await this.prisma.loginLink.update({ where: { token }, data: { uses: { increment: 1 } } });
+    return this.finishLogin(link.user);
   }
 
   /** Local development without the bot: enabled via AUTH_DEV_MODE=true */

@@ -5,10 +5,36 @@ import type { ApiErrorDto } from '@svinooh/shared';
 const API_URL: string = import.meta.env.VITE_API_URL || '';
 const TOKEN_KEY = 'svinooh_token';
 
+// Telegram's in-app browser, private windows and WebViews with site data
+// switched off can all make localStorage throw on the way in — and a throw here
+// took the whole app down with it. The session then lives for the page instead
+// of surviving a reload, which is worth infinitely more than a blank screen.
+let memoryToken: string | null = null;
+
 export const tokenStore = {
-  get: (): string | null => localStorage.getItem(TOKEN_KEY),
-  set: (token: string): void => localStorage.setItem(TOKEN_KEY, token),
-  clear: (): void => localStorage.removeItem(TOKEN_KEY),
+  get: (): string | null => {
+    try {
+      return localStorage.getItem(TOKEN_KEY) ?? memoryToken;
+    } catch {
+      return memoryToken;
+    }
+  },
+  set: (token: string): void => {
+    memoryToken = token;
+    try {
+      localStorage.setItem(TOKEN_KEY, token);
+    } catch {
+      /* no storage — the in-memory copy carries this page */
+    }
+  },
+  clear: (): void => {
+    memoryToken = null;
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+    } catch {
+      /* nothing to clear */
+    }
+  },
 };
 
 export class ApiError extends Error {

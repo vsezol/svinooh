@@ -79,15 +79,27 @@ npm run -w apps/wallet verify:scanners        # all networks; add -- btc|sol|tro
    `TELEGRAM_BOT_USERNAME` (no @). The button on the home page appears by
    itself (`GET /api/auth/config`).
 
-Two ways in, both handled by the auth service:
+Three ways in, all handled by the auth service:
 
 - **Login widget** — the browser sends Telegram's payload; the backend checks
   the signature (HMAC-SHA256 of the bot token, `auth_date` no older than a day).
-- **The bot** — the site opens `t.me/<bot>?start=<token>`, the user taps Start,
-  the bot replies with a button that leads straight to their own portfolio
-  (`/p/<slug>?tg_login=<token>`). The site finishes signing in from that token,
-  so returning without tapping the button works too — it is kept in
-  `sessionStorage` and polled.
+- **The bot** — the site opens `t.me/<bot>?start=<token>`, the user presses
+  Start, and the tab that is waiting finishes the sign-in by polling
+  `/auth/telegram/poll`. That token is one-shot and lives five minutes in
+  memory: it belongs to the tab that started, and to nothing else.
+- **The link the bot sends back** — the reply carries the user's portfolio URL
+  as a button *and* as plain text, with `?login=<key>` on it. Opening it signs
+  the visitor in, wherever it is opened: Telegram's own browser, Safari on a
+  phone when the sign-in began on a laptop, or a tab opened an hour later.
+  Without it the way back depends on the original tab still existing, which is
+  where people were being lost. Any message to the bot gets one, so a stale
+  link is one `/start` away from being replaced.
+
+  `LoginLink` is a bearer credential and treated as one: 32 random bytes, a day
+  to live, at most 20 opens (the same link really is opened two or three times
+  — Telegram's browser, then "open in Safari", then a reload), private chats
+  only, and issuing a new one drops the user's older links so the newest message
+  in the chat is the only live one.
 
 In production turn the dev login off: `AUTH_DEV_MODE=false`.
 
@@ -102,6 +114,7 @@ GET    /api/auth/config                       — { botUsername, botId, devMode,
 POST   /api/auth/telegram                     — widget payload → { token, me }
 POST   /api/auth/telegram/start               — start bot sign-in → { token, deepLink }
 GET    /api/auth/telegram/poll?token=         — bot sign-in status
+POST   /api/auth/link                         — { token } from the bot's link → { token, me }
 POST   /api/auth/dev                          — { name } (only with AUTH_DEV_MODE=true)
 GET    /api/auth/me                           🔒
 

@@ -59,6 +59,11 @@ export class AuthProxyController {
     return forward('GET', '/auth/telegram/poll', { query: { token } });
   }
 
+  @Post('link')
+  link(@Body() body: unknown) {
+    return forward('POST', '/auth/link', { body });
+  }
+
   @Post('dev')
   dev(@Body() body: unknown) {
     return forward('POST', '/auth/dev', { body });
