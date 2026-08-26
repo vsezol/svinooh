@@ -24,13 +24,7 @@ export function MetricCards({
 
       <Card label="TOTAL DEBT">
         <Figure value={debt.total > 0 ? fmtUsd(debt.total) : '—'} />
-        <Caption>
-          {debt.avgApy != null
-            ? `Avg borrow APY ${(debt.avgApy * 100).toFixed(2)}%`
-            : debt.total > 0
-              ? 'Avg borrow APY not reported'
-              : 'Nothing borrowed'}
-        </Caption>
+        <Caption>{debtCaption(debt)}</Caption>
       </Card>
 
       <Card label="STABLES / REST">
@@ -59,6 +53,17 @@ export function MetricCards({
       </Card>
     </div>
   );
+}
+
+/**
+ * The rate is weighted over the debt whose rate we know. When that isn't all of
+ * it, the caption says how much it covers rather than implying the whole.
+ */
+function debtCaption(debt: DebtTotals): string {
+  if (debt.total <= 0) return 'Nothing borrowed';
+  if (debt.avgApy == null) return 'Borrow APY not reported by the source';
+  const rate = `Avg borrow APY ${(debt.avgApy * 100).toFixed(2)}%`;
+  return debt.ratedShare >= 0.995 ? rate : `${rate} · on ${Math.round(debt.ratedShare * 100)}% of debt`;
 }
 
 function Card({ label, children }: { label: string; children: React.ReactNode }) {
