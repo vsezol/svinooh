@@ -2,12 +2,11 @@
 # Root Directory = "/"). We simply bake the config into the official image.
 FROM grafana/tempo:2.7.1
 COPY ops/tempo/tempo.yaml /etc/tempo.yaml
-# The image runs as a non-root user, and the storage paths from tempo.yaml have
-# to exist and be writable before Tempo starts
-USER root
-RUN mkdir -p /var/tempo/wal /var/tempo/blocks && chown -R 10001:10001 /var/tempo
-USER 10001:10001
+
+# /var/tempo is a Railway volume, so the image's own directories there are
+# shadowed by the mount — Tempo creates its wal/ and blocks/ subdirectories on
+# start. Railway mounts volumes as root, and this image runs as uid 10001, so
+# the service also sets RAILWAY_RUN_UID=0; without it Tempo cannot write to its
+# own storage.
 ENTRYPOINT ["/tempo"]
 CMD ["-config.file=/etc/tempo.yaml"]
-
-# build trigger
