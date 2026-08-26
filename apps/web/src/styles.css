@@ -8,8 +8,8 @@ body {
   --surf2: #12151c;
   --line: #1b1f28;
   --line2: #262c38;
-  --text: #e9ebf0;
-  --mut: #8b93a1;
+  --text: #edeff4;
+  --mut: #9aa1af;
   --acc: #2bd576;
   --acc-text: var(--acc);
   --acc-soft: color-mix(in srgb, var(--acc) 13%, transparent);
@@ -20,6 +20,7 @@ body {
   --sans: 'Manrope', system-ui, -apple-system, sans-serif;
 }
 
+html[data-theme='light'],
 body[data-theme='light'] {
   --bg: #f3f4f6;
   --surf: #ffffff;
@@ -27,7 +28,7 @@ body[data-theme='light'] {
   --line: #e5e7ec;
   --line2: #d6dae2;
   --text: #14171d;
-  --mut: #68707e;
+  --mut: #5a6270;
   --acc-text: color-mix(in srgb, var(--acc) 62%, #063018);
   --up: #0e9f54;
   --down: #d9304e;
@@ -83,6 +84,17 @@ button {
 @keyframes svspin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* The chain marquee: one list rendered twice, translated by exactly half its
+   width, so the seam never shows. */
+@keyframes svmarquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
   }
 }
 
@@ -307,43 +319,6 @@ button {
   color: var(--acc-text);
 }
 
-.wallet-edit {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
-  color: var(--mut);
-  cursor: pointer;
-  opacity: 0.6;
-  transition: opacity 0.12s ease, color 0.12s ease;
-}
-
-.wallet-edit:hover {
-  opacity: 1;
-  color: var(--acc-text);
-}
-
-.wallet-x {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--mut);
-  font-size: 15px;
-  line-height: 1;
-  opacity: 0.55;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
-}
-
-.wallet-x:hover {
-  opacity: 1;
-  color: var(--down);
-  background: color-mix(in srgb, var(--down) 10%, transparent);
-}
-
 /* positions table inside a wallet */
 .pos-head,
 .pos-grid {
@@ -467,4 +442,95 @@ button {
   .hide-mobile {
     display: none !important;
   }
+}
+
+
+/* Round icon button — theme toggle, share, the wallet kebab */
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--mut);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.icon-btn:hover {
+  color: var(--text);
+  border-color: var(--mut);
+}
+
+/* Same, but sized to sit inside a row rather than a toolbar */
+.row-icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--mut);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.row-icon-btn:hover {
+  color: var(--text);
+  background: var(--line);
+}
+
+/* Pill button with an icon and a label — share, and anything like it */
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--mut);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.pill-btn:hover {
+  color: var(--text);
+  border-color: var(--mut);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-item:hover {
+  background: var(--surf2);
+}
+
+.menu-item.danger {
+  color: var(--down);
 }

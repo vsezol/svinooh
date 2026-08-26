@@ -51,6 +51,11 @@ export interface PositionDto {
   /** Health factor of a lending position (below 1 — liquidation) */
   healthRate?: number | null;
   /**
+   * What the debt on this position costs, as a positive fraction (0.06 = 6%
+   * APY). Only where the source reports it — DeBank doesn't.
+   */
+  borrowApy?: number | null;
+  /**
    * Concentrated liquidity only (Uniswap V3-style, Meteora DLMM): whether the
    * price is still inside the position's range. null — not applicable, or
    * unknown.

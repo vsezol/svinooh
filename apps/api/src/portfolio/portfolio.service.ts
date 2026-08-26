@@ -555,6 +555,7 @@ export class PortfolioService {
         category: p.category as PositionCategory,
         apy: p.apy,
         healthRate: p.healthRate,
+        borrowApy: p.borrowApy,
         range: (p.range as PositionRange | null) ?? null,
         // Written by the wallet service as PositionTokenDto[]; Prisma types it as
         // opaque JSON, so this is the one place the shape is asserted

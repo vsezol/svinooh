@@ -101,6 +101,8 @@ model Position {
   apy      Float?
   // Health factor of a lending position (below 1 — liquidation)
   healthRate Float?
+  // What the debt on this position costs, as a positive fraction (0.06 = 6% APY)
+  borrowApy  Float?
   // Concentrated liquidity only: "in" | "out" of the position's price range
   range      String?
   // The underlying legs — PositionTokenDto[]: what's supplied, accrued, borrowed

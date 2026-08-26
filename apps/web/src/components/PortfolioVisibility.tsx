@@ -1,27 +1,10 @@
 import type { PortfolioVisibility } from '@svinooh/shared';
 
-const LOCK = (
-  <svg viewBox="0 0 12 12" width={10} height={10} fill="none" stroke="currentColor" strokeWidth={1.3}>
-    <rect x="2.2" y="5.2" width="7.6" height="5.3" rx="1.2" />
-    <path d="M4 5.2V3.8a2 2 0 0 1 4 0v1.4" />
-  </svg>
-);
-
-const GLOBE = (
-  <svg viewBox="0 0 12 12" width={10} height={10} fill="none" stroke="currentColor" strokeWidth={1.3}>
-    <circle cx="6" cy="6" r="4.3" />
-    <path d="M1.7 6h8.6M6 1.7c1.1 1.2 1.7 2.7 1.7 4.3S7.1 9.1 6 10.3C4.9 9.1 4.3 7.6 4.3 6S4.9 2.9 6 1.7Z" />
-  </svg>
-);
-
 /**
- * The owner's visibility switch, sitting in the top-right above the chart —
- * the first thing they see about their own portfolio, because it decides who
- * else sees their balances.
- *
- * Both states are spelled out and always visible: an unlabelled toggle makes
- * you guess which way is "on". Private sits on the left as the default and
- * resting state; going public is deliberate and passes through a confirmation.
+ * The owner's visibility switch, in the top-right beside Share. Both states are
+ * spelled out and always visible — an unlabelled toggle makes you flip it to
+ * learn what it does — and what each one means is spelled out again in the
+ * status line under the total.
  */
 export function VisibilityCard({
   visibility,
@@ -40,39 +23,32 @@ export function VisibilityCard({
   const isPublic = visibility === 'public';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
-      <div
-        role="group"
-        aria-label="Portfolio visibility"
-        style={{
-          display: 'flex',
-          gap: 2,
-          border: '1px solid var(--line)',
-          borderRadius: 999,
-          padding: 2,
-          opacity: busy ? 0.5 : 1,
-        }}
-      >
-        <Half label="PRIVATE" icon={LOCK} active={!isPublic} onClick={onGoPrivate} busy={busy} />
-        <Half label="PUBLIC" icon={GLOBE} active={isPublic} accent onClick={onGoPublic} busy={busy} />
-      </div>
-      <span className="mono" style={{ fontSize: 9.5, color: 'var(--mut)', letterSpacing: '0.04em' }}>
-        {isPublic ? 'Listed on the home page' : 'Only people with the link'}
-      </span>
+    <div
+      role="group"
+      aria-label="Portfolio visibility"
+      style={{
+        display: 'flex',
+        gap: 2,
+        border: '1px solid var(--line2)',
+        borderRadius: 999,
+        padding: 2,
+        opacity: busy ? 0.5 : 1,
+      }}
+    >
+      <Half label="Public" active={isPublic} accent onClick={onGoPublic} busy={busy} />
+      <Half label="Private" active={!isPublic} onClick={onGoPrivate} busy={busy} />
     </div>
   );
 }
 
 function Half({
   label,
-  icon,
   active,
   accent,
   busy,
   onClick,
 }: {
   label: string;
-  icon: React.ReactNode;
   active: boolean;
   accent?: boolean;
   busy: boolean;
@@ -80,20 +56,21 @@ function Half({
 }) {
   return (
     <button
-      className="period"
       aria-pressed={active}
       disabled={busy || active}
       onClick={onClick}
       style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 5,
+        fontFamily: 'var(--sans)',
+        fontSize: 12,
+        fontWeight: 700,
+        padding: '6px 14px',
+        borderRadius: 999,
+        border: 'none',
         cursor: busy || active ? 'default' : 'pointer',
-        color: active ? (accent ? 'var(--acc-text)' : 'var(--text)') : 'var(--mut)',
-        background: active ? (accent ? 'var(--acc-soft)' : 'var(--surf2)') : 'transparent',
+        color: active ? (accent ? 'var(--acc-ink)' : 'var(--text)') : 'var(--mut)',
+        background: active ? (accent ? 'var(--acc)' : 'var(--surf2)') : 'transparent',
       }}
     >
-      {icon}
       {label}
     </button>
   );

@@ -20,7 +20,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(initial);
 
   useEffect(() => {
+    // Both elements: <html> paints the area body doesn't cover (overscroll, and
+    // any gap below a short page), and it resolves --bg from its own scope — so
+    // a light override that only lands on <body> leaves the page edges dark.
     document.body.dataset.theme = theme;
+    document.documentElement.dataset.theme = theme;
     localStorage.setItem(KEY, theme);
   }, [theme]);
 

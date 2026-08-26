@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import type { PositionTokenRole, WalletDto } from '@svinooh/shared';
-import { buildBlocks } from '../lib/blocks';
+import { blockMatches, buildBlocks, type PositionFilter } from '../lib/blocks';
 import { chainMeta, fmtUsd, shortAddress, walletName } from '../lib/format';
+import { WalletMenu } from './WalletMenu';
 
 /** How a leg of a DeFi position is labelled: accrued LP fees/rewards, and debt */
 const ROLE_LABEL: Record<PositionTokenRole, string> = {
@@ -21,11 +22,13 @@ interface Props {
   wallet: WalletDto;
   isOwner: boolean;
   total: number;
+  /** Which positions to show; blocks that don't match are hidden */
+  filter: PositionFilter;
   onRemove: () => void;
   onRename: (label: string) => void;
 }
 
-export function WalletRow({ wallet, isOwner, total, onRemove, onRename }: Props) {
+export function WalletRow({ wallet, isOwner, total, filter, onRemove, onRename }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -34,7 +37,10 @@ export function WalletRow({ wallet, isOwner, total, onRemove, onRename }: Props)
   const chain = chainMeta(wallet.chain);
   const label = walletName(wallet.label, wallet.chain);
   const syncing = wallet.status === 'pending' && wallet.totalUsd === null;
-  const blocks = useMemo(() => buildBlocks(wallet.positions), [wallet.positions]);
+  const blocks = useMemo(
+    () => buildBlocks(wallet.positions).filter((b) => blockMatches(b, filter)),
+    [wallet.positions, filter],
+  );
   const expanded = !collapsed && !syncing && blocks.length > 0;
   const share = total > 0 && wallet.totalUsd ? ((wallet.totalUsd / total) * 100).toFixed(1) + '% of total' : '';
 
@@ -45,13 +51,11 @@ export function WalletRow({ wallet, isOwner, total, onRemove, onRename }: Props)
     setTimeout(() => setCopied(false), 1400);
   };
 
-  const remove = (e: MouseEvent) => {
-    e.stopPropagation();
+  const remove = () => {
     if (confirm(`Remove ${label}? Its history is deleted too.`)) onRemove();
   };
 
-  const startEdit = (e: MouseEvent) => {
-    e.stopPropagation();
+  const startEdit = () => {
     setEditValue(wallet.label ?? '');
     setEditing(true);
   };
@@ -101,14 +105,7 @@ export function WalletRow({ wallet, isOwner, total, onRemove, onRename }: Props)
                 }}
               />
             ) : (
-              <>
-                <span style={{ fontWeight: 700, fontSize: 14 }}>{label}</span>
-                {isOwner && !syncing ? (
-                  <span onClick={startEdit} title="Rename" className="wallet-edit">
-                    EDIT
-                  </span>
-                ) : null}
-              </>
+              <span style={{ fontWeight: 700, fontSize: 15 }}>{label}</span>
             )}
             <span
               style={{
@@ -125,7 +122,7 @@ export function WalletRow({ wallet, isOwner, total, onRemove, onRename }: Props)
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
-            <span className="mono" style={{ fontSize: 11.5, color: wallet.status === 'failed' ? 'var(--down)' : 'var(--mut)' }}>
+            <span className="mono" style={{ fontSize: 11.5, fontWeight: 500, color: wallet.status === 'failed' ? 'var(--down)' : 'var(--mut)' }}>
               {wallet.status === 'failed'
                 ? 'sync failed'
                 : wallet.stale
@@ -147,7 +144,7 @@ export function WalletRow({ wallet, isOwner, total, onRemove, onRename }: Props)
           </div>
         ) : (
           <div style={{ textAlign: 'right' }}>
-            <div className="mono" style={{ fontWeight: 600, fontSize: 15 }}>
+            <div className="mono" style={{ fontWeight: 600, fontSize: 15.5 }}>
               {fmtUsd(wallet.totalUsd)}
             </div>
             <div className="mono" style={{ fontSize: 10.5, color: 'var(--mut)', marginTop: 2 }}>
@@ -155,12 +152,6 @@ export function WalletRow({ wallet, isOwner, total, onRemove, onRename }: Props)
             </div>
           </div>
         )}
-
-        {isOwner && !syncing ? (
-          <div onClick={remove} title="Remove wallet" className="wallet-x">
-            ×
-          </div>
-        ) : null}
 
         {!syncing && blocks.length > 0 ? (
           <span
@@ -176,6 +167,9 @@ export function WalletRow({ wallet, isOwner, total, onRemove, onRename }: Props)
             }}
           />
         ) : null}
+
+        {/* Owner actions live behind the kebab, away from the expand chevron */}
+        {isOwner && !syncing ? <WalletMenu onRename={startEdit} onRemove={remove} /> : null}
       </div>
 
       {expanded ? (
@@ -183,7 +177,7 @@ export function WalletRow({ wallet, isOwner, total, onRemove, onRename }: Props)
           {blocks.map((b, i) => (
             <div key={i} style={{ border: '1px solid var(--line)', borderRadius: 12, background: 'var(--surf2)', overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '10px 14px', flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 800, fontSize: 12.5 }}>{b.proto}</span>
+                <span style={{ fontWeight: 800, fontSize: 13 }}>{b.proto}</span>
                 {b.count > 1 ? (
                   <span className="mono" title={`${b.count} positions folded together`} style={{ fontSize: 9.5, color: 'var(--mut)' }}>
                     ×{b.count}
@@ -240,7 +234,7 @@ export function WalletRow({ wallet, isOwner, total, onRemove, onRename }: Props)
               </div>
               {b.rows.map((r, ri) => (
                 <div key={ri} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 14px', borderTop: '1px solid var(--line)' }}>
-                  <span style={{ fontWeight: 600, fontSize: 12.5 }}>{r.title}</span>
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>{r.title}</span>
                   {r.role && r.role !== 'supply' ? (
                     <span
                       className="mono"
@@ -257,11 +251,11 @@ export function WalletRow({ wallet, isOwner, total, onRemove, onRename }: Props)
                       {ROLE_LABEL[r.role]}
                     </span>
                   ) : null}
-                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--mut)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span className="mono" style={{ fontSize: 11, color: 'var(--mut)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {r.sub}
                   </span>
                   <div style={{ flex: 1 }} />
-                  <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: r.role && r.role !== 'supply' ? roleColor(r.role) : undefined }}>
+                  <span className="mono" style={{ fontSize: 12.5, fontWeight: 600, color: r.role && r.role !== 'supply' ? roleColor(r.role) : undefined }}>
                     {fmtUsd(r.value)}
                   </span>
                 </div>

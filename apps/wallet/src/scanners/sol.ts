@@ -53,6 +53,11 @@ interface JupPositionAsset {
   data?: { address?: string; price?: number; amount?: JupAmount };
 }
 
+interface JupYield {
+  apr?: number;
+  apy?: number;
+}
+
 interface JupElement {
   platformId?: string;
   serviceId?: string;
@@ -66,6 +71,8 @@ interface JupElement {
     suppliedAssets?: JupPositionAsset[];
     borrowedAssets?: JupPositionAsset[];
     rewardAssets?: JupPositionAsset[];
+    /** One entry per borrowed asset, each a list whose first item is the rate */
+    borrowedYields?: JupYield[][];
     healthRatio?: number;
   };
 }
@@ -114,6 +121,29 @@ function toHealthFactor(headroom: number | undefined): number | null {
 }
 
 const shortMint = (mint: string): string => `${mint.slice(0, 4)}…${mint.slice(-4)}`;
+
+/**
+ * What the debt on a lending position costs, weighted by how much of it is
+ * borrowed in each asset. `borrowedYields` runs parallel to `borrowedAssets`,
+ * and the first entry of each is the borrow rate itself — negative, because to
+ * the borrower it is a cost. We return it positive: "you pay this much".
+ * Later entries are incentives paid back to the borrower, so they are ignored
+ * here; netApy on the element already accounts for them.
+ */
+function borrowApyOf(element: JupElement): number | null {
+  const borrowed = element.data?.borrowedAssets || [];
+  const yields = element.data?.borrowedYields || [];
+  let weighted = 0;
+  let total = 0;
+  for (let i = 0; i < borrowed.length; i++) {
+    const usd = Math.abs(borrowed[i]?.value ?? 0);
+    const apy = yields[i]?.[0]?.apy;
+    if (!usd || typeof apy !== 'number') continue;
+    weighted += Math.abs(apy) * usd;
+    total += usd;
+  }
+  return total > 0 ? weighted / total : null;
+}
 
 /**
  * Jupiter reports an amount in one of two shapes, and which one it uses varies
@@ -273,6 +303,7 @@ export async function scanSol(address: string): Promise<ScanResult> {
         category: STAKED_LABELS.test(element.label || '') ? 'staked' : 'defi',
         apy: typeof element.netApy === 'number' && element.netApy !== 0 ? element.netApy : null,
         healthRate: toHealthFactor(element.data?.healthRatio),
+        borrowApy: borrowApyOf(element),
         range: RANGED_POOLS.test(element.name || '') ? rangeFromLegs(tokens) : null,
         tokens,
       });
