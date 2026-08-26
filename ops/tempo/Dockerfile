@@ -10,3 +10,5 @@ COPY ops/tempo/tempo.yaml /etc/tempo.yaml
 # own storage.
 ENTRYPOINT ["/tempo"]
 CMD ["-config.file=/etc/tempo.yaml"]
+
+# restart to verify volume persistence
