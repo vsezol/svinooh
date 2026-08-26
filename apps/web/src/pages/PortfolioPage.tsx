@@ -13,6 +13,7 @@ import { WalletRow } from '../components/WalletRow';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import {
+  blockMatches,
   buildBlocks,
   debtTotals,
   filteredTotal,
@@ -244,8 +245,10 @@ export function PortfolioPage() {
         ? 'ONLY PEOPLE WITH THE LINK'
         : 'SHARED PORTFOLIO';
 
+  // Same predicate the rows and the running total use — a second copy of it
+  // here is how the list came to disagree with the number above it
   const visibleWallets = wallets.filter(
-    (w, i) => filter === 'all' || w.status === 'pending' || blocksByWallet[i].some((b) => b.typeLabel && shownFilterMatch(b.typeLabel, filter)),
+    (w, i) => filter === 'all' || w.status === 'pending' || blocksByWallet[i].some((b) => blockMatches(b, filter)),
   );
 
   return (
@@ -515,10 +518,4 @@ export function PortfolioPage() {
       {authOpen ? <AuthModal onClose={() => setAuthOpen(false)} /> : null}
     </div>
   );
-}
-
-/** Mirrors blockMatches, but on the label a wallet row already computed */
-function shownFilterMatch(typeLabel: string, filter: PositionFilter): boolean {
-  if (filter === 'all') return true;
-  return filter === 'pools' ? /POOL|LIQUIDITY|LP/.test(typeLabel) : /LEND|BORROW/.test(typeLabel);
 }
