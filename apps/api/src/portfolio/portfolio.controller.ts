@@ -49,6 +49,13 @@ export class PortfolioController {
     return this.portfolios.rename(slug, userId, body?.name ?? '');
   }
 
+  /** Take over a portfolio that belongs to nobody */
+  @Post(':slug/claim')
+  @UseGuards(RequiredAuthGuard)
+  claim(@Param('slug') slug: string, @CurrentUserId() userId: string) {
+    return this.portfolios.claim(slug, userId);
+  }
+
   @Patch(':slug/visibility')
   @UseGuards(RequiredAuthGuard)
   setVisibility(

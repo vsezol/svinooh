@@ -60,9 +60,10 @@ export function AuthModal({ onClose }: { onClose: () => void }) {
       setWaiting(true);
       stopPoll.current = pollTelegramLogin(s.token, {
         onResult: (res) => {
-          const authed = applyAuth(res);
-          onClose();
-          navigate(`/p/${authed.portfolioSlug}`);
+          void applyAuth(res).then((authed) => {
+            onClose();
+            navigate(`/p/${authed.portfolioSlug}`);
+          });
         },
         onError: (message) => {
           setWaiting(false);
