@@ -1,0 +1,18 @@
+# Dashboards are loaded from files, so a fresh container comes up already
+# configured. `allowUiUpdates` is on deliberately: tweaking a panel in the UI
+# should work, and the volume keeps that tweak. The files are the starting
+# point and the thing to fall back to — export a dashboard back into
+# ops/grafana/dashboards once you are happy with it.
+apiVersion: 1
+
+providers:
+  - name: svinooh
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false
