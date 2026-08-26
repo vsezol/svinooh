@@ -39,6 +39,9 @@ model Portfolio {
   snapshots PortfolioSnapshot[]
   owner     PortfolioOwner?
   createdAt DateTime            @default(now())
+  // When someone last opened this portfolio. The wallet service uses it to
+  // decide how often to rescan: what nobody looks at does not need to be fresh.
+  lastViewedAt DateTime?
 }
 
 /// Ownership of a portfolio, and its visibility. Visibility is a property of the

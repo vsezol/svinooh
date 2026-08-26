@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { Wallet } from '@prisma/client';
 import type { Chain } from '@svinooh/shared';
 import { config } from '../config';
+import { ScanHold } from '../common/scan-hold';
 import { MetricsService } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import type { ScanJob } from '../queue/rabbit.service';
@@ -28,19 +29,76 @@ export class SyncService implements OnModuleDestroy {
     await closeBrowser();
   }
 
-  /** All unique addresses (chain:address) as queue jobs */
+  /**
+   * The addresses that are DUE for a rescan, most urgent first.
+   *
+   * Previously this returned everything and the producer refilled the queue the
+   * moment it drained, so wallets were rescanned every ~1.8 minutes regardless
+   * of SYNC_INTERVAL_MIN — roughly 4,800 DeBank page loads a day from one
+   * datacenter IP, which is what got us throttled. Now each address has a due
+   * time, and one that isn't due is simply not enqueued.
+   *
+   * Two tiers:
+   *   fast (SYNC_INTERVAL_MIN) — the address is in somebody's own portfolio, or
+   *                              in one that was opened recently
+   *   slow (SYNC_IDLE_INTERVAL_MIN) — it only exists in anonymous portfolios
+   *                                   nobody has looked at lately
+   *
+   * An address in several portfolios takes the fastest tier any of them asks
+   * for. Ownership and lastViewedAt belong to the api, which owns those rows —
+   * we only read them.
+   */
   async listGroups(): Promise<ScanJob[]> {
-    const wallets = await this.prisma.wallet.findMany({ select: { chain: true, address: true } });
-    const seen = new Set<string>();
-    const jobs: ScanJob[] = [];
+    const wallets = await this.prisma.wallet.findMany({
+      select: {
+        chain: true,
+        address: true,
+        lastSyncedAt: true,
+        portfolio: {
+          select: { lastViewedAt: true, owner: { select: { portfolioId: true } } },
+        },
+      },
+    });
+
+    const now = Date.now();
+    const activeSince = now - config.syncActiveWindowMin * 60_000;
+    const groups = new Map<
+      string,
+      { chain: string; address: string; owned: boolean; active: boolean; lastSyncedAt: number | null }
+    >();
+
     for (const w of wallets) {
       const key = `${w.chain}:${w.address}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        jobs.push({ chain: w.chain, address: w.address });
+      const owned = w.portfolio.owner !== null;
+      const active = (w.portfolio.lastViewedAt?.getTime() ?? 0) >= activeSince;
+      const syncedAt = w.lastSyncedAt?.getTime() ?? null;
+      const existing = groups.get(key);
+      if (!existing) {
+        groups.set(key, { chain: w.chain, address: w.address, owned, active, lastSyncedAt: syncedAt });
+        continue;
+      }
+      existing.owned ||= owned;
+      existing.active ||= active;
+      // The group is scanned as one, so the freshest sync among its wallets is
+      // the group's — scanning again earlier would buy nothing
+      if (syncedAt !== null && (existing.lastSyncedAt === null || syncedAt > existing.lastSyncedAt)) {
+        existing.lastSyncedAt = syncedAt;
       }
     }
-    return jobs;
+
+    const due = [...groups.values()]
+      .map((g) => {
+        const fast = g.owned || g.active;
+        const intervalMs =
+          (fast ? config.syncIntervalMin : config.syncIdleIntervalMin) * 60_000;
+        return { ...g, fast, overdueBy: g.lastSyncedAt === null ? Infinity : now - g.lastSyncedAt - intervalMs };
+      })
+      .filter((g) => g.overdueBy >= 0)
+      // Owned and actively-viewed wallets go first; within a tier, whatever has
+      // been waiting longest
+      .sort((a, b) => Number(b.fast) - Number(a.fast) || b.overdueBy - a.overdueBy);
+
+    return due.map((g) => ({ chain: g.chain, address: g.address }));
   }
 
   /** Scan a single address from the queue: the scan itself plus a snapshot of affected portfolios */
@@ -73,12 +131,19 @@ export class SyncService implements OnModuleDestroy {
       this.metrics.scans.inc({ chain, result: 'ok' });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      // a suppressed drop is protection against the "sawtooth", not a real failure
-      const suppressed = message.startsWith('Unconfirmed drop');
-      this.metrics.scans.inc({ chain, result: suppressed ? 'suppressed' : 'failed' });
-      if (!suppressed) this.metrics.errors.inc({ type: 'scan' });
-      this.logger.warn(`Scan ${key} failed: ${message}`);
-      await this.markFailed(group, message);
+      // A hold is our own decision, not a broken source: keep the wallet exactly
+      // as it was — status, value and all — so the page keeps showing the last
+      // good number instead of "sync failed". It goes stale on its own if the
+      // hold persists, which is the honest signal.
+      if (error instanceof ScanHold) {
+        this.metrics.scans.inc({ chain, result: 'suppressed' });
+        this.logger.warn(`Scan ${key} held: ${message}`);
+      } else {
+        this.metrics.scans.inc({ chain, result: 'failed' });
+        this.metrics.errors.inc({ type: 'scan' });
+        this.logger.warn(`Scan ${key} failed: ${message}`);
+        await this.markFailed(group, message);
+      }
     } finally {
       this.inFlight.delete(key);
     }
@@ -130,7 +195,7 @@ export class SyncService implements OnModuleDestroy {
       return second.totalUsd >= first.totalUsd ? second : first; // conservative — pick the larger
     }
     this.dropStreak.set(key, streak);
-    throw new Error(
+    throw new ScanHold(
       `Unconfirmed drop ${chain}:${address}: $${previousTotal.toFixed(2)} → $${first.totalUsd.toFixed(2)} (${streak}/${config.dropConfirmCycles}), keeping last known`,
     );
   }

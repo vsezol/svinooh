@@ -223,6 +223,11 @@ export class PortfolioService {
     if (!view) {
       view = await this.buildView(slug);
       await this.cache.set(key, view, config.cacheTtlSec);
+      // Record the visit so the wallet service knows this portfolio is being
+      // looked at and keeps it fresh. Only on a cache MISS, which the 60s TTL
+      // already throttles to at most one write a minute per portfolio — and
+      // never in the way of the response.
+      this.touchViewed(slug);
     }
     const isOwner = userId !== null && view.ownerUserId === userId;
     // The cached view is the PUBLIC one. Owner-only fields — their own profile
@@ -285,6 +290,17 @@ export class PortfolioService {
       labels: Object.fromEntries(wallets.map((w) => [w.id, w.label])),
       dto,
     };
+  }
+
+  /**
+   * Someone opened this portfolio. Best-effort: a failure here must never turn
+   * a page view into an error, and the value is only ever used to pick a rescan
+   * cadence.
+   */
+  private touchViewed(slug: string): void {
+    void this.prisma.portfolio
+      .update({ where: { slug }, data: { lastViewedAt: new Date() } })
+      .catch(() => {});
   }
 
   /** Publish or unpublish an owned portfolio. Owner-only, by definition. */

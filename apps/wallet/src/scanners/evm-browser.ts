@@ -203,7 +203,10 @@ async function scanEvmBrowserLocked(address: string): Promise<ScanResult> {
       waitUntil: 'domcontentloaded',
       timeout: 30_000,
     });
-    await page.waitForSelector('[class*="HeaderInfo_totalAssetInner"]', { timeout: 25_000 });
+    // 45s, not 25s: when DeBank throttles us the page still renders, just
+    // slowly, and every hard failure we've had was this wait expiring. The
+    // watchdog above is the real ceiling.
+    await page.waitForSelector('[class*="HeaderInfo_totalAssetInner"]', { timeout: 45_000 });
 
     // DeBank loads chains one at a time, and the total grows as each resolves.
     // Reading right after waitForSelector yields an understated number:
