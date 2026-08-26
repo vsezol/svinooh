@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import { ScanHold } from '../common/scan-hold';
 import { config } from '../config';
 import { scanEvmBrowser } from './evm-browser';
 import { scanEvmHttp } from './evm-http';
@@ -25,6 +26,20 @@ const BREAKER_COOLDOWN_MS = 30 * 60_000; // how long we disable HTTP for
 
 let consecutiveFailures = 0;
 let openedUntil = 0; // timestamp until which we skip HTTP
+
+/**
+ * The same idea for the Chrome path. When DeBank starts throttling us the page
+ * stops rendering inside the selector wait, and the worst thing we can do is
+ * come straight back for more — that is what keeps us throttled. After a few
+ * consecutive failures we stand down for a while and hold the last known
+ * values instead.
+ */
+const CHROME_ATTEMPTS = 2; // one immediate retry: a slow render often succeeds second time
+const CHROME_BREAKER_THRESHOLD = 4;
+const CHROME_COOLDOWN_MS = 10 * 60_000;
+
+let chromeFailures = 0;
+let chromeCooldownUntil = 0;
 
 function httpAllowedNow(): boolean {
   if (!config.evmHttpEnabled) return false;
@@ -65,7 +80,34 @@ export async function scanEvm(address: string): Promise<ScanResult> {
       logger.warn(`${address}: HTTP path failed (${message}) → falling back to Chrome`);
     }
   }
-  const result = await scanEvmBrowser(address);
-  logger.log(`${address}: Chrome debank $${result.totalUsd.toFixed(2)}`);
-  return result;
+
+  if (Date.now() < chromeCooldownUntil) {
+    const leftMin = Math.ceil((chromeCooldownUntil - Date.now()) / 60_000);
+    throw new ScanHold(`EVM backing off after repeated DeBank timeouts, ~${leftMin} min left`);
+  }
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= CHROME_ATTEMPTS; attempt++) {
+    try {
+      const result = await scanEvmBrowser(address);
+      chromeFailures = 0;
+      logger.log(`${address}: Chrome debank $${result.totalUsd.toFixed(2)}`);
+      return result;
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (attempt < CHROME_ATTEMPTS) {
+        logger.warn(`${address}: Chrome attempt ${attempt} failed (${message}) → retrying`);
+      }
+    }
+  }
+
+  if (++chromeFailures >= CHROME_BREAKER_THRESHOLD) {
+    chromeCooldownUntil = Date.now() + CHROME_COOLDOWN_MS;
+    chromeFailures = 0;
+    logger.warn(
+      `DeBank looks throttled — pausing EVM scans for ${CHROME_COOLDOWN_MS / 60_000} min after ${CHROME_BREAKER_THRESHOLD} failures in a row`,
+    );
+  }
+  throw lastError;
 }

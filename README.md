@@ -178,17 +178,40 @@ Reliability rules (a silently wrong number is worse than a failed request):
   drop is only believed once it holds for `SYNC_DROP_CONFIRM_CYCLES` cycles in a
   row. Until then the wallet keeps its last known value with `stale: true` and no
   snapshot is written — so a source glitch never draws a sawtooth on the chart.
+- **A hold is not a failure**: when we skip a result on purpose — an unconfirmed
+  drop, or the EVM backoff below — the wallet is left exactly as it was rather
+  than marked `failed`. Telling someone their sync broke when we chose to skip a
+  cycle is both wrong and alarming; going stale is the honest signal.
+- **Back off when DeBank throttles**: a Chrome scan is retried once, and after
+  four failures in a row EVM scanning pauses for ten minutes instead of coming
+  straight back for more.
 - One network failing doesn't take the cycle down; retries with backoff on 5xx.
 - Assets with no price (TRC10, unlisted tokens) aren't swallowed — they come back
   in `unpriced` and are flagged in the UI.
 
 ## The scan queue and history
 
-The wallet service keeps a RabbitMQ queue of addresses. A producer refills it
-whenever it drains (`SCAN_RELOAD_SEC`), a consumer takes them one at a time
-(`SCAN_PREFETCH`) with a pause after each (`SCAN_JOB_DELAY_MS`) — deliberately
-slow, so upstream rate limits are hit less often. Identical addresses in
-different portfolios are scanned once. After each successful scan a
+The wallet service keeps a RabbitMQ queue of addresses. A producer tops it up
+with the addresses that are **due**, a consumer takes them one at a time
+(`SCAN_PREFETCH`) with a pause after each (`SCAN_JOB_DELAY_MS`). Identical
+addresses in different portfolios are scanned once.
+
+Due-ness has two tiers, because most of the load comes from wallets nobody is
+looking at:
+
+| Tier | Every | Which wallets |
+|---|---|---|
+| fast | `SYNC_INTERVAL_MIN` (5 min) | in someone's own portfolio, or in one opened within `SYNC_ACTIVE_WINDOW_MIN` |
+| slow | `SYNC_IDLE_INTERVAL_MIN` (30 min) | only in anonymous portfolios nobody has opened lately |
+
+An address in several portfolios takes the fastest tier any of them asks for,
+and the fast tier is enqueued first. Opening a portfolio stamps `lastViewedAt`,
+so its wallets are back on the fast tier within one top-up.
+
+This matters more than it looks: the producer used to refill the moment the
+queue drained, so everything was rescanned every ~1.8 minutes no matter what
+`SYNC_INTERVAL_MIN` said — about 4,800 DeBank page loads a day from one
+datacenter IP, which is what got the EVM scans throttled into timeouts. After each successful scan a
 `WalletSnapshot` is written, and a `PortfolioSnapshot` after the portfolio is
 recomputed. Without `RABBITMQ_URL` the same work runs in-process on a timer,
 which is what local development uses.

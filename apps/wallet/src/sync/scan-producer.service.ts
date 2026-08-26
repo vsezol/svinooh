@@ -5,9 +5,11 @@ import { RabbitService } from '../queue/rabbit.service';
 import { SyncService } from './sync.service';
 
 /**
- * Fills the queue with wallet addresses and, as soon as it drains, fills it
- * again — an endless "slow and steady" loop. Without RabbitMQ it runs the same
- * scan in-process (sequentially, with a pause) so dev works without a broker.
+ * Tops the queue up with the addresses that are DUE for a rescan (SyncService
+ * decides which, and in what order). It checks often, but an address that isn't
+ * due yet is simply not enqueued — that is what paces us against the upstream
+ * sources. Without RabbitMQ it runs the same pipeline in-process so dev works
+ * without a broker.
  */
 @Injectable()
 export class ScanProducerService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -34,7 +36,7 @@ export class ScanProducerService implements OnApplicationBootstrap, OnModuleDest
     }
   }
 
-  /** Queue is empty → re-enqueue all addresses */
+  /** Queue is empty → enqueue whatever is due now (possibly nothing) */
   private async topUp(): Promise<void> {
     if (this.toppingUp || this.stopped) return;
     this.toppingUp = true;
