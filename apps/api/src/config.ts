@@ -32,7 +32,10 @@ export const config = {
   authServiceUrl: (process.env.AUTH_SERVICE_URL || 'http://localhost:3001').replace(/\/+$/, ''),
   // Internal URL of the wallet service — scan-on-add is delegated to it.
   walletServiceUrl: (process.env.WALLET_SERVICE_URL || 'http://localhost:3002').replace(/\/+$/, ''),
-  // How often the wallet service rescans; used for the "stale" flag and reported to the frontend
+  // How often the wallet service rescans a wallet that's in use. Used for the
+  // "stale" flag (3× this) and reported to the frontend, so it MUST match the
+  // wallet service's SYNC_INTERVAL_MIN — set it lower and every wallet reads as
+  // stale the moment it is scanned on time.
   syncIntervalMin: int(process.env.SYNC_INTERVAL_MIN, 5),
   // Redis for the assembled-portfolio cache. Empty — an in-memory cache, so
   // local development doesn't need Redis running.
