@@ -4,3 +4,5 @@
 FROM grafana/grafana:11.2.0
 COPY ops/grafana/provisioning /etc/grafana/provisioning
 COPY ops/grafana/dashboards /etc/grafana/dashboards
+
+# build trigger
