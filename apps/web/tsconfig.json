@@ -5,12 +5,14 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "jsx": "react-jsx",
+    "jsx": "preserve",
     "noEmit": true,
     "isolatedModules": true,
-    "useDefineForClassFields": true,
-    "verbatimModuleSyntax": true,
-    "types": ["vite/client"]
+    "allowJs": true,
+    "incremental": true,
+    "resolveJsonModule": true,
+    "plugins": [{ "name": "next" }]
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["next-env.d.ts", "app", "src", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
 }

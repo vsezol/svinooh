@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import type { TelegramStartDto } from '@svinooh/shared';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -39,7 +39,7 @@ const TG_ICON = (
  */
 export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: string }) {
   const { config, loginDev, applyAuth } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
   const [devName, setDevName] = useState('');
   const [busy, setBusy] = useState(false);
   const [waiting, setWaiting] = useState(false);
@@ -67,7 +67,7 @@ export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: s
         onResult: (res) => {
           void applyAuth(res).then((authed) => {
             onClose();
-            navigate(`/p/${authed.portfolioSlug}`);
+            router.push(`/p/${authed.portfolioSlug}`);
           });
         },
         onError: (message) => {
@@ -90,7 +90,7 @@ export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: s
     try {
       const authed = await loginDev(devName.trim());
       onClose();
-      navigate(`/p/${authed.portfolioSlug}`);
+      router.push(`/p/${authed.portfolioSlug}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed');
       setBusy(false);

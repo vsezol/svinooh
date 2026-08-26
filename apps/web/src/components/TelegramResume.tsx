@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import type { AuthResponseDto } from '@svinooh/shared';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -34,7 +34,7 @@ function takeParam(name: string): string | null {
  */
 export function TelegramResume() {
   const { me, loading, applyAuth } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
   const started = useRef(false);
   const [deadLink, setDeadLink] = useState<string | null>(null);
 
@@ -49,7 +49,7 @@ export function TelegramResume() {
         .then((authed) => {
           // The link already points at the portfolio; only send them there if
           // it doesn't
-          if (window.location.pathname === '/') navigate(`/p/${authed.portfolioSlug}`);
+          if (window.location.pathname === '/') router.push(`/p/${authed.portfolioSlug}`);
         })
         .catch((err: unknown) => {
           started.current = false;
@@ -77,11 +77,11 @@ export function TelegramResume() {
     started.current = true;
     return pollTelegramLogin(token, {
       onResult: (res) => {
-        void applyAuth(res).then((authed) => navigate(`/p/${authed.portfolioSlug}`));
+        void applyAuth(res).then((authed) => router.push(`/p/${authed.portfolioSlug}`));
       },
       onError: () => pendingTgToken.clear(),
     });
-  }, [loading, me, applyAuth, navigate]);
+  }, [loading, me, applyAuth, router]);
 
   return deadLink ? <AuthModal notice={deadLink} onClose={() => setDeadLink(null)} /> : null;
 }

@@ -1,5 +1,7 @@
+'use client';
+
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import type { PortfolioDto, PublicPortfolioDto } from '@svinooh/shared';
 import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AuthModal } from '../components/AuthModal';
@@ -17,7 +19,7 @@ import { useReplay } from '../lib/replay';
 
 export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } = {}) {
   const { me } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
 
   // The server rendered this page with data already in it; starting from the
   // same data is what makes hydration silent instead of a second first paint.
@@ -81,7 +83,7 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
         body: JSON.stringify({ address: search.trim() }),
       });
       setOpen(false);
-      navigate(`/p/${slug}`);
+      router.push(`/p/${slug}`);
     } catch (err) {
       setTrackErr(err instanceof ApiError ? err.message : 'Could not open this address');
     } finally {
@@ -114,7 +116,7 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
     return { pct: first ? (chg / first) * 100 : 0, up: chg >= 0 };
   })();
 
-  const primary = () => (me ? navigate(`/p/${me.portfolioSlug}`) : setAuthOpen(true));
+  const primary = () => (me ? router.push(`/p/${me.portfolioSlug}`) : setAuthOpen(true));
   const primaryLabel = me ? 'My portfolio' : 'Create portfolio';
 
   return (
@@ -184,7 +186,7 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
                   error={trackErr}
                   onPick={(slug) => {
                     setOpen(false);
-                    navigate(`/p/${slug}`);
+                    router.push(`/p/${slug}`);
                   }}
                   onTrack={() => void trackAddress()}
                 />
@@ -243,7 +245,7 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
             ))}
             {demo ? (
               <div
-                onClick={() => navigate(`/p/${demo.slug}`)}
+                onClick={() => router.push(`/p/${demo.slug}`)}
                 className="row-hover mono"
                 style={{ borderTop: '1px solid var(--line)', padding: '11px 18px', textAlign: 'center', fontSize: 10, letterSpacing: '0.12em', color: 'var(--acc-text)', cursor: 'pointer', userSelect: 'none' }}
               >
@@ -277,7 +279,7 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
                 pubs.map((p, i) => (
                   <div
                     key={p.slug}
-                    onClick={() => navigate(`/p/${p.slug}`)}
+                    onClick={() => router.push(`/p/${p.slug}`)}
                     className="row-hover"
                     style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderTop: i ? '1px solid var(--line)' : 'none', cursor: 'pointer' }}
                   >
