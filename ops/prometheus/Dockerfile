@@ -4,3 +4,5 @@ FROM prom/prometheus:v2.54.1
 COPY ops/prometheus/prometheus.yml /etc/prometheus/prometheus.yml
 
 # build trigger
+
+# restart to verify volume persistence
