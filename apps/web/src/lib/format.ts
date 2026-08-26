@@ -48,9 +48,14 @@ export function shortAddress(address: string): string {
 
 export function syncedLabel(iso: string | null): string {
   if (!iso) return 'never';
-  const mins = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
+  const secs = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  // Never "just now". It was true for one second and then quietly became a
+  // lie — the page stays open, the label doesn't, and a portfolio claiming to
+  // be current when it is twenty minutes old is the one thing this line must
+  // not do. A number is always answerable.
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins} min ago`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });

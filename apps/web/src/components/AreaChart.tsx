@@ -17,7 +17,6 @@ interface Props {
   times: number[]; // ms, same length
   period: HistoryRange;
   height: string;
-  variant?: 'full' | 'mini';
 }
 
 /** What a drag across the chart selected */
@@ -27,6 +26,14 @@ interface Selection {
   fromX: number;
   toX: number;
 }
+
+/** Drag moves it, with a finger or a mouse; the wheel is spent on zooming */
+const SCROLL = {
+  mouseWheel: false,
+  pressedMouseMove: true,
+  horzTouchDrag: true,
+  vertTouchDrag: false,
+} as const;
 
 const token = (name: string): string =>
   getComputedStyle(document.body).getPropertyValue(name).trim() || '#2bd576';
@@ -39,14 +46,18 @@ function dateLabel(ms: number, period: HistoryRange): string {
 }
 
 /**
- * TradingView's Lightweight Charts (Apache-2.0) with a measuring tool on top.
+ * TradingView's Lightweight Charts (Apache-2.0).
  *
- * Panning and zooming are off: the period buttons decide the range, and the
- * drag gesture is spent on something more useful — dragging across the chart
- * selects a span and reports what the portfolio did over it, the way a broker
- * chart does. Works with a mouse or a finger; a tap clears the selection.
+ * It behaves like a chart: drag moves it, the wheel and a pinch zoom, a double
+ * click on the scale puts it back. Measuring a span — drag across it and read
+ * what the portfolio did over it — is the same gesture, so it moved onto
+ * shift-drag. Scrolling is what people reach for first and it should be what
+ * they get.
+ *
+ * Nothing is drawn behind the line: gridlines on a 200px sparkline of one
+ * portfolio are decoration that competes with the only thing worth reading.
  */
-export function AreaChart({ values, times, period, height, variant = 'full' }: Props) {
+export function AreaChart({ values, times, period, height }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const series = useRef<ISeriesApi<'Area'> | null>(null);
@@ -55,7 +66,6 @@ export function AreaChart({ values, times, period, height, variant = 'full' }: P
 
   const [hover, setHover] = useState<{ index: number } | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
-  const mini = variant === 'mini';
 
   // Lightweight Charts wants seconds, strictly ascending and unique — the
   // history can carry two points inside one second after downsampling.
@@ -76,50 +86,57 @@ export function AreaChart({ values, times, period, height, variant = 'full' }: P
     if (!box.current) return;
     const c = createChart(box.current, {
       autoSize: true,
-      handleScroll: false,
-      handleScale: false,
+      // Drag it, wheel it, pinch it — the chart moves, the way a chart should.
+      // Measuring a span is still here, on shift-drag, because those are the
+      // same gesture and scrolling is the one people reach for first.
+      handleScroll: SCROLL,
+      // The wheel and a pinch zoom in; scrolling only means anything once
+      // something is off-screen, so without this the drag would move nothing
+      // and the chart would look broken rather than fitted.
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: false,
+        axisDoubleClickReset: true,
+      },
       layout: { background: { color: 'transparent' }, attributionLogo: false },
       leftPriceScale: { visible: false },
       rightPriceScale: { visible: false },
+      // Held to the data's own edges: scrolling runs out where the history
+      // does, rather than into empty space
       timeScale: { visible: false, fixLeftEdge: true, fixRightEdge: true },
       crosshair: {
         mode: CrosshairMode.Magnet,
         vertLine: { style: LineStyle.Dotted, labelVisible: false },
         horzLine: { visible: false, labelVisible: false },
       },
-      grid: { horzLines: { visible: !mini }, vertLines: { visible: false } },
+      grid: { horzLines: { visible: false }, vertLines: { visible: false } },
     });
     chart.current = c;
     series.current = c.addSeries(AreaSeries, { lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
-    if (!mini) {
-      c.subscribeCrosshairMove((param) => {
-        const index = param.logical;
-        setHover(index == null ? null : { index: Math.round(index) });
-      });
-    }
+    c.subscribeCrosshairMove((param) => {
+      const index = param.logical;
+      setHover(index == null ? null : { index: Math.round(index) });
+    });
     return () => {
       c.remove();
       chart.current = null;
       series.current = null;
     };
-  }, [mini]);
+  }, []);
 
   // Colours follow the theme
   useEffect(() => {
     if (!chart.current || !series.current) return;
     const acc = token('--acc');
-    const line = token('--line');
     const mut = token('--mut');
     series.current.applyOptions({
       lineColor: acc,
       topColor: `color-mix(in srgb, ${acc} 22%, transparent)`,
       bottomColor: `color-mix(in srgb, ${acc} 0%, transparent)`,
     });
-    chart.current.applyOptions({
-      grid: { horzLines: { color: line, visible: !mini }, vertLines: { visible: false } },
-      crosshair: { vertLine: { color: mut } },
-    });
-  }, [theme, mini]);
+    chart.current.applyOptions({ crosshair: { vertLine: { color: mut } } });
+  }, [theme]);
 
   useEffect(() => {
     series.current?.setData(data);
@@ -143,8 +160,29 @@ export function AreaChart({ values, times, period, height, variant = 'full' }: P
     return typeof c === 'number' ? c : 0;
   };
 
+  /**
+   * Shift turns the drag from scrolling into measuring. The chart's own
+   * scrolling has to be switched off while it is held, or the two gestures
+   * both act on the same pointer and the chart slides out from under the
+   * selection.
+   */
+  useEffect(() => {
+    const set = (measuring: boolean) => {
+      chart.current?.applyOptions({ handleScroll: measuring ? false : SCROLL });
+      if (!measuring) setSelection(null);
+    };
+    const down = (e: KeyboardEvent) => e.key === 'Shift' && set(true);
+    const up = (e: KeyboardEvent) => e.key === 'Shift' && set(false);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+    };
+  }, []);
+
   const onPointerDown = (e: React.PointerEvent) => {
-    if (mini) return;
+    if (!e.shiftKey) return;
     const index = indexAt(e.clientX);
     if (index == null) return;
     drag.current = { startX: index, moved: false };
@@ -152,7 +190,7 @@ export function AreaChart({ values, times, period, height, variant = 'full' }: P
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
-    if (mini || !drag.current) return;
+    if (!drag.current) return;
     const index = indexAt(e.clientX);
     if (index == null) return;
     const from = Math.min(drag.current.startX, index);
@@ -163,7 +201,6 @@ export function AreaChart({ values, times, period, height, variant = 'full' }: P
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
-    if (mini) return;
     // A tap, not a drag — clear whatever was selected
     if (drag.current && !drag.current.moved) setSelection(null);
     drag.current = null;
@@ -187,10 +224,7 @@ export function AreaChart({ values, times, period, height, variant = 'full' }: P
   const hovered = hover && hover.index >= 0 && hover.index < values.length ? hover.index : null;
 
   return (
-    <div
-      className={mini ? undefined : 'card'}
-      style={{ position: 'relative', overflow: 'hidden', touchAction: mini ? undefined : 'pan-y' }}
-    >
+    <div className="card" style={{ position: 'relative', overflow: 'hidden', touchAction: 'pan-y' }}>
       <div
         ref={box}
         style={{ height, width: '100%' }}
@@ -201,7 +235,7 @@ export function AreaChart({ values, times, period, height, variant = 'full' }: P
       />
 
       {/* the selected span */}
-      {selection && !mini ? (
+      {selection ? (
         <div
           style={{
             position: 'absolute',
@@ -218,8 +252,7 @@ export function AreaChart({ values, times, period, height, variant = 'full' }: P
       ) : null}
 
       {/* what the selection is worth, or the value under the cursor */}
-      {!mini ? (
-        <div
+      <div
           className="mono"
           style={{
             position: 'absolute',
@@ -245,13 +278,10 @@ export function AreaChart({ values, times, period, height, variant = 'full' }: P
               <span style={{ fontWeight: 600 }}>{fmtUsd(values[hovered])}</span>
               <span style={{ color: 'var(--mut)' }}>{dateLabel(times[hovered], period)}</span>
             </>
-          ) : (
-            <span style={{ color: 'var(--mut)' }}>Drag across the chart to measure a period</span>
-          )}
-        </div>
-      ) : null}
+          ) : null}
+      </div>
 
-      {!mini && values.length ? (
+      {values.length ? (
         <div
           className="mono"
           style={{

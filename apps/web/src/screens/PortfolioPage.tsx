@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { HistoryDto, HistoryRange, PortfolioDto } from '@svinooh/shared';
+import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AreaChart } from '../components/AreaChart';
 import { AuthModal } from '../components/AuthModal';
 import { ClaimModal } from '../components/ClaimModal';
@@ -11,6 +12,7 @@ import { MetricCards } from '../components/MetricCards';
 import { GoPublicModal, VisibilityCard } from '../components/PortfolioVisibility';
 import { ScopeSelect } from '../components/ScopeSelect';
 import { ShareButton } from '../components/ShareButton';
+import { SyncedAgo } from '../components/SyncedAgo';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { WalletRow, type WalletActions } from '../components/WalletRow';
 import { api, ApiError } from '../lib/api';
@@ -24,7 +26,7 @@ import {
   rewardsTotals,
   type PositionFilter,
 } from '../lib/blocks';
-import { fmtUsd, portfolioLabel, syncedLabel, walletName } from '../lib/format';
+import { fmtUsd, portfolioLabel, walletName } from '../lib/format';
 
 const PERIODS: Array<{ key: HistoryRange; label: string }> = [
   { key: '24h', label: '24H' },
@@ -391,9 +393,11 @@ export function PortfolioPage({ slug }: { slug: string }) {
                 {walletCount === 1 ? 'WALLET' : 'WALLETS'}
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginTop: 6 }}>
-                <div className="mono" style={{ fontWeight: 600, fontSize: 'clamp(30px,6vw,44px)', letterSpacing: '-0.02em', lineHeight: 1 }}>
-                  {fmtUsd(headlineTotal)}
-                </div>
+                <AnimatedUsd
+                  className="mono"
+                  value={headlineTotal}
+                  style={{ fontWeight: 600, fontSize: 'clamp(30px,6vw,44px)', letterSpacing: '-0.02em', lineHeight: 1 }}
+                />
                 {change ? (
                   <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: change.up ? 'var(--up)' : 'var(--down)' }}>
                     {(change.up ? '+' : '−') +
@@ -430,7 +434,7 @@ export function PortfolioPage({ slug }: { slug: string }) {
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--acc)', animation: 'svpulse 2.4s ease infinite' }} />
-            SYNCED {syncedLabel(data.updatedAt).toUpperCase()}
+            <SyncedAgo iso={data.updatedAt} />
           </span>
           {isOwner ? <span>{visNote}</span> : null}
         </div>

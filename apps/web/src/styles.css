@@ -108,78 +108,104 @@ button {
   }
 }
 
-/* A figure changes only where it actually changed: the new character slides in
-   from the direction the value moved, tinted, and settles into the surrounding
-   ink. Everything that stayed the same stays still, so the eye goes to the
-   difference instead of re-reading the whole number. */
-@keyframes svdigitup {
-  0% {
-    transform: translateY(0.45em);
-    opacity: 0;
-    color: var(--up);
-  }
-  35% {
-    transform: none;
-    opacity: 1;
-    color: var(--up);
-  }
-  100% {
-    transform: none;
-    opacity: 1;
-    color: inherit;
-  }
-}
-
-@keyframes svdigitdown {
-  0% {
-    transform: translateY(-0.45em);
-    opacity: 0;
-    color: var(--down);
-  }
-  35% {
-    transform: none;
-    opacity: 1;
-    color: var(--down);
-  }
-  100% {
-    transform: none;
-    opacity: 1;
-    color: inherit;
-  }
-}
-
-.digit-up,
-.digit-down {
+/* A figure changes only where it actually changed, and the slot that changes
+   turns over rather than swapping: the outgoing character leaves in the
+   direction the number went, the incoming one arrives from the other side.
+   Nothing is clipped and nothing is tinted — a soft fade does the work a
+   counter's housing would do, without cutting the tops off the glyphs. */
+.roll {
   display: inline-block;
+  position: relative;
 }
 
-.digit-up {
-  animation: svdigitup 900ms ease-out;
+.roll > span {
+  display: inline-block;
+  animation-duration: 620ms;
+  animation-fill-mode: both;
+  /* A long, smooth settle — the character decelerates into its slot rather
+     than arriving and stopping */
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.digit-down {
-  animation: svdigitdown 900ms ease-out;
+/* The character on its way out is taken out of the flow, so the one arriving
+   keeps the slot's width and the line never reflows mid-roll. It leaves on the
+   same curve but sooner: if it lingers in place while its replacement fades in
+   over it, the slot is two digits at once and reads as a smear. */
+.roll > span:first-child {
+  position: absolute;
+  left: 0;
+  top: 0;
+  animation-duration: 460ms;
+}
+
+@keyframes svrollinup {
+  from {
+    transform: translateY(0.85em);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes svrolloutup {
+  from {
+    transform: none;
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-0.85em);
+    opacity: 0;
+  }
+}
+
+@keyframes svrollindown {
+  from {
+    transform: translateY(-0.85em);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes svrolloutdown {
+  from {
+    transform: none;
+    opacity: 1;
+  }
+  to {
+    transform: translateY(0.85em);
+    opacity: 0;
+  }
+}
+
+.roll-in-up {
+  animation-name: svrollinup;
+}
+
+.roll-out-up {
+  animation-name: svrolloutup;
+}
+
+.roll-in-down {
+  animation-name: svrollindown;
+}
+
+.roll-out-down {
+  animation-name: svrolloutdown;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .digit-up,
-  .digit-down {
+  .roll > span {
     animation: none;
   }
-}
 
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--line2);
-  border-radius: 99px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
+  .roll > span:first-child {
+    display: none;
+  }
 }
 
 /* Shown depending on the theme, decided in CSS so that server-rendered markup
