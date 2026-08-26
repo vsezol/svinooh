@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import type { ReactNode } from 'react';
 import type { AuthConfigDto, AuthResponseDto, MeDto, TelegramAuthPayload } from '@svinooh/shared';
 import { api, tokenStore } from './api';
+import { settleClaim } from './claim';
 
 interface AuthState {
   me: MeDto | null;
@@ -10,7 +11,7 @@ interface AuthState {
   loginTelegram: (payload: TelegramAuthPayload) => Promise<MeDto>;
   loginDev: (name: string) => Promise<MeDto>;
   /** Apply a ready-made auth response (e.g. from bot polling) */
-  applyAuth: (res: AuthResponseDto) => MeDto;
+  applyAuth: (res: AuthResponseDto) => Promise<MeDto>;
   logout: () => void;
 }
 
@@ -20,7 +21,7 @@ const AuthContext = createContext<AuthState>({
   loading: true,
   loginTelegram: async () => ({}) as MeDto,
   loginDev: async () => ({}) as MeDto,
-  applyAuth: () => ({}) as MeDto,
+  applyAuth: async () => ({}) as MeDto,
   logout: () => {},
 });
 
@@ -47,10 +48,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  const finish = useCallback((res: AuthResponseDto): MeDto => {
+  /**
+   * The single funnel every successful sign-in passes through — widget, bot or
+   * dev login. A portfolio the visitor set out to claim is taken over here, so
+   * whatever navigates afterwards follows them to it.
+   */
+  const finish = useCallback(async (res: AuthResponseDto): Promise<MeDto> => {
     tokenStore.set(res.token);
-    setMe(res.me);
-    return res.me;
+    const settled = await settleClaim(res.me);
+    setMe(settled);
+    return settled;
   }, []);
 
   const loginTelegram = useCallback(

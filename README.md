@@ -129,10 +129,16 @@ An unrecognized address → 400 `{ code: "UNSUPPORTED_NETWORK" }`, a duplicate �
 Searching a wallet address on the landing opens it as a portfolio with no owner,
 and **anyone can add wallets to it without an account** — assemble one, share the
 link, decide about signing up later. Renaming and removing stay owner-only, so an
-open portfolio can be built up but not taken apart; the UI offers sign-in when
-someone reaches for those. An anonymous portfolio is capped at ten wallets,
-because nobody owns it and everything in it is rescanned for as long as it
-exists.
+open portfolio can be built up but not taken apart. It is capped at ten wallets,
+because nobody owns it and everything in it is rescanned for as long as it exists.
+
+Reaching for an owner-only action offers to **claim** it
+(`POST /portfolios/:slug/claim`): the portfolio becomes yours, wallets and all.
+Signed out, the intent is parked in `sessionStorage` and completed by whichever
+sign-in follows — including the Telegram round trip through another tab — so the
+login lands you back on the portfolio you were building rather than on a fresh
+empty one. Claiming makes it private, and drops the empty portfolio that signing
+in creates, so an account still ends up with exactly one.
 
 ## How the value is computed
 

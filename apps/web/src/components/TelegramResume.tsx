@@ -37,8 +37,7 @@ export function TelegramResume() {
     started.current = true;
     return pollTelegramLogin(token, {
       onResult: (res) => {
-        const authed = applyAuth(res);
-        navigate(`/p/${authed.portfolioSlug}`);
+        void applyAuth(res).then((authed) => navigate(`/p/${authed.portfolioSlug}`));
       },
       onError: () => pendingTgToken.clear(),
     });

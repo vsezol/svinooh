@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import type { HistoryDto, HistoryRange, PortfolioDto } from '@svinooh/shared';
 import { AreaChart } from '../components/AreaChart';
 import { AuthModal } from '../components/AuthModal';
+import { ClaimModal } from '../components/ClaimModal';
 import { Logo } from '../components/Logo';
 import { MetricCards } from '../components/MetricCards';
 import { GoPublicModal, VisibilityCard } from '../components/PortfolioVisibility';
@@ -12,6 +13,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { WalletRow, type WalletActions } from '../components/WalletRow';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { pendingClaim } from '../lib/claim';
 import {
   blockMatches,
   buildBlocks,
@@ -123,6 +125,8 @@ export function PortfolioPage() {
   const [adding, setAdding] = useState(false);
   const [confirmPublic, setConfirmPublic] = useState(false);
   const [savingVisibility, setSavingVisibility] = useState(false);
+  const [confirmClaim, setConfirmClaim] = useState(false);
+  const [claiming, setClaiming] = useState(false);
 
   const history = useHistory(slug, scope, period, data?.updatedAt ?? null);
 
@@ -177,6 +181,33 @@ export function PortfolioPage() {
       await reload();
     } catch {
       // didn't save — the previous name comes back on the next reload
+    }
+  };
+
+  /**
+   * Reaching for an owner-only action on a portfolio nobody owns. Signed in, we
+   * ask whether they want to take it over; signed out, the intent is parked and
+   * the sign-in that follows completes it (see settleClaim).
+   */
+  const startClaim = () => {
+    if (me) {
+      setConfirmClaim(true);
+      return;
+    }
+    pendingClaim.set(slug);
+    setAuthOpen(true);
+  };
+
+  const claim = async () => {
+    setClaiming(true);
+    try {
+      await api(`/portfolios/${slug}/claim`, { method: 'POST' });
+      setConfirmClaim(false);
+      await reload();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not take this portfolio over');
+    } finally {
+      setClaiming(false);
     }
   };
 
@@ -264,11 +295,11 @@ export function PortfolioPage() {
         >
           <div className="mono" style={{ fontSize: 11, fontWeight: 500, color: 'var(--mut)', letterSpacing: '0.03em' }}>
             {isUnowned
-              ? 'This portfolio belongs to nobody · add wallets freely, sign in to make one of your own'
+              ? 'This portfolio belongs to nobody · add wallets freely'
               : 'Viewing a shared portfolio · read-only'}
           </div>
           <div
-            onClick={() => setAuthOpen(true)}
+            onClick={isUnowned ? startClaim : () => setAuthOpen(true)}
             className="mono"
             style={{
               fontSize: 10.5,
@@ -281,7 +312,7 @@ export function PortfolioPage() {
               whiteSpace: 'nowrap',
             }}
           >
-            CREATE YOUR PORTFOLIO →
+            {isUnowned ? 'MAKE IT MINE →' : 'CREATE YOUR PORTFOLIO →'}
           </div>
         </div>
       ) : null}
@@ -488,17 +519,27 @@ export function PortfolioPage() {
                 filter={filter}
                 onRemove={() => void removeWallet(w.id)}
                 onRename={(label) => void renameWallet(w.id, label)}
-                onRequireAuth={() => setAuthOpen(true)}
+                onRequireAuth={startClaim}
               />
             ))}
           </div>
         )}
       </div>
 
+      {confirmClaim ? (
+        <ClaimModal busy={claiming} onCancel={() => setConfirmClaim(false)} onConfirm={() => void claim()} />
+      ) : null}
       {confirmPublic ? (
         <GoPublicModal onCancel={() => setConfirmPublic(false)} onConfirm={() => void setVisibility(true)} />
       ) : null}
-      {authOpen ? <AuthModal onClose={() => setAuthOpen(false)} /> : null}
+      {authOpen ? (
+        <AuthModal
+          onClose={() => {
+            setAuthOpen(false);
+            pendingClaim.clear();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

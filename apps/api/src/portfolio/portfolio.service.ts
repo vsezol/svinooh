@@ -311,6 +311,46 @@ export class PortfolioService {
       .catch(() => {});
   }
 
+  /**
+   * Take ownership of a portfolio nobody owns.
+   *
+   * This is what closes the loop on building one without an account: assemble
+   * it anonymously, sign in, and it becomes yours — rather than signing in and
+   * being handed a different, empty portfolio while the wallets you gathered
+   * stay ownerless.
+   *
+   * It becomes PRIVATE in the process. It was listed publicly while it belonged
+   * to nobody, but a portfolio that belongs to someone is private until they say
+   * otherwise — that rule doesn't bend just because of how this one started.
+   */
+  async claim(slug: string, userId: string): Promise<{ slug: string }> {
+    const portfolio = await this.load(slug);
+    if (portfolio.owner) {
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'ALREADY_OWNED',
+        message: 'This portfolio already belongs to someone',
+      });
+    }
+
+    await this.prisma.portfolioOwner.create({
+      data: { portfolioId: portfolio.id, userId, isPublic: false },
+    });
+
+    // Signing in hands every new account an empty portfolio. If that is all it
+    // has, the one just claimed is plainly the one they meant — leaving the
+    // empty shell behind would give them two and a UI that only shows one.
+    const others = await this.prisma.portfolioOwner.findMany({
+      where: { userId, portfolioId: { not: portfolio.id } },
+      include: { portfolio: { include: { wallets: { select: { id: true } } } } },
+    });
+    const emptyIds = others.filter((o) => o.portfolio.wallets.length === 0).map((o) => o.portfolioId);
+    if (emptyIds.length) await this.prisma.portfolio.deleteMany({ where: { id: { in: emptyIds } } });
+
+    await this.cache.del(cacheKey(slug));
+    return { slug: portfolio.slug };
+  }
+
   /** Publish or unpublish an owned portfolio. Owner-only, by definition. */
   async setVisibility(
     slug: string,
