@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { HistoryDto, PortfolioDto, PublicPortfolioDto } from '@svinooh/shared';
+import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AreaChart } from '../components/AreaChart';
 import { AuthModal } from '../components/AuthModal';
 import { ChainMarquee } from '../components/ChainMarquee';
@@ -9,7 +10,8 @@ import { SearchDropdown } from '../components/SearchDropdown';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { fmtUsd, fmtUsd0, portfolioLabel } from '../lib/format';
+import { fmtUsd0, portfolioLabel } from '../lib/format';
+import { useReplay } from '../lib/replay';
 
 
 export function Landing() {
@@ -88,6 +90,22 @@ export function Landing() {
       .sort((a, b) => b.valueUsd - a.valueUsd)
       .slice(0, 3);
   }, [demo]);
+
+  // The card walks through the portfolio's most recent moves on arrival, then
+  // settles on where it actually stands
+  const series = demoHistory?.values ?? [];
+  const replay = useReplay(series);
+  const currentTotal = demo?.totalUsd ?? pubs[0]?.totalUsd ?? 0;
+  // Mid-replay the card walks the history; once it says LIVE again it has to
+  // rest on what the portfolio is actually worth, not on the last plotted point
+  // — the history is smoothed and bucketed, so the two are near but not equal.
+  const shownTotal = replay.live || !series.length ? currentTotal : series[replay.index];
+  const replayChange = (() => {
+    if (series.length < 2) return null;
+    const first = series[0];
+    const chg = shownTotal - first;
+    return { pct: first ? (chg / first) * 100 : 0, up: chg >= 0 };
+  })();
 
   const primary = () => (me ? navigate(`/p/${me.portfolioSlug}`) : setAuthOpen(true));
   const primaryLabel = me ? 'My portfolio' : 'Create portfolio';
@@ -185,13 +203,23 @@ export function Landing() {
               </span>
               <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 9.5, letterSpacing: '0.14em', color: 'var(--acc-text)' }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--acc)', animation: 'svpulse 2.4s ease infinite' }} />
-                LIVE
+                {replay.live ? 'LIVE' : 'REPLAY'}
               </span>
             </div>
             <div style={{ padding: '10px 18px 0', display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-              <span className="mono" style={{ fontWeight: 600, fontSize: 30, letterSpacing: '-0.02em' }}>
-                {fmtUsd(demo?.totalUsd ?? pubs[0]?.totalUsd ?? 0)}
-              </span>
+              <AnimatedUsd
+                className="mono"
+                value={shownTotal}
+                style={{ fontWeight: 600, fontSize: 30, letterSpacing: '-0.02em' }}
+              />
+              {replayChange ? (
+                <span
+                  className="mono"
+                  style={{ fontSize: 12, fontWeight: 600, color: replayChange.up ? 'var(--up)' : 'var(--down)' }}
+                >
+                  {(replayChange.up ? '+' : '') + replayChange.pct.toFixed(2)}% · 30D
+                </span>
+              ) : null}
             </div>
             <div style={{ padding: '4px 0 0' }}>
               <AreaChart values={demoHistory?.values ?? []} times={demoHistory?.times ?? []} period="30d" height="132px" variant="mini" />
