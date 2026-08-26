@@ -11,9 +11,19 @@ interface ThemeState {
 
 const ThemeContext = createContext<ThemeState>({ theme: 'dark', toggle: () => {} });
 
+/**
+ * On the server there is no storage and no visitor — the HTML is rendered dark
+ * and the inline script in it applies the saved theme before the first paint,
+ * so nothing flashes and nothing shifts. Here we read what that script decided,
+ * which is also what makes the client's first render match the server's.
+ */
 function initial(): Theme {
-  const saved = localStorage.getItem(KEY);
-  return saved === 'light' ? 'light' : 'dark';
+  try {
+    if (document.documentElement.dataset.theme === 'light') return 'light';
+    return localStorage.getItem(KEY) === 'light' ? 'light' : 'dark';
+  } catch {
+    return 'dark';
+  }
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -25,7 +35,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     // a light override that only lands on <body> leaves the page edges dark.
     document.body.dataset.theme = theme;
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem(KEY, theme);
+    try {
+      localStorage.setItem(KEY, theme);
+    } catch {
+      /* no storage — the theme still applies, it just won't be remembered */
+    }
   }, [theme]);
 
   const toggle = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), []);

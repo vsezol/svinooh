@@ -18,7 +18,8 @@ apps/
             /auth/* proxied to the auth service
   auth/   — sign-in (NestJS): Telegram bot and login widget, issues JWTs, owns User
   wallet/ — scanning (NestJS): RabbitMQ queue, the chain scanners, snapshots
-  web/    — React (Vite): portfolio page, charts, Telegram login
+  web/    — React (Vite): portfolio page, charts, Telegram login. The landing
+            is rendered server-side by a small Node server (apps/web/server.mjs)
 libs/
   shared/ — the API contract (types only, nothing to build)
   db/     — Prisma schema, migrations and PrismaService, shared by the services
@@ -104,6 +105,38 @@ Three ways in, all handled by the auth service:
   page with no explanation.
 
 In production turn the dev login off: `AUTH_DEV_MODE=false`.
+
+## The landing is rendered on the server
+
+Every other page is a client render — open the shell, fetch, draw. The landing
+could not afford that. It is what a stranger and a crawler arrive on, and it was
+arriving as an empty card that filled in over two chained round trips (the
+public list decides which portfolio the demo card shows, so the second request
+cannot start until the first lands). The page moved twice before it settled.
+
+`apps/web/server.mjs` renders it instead: one Node process that serves the built
+assets, and for `/` returns HTML with the card, the figures and the chart
+already in it, plus the data it used in a `<script>` so the browser hydrates
+against exactly what it was given rather than fetching it again.
+
+Three details make it hold together:
+
+- **The chart is SVG, not canvas.** The portfolio page keeps Lightweight Charts
+  — it is interactive there, and you can drag across it to measure a span. A
+  canvas cannot exist before JavaScript runs, so the landing uses a plain SVG
+  path (`Sparkline`) that is in the markup and painted with the first frame.
+- **The theme is applied before the first paint.** The server has no idea which
+  theme a visitor keeps, so an inline script sets `data-theme` on `<html>`
+  first, and the theme toggle picks its icon in CSS rather than in JavaScript —
+  otherwise the server's markup and the browser's first render would disagree.
+- **Nothing personal is in the HTML.** It renders signed-out, from public
+  endpoints: `owner` is null, wallet labels are null, and hydration is what
+  turns it into your page if it is yours.
+
+The render is cached for a minute and refreshed behind whoever asks for a stale
+one, so the API sees two requests a minute rather than two per visitor. If it is
+unreachable the server returns the plain shell — which is what every page was
+before it existed, so the site degrades to working rather than to broken.
 
 ## API
 
@@ -325,8 +358,12 @@ api     DATABASE_URL, JWT_SECRET, REDIS_URL, AUTH_SERVICE_URL, WALLET_SERVICE_UR
 auth    DATABASE_URL, JWT_SECRET (same as api), TELEGRAM_BOT_TOKEN,
         TELEGRAM_BOT_USERNAME, WEB_URL, AUTH_DEV_MODE=false, LOKI_URL, OTEL_…
 wallet  DATABASE_URL, RABBITMQ_URL, CHROME_NO_SANDBOX=1, LOKI_URL, OTEL_…
-web     VITE_API_URL = https://<api domain>   (baked into the static build —
-                                               rebuild after changing it)
+web     VITE_API_URL = https://<api domain>   (baked into the browser bundle —
+                                               rebuild after changing it; the
+                                               server reads it again at runtime
+                                               to render the landing)
+        API_INTERNAL_URL                       (optional: the api's private
+                                               address, for that render)
 ```
 
 The wallet service needs ≥ 1 GB of memory (headless Chrome). Migrations are

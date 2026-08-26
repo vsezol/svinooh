@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit -p tsconfig.json && vite build",
-    "preview": "vite preview"
+    "build": "tsc --noEmit -p tsconfig.json && vite build && vite build --ssr src/entry-server.tsx",
+    "preview": "node server.mjs",
+    "start": "node server.mjs"
   },
   "dependencies": {
     "@svinooh/shared": "*",

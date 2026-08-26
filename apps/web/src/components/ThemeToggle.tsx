@@ -16,18 +16,19 @@ const MOON = (
 /**
  * Sun in the dark, moon in the light — the icon shows what you get by pressing
  * it, which is the convention everywhere and needs no label.
+ *
+ * Which icon shows is decided in CSS, off the `data-theme` on <html>, rather
+ * than by this component. The server has no idea what theme a visitor keeps, so
+ * a JavaScript choice here would render one icon into the HTML and swap it on
+ * hydration; the attribute is set before the first paint, so CSS gets it right
+ * the first time.
  */
 export function ThemeToggle() {
-  const { theme, toggle } = useTheme();
-  const dark = theme === 'dark';
+  const { toggle } = useTheme();
   return (
-    <button
-      className="icon-btn"
-      onClick={toggle}
-      title={dark ? 'Switch to light' : 'Switch to dark'}
-      aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
-    >
-      {dark ? SUN : MOON}
+    <button className="icon-btn" onClick={toggle} title="Switch theme" aria-label="Switch theme">
+      <span className="on-dark">{SUN}</span>
+      <span className="on-light">{MOON}</span>
     </button>
   );
 }
