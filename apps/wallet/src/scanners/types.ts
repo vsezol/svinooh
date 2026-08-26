@@ -26,6 +26,8 @@ export interface ScanPosition {
   apy?: number | null;
   /** Health factor of a lending position */
   healthRate?: number | null;
+  /** Cost of the debt as a positive fraction (0.06 = 6% APY) */
+  borrowApy?: number | null;
   /** Concentrated liquidity only: is the price still inside the position's band */
   range?: PositionRange | null;
   tokens?: ScanPositionToken[] | null;

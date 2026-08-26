@@ -190,3 +190,105 @@ export function rewardsTotals(wallets: WalletDto[]): RewardsTotals {
   }
   return { pools, other, total: pools + other };
 }
+
+/**
+ * Stablecoin tickers. Exact names first, then a shape rule for the endless
+ * wrapped variants (sUSDe, wUSDM, USDbC…). Deliberately conservative: an
+ * unrecognised token counts as "rest", which understates stables rather than
+ * overstating how safe a portfolio is.
+ */
+const STABLE_NAMES = new Set([
+  'USDC', 'USDT', 'DAI', 'USDE', 'SUSDE', 'USDS', 'SUSDS', 'FRAX', 'TUSD', 'USDG',
+  'PYUSD', 'LUSD', 'GHO', 'CRVUSD', 'USDD', 'FDUSD', 'USDY', 'BUSD', 'EURC', 'USD0',
+  'DEUSD', 'USDX', 'RLUSD', 'USDB', 'DOLA', 'MIM', 'ALUSD', 'BUIDL', 'USDL', 'USDF',
+]);
+
+/** Anything shaped like a dollar token: USDbC, sUSDa, wUSDM, USDai… */
+const STABLE_SHAPE = /^[A-Z]{0,3}USD[A-Z0-9]{0,3}$/;
+
+export function isStable(symbol: string): boolean {
+  const s = symbol.trim().toUpperCase();
+  return STABLE_NAMES.has(s) || STABLE_SHAPE.test(s);
+}
+
+export interface DebtTotals {
+  /** Positive: how much is owed */
+  total: number;
+  /** Value-weighted borrow APY as a fraction, null when no source reported one */
+  avgApy: number | null;
+}
+
+/** What the portfolio owes, and what that debt costs on average */
+export function debtTotals(wallets: WalletDto[]): DebtTotals {
+  let total = 0;
+  let weighted = 0;
+  let rated = 0;
+  for (const wallet of wallets) {
+    for (const position of wallet.positions) {
+      const debt = (position.tokens ?? [])
+        .filter((t) => t.role === 'borrow')
+        .reduce((sum, t) => sum + Math.abs(t.valueUsd), 0);
+      if (!debt) continue;
+      total += debt;
+      if (position.borrowApy != null) {
+        weighted += position.borrowApy * debt;
+        rated += debt;
+      }
+    }
+  }
+  return { total, avgApy: rated > 0 ? weighted / rated : null };
+}
+
+export interface StableSplit {
+  stables: number;
+  rest: number;
+  /** Share of the total held in stablecoins, 0–1 */
+  stableShare: number;
+}
+
+/**
+ * How much of the portfolio sits in dollars. Counted from the legs, so a
+ * stablecoin deposited into a lending market still counts as stable — which is
+ * the question being asked. Debt is netted off the side it is denominated in.
+ */
+export function stableSplit(wallets: WalletDto[]): StableSplit {
+  let stables = 0;
+  let total = 0;
+  for (const wallet of wallets) {
+    for (const position of wallet.positions) {
+      total += position.valueUsd;
+      const legs = position.tokens ?? [];
+      if (!legs.length) {
+        if (position.category === 'token' && isStable(position.symbol)) stables += position.valueUsd;
+        continue;
+      }
+      for (const leg of legs) if (isStable(leg.symbol)) stables += leg.valueUsd;
+    }
+  }
+  stables = Math.max(0, stables);
+  const rest = Math.max(0, total - stables);
+  return { stables, rest, stableShare: total > 0 ? stables / total : 0 };
+}
+
+/** Which positions the list is showing */
+export type PositionFilter = 'all' | 'pools' | 'lending';
+
+const FILTER_MATCH: Record<Exclude<PositionFilter, 'all'>, RegExp> = {
+  pools: /pool|liquidity|\blp\b/i,
+  lending: /lend|borrow/i,
+};
+
+export function blockMatches(block: Block, filter: PositionFilter): boolean {
+  if (filter === 'all') return true;
+  // The "Wallet" block is plain holdings — it is neither a pool nor a loan
+  if (!block.typeLabel) return false;
+  return FILTER_MATCH[filter].test(block.typeLabel);
+}
+
+/** Total value of everything the filter is currently showing */
+export function filteredTotal(blocksByWallet: Block[][], filter: PositionFilter): number {
+  return blocksByWallet
+    .flat()
+    .filter((b) => blockMatches(b, filter))
+    .reduce((sum, b) => sum + b.value, 0);
+}

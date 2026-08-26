@@ -3,31 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import type { HistoryDto, PortfolioDto, PublicPortfolioDto } from '@svinooh/shared';
 import { AreaChart } from '../components/AreaChart';
 import { AuthModal } from '../components/AuthModal';
+import { ChainMarquee } from '../components/ChainMarquee';
 import { Logo } from '../components/Logo';
 import { SearchDropdown } from '../components/SearchDropdown';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { fmtUsd, fmtUsd0, portfolioLabel } from '../lib/format';
-import { useTheme } from '../lib/theme';
 
-const CHAIN_BADGES = [
-  { label: 'EVM · 50+ CHAINS', icon: <path d="M5 0.6 L8.7 5 L5 9.4 L1.3 5 Z" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinejoin="round" /> },
-  {
-    label: 'SOLANA',
-    icon: (
-      <g fill="currentColor">
-        <rect x="1" y="1.4" width="8" height="1.7" rx="0.85" />
-        <rect x="1" y="4.15" width="8" height="1.7" rx="0.85" />
-        <rect x="1" y="6.9" width="8" height="1.7" rx="0.85" />
-      </g>
-    ),
-  },
-  { label: 'TRON', icon: <path d="M1.2 1.4 L8.8 2.8 L4.6 8.8 Z" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinejoin="round" /> },
-];
 
 export function Landing() {
   const { me } = useAuth();
-  const { theme, toggle } = useTheme();
   const navigate = useNavigate();
 
   const [authOpen, setAuthOpen] = useState(false);
@@ -112,9 +98,7 @@ export function Landing() {
       <div className="shell" style={{ height: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Logo size={19} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="pill" onClick={toggle}>
-            {theme === 'dark' ? 'LIGHT' : 'DARK'}
-          </button>
+          <ThemeToggle />
           <button className="btn-acc" style={{ height: 32, fontSize: 12, padding: '0 14px' }} onClick={primary}>
             {primaryLabel}
           </button>
@@ -163,7 +147,7 @@ export function Landing() {
                   if (e.key === 'Escape') setOpen(false);
                   if (e.key === 'Enter' && looksLikeAddress) void trackAddress();
                 }}
-                placeholder="Search a portfolio or paste a wallet address"
+                placeholder="Search a portfolio id or paste a wallet address"
                 spellCheck={false}
                 style={{ width: '100%', height: 46, padding: '0 18px', fontSize: 12.5 }}
               />
@@ -188,49 +172,6 @@ export function Landing() {
             >
               {primaryLabel}
             </button>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 28 }}>
-            {CHAIN_BADGES.map((b) => (
-              <span
-                key={b.label}
-                className="mono"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 7,
-                  border: '1px solid var(--line)',
-                  background: 'var(--surf)',
-                  borderRadius: 999,
-                  padding: '7px 13px',
-                  fontSize: 9.5,
-                  letterSpacing: '0.1em',
-                  color: 'var(--mut)',
-                }}
-              >
-                <svg width="11" height="11" viewBox="0 0 10 10">
-                  {b.icon}
-                </svg>
-                {b.label}
-              </span>
-            ))}
-            <span
-              className="mono"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 7,
-                border: '1px solid var(--line)',
-                background: 'var(--surf)',
-                borderRadius: 999,
-                padding: '7px 13px',
-                fontSize: 9.5,
-                letterSpacing: '0.1em',
-                color: 'var(--mut)',
-              }}
-            >
-              <span style={{ fontWeight: 800, fontSize: 11.5, lineHeight: 1 }}>₿</span>
-              BITCOIN
-            </span>
           </div>
         </div>
 
@@ -282,8 +223,10 @@ export function Landing() {
         </div>
       </div>
 
+      <ChainMarquee />
+
       {/* public portfolios */}
-      <div className="shell" style={{ width: '100%', padding: '0 clamp(14px,3.5vw,28px) 52px' }}>
+      <div className="shell" style={{ width: '100%', padding: '36px clamp(14px,3.5vw,28px) 52px' }}>
         <div style={{ borderTop: '1px solid var(--line)', paddingTop: 22 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
             <div className="eyebrow">PUBLIC PORTFOLIOS</div>
@@ -348,9 +291,11 @@ export function Landing() {
         >
           <div style={{ position: 'absolute', inset: '-40%', background: 'radial-gradient(ellipse at 50% 130%, var(--acc-soft), transparent 60%)', pointerEvents: 'none' }} />
           <div style={{ position: 'relative' }}>
-            <div style={{ fontWeight: 800, fontSize: 'clamp(22px,4vw,32px)', letterSpacing: '-0.03em' }}>Get your own link</div>
-            <div className="mono" style={{ fontSize: 13, color: 'var(--mut)', marginTop: 10 }}>
-              {window.location.host}/p/<span style={{ color: 'var(--acc-text)' }}>you</span>
+            <div style={{ fontWeight: 800, fontSize: 'clamp(22px,4vw,32px)', letterSpacing: '-0.03em' }}>
+              All your wallets. One portfolio.
+            </div>
+            <div style={{ fontSize: 13.5, color: 'var(--mut)', marginTop: 10, lineHeight: 1.6 }}>
+              Every chain, every DeFi position — tracked live and shareable by link.
             </div>
             <button
               className="btn-acc"

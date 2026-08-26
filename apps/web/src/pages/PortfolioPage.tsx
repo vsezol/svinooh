@@ -4,14 +4,23 @@ import type { HistoryDto, HistoryRange, PortfolioDto } from '@svinooh/shared';
 import { AreaChart } from '../components/AreaChart';
 import { AuthModal } from '../components/AuthModal';
 import { Logo } from '../components/Logo';
+import { MetricCards } from '../components/MetricCards';
+import { GoPublicModal, VisibilityCard } from '../components/PortfolioVisibility';
+import { ScopeSelect } from '../components/ScopeSelect';
+import { ShareButton } from '../components/ShareButton';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { WalletRow } from '../components/WalletRow';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { GoPublicModal, VisibilityCard } from '../components/PortfolioVisibility';
-import { RewardsStrip } from '../components/RewardsStrip';
-import { rewardsTotals } from '../lib/blocks';
-import { fmtUsd, walletName } from '../lib/format';
-import { useTheme } from '../lib/theme';
+import {
+  buildBlocks,
+  debtTotals,
+  filteredTotal,
+  rewardsTotals,
+  stableSplit,
+  type PositionFilter,
+} from '../lib/blocks';
+import { fmtUsd, portfolioLabel, syncedLabel, walletName } from '../lib/format';
 
 const PERIODS: Array<{ key: HistoryRange; label: string }> = [
   { key: '24h', label: '24H' },
@@ -19,6 +28,21 @@ const PERIODS: Array<{ key: HistoryRange; label: string }> = [
   { key: '30d', label: '30D' },
   { key: 'all', label: 'ALL' },
 ];
+
+const FILTERS: Array<{ key: PositionFilter; label: string }> = [
+  { key: 'all', label: 'ALL' },
+  { key: 'pools', label: 'POOLS' },
+  { key: 'lending', label: 'LENDING' },
+];
+
+/** The card icon beside the total */
+const WALLET_ICON = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="6" width="18" height="13" rx="2.5" />
+    <path d="M3 10h18" />
+    <circle cx="16.5" cy="14.5" r="1.3" fill="currentColor" stroke="none" />
+  </svg>
+);
 
 /**
  * `viewerId` is not used in the request — it's a reload trigger. The bot's
@@ -96,13 +120,12 @@ export function PortfolioPage() {
   const { slug = '' } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { me, logout } = useAuth();
-  const { theme, toggle } = useTheme();
   const { data, error, reload } = usePortfolio(slug, me?.id ?? null);
 
   const [scope, setScope] = useState<string>('all');
   const [period, setPeriod] = useState<HistoryRange>('24h');
+  const [filter, setFilter] = useState<PositionFilter>('all');
   const [authOpen, setAuthOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [input, setInput] = useState('');
   const [addErr, setAddErr] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -116,7 +139,12 @@ export function PortfolioPage() {
     if (scope !== 'all' && data && !data.wallets.some((w) => w.id === scope)) setScope('all');
   }, [data, scope]);
 
-  const rewards = useMemo(() => rewardsTotals(data?.wallets ?? []), [data]);
+  const wallets = data?.wallets ?? [];
+  const rewards = useMemo(() => rewardsTotals(wallets), [wallets]);
+  const debt = useMemo(() => debtTotals(wallets), [wallets]);
+  const stables = useMemo(() => stableSplit(wallets), [wallets]);
+  const blocksByWallet = useMemo(() => wallets.map((w) => buildBlocks(w.positions)), [wallets]);
+  const shownTotal = useMemo(() => filteredTotal(blocksByWallet, filter), [blocksByWallet, filter]);
 
   const change = useMemo(() => {
     if (!history || history.values.length < 2) return null;
@@ -126,12 +154,6 @@ export function PortfolioPage() {
     const pct = first ? (chg / first) * 100 : 0;
     return { chg, pct, up: chg >= 0 };
   }, [history]);
-
-  const copyLink = () => {
-    void navigator.clipboard?.writeText(window.location.href).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1400);
-  };
 
   const addWallet = async () => {
     const address = input.trim();
@@ -158,6 +180,15 @@ export function PortfolioPage() {
     }
   };
 
+  const renameWallet = async (walletId: string, label: string) => {
+    try {
+      await api(`/portfolios/${slug}/wallets/${walletId}`, { method: 'PATCH', body: JSON.stringify({ label }) });
+      await reload();
+    } catch {
+      // didn't save — the previous name comes back on the next reload
+    }
+  };
+
   const setVisibility = async (isPublic: boolean) => {
     setSavingVisibility(true);
     setConfirmPublic(false);
@@ -168,15 +199,6 @@ export function PortfolioPage() {
       alert(err instanceof Error ? err.message : 'Could not change visibility');
     } finally {
       setSavingVisibility(false);
-    }
-  };
-
-  const renameWallet = async (walletId: string, label: string) => {
-    try {
-      await api(`/portfolios/${slug}/wallets/${walletId}`, { method: 'PATCH', body: JSON.stringify({ label }) });
-      await reload();
-    } catch {
-      // didn't save — the previous name comes back on the next reload
     }
   };
 
@@ -200,29 +222,35 @@ export function PortfolioPage() {
   }
 
   const isOwner = data.isOwner;
-  const walletCount = data.wallets.filter((w) => w.status !== 'pending').length;
-  const selectedWallet = scope === 'all' ? null : data.wallets.find((w) => w.id === scope);
+  const walletCount = wallets.filter((w) => w.status !== 'pending').length;
+  const selectedWallet = scope === 'all' ? null : wallets.find((w) => w.id === scope);
   const headlineTotal = selectedWallet ? (selectedWallet.totalUsd ?? 0) : data.totalUsd;
-  // An empty chart frame with "history shows up later" in it is worse than no
-  // chart: on a fresh portfolio it is the biggest thing on the page and says
-  // nothing. It appears once a wallet has synced AND there are points to plot.
-  const hasChart = data.wallets.some((w) => w.totalUsd !== null) && (history?.values.length ?? 0) >= 2;
+  // An empty chart frame that explains history arrives later is the biggest
+  // thing on a fresh portfolio and says nothing — it appears once there is a
+  // line to draw.
+  const hasChart = wallets.some((w) => w.totalUsd !== null) && (history?.values.length ?? 0) >= 2;
 
-  const changeHelp =
-    scope === 'all'
-      ? `Change over ${period.toUpperCase()}. For each wallet: its value now minus its value at the start of the period; summed across wallets, then divided by the combined value at the start. Adding a wallet doesn't count as profit.`
-      : `Change over ${period.toUpperCase()}: this wallet's value now minus its value at the start of the period.`;
-
-  const scopeChips = [
-    { id: 'all', label: 'ALL WALLETS' },
-    ...data.wallets
+  const scopeOptions = [
+    { id: 'all', label: 'All wallets', valueUsd: data.totalUsd },
+    ...wallets
       .filter((w) => w.status !== 'pending')
-      .map((w) => ({ id: w.id, label: walletName(w.label, w.chain).toUpperCase() })),
+      .map((w) => ({ id: w.id, label: walletName(w.label, w.chain), valueUsd: w.totalUsd })),
   ];
+
+  const visNote =
+    data.visibility === 'public'
+      ? 'VISIBLE TO EVERYONE'
+      : data.visibility === 'private'
+        ? 'ONLY PEOPLE WITH THE LINK'
+        : 'SHARED PORTFOLIO';
+
+  const visibleWallets = wallets.filter(
+    (w, i) => filter === 'all' || w.status === 'pending' || blocksByWallet[i].some((b) => b.typeLabel && shownFilterMatch(b.typeLabel, filter)),
+  );
 
   return (
     <div>
-      {/* public banner */}
+      {/* a guest never learns whose portfolio this is */}
       {!isOwner ? (
         <div
           style={{
@@ -236,9 +264,7 @@ export function PortfolioPage() {
             flexWrap: 'wrap',
           }}
         >
-          {/* Never name the owner here: a balance next to a handle is exactly
-              the deanonymization we refuse to ship. */}
-          <div className="mono" style={{ fontSize: 11, color: 'var(--mut)', letterSpacing: '0.03em' }}>
+          <div className="mono" style={{ fontSize: 11, fontWeight: 500, color: 'var(--mut)', letterSpacing: '0.03em' }}>
             Viewing a shared portfolio · read-only
           </div>
           <div
@@ -272,27 +298,19 @@ export function PortfolioPage() {
           borderBottom: '1px solid var(--line)',
         }}
       >
-        <div
-          className="shell"
-          style={{ height: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}
-        >
+        <div className="shell" style={{ height: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <Logo size={21} onClick={() => navigate('/')} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button className="pill" onClick={copyLink}>
-              {copied ? 'COPIED ✓' : 'COPY LINK'}
-            </button>
-            <button className="pill" onClick={toggle}>
-              {theme === 'dark' ? 'LIGHT' : 'DARK'}
-            </button>
+            <ThemeToggle />
             {isOwner && me ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 4 }}>
                 {me.photoUrl ? (
-                  <img src={me.photoUrl} alt="" style={{ width: 28, height: 28, borderRadius: '50%' }} />
+                  <img src={me.photoUrl} alt="" style={{ width: 30, height: 30, borderRadius: '50%' }} />
                 ) : (
                   <div
                     style={{
-                      width: 28,
-                      height: 28,
+                      width: 30,
+                      height: 30,
                       borderRadius: '50%',
                       background: 'var(--acc-soft)',
                       border: '1px solid color-mix(in srgb, var(--acc) 40%, transparent)',
@@ -307,6 +325,7 @@ export function PortfolioPage() {
                     {(me.name || '?').slice(0, 2).toUpperCase()}
                   </div>
                 )}
+                {/* the viewer's own handle, shown only to them */}
                 <span className="mono hide-mobile" style={{ fontSize: 11.5, color: 'var(--mut)' }}>
                   {me.username ? `@${me.username}` : me.name}
                 </span>
@@ -322,7 +341,7 @@ export function PortfolioPage() {
                 </button>
               </div>
             ) : (
-              <button className="btn-acc" style={{ height: 32, fontSize: 12, padding: '0 14px' }} onClick={() => setAuthOpen(true)}>
+              <button className="btn-acc" style={{ height: 34, fontSize: 12, padding: '0 14px' }} onClick={() => setAuthOpen(true)}>
                 Sign in
               </button>
             )}
@@ -332,59 +351,79 @@ export function PortfolioPage() {
 
       <div className="shell" style={{ padding: 'clamp(20px,4vw,36px) clamp(14px,3.5vw,28px) 60px' }}>
         {/* total */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-          <div>
-            <div className="eyebrow">
-              {selectedWallet ? 'WALLET BALANCE' : 'TOTAL BALANCE'} · {walletCount}{' '}
-              {walletCount === 1 ? 'WALLET' : 'WALLETS'}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 12,
+                background: 'var(--acc-soft)',
+                color: 'var(--acc-text)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              {WALLET_ICON}
             </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap', marginTop: 8 }}>
-              <div className="mono" style={{ fontWeight: 600, fontSize: 'clamp(30px,6vw,44px)', letterSpacing: '-0.02em', lineHeight: 1 }}>
-                {fmtUsd(headlineTotal)}
+            <div>
+              <div className="eyebrow">
+                {selectedWallet ? 'WALLET BALANCE' : 'TOTAL BALANCE'} · {walletCount}{' '}
+                {walletCount === 1 ? 'WALLET' : 'WALLETS'}
               </div>
-              {change ? (
-                <div
-                  className="mono"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 600, color: change.up ? 'var(--up)' : 'var(--down)' }}
-                >
-                  <span>
-                    {(change.up ? '+$' : '−$') +
-                      Math.abs(change.chg).toLocaleString('en-US', { maximumFractionDigits: 0 }) +
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginTop: 6 }}>
+                <div className="mono" style={{ fontWeight: 600, fontSize: 'clamp(30px,6vw,44px)', letterSpacing: '-0.02em', lineHeight: 1 }}>
+                  {fmtUsd(headlineTotal)}
+                </div>
+                {change ? (
+                  <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: change.up ? 'var(--up)' : 'var(--down)' }}>
+                    {(change.up ? '+' : '−') +
+                      fmtUsd(Math.abs(change.chg), 0) +
                       ' (' +
                       (change.up ? '+' : '') +
                       change.pct.toFixed(2) +
                       '%) · ' +
                       period.toUpperCase()}
-                  </span>
-                  <span className="infotip" tabIndex={0} role="note" aria-label="How the change is calculated">
-                    i<span className="infotip-pop">{changeHelp}</span>
-                  </span>
-                </div>
-              ) : null}
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
+
           {isOwner ? (
-            <VisibilityCard
-              visibility={data.visibility}
-              busy={savingVisibility}
-              onGoPublic={() => setConfirmPublic(true)}
-              onGoPrivate={() => void setVisibility(false)}
-            />
-          ) : null}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <VisibilityCard
+                visibility={data.visibility}
+                busy={savingVisibility}
+                onGoPublic={() => setConfirmPublic(true)}
+                onGoPrivate={() => void setVisibility(false)}
+              />
+              <ShareButton title={`${portfolioLabel(data.name, data.slug)} · svinooh`} />
+            </div>
+          ) : (
+            <ShareButton title={`${portfolioLabel(data.name, data.slug)} · svinooh`} />
+          )}
         </div>
 
-        {/* chips + periods + chart — only once there is a line to draw */}
+        <div
+          className="mono"
+          style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 12, fontSize: 10.5, color: 'var(--mut)', letterSpacing: '0.04em' }}
+        >
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--acc)', animation: 'svpulse 2.4s ease infinite' }} />
+            SYNCED {syncedLabel(data.updatedAt).toUpperCase()}
+          </span>
+          {isOwner ? <span>{visNote}</span> : null}
+        </div>
+
+        {/* scope + period, on one row: the period tabs stay pinned right on a phone */}
         {hasChart ? (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 22 }}>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {scopeChips.map((c) => (
-                  <button key={c.id} className={`chip ${scope === c.id ? 'active' : ''}`} onClick={() => setScope(c.id)}>
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: 2, border: '1px solid var(--line)', borderRadius: 999, padding: 2 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'nowrap', marginTop: 22 }}>
+              <ScopeSelect options={scopeOptions} value={scope} onChange={setScope} />
+              <div style={{ display: 'flex', gap: 2, border: '1px solid var(--line)', borderRadius: 999, padding: 2, flexShrink: 0 }}>
                 {PERIODS.map((p) => (
                   <button key={p.key} className={`period ${period === p.key ? 'active' : ''}`} onClick={() => setPeriod(p.key)}>
                     {p.label}
@@ -393,20 +432,17 @@ export function PortfolioPage() {
               </div>
             </div>
 
-            <div style={{ marginTop: 16 }}>
-              <AreaChart
-                values={history?.values ?? []}
-                times={history?.times ?? []}
-                period={period}
-                height="clamp(160px,26vw,240px)"
-              />
+            <div style={{ marginTop: 14 }}>
+              <AreaChart values={history?.values ?? []} times={history?.times ?? []} period={period} height="clamp(160px,26vw,240px)" />
             </div>
           </>
         ) : null}
 
+        <MetricCards rewards={rewards} debt={debt} stables={stables} />
+
         {/* add wallet */}
         {isOwner ? (
-          <div style={{ marginTop: 30 }}>
+          <div style={{ marginTop: 26 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <input
                 className="mono add-input"
@@ -427,51 +463,50 @@ export function PortfolioPage() {
               </button>
             </div>
             {addErr ? (
-              <div className="mono" style={{ marginTop: 7, fontSize: 10.5, color: 'var(--down)' }}>
+              <div className="mono" style={{ marginTop: 7, fontSize: 11, color: 'var(--down)' }}>
                 {addErr}
               </div>
             ) : null}
           </div>
         ) : null}
 
-        {/* unclaimed rewards across every wallet */}
-        <RewardsStrip totals={rewards} />
-
-        {/* wallets */}
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 30, marginBottom: 10 }}>
-          <div className="eyebrow">WALLETS · SORTED BY VALUE</div>
-          <div className="mono" style={{ fontSize: 10, color: 'var(--mut)' }}>
-            USD
+        {/* which positions to show, and what they add up to */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 26, marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {FILTERS.map((f) => (
+              <button key={f.key} className={`chip ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div className="mono" style={{ fontSize: 11, fontWeight: 500, color: 'var(--mut)' }}>
+            {filter === 'all' ? `${walletCount} ${walletCount === 1 ? 'wallet' : 'wallets'}` : 'Shown'} · {fmtUsd(shownTotal)}
           </div>
         </div>
 
-        {data.wallets.length === 0 ? (
+        {visibleWallets.length === 0 ? (
           <div className="card" style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--mut)', fontSize: 13 }}>
-            {isOwner
-              ? 'No wallets yet. Paste an address above — the network is detected automatically.'
-              : 'This portfolio has no wallets yet.'}
+            {wallets.length === 0
+              ? isOwner
+                ? 'No wallets yet. Paste an address above — the network is detected automatically.'
+                : 'This portfolio has no wallets yet.'
+              : 'Nothing matches this filter.'}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {data.wallets.map((w) => (
+            {visibleWallets.map((w) => (
               <WalletRow
                 key={w.id}
                 wallet={w}
                 isOwner={isOwner}
                 total={data.totalUsd}
+                filter={filter}
                 onRemove={() => void removeWallet(w.id)}
                 onRename={(label) => void renameWallet(w.id, label)}
               />
             ))}
           </div>
         )}
-
-        <div className="mono" style={{ marginTop: 36, textAlign: 'center', fontSize: 10.5, color: 'var(--mut)', lineHeight: 1.8 }}>
-          <a href={window.location.href}>{window.location.host}/p/{data.slug}</a> ·{' '}
-          {data.visibility === 'private'
-            ? 'private — not listed anywhere; anyone with this link can view it'
-            : 'anyone can view without signing in'}
-        </div>
       </div>
 
       {confirmPublic ? (
@@ -480,4 +515,10 @@ export function PortfolioPage() {
       {authOpen ? <AuthModal onClose={() => setAuthOpen(false)} /> : null}
     </div>
   );
+}
+
+/** Mirrors blockMatches, but on the label a wallet row already computed */
+function shownFilterMatch(typeLabel: string, filter: PositionFilter): boolean {
+  if (filter === 'all') return true;
+  return filter === 'pools' ? /POOL|LIQUIDITY|LP/.test(typeLabel) : /LEND|BORROW/.test(typeLabel);
 }
