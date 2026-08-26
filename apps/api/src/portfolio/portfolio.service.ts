@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { Portfolio, Position, Wallet } from '@prisma/client';
+import type { Portfolio, PortfolioOwner, Position, Wallet } from '@prisma/client';
 import type {
   Chain,
   HistoryDto,
@@ -29,6 +29,14 @@ import { detectChain } from '../scanners/detect';
 import { CacheService } from '../cache/cache.service';
 
 type WalletWithPositions = Wallet & { positions: Position[] };
+type PortfolioWithOwner = Portfolio & { owner: PortfolioOwner | null };
+
+/**
+ * How many wallets a portfolio nobody owns may hold. Anyone can add to one, and
+ * everything in it is rescanned for as long as it exists — so it is capped, and
+ * the message points at the way to go bigger.
+ */
+const ANONYMOUS_WALLET_LIMIT = 10;
 
 const RANGES: Record<HistoryRange, { sinceMs: number | null; bucket: string | null }> = {
   '24h': { sinceMs: 24 * 3600e3, bucket: null }, // raw 5-minute points
@@ -327,13 +335,33 @@ export class PortfolioService {
     return { name };
   }
 
-  async addWallet(slug: string, userId: string, addressRaw: string): Promise<WalletDto> {
-    const portfolio = await this.requireOwned(slug, userId);
+  /**
+   * Add a wallet. Owners can always do this; an ANONYMOUS portfolio accepts it
+   * from anyone, signed in or not — that is the point of it, you can assemble
+   * one and share the link before deciding whether you want an account.
+   * Renaming and removing stay owner-only: building something up is safe to
+   * leave open, taking it apart is not.
+   */
+  async addWallet(slug: string, userId: string | null, addressRaw: string): Promise<WalletDto> {
+    const portfolio = await this.requireWritable(slug, userId);
     const address = String(addressRaw || '').trim();
     if (!address) throw new BadRequestException('Empty address');
 
     const chain = detectChain(address);
     if (!chain) throw unsupportedNetwork();
+
+    // A portfolio nobody owns is also a portfolio nobody is responsible for, so
+    // it doesn't get to grow without limit — every wallet is rescanned forever.
+    if (!portfolio.owner) {
+      const count = await this.prisma.wallet.count({ where: { portfolioId: portfolio.id } });
+      if (count >= ANONYMOUS_WALLET_LIMIT) {
+        throw new BadRequestException({
+          statusCode: 400,
+          code: 'ANONYMOUS_LIMIT',
+          message: `A shared portfolio holds up to ${ANONYMOUS_WALLET_LIMIT} wallets. Sign in to build a bigger one.`,
+        });
+      }
+    }
 
     const existing = await this.prisma.wallet.findUnique({
       where: { portfolioId_address: { portfolioId: portfolio.id, address } },
@@ -473,14 +501,28 @@ export class PortfolioService {
     return { range, points };
   }
 
-  private async requireOwned(slug: string, userId: string): Promise<Portfolio> {
+  /** Owner-only: renaming, removing, publishing */
+  private async requireOwned(slug: string, userId: string): Promise<PortfolioWithOwner> {
+    const portfolio = await this.load(slug);
+    // An anonymous portfolio has no owner, so nobody can claim these rights over it
+    if (portfolio.owner?.userId !== userId) throw new ForbiddenException("This isn't your portfolio");
+    return portfolio;
+  }
+
+  /** Owner, or anybody at all when the portfolio belongs to nobody */
+  private async requireWritable(slug: string, userId: string | null): Promise<PortfolioWithOwner> {
+    const portfolio = await this.load(slug);
+    if (!portfolio.owner) return portfolio;
+    if (portfolio.owner.userId !== userId) throw new ForbiddenException("This isn't your portfolio");
+    return portfolio;
+  }
+
+  private async load(slug: string): Promise<PortfolioWithOwner> {
     const portfolio = await this.prisma.portfolio.findUnique({
       where: { slug },
       include: { owner: true },
     });
     if (!portfolio) throw new NotFoundException('Portfolio not found');
-    // An anonymous portfolio has no owner, so nobody can claim it either
-    if (portfolio.owner?.userId !== userId) throw new ForbiddenException("This isn't your portfolio");
     return portfolio;
   }
 

@@ -109,16 +109,30 @@ GET    /api/portfolios/public?limit=&q=       — leaderboard/search of public p
 GET    /api/portfolios/:slug                  — public; with a token it returns isOwner
 PATCH  /api/portfolios/:slug                  🔒 { name }
 GET    /api/portfolios/:slug/history?range=24h|7d|30d|all
-POST   /api/portfolios/:slug/wallets          🔒 { address } — the network is detected,
-                                                the response is immediate (status=pending),
-                                                the scan runs asynchronously
+POST   /api/portfolios/anonymous              — { address } → open a wallet as a portfolio
+                                                that belongs to nobody, creating it if needed
+POST   /api/portfolios/:slug/wallets          { address } — the network is detected, the
+                                                response is immediate (status=pending) and the
+                                                scan runs asynchronously. Owner-only on an owned
+                                                portfolio; open to anyone on an anonymous one
 PATCH  /api/portfolios/:slug/wallets/:id      🔒 { label }
 DELETE /api/portfolios/:slug/wallets/:id      🔒
 GET    /api/portfolios/:slug/wallets/:id/history?range=…
 ```
 
 An unrecognized address → 400 `{ code: "UNSUPPORTED_NETWORK" }`, a duplicate →
-409 `{ code: "WALLET_EXISTS" }`.
+409 `{ code: "WALLET_EXISTS" }`, an anonymous portfolio that is already full →
+400 `{ code: "ANONYMOUS_LIMIT" }`.
+
+### Portfolios nobody owns
+
+Searching a wallet address on the landing opens it as a portfolio with no owner,
+and **anyone can add wallets to it without an account** — assemble one, share the
+link, decide about signing up later. Renaming and removing stay owner-only, so an
+open portfolio can be built up but not taken apart; the UI offers sign-in when
+someone reaches for those. An anonymous portfolio is capped at ten wallets,
+because nobody owns it and everything in it is rescanned for as long as it
+exists.
 
 ## How the value is computed
 

@@ -18,17 +18,28 @@ const roleColor = (role: PositionTokenRole): string =>
 /** 0.8075 → "80.8% APY" */
 const fmtApy = (apy: number): string => `${(apy * 100).toFixed(apy < 0.1 ? 2 : 1)}% APY`;
 
+/**
+ * edit   — the owner: rename and remove do what they say
+ * locked — a portfolio nobody owns: the actions are there, and pressing one
+ *          asks you to sign in first
+ * none   — somebody else's portfolio: no actions, and no false promise that
+ *          signing in would grant any
+ */
+export type WalletActions = 'edit' | 'locked' | 'none';
+
 interface Props {
   wallet: WalletDto;
-  isOwner: boolean;
+  actions: WalletActions;
   total: number;
   /** Which positions to show; blocks that don't match are hidden */
   filter: PositionFilter;
   onRemove: () => void;
   onRename: (label: string) => void;
+  /** Pressing a locked action */
+  onRequireAuth: () => void;
 }
 
-export function WalletRow({ wallet, isOwner, total, filter, onRemove, onRename }: Props) {
+export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, onRequireAuth }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -168,8 +179,14 @@ export function WalletRow({ wallet, isOwner, total, filter, onRemove, onRename }
           />
         ) : null}
 
-        {/* Owner actions live behind the kebab, away from the expand chevron */}
-        {isOwner && !syncing ? <WalletMenu onRename={startEdit} onRemove={remove} /> : null}
+        {/* Actions live behind the kebab, away from the expand chevron */}
+        {actions !== 'none' && !syncing ? (
+          <WalletMenu
+            locked={actions === 'locked'}
+            onRename={actions === 'edit' ? startEdit : onRequireAuth}
+            onRemove={actions === 'edit' ? remove : onRequireAuth}
+          />
+        ) : null}
       </div>
 
       {expanded ? (

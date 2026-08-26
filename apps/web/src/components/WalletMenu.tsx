@@ -14,7 +14,23 @@ const KEBAB = (
  * opens it were neighbours — one slip apart. Destructive actions belong behind a
  * deliberate second step.
  */
-export function WalletMenu({ onRename, onRemove }: { onRename: () => void; onRemove: () => void }) {
+const LOCK = (
+  <svg viewBox="0 0 12 12" width={10} height={10} fill="none" stroke="currentColor" strokeWidth={1.3}>
+    <rect x="2.2" y="5.2" width="7.6" height="5.3" rx="1.2" />
+    <path d="M4 5.2V3.8a2 2 0 0 1 4 0v1.4" />
+  </svg>
+);
+
+export function WalletMenu({
+  locked,
+  onRename,
+  onRemove,
+}: {
+  /** The actions need an account — say so rather than failing after the click */
+  locked?: boolean;
+  onRename: () => void;
+  onRemove: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
@@ -68,18 +84,28 @@ export function WalletMenu({ onRename, onRemove }: { onRename: () => void; onRem
               onRename();
             }}
           >
+            {locked ? LOCK : null}
             Rename
           </button>
           <button
-            className="menu-item danger"
+            className={locked ? 'menu-item' : 'menu-item danger'}
             role="menuitem"
             onClick={() => {
               setOpen(false);
               onRemove();
             }}
           >
+            {locked ? LOCK : null}
             Remove wallet
           </button>
+          {locked ? (
+            <div
+              className="mono"
+              style={{ padding: '8px 14px 10px', fontSize: 10, color: 'var(--mut)', borderTop: '1px solid var(--line)', lineHeight: 1.6 }}
+            >
+              Sign in to edit this portfolio
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

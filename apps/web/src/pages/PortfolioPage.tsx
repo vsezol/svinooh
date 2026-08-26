@@ -9,7 +9,7 @@ import { GoPublicModal, VisibilityCard } from '../components/PortfolioVisibility
 import { ScopeSelect } from '../components/ScopeSelect';
 import { ShareButton } from '../components/ShareButton';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { WalletRow } from '../components/WalletRow';
+import { WalletRow, type WalletActions } from '../components/WalletRow';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import {
@@ -213,6 +213,11 @@ export function PortfolioPage() {
   }
 
   const isOwner = data.isOwner;
+  // A portfolio nobody owns is open for building: anyone can add wallets to it
+  // without an account. Taking wallets out, or renaming them, still needs one.
+  const isUnowned = data.visibility === 'anonymous';
+  const canAdd = isOwner || isUnowned;
+  const walletActions: WalletActions = isOwner ? 'edit' : isUnowned ? 'locked' : 'none';
   const walletCount = wallets.filter((w) => w.status !== 'pending').length;
   const selectedWallet = scope === 'all' ? null : wallets.find((w) => w.id === scope);
   const headlineTotal = selectedWallet ? (selectedWallet.totalUsd ?? 0) : data.totalUsd;
@@ -258,7 +263,9 @@ export function PortfolioPage() {
           }}
         >
           <div className="mono" style={{ fontSize: 11, fontWeight: 500, color: 'var(--mut)', letterSpacing: '0.03em' }}>
-            Viewing a shared portfolio · read-only
+            {isUnowned
+              ? 'This portfolio belongs to nobody · add wallets freely, sign in to make one of your own'
+              : 'Viewing a shared portfolio · read-only'}
           </div>
           <div
             onClick={() => setAuthOpen(true)}
@@ -419,7 +426,7 @@ export function PortfolioPage() {
         <MetricCards rewards={rewards} debt={debt} />
 
         {/* add wallet */}
-        {isOwner ? (
+        {canAdd ? (
           <div style={{ marginTop: 26 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <input
@@ -465,7 +472,7 @@ export function PortfolioPage() {
         {visibleWallets.length === 0 ? (
           <div className="card" style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--mut)', fontSize: 13 }}>
             {wallets.length === 0
-              ? isOwner
+              ? canAdd
                 ? 'No wallets yet. Paste an address above — the network is detected automatically.'
                 : 'This portfolio has no wallets yet.'
               : 'Nothing matches this filter.'}
@@ -476,11 +483,12 @@ export function PortfolioPage() {
               <WalletRow
                 key={w.id}
                 wallet={w}
-                isOwner={isOwner}
+                actions={walletActions}
                 total={data.totalUsd}
                 filter={filter}
                 onRemove={() => void removeWallet(w.id)}
                 onRename={(label) => void renameWallet(w.id, label)}
+                onRequireAuth={() => setAuthOpen(true)}
               />
             ))}
           </div>
