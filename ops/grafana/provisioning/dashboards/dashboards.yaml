@@ -1,0 +1,16 @@
+# Dashboards are loaded from files on every start. They are read-only in the UI
+# on purpose: the JSON in ops/grafana/dashboards is the source of truth, so a
+# restart can never lose them and a change is reviewable in a diff.
+apiVersion: 1
+
+providers:
+  - name: svinooh
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false
