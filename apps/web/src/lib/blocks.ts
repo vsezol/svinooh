@@ -216,6 +216,13 @@ export interface DebtTotals {
   total: number;
   /** Value-weighted borrow APY as a fraction, null when no source reported one */
   avgApy: number | null;
+  /**
+   * Share of the debt the average actually covers, 0–1. DeBank reports no
+   * borrow rates at all, so on a mixed portfolio the figure describes only part
+   * of what is owed — and saying so is the difference between a number and a
+   * misleading one.
+   */
+  ratedShare: number;
 }
 
 /** What the portfolio owes, and what that debt costs on average */
@@ -236,7 +243,11 @@ export function debtTotals(wallets: WalletDto[]): DebtTotals {
       }
     }
   }
-  return { total, avgApy: rated > 0 ? weighted / rated : null };
+  return {
+    total,
+    avgApy: rated > 0 ? weighted / rated : null,
+    ratedShare: total > 0 ? rated / total : 0,
+  };
 }
 
 export interface StableSplit {
