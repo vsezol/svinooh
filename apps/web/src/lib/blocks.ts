@@ -191,135 +191,22 @@ export function rewardsTotals(wallets: WalletDto[]): RewardsTotals {
   return { pools, other, total: pools + other };
 }
 
-/**
- * Is this ticker a dollar? Three answers, because "no" and "can't tell" are
- * different things and only one of them should be counted as volatile.
- */
-export type AssetKind = 'stable' | 'volatile' | 'unknown';
-
-/** Dollar tokens whose ticker doesn't spell it out */
-const STABLE_NAMES = new Set([
-  'DAI', 'FRAX', 'TUSD', 'GHO', 'LUSD', 'MIM', 'DOLA', 'BUIDL', 'EURC', 'EURS',
-  'SUSDS', 'SUSDE', 'SFRAX', 'SDAI', 'ALUSD', 'BOLD', 'CRVUSD', 'FXUSD',
-]);
-
-/** Anything that spells it out: USDC, sUSDe, apxUSD, USDbC, wUSDM… */
-const STABLE_SHAPE = /^[A-Z]{0,4}USD[A-Z0-9]{0,4}$/;
-
-/**
- * A basket we can't see inside. A GMX GM token (`GM:SOL/USD[USDC]`) is backed
- * partly by the index asset and partly by USDC, and nothing in our data says in
- * what proportion — so it is neither, and gets reported as unclassified rather
- * than silently lumped in with the volatile half.
- */
-const BASKET = /^(gm:|glp\b|gmx-lp)/i;
-
-/**
- * Pendle splits a yield asset into a principal token and a yield token. The
- * principal, `PT-<asset>-<expiry>`, redeems 1:1 for its underlying at maturity,
- * so a PT of a stablecoin is a stablecoin — `PT-sUSDai-15OCT2026` is dollars.
- * The yield token is not: it is a claim on a variable stream.
- */
-const PENDLE_PT = /^PT-(.+)-\d{1,2}[A-Z]{3}\d{4}$/i;
-
-export function assetKind(symbolRaw: string): AssetKind {
-  const symbol = symbolRaw.trim();
-  if (BASKET.test(symbol)) return 'unknown';
-
-  const pt = PENDLE_PT.exec(symbol);
-  const core = (pt ? pt[1] : symbol).toUpperCase();
-
-  if (STABLE_NAMES.has(core) || STABLE_SHAPE.test(core)) return 'stable';
-  return 'volatile';
-}
-
-export interface StableSplit {
-  stables: number;
-  rest: number;
-  /** Value we could not place either way */
-  unknown: number;
-  /** Share of the CLASSIFIED value held in stablecoins, 0–1 */
-  stableShare: number;
-  /** How much of the portfolio the split actually covers, 0–1 */
-  coverage: number;
-}
-
-/**
- * How much of the portfolio sits in dollars. Counted from the legs, so a
- * stablecoin deposited into a lending market still counts as stable — which is
- * the question being asked. Debt is netted off the side it is denominated in.
- */
-export function stableSplit(wallets: WalletDto[]): StableSplit {
-  let stables = 0;
-  let rest = 0;
-  let unknown = 0;
-
-  const add = (kind: AssetKind, usd: number) => {
-    if (kind === 'stable') stables += usd;
-    else if (kind === 'volatile') rest += usd;
-    else unknown += usd;
-  };
-
-  for (const wallet of wallets) {
-    for (const position of wallet.positions) {
-      const legs = position.tokens ?? [];
-      // No legs: the position IS the asset — staked TRX, a GM pool token
-      if (!legs.length) add(assetKind(position.symbol), position.valueUsd);
-      else for (const leg of legs) add(assetKind(leg.symbol), leg.valueUsd);
-    }
-  }
-
-  stables = Math.max(0, stables);
-  rest = Math.max(0, rest);
-  unknown = Math.max(0, unknown);
-  const classified = stables + rest;
-  const total = classified + unknown;
-  return {
-    stables,
-    rest,
-    unknown,
-    stableShare: classified > 0 ? stables / classified : 0,
-    coverage: total > 0 ? classified / total : 1,
-  };
-}
-
 export interface DebtTotals {
   /** Positive: how much is owed */
   total: number;
-  /** Value-weighted borrow APY as a fraction, null when no source reported one */
-  avgApy: number | null;
-  /**
-   * Share of the debt the average actually covers, 0–1. DeBank reports no
-   * borrow rates at all, so on a mixed portfolio the figure describes only part
-   * of what is owed — and saying so is the difference between a number and a
-   * misleading one.
-   */
-  ratedShare: number;
 }
 
-/** What the portfolio owes, and what that debt costs on average */
+/** What the portfolio owes */
 export function debtTotals(wallets: WalletDto[]): DebtTotals {
   let total = 0;
-  let weighted = 0;
-  let rated = 0;
   for (const wallet of wallets) {
     for (const position of wallet.positions) {
-      const debt = (position.tokens ?? [])
+      total += (position.tokens ?? [])
         .filter((t) => t.role === 'borrow')
         .reduce((sum, t) => sum + Math.abs(t.valueUsd), 0);
-      if (!debt) continue;
-      total += debt;
-      if (position.borrowApy != null) {
-        weighted += position.borrowApy * debt;
-        rated += debt;
-      }
     }
   }
-  return {
-    total,
-    avgApy: rated > 0 ? weighted / rated : null,
-    ratedShare: total > 0 ? rated / total : 0,
-  };
+  return { total };
 }
 
 /** Which positions the list is showing */
