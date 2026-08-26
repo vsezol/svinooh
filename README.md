@@ -236,9 +236,23 @@ One project, eleven services:
 | `prometheus`, `loki`, `tempo`, `grafana` | observability |
 
 Each app service is deployed from this repository with Config-as-code
-(`apps/<name>/railway.json`, Root Directory `/`); prometheus and tempo the same
-way from `ops/<name>/railway.json`. Only `api`, `web` and `grafana` have public
-domains — everything else talks over `*.railway.internal`.
+(`apps/<name>/railway.json`, Root Directory `/`); prometheus, tempo and grafana
+the same way from `ops/<name>/railway.json`. Only `api`, `web` and `grafana`
+have public domains — everything else talks over `*.railway.internal`.
+
+Four services carry a volume, so their data survives a restart:
+
+| Service | Mount | Holds |
+|---|---|---|
+| `prometheus` | `/prometheus` | the metrics TSDB |
+| `loki` | `/loki` | log chunks and indexes |
+| `tempo` | `/var/tempo` | the trace WAL and blocks |
+| `grafana` | `/var/lib/grafana` | its database — users, preferences, UI edits |
+
+All four also set `RAILWAY_RUN_UID=0`: Railway mounts volumes as root while
+these images run as a non-root user, and without it they cannot write to their
+own storage. Grafana's datasources and dashboards come from the image rather
+than the volume, so even an empty one starts up configured.
 
 Wiring between services uses Railway reference variables
 (`${{Postgres.DATABASE_URL}}`, `${{tempo.RAILWAY_PRIVATE_DOMAIN}}`, …) rather
