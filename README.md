@@ -210,7 +210,16 @@ the Postgres side (30 min / 2 h / 6 h).
   required, so anything already loaded would never be traced). One request
   through web → api → auth/wallet → Postgres/Redis/RabbitMQ is a single trace.
 - **Grafana** ties them together: a log line links to its trace, and a trace
-  links back to its logs.
+  links back to its logs. Its datasources and dashboards are files in
+  `ops/grafana`; `ops/grafana/apply.sh` pushes them into an instance and is
+  idempotent, so a wiped Grafana is one command away from being itself again.
+
+⚠️ None of the four observability services has a volume yet, so a restart still
+loses the metrics, logs and traces collected so far (the dashboards come back
+with `apply.sh`). Adding one in the Railway dashboard per service fixes it —
+mount `/prometheus`, `/loki`, `/var/tempo` and `/var/lib/grafana` respectively.
+`RAILWAY_RUN_UID=0` is already set on all four, which these non-root images need
+in order to write to a Railway volume.
 
 Set `OTEL_EXPORTER_OTLP_ENDPOINT` / `LOKI_URL` to turn traces / logs shipping on;
 unset, both are no-ops.
@@ -261,5 +270,4 @@ locally — the Chrome fallback covers it, `DEBANK_PROXY_URL` covers it better.
 - Sign-in with Twitter/X — next to Telegram in the auth service.
 - A Telegram bot / mini-app — the monorepo is ready for `apps/bot`.
 - Python analytics — package-based Nx accepts it without rework.
-- Volumes for Prometheus / Loki / Tempo, and Grafana dashboards as code: right
-  now the observability data and dashboards do not survive a restart.
+- Volumes for Prometheus / Loki / Tempo / Grafana — see the warning above.
