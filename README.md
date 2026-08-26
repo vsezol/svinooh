@@ -95,11 +95,13 @@ Three ways in, all handled by the auth service:
   where people were being lost. Any message to the bot gets one, so a stale
   link is one `/start` away from being replaced.
 
-  `LoginLink` is a bearer credential and treated as one: 32 random bytes, a day
-  to live, at most 20 opens (the same link really is opened two or three times
-  — Telegram's browser, then "open in Safari", then a reload), private chats
-  only, and issuing a new one drops the user's older links so the newest message
-  in the chat is the only live one.
+  `LoginLink` is a bearer credential and treated as one: 32 random bytes, one
+  hour to live, at most 20 opens (the same link really is opened two or three
+  times — Telegram's browser, then "open in Safari", then a reload), private
+  chats only, and issuing a new one drops the user's older links so the newest
+  message in the chat is the only live one. Past the hour the site says so and
+  offers the sign-in modal, rather than dropping the visitor on a signed-out
+  page with no explanation.
 
 In production turn the dev login off: `AUTH_DEV_MODE=false`.
 

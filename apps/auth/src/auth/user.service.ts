@@ -5,12 +5,13 @@ import { PrismaService } from '@svinooh/db';
 import { randomSlug } from '../common/util';
 
 /**
- * How long a sign-in link from the bot stays good. A day covers the case the
- * link exists for — made on the desktop, opened on the phone later — and
- * re-issuing one costs a single press in the bot, so expiry is an
- * inconvenience rather than a lost account.
+ * How long a sign-in link from the bot stays good. An hour covers the case the
+ * link exists for — made on the desktop, opened on the phone a moment later —
+ * without leaving a working credential sitting in a chat for the rest of the
+ * day. Past that the site says so and offers a new one, which is a press in the
+ * bot away.
  */
-const LINK_TTL_MS = 24 * 60 * 60_000;
+const LINK_TTL_MS = 60 * 60_000;
 
 /**
  * Owns the User record and its portfolio. Split out of AuthService because the

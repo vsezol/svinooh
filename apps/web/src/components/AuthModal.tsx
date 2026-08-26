@@ -32,7 +32,12 @@ const TG_ICON = (
   </svg>
 );
 
-export function AuthModal({ onClose }: { onClose: () => void }) {
+/**
+ * `notice` — why the modal opened by itself rather than because the visitor
+ * pressed something. An expired sign-in link is the case it exists for: landing
+ * signed out with no explanation is how people conclude the thing is broken.
+ */
+export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: string }) {
   const { config, loginDev, applyAuth } = useAuth();
   const navigate = useNavigate();
   const [devName, setDevName] = useState('');
@@ -104,10 +109,29 @@ export function AuthModal({ onClose }: { onClose: () => void }) {
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <Logo size={22} />
         </div>
-        <div style={{ fontWeight: 800, fontSize: 18, textAlign: 'center', marginTop: 14 }}>Create your portfolio</div>
-        <div style={{ fontSize: 12.5, color: 'var(--mut)', textAlign: 'center', marginTop: 6, lineHeight: 1.55 }}>
-          Sign in to add wallets and get your public link. Viewing portfolios never needs an account.
+        <div style={{ fontWeight: 800, fontSize: 18, textAlign: 'center', marginTop: 14 }}>
+          {notice ? 'Sign in again' : 'Create your portfolio'}
         </div>
+        {notice ? (
+          <div
+            style={{
+              marginTop: 14,
+              border: '1px solid color-mix(in srgb, var(--down) 38%, transparent)',
+              background: 'color-mix(in srgb, var(--down) 9%, transparent)',
+              borderRadius: 12,
+              padding: '11px 13px',
+              fontSize: 12.5,
+              lineHeight: 1.55,
+              textAlign: 'center',
+            }}
+          >
+            {notice}
+          </div>
+        ) : (
+          <div style={{ fontSize: 12.5, color: 'var(--mut)', textAlign: 'center', marginTop: 6, lineHeight: 1.55 }}>
+            Sign in to add wallets and get your public link. Viewing portfolios never needs an account.
+          </div>
+        )}
 
         {waiting ? (
           <div style={{ marginTop: 22, textAlign: 'center' }}>

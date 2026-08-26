@@ -168,7 +168,7 @@ export class TelegramBotService implements OnApplicationBootstrap, OnModuleDestr
     }
     await this.reply(
       chatId,
-      `✅ Signed in.\n\n${url}\n\nThat link opens your portfolio and signs you in — on this phone, on your laptop, in any browser. Good for 24 hours; send /start for a new one.`,
+      `✅ Signed in.\n\n${url}\n\nThat link opens your portfolio and signs you in — on this phone, on your laptop, in any browser. Good for an hour; send /start for a new one.`,
       { inline_keyboard: [[{ text: 'Open my portfolio →', url }]] },
     );
   }

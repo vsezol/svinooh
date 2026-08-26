@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AuthResponseDto } from '@svinooh/shared';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { pendingTgToken, pollTelegramLogin } from '../lib/telegram';
+import { AuthModal } from './AuthModal';
 
 /** Take a token out of the URL without leaving it in history or in a shared link */
 function takeParam(name: string): string | null {
@@ -17,20 +18,25 @@ function takeParam(name: string): string | null {
 }
 
 /**
- * Signs the visitor in when they arrive from Telegram. Renders nothing.
+ * Signs the visitor in when they arrive from Telegram.
  *
  * Two ways in, and they are not the same thing:
  *
- *  - `?login=<key>` — the durable link the bot sends into the chat. It stands on
- *    its own, so it works in Telegram's browser, on a second device, an hour
- *    later, and it signs you in whoever you were before.
+ *  - `?login=<key>` — the standalone link the bot sends into the chat. It works
+ *    in Telegram's browser, on a second device, in a tab opened later, and it
+ *    signs you in whoever you were before.
  *  - `?tg_login=` / a token in sessionStorage — a sign-in the site itself
  *    started and is still waiting on. Only useful if nobody is signed in yet.
+ *
+ * A link that has run out says so. Landing signed out with no explanation is
+ * how someone decides the product is broken and leaves; the sign-in modal opens
+ * with the reason and the one-press way to get a fresh link.
  */
 export function TelegramResume() {
   const { me, loading, applyAuth } = useAuth();
   const navigate = useNavigate();
   const started = useRef(false);
+  const [deadLink, setDeadLink] = useState<string | null>(null);
 
   useEffect(() => {
     if (loading || started.current) return;
@@ -45,10 +51,16 @@ export function TelegramResume() {
           // it doesn't
           if (window.location.pathname === '/') navigate(`/p/${authed.portfolioSlug}`);
         })
-        .catch(() => {
-          // Expired or already spent — leave them where they are rather than
-          // interrupting with an error they can do nothing about
+        .catch((err: unknown) => {
           started.current = false;
+          // Already signed in: the link had nothing to add, so its expiry is
+          // not news — the page in front of them works
+          if (me) return;
+          setDeadLink(
+            err instanceof ApiError && err.statusCode === 401
+              ? err.message
+              : 'That sign-in link could not be used. Open the bot and press Start for a new one.',
+          );
         });
       return;
     }
@@ -71,5 +83,5 @@ export function TelegramResume() {
     });
   }, [loading, me, applyAuth, navigate]);
 
-  return null;
+  return deadLink ? <AuthModal notice={deadLink} onClose={() => setDeadLink(null)} /> : null;
 }
