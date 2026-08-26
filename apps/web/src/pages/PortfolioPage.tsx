@@ -18,7 +18,6 @@ import {
   debtTotals,
   filteredTotal,
   rewardsTotals,
-  stableSplit,
   type PositionFilter,
 } from '../lib/blocks';
 import { fmtUsd, portfolioLabel, syncedLabel, walletName } from '../lib/format';
@@ -36,14 +35,6 @@ const FILTERS: Array<{ key: PositionFilter; label: string }> = [
   { key: 'lending', label: 'LENDING' },
 ];
 
-/** The card icon beside the total */
-const WALLET_ICON = (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="6" width="18" height="13" rx="2.5" />
-    <path d="M3 10h18" />
-    <circle cx="16.5" cy="14.5" r="1.3" fill="currentColor" stroke="none" />
-  </svg>
-);
 
 /**
  * `viewerId` is not used in the request — it's a reload trigger. The bot's
@@ -143,7 +134,6 @@ export function PortfolioPage() {
   const wallets = data?.wallets ?? [];
   const rewards = useMemo(() => rewardsTotals(wallets), [wallets]);
   const debt = useMemo(() => debtTotals(wallets), [wallets]);
-  const stables = useMemo(() => stableSplit(wallets), [wallets]);
   const blocksByWallet = useMemo(() => wallets.map((w) => buildBlocks(w.positions)), [wallets]);
   const shownTotal = useMemo(() => filteredTotal(blocksByWallet, filter), [blocksByWallet, filter]);
 
@@ -356,21 +346,6 @@ export function PortfolioPage() {
         {/* total */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 12,
-                background: 'var(--acc-soft)',
-                color: 'var(--acc-text)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              {WALLET_ICON}
-            </div>
             <div>
               <div className="eyebrow">
                 {selectedWallet ? 'WALLET BALANCE' : 'TOTAL BALANCE'} · {walletCount}{' '}
@@ -441,7 +416,7 @@ export function PortfolioPage() {
           </>
         ) : null}
 
-        <MetricCards rewards={rewards} debt={debt} stables={stables} />
+        <MetricCards rewards={rewards} debt={debt} />
 
         {/* add wallet */}
         {isOwner ? (

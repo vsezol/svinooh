@@ -8,30 +8,38 @@ const SHARE_ICON = (
 );
 
 /**
- * The system share sheet where there is one — phones, mostly, which is where
- * sharing a portfolio actually happens — and a copy-to-clipboard fallback
- * everywhere else. "COPY LINK" was neither: on a phone it bypassed the sheet
- * people expect, and on a desktop it said what it did rather than why.
+ * One behaviour per device, decided up front rather than by whatever the
+ * browser happens to support.
+ *
+ * On a touch device the system sheet is the point — that is how a link gets
+ * into a chat. On a desktop the sheet is a clumsy popup nobody asked for, so
+ * the link goes to the clipboard and the button says so. Feature-detecting
+ * `navigator.share` alone made this unpredictable: some desktop browsers have
+ * it, so the same button did different things on different machines.
  */
+function prefersSystemSheet(): boolean {
+  return typeof navigator.share === 'function' && window.matchMedia('(pointer: coarse)').matches;
+}
+
 export function ShareButton({ title }: { title: string }) {
   const [copied, setCopied] = useState(false);
 
   const share = async () => {
     const url = window.location.href;
-    if (navigator.share) {
+    if (prefersSystemSheet()) {
       try {
         await navigator.share({ title, url });
-        return;
       } catch {
-        // dismissed, or the sheet refused — fall through to copying
+        // dismissed — nothing to report, the user closed the sheet on purpose
       }
+      return;
     }
     try {
-      await navigator.clipboard?.writeText(url);
+      await navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch {
-      // no clipboard access (insecure context) — nothing useful left to do
+      // no clipboard access (an insecure context) — leave the label alone
     }
   };
 

@@ -1,4 +1,5 @@
 import type { PortfolioVisibility } from '@svinooh/shared';
+import { Modal } from './Modal';
 
 /**
  * The owner's visibility switch, in the top-right beside Share. Both states are
@@ -35,8 +36,9 @@ export function VisibilityCard({
         opacity: busy ? 0.5 : 1,
       }}
     >
-      <Half label="Public" active={isPublic} accent onClick={onGoPublic} busy={busy} />
+      {/* Private on the left as the resting default, Public on the right */}
       <Half label="Private" active={!isPublic} onClick={onGoPrivate} busy={busy} />
+      <Half label="Public" active={isPublic} accent onClick={onGoPublic} busy={busy} />
     </div>
   );
 }
@@ -83,26 +85,9 @@ function Half({
  */
 export function GoPublicModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
   return (
-    <div
-      onClick={onCancel}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 100,
-        background: 'color-mix(in srgb, var(--bg) 65%, transparent)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 20,
-      }}
-    >
+    <Modal onClose={onCancel}>
       <div
-        onClick={(e) => e.stopPropagation()}
         style={{
-          width: '100%',
-          maxWidth: 380,
           background: 'var(--surf)',
           border: '1px solid var(--line2)',
           borderRadius: 20,
@@ -131,6 +116,6 @@ export function GoPublicModal({ onCancel, onConfirm }: { onCancel: () => void; o
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

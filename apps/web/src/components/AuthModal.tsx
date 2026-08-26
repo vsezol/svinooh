@@ -6,6 +6,7 @@ import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { pendingTgToken, pollTelegramLogin } from '../lib/telegram';
 import { Logo } from './Logo';
+import { Modal } from './Modal';
 
 const modalBtn: CSSProperties = {
   marginTop: 8,
@@ -91,24 +92,9 @@ export function AuthModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 100,
-        background: 'color-mix(in srgb, var(--bg) 65%, transparent)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 20,
-      }}
-    >
+    <Modal onClose={onClose}>
       <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 360, background: 'var(--surf)', border: '1px solid var(--line2)', borderRadius: 20, padding: '28px 24px', position: 'relative' }}
+        style={{ background: 'var(--surf)', border: '1px solid var(--line2)', borderRadius: 20, padding: '28px 24px', position: 'relative' }}
       >
         <div onClick={onClose} className="auth-close" style={{ position: 'absolute', top: 12, right: 14, width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--mut)', fontSize: 16, cursor: 'pointer' }}>
           ×
@@ -176,6 +162,6 @@ export function AuthModal({ onClose }: { onClose: () => void }) {
 
         {error ? <div style={{ marginTop: 12, fontSize: 12, color: 'var(--down)', textAlign: 'center' }}>{error}</div> : null}
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,7 +1,16 @@
-import { useId, useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import {
+  AreaSeries,
+  createChart,
+  CrosshairMode,
+  LineStyle,
+  type IChartApi,
+  type ISeriesApi,
+  type UTCTimestamp,
+} from 'lightweight-charts';
 import type { HistoryRange } from '@svinooh/shared';
-import { fmtUsd, fmtUsd0 } from '../lib/format';
+import { fmtUsd } from '../lib/format';
+import { useTheme } from '../lib/theme';
 
 interface Props {
   values: number[];
@@ -11,214 +20,256 @@ interface Props {
   variant?: 'full' | 'mini';
 }
 
-const mono = "'IBM Plex Mono',monospace";
+/** What a drag across the chart selected */
+interface Selection {
+  fromIndex: number;
+  toIndex: number;
+  fromX: number;
+  toX: number;
+}
+
+const token = (name: string): string =>
+  getComputedStyle(document.body).getPropertyValue(name).trim() || '#2bd576';
 
 function dateLabel(ms: number, period: HistoryRange): string {
   const d = new Date(ms);
-  if (period === '24h') {
-    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-  }
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return period === '24h'
+    ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+    : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-/** Custom SVG chart: area + line + grid + hover cursor. Pixel-for-pixel from the design. */
+/**
+ * TradingView's Lightweight Charts (Apache-2.0) with a measuring tool on top.
+ *
+ * Panning and zooming are off: the period buttons decide the range, and the
+ * drag gesture is spent on something more useful — dragging across the chart
+ * selects a span and reports what the portfolio did over it, the way a broker
+ * chart does. Works with a mouse or a finger; a tap clears the selection.
+ */
 export function AreaChart({ values, times, period, height, variant = 'full' }: Props) {
-  const gradId = useId().replace(/:/g, '');
-  const [hover, setHover] = useState<number | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const chart = useRef<IChartApi | null>(null);
+  const series = useRef<ISeriesApi<'Area'> | null>(null);
+  const drag = useRef<{ startX: number; moved: boolean } | null>(null);
+  const { theme } = useTheme();
 
-  const geom = useMemo(() => {
-    const N = values.length;
-    if (N < 2) return null;
-    let mn = Math.min(...values);
-    let mx = Math.max(...values);
-    const padR = (mx - mn) * 0.1 || mx * 0.05 || 1;
-    mn -= padR;
-    mx += padR;
-    const X = (i: number) => (i / (N - 1)) * 1000;
-    const Y = (v: number) => 232 - ((v - mn) / (mx - mn)) * 224;
-    const linePath = values.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ',' + Y(v).toFixed(1)).join(' ');
-    const areaPath = linePath + ' L1000,240 L0,240 Z';
-    return { N, mn, mx, X, Y, linePath, areaPath };
-  }, [values]);
+  const [hover, setHover] = useState<{ index: number } | null>(null);
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const mini = variant === 'mini';
 
-  if (!geom) {
-    // mini variant (demo card) — just empty space, no text
-    if (variant === 'mini') return <div style={{ height }} />;
-    return (
-      <div
-        className="card"
-        style={{
-          height,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          textAlign: 'center',
-          padding: '0 30px',
-          fontFamily: mono,
-          fontSize: 12,
-          color: 'var(--mut)',
-        }}
-      >
-        History shows up after a couple of syncs — wallets refresh every 5 minutes.
-      </div>
-    );
-  }
+  // Lightweight Charts wants seconds, strictly ascending and unique — the
+  // history can carry two points inside one second after downsampling.
+  const data = (() => {
+    const out: Array<{ time: UTCTimestamp; value: number }> = [];
+    let last = -1;
+    for (let i = 0; i < values.length; i++) {
+      const t = Math.floor(times[i] / 1000);
+      const time = (t <= last ? last + 1 : t) as UTCTimestamp;
+      last = time;
+      out.push({ time, value: values[i] });
+    }
+    return out;
+  })();
 
-  const { N, mn, mx, Y, linePath, areaPath } = geom;
+  // Build once; data and colours are pushed in by the effects below
+  useEffect(() => {
+    if (!box.current) return;
+    const c = createChart(box.current, {
+      autoSize: true,
+      handleScroll: false,
+      handleScale: false,
+      layout: { background: { color: 'transparent' }, attributionLogo: false },
+      leftPriceScale: { visible: false },
+      rightPriceScale: { visible: false },
+      timeScale: { visible: false, fixLeftEdge: true, fixRightEdge: true },
+      crosshair: {
+        mode: CrosshairMode.Magnet,
+        vertLine: { style: LineStyle.Dotted, labelVisible: false },
+        horzLine: { visible: false, labelVisible: false },
+      },
+      grid: { horzLines: { visible: !mini }, vertLines: { visible: false } },
+    });
+    chart.current = c;
+    series.current = c.addSeries(AreaSeries, { lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
+    if (!mini) {
+      c.subscribeCrosshairMove((param) => {
+        const index = param.logical;
+        setHover(index == null ? null : { index: Math.round(index) });
+      });
+    }
+    return () => {
+      c.remove();
+      chart.current = null;
+      series.current = null;
+    };
+  }, [mini]);
 
-  const isMini = variant === 'mini';
-  const hoverIdx = hover != null ? Math.round(hover * (N - 1)) : null;
-  const hPct = hoverIdx != null ? (hoverIdx / (N - 1)) * 100 : 0;
-  const yPct = hoverIdx != null ? (Y(values[hoverIdx]) / 240) * 100 : 0;
+  // Colours follow the theme
+  useEffect(() => {
+    if (!chart.current || !series.current) return;
+    const acc = token('--acc');
+    const line = token('--line');
+    const mut = token('--mut');
+    series.current.applyOptions({
+      lineColor: acc,
+      topColor: `color-mix(in srgb, ${acc} 22%, transparent)`,
+      bottomColor: `color-mix(in srgb, ${acc} 0%, transparent)`,
+    });
+    chart.current.applyOptions({
+      grid: { horzLines: { color: line, visible: !mini }, vertLines: { visible: false } },
+      crosshair: { vertLine: { color: mut } },
+    });
+  }, [theme, mini]);
 
-  const box: CSSProperties = {
-    position: 'relative',
-    border: isMini ? 'none' : '1px solid var(--line)',
-    borderRadius: isMini ? 0 : 16,
-    background: isMini ? 'transparent' : 'var(--surf)',
-    overflow: 'hidden',
+  useEffect(() => {
+    series.current?.setData(data);
+    chart.current?.timeScale().fitContent();
+    setSelection(null);
+    // Re-running on every array identity would reset the selection on each
+    // poll; the length and the endpoints are what actually change the picture.
+  }, [values.length, times[0], times[times.length - 1], values[values.length - 1]]);
+
+  /** Screen x → index in the series */
+  const indexAt = (clientX: number): number | null => {
+    if (!chart.current || !box.current || !values.length) return null;
+    const x = clientX - box.current.getBoundingClientRect().left;
+    const logical = chart.current.timeScale().coordinateToLogical(x);
+    if (logical == null) return null;
+    return Math.min(values.length - 1, Math.max(0, Math.round(logical)));
   };
 
-  const tipLeft = hPct < 55 ? `calc(${hPct}% + 10px)` : 'auto';
-  const tipRight = hPct < 55 ? 'auto' : `calc(${100 - hPct}% + 10px)`;
+  const xAt = (index: number): number => {
+    const c = chart.current?.timeScale().logicalToCoordinate(index as never);
+    return typeof c === 'number' ? c : 0;
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (mini) return;
+    const index = indexAt(e.clientX);
+    if (index == null) return;
+    drag.current = { startX: index, moved: false };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (mini || !drag.current) return;
+    const index = indexAt(e.clientX);
+    if (index == null) return;
+    const from = Math.min(drag.current.startX, index);
+    const to = Math.max(drag.current.startX, index);
+    if (to - from < 1) return; // not a drag yet
+    drag.current.moved = true;
+    setSelection({ fromIndex: from, toIndex: to, fromX: xAt(from), toX: xAt(to) });
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (mini) return;
+    // A tap, not a drag — clear whatever was selected
+    if (drag.current && !drag.current.moved) setSelection(null);
+    drag.current = null;
+    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+  };
+
+  const range = selection
+    ? (() => {
+        const from = values[selection.fromIndex];
+        const to = values[selection.toIndex];
+        const chg = to - from;
+        return {
+          chg,
+          pct: from ? (chg / from) * 100 : 0,
+          up: chg >= 0,
+          label: `${dateLabel(times[selection.fromIndex], period)} → ${dateLabel(times[selection.toIndex], period)}`,
+        };
+      })()
+    : null;
+
+  const hovered = hover && hover.index >= 0 && hover.index < values.length ? hover.index : null;
 
   return (
-    <div>
-      <div style={box}>
-        <svg
-          viewBox="0 0 1000 240"
-          preserveAspectRatio="none"
-          style={{ display: 'block', width: '100%', height }}
-        >
-          <defs>
-            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--acc)" stopOpacity={0.2} />
-              <stop offset="100%" stopColor="var(--acc)" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          {!isMini && (
-            <>
-              <line x1="0" y1="60" x2="1000" y2="60" stroke="var(--line)" strokeWidth={1} />
-              <line x1="0" y1="120" x2="1000" y2="120" stroke="var(--line)" strokeWidth={1} />
-              <line x1="0" y1="180" x2="1000" y2="180" stroke="var(--line)" strokeWidth={1} />
-            </>
-          )}
-          <path d={areaPath} fill={`url(#${gradId})`} />
-          <path
-            d={linePath}
-            fill="none"
-            stroke="var(--acc)"
-            strokeWidth={1.8}
-            vectorEffect="non-scaling-stroke"
-          />
-        </svg>
+    <div
+      className={mini ? undefined : 'card'}
+      style={{ position: 'relative', overflow: 'hidden', touchAction: mini ? undefined : 'pan-y' }}
+    >
+      <div
+        ref={box}
+        style={{ height, width: '100%' }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      />
 
-        {!isMini && hoverIdx != null && (
-          <>
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                bottom: 0,
-                left: `${hPct}%`,
-                width: 1,
-                background: 'var(--line2)',
-                pointerEvents: 'none',
-              }}
-            />
-            <div
-              style={{
-                position: 'absolute',
-                left: `calc(${hPct}% - 4px)`,
-                top: `calc(${yPct}% - 4px)`,
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: 'var(--acc)',
-                border: '2px solid var(--bg)',
-                pointerEvents: 'none',
-              }}
-            />
-            <div
-              style={{
-                position: 'absolute',
-                top: 8,
-                left: tipLeft,
-                right: tipRight,
-                background: 'var(--surf2)',
-                border: '1px solid var(--line2)',
-                borderRadius: 8,
-                padding: '6px 10px',
-                fontFamily: mono,
-                fontSize: 11,
-                pointerEvents: 'none',
-                whiteSpace: 'nowrap',
-                zIndex: 5,
-              }}
-            >
-              <span style={{ fontWeight: 600, color: 'var(--text)' }}>{fmtUsd(values[hoverIdx])}</span>
-              <span style={{ color: 'var(--mut)', marginLeft: 8 }}>
-                {dateLabel(times[hoverIdx], period)}
-              </span>
-            </div>
-          </>
-        )}
-
-        {!isMini && (
-          <>
-            <div
-              style={{
-                position: 'absolute',
-                top: 8,
-                right: 10,
-                fontFamily: mono,
-                fontSize: 10,
-                color: 'var(--mut)',
-                pointerEvents: 'none',
-              }}
-            >
-              {fmtUsd0(mx)}
-            </div>
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 8,
-                right: 10,
-                fontFamily: mono,
-                fontSize: 10,
-                color: 'var(--mut)',
-                pointerEvents: 'none',
-              }}
-            >
-              {fmtUsd0(Math.max(mn, 0))}
-            </div>
-            <div
-              onMouseMove={(e) => {
-                const r = e.currentTarget.getBoundingClientRect();
-                setHover(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)));
-              }}
-              onMouseLeave={() => setHover(null)}
-              style={{ position: 'absolute', inset: 0, cursor: 'crosshair' }}
-            />
-          </>
-        )}
-      </div>
-
-      {!isMini && (
+      {/* the selected span */}
+      {selection && !mini ? (
         <div
           style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            left: Math.min(selection.fromX, selection.toX),
+            width: Math.abs(selection.toX - selection.fromX),
+            background: 'color-mix(in srgb, var(--acc) 12%, transparent)',
+            borderLeft: '1px solid color-mix(in srgb, var(--acc) 55%, transparent)',
+            borderRight: '1px solid color-mix(in srgb, var(--acc) 55%, transparent)',
+            pointerEvents: 'none',
+          }}
+        />
+      ) : null}
+
+      {/* what the selection is worth, or the value under the cursor */}
+      {!mini ? (
+        <div
+          className="mono"
+          style={{
+            position: 'absolute',
+            top: 8,
+            left: 12,
+            fontSize: 11,
+            pointerEvents: 'none',
+            display: 'flex',
+            alignItems: 'baseline',
+            gap: 9,
+          }}
+        >
+          {range ? (
+            <>
+              <span style={{ fontWeight: 600, color: range.up ? 'var(--up)' : 'var(--down)' }}>
+                {(range.up ? '+' : '−') + fmtUsd(Math.abs(range.chg), 0)} ({range.up ? '+' : ''}
+                {range.pct.toFixed(2)}%)
+              </span>
+              <span style={{ color: 'var(--mut)' }}>{range.label}</span>
+            </>
+          ) : hovered !== null ? (
+            <>
+              <span style={{ fontWeight: 600 }}>{fmtUsd(values[hovered])}</span>
+              <span style={{ color: 'var(--mut)' }}>{dateLabel(times[hovered], period)}</span>
+            </>
+          ) : (
+            <span style={{ color: 'var(--mut)' }}>Drag across the chart to measure a period</span>
+          )}
+        </div>
+      ) : null}
+
+      {!mini && values.length ? (
+        <div
+          className="mono"
+          style={{
+            position: 'absolute',
+            bottom: 6,
+            left: 12,
+            right: 12,
             display: 'flex',
             justifyContent: 'space-between',
-            marginTop: 6,
-            fontFamily: mono,
             fontSize: 10,
             color: 'var(--mut)',
+            pointerEvents: 'none',
           }}
         >
           <span>{dateLabel(times[0], period)}</span>
           <span>NOW</span>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
