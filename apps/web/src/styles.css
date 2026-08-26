@@ -108,6 +108,66 @@ button {
   }
 }
 
+/* A figure changes only where it actually changed: the new character slides in
+   from the direction the value moved, tinted, and settles into the surrounding
+   ink. Everything that stayed the same stays still, so the eye goes to the
+   difference instead of re-reading the whole number. */
+@keyframes svdigitup {
+  0% {
+    transform: translateY(0.45em);
+    opacity: 0;
+    color: var(--up);
+  }
+  35% {
+    transform: none;
+    opacity: 1;
+    color: var(--up);
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+    color: inherit;
+  }
+}
+
+@keyframes svdigitdown {
+  0% {
+    transform: translateY(-0.45em);
+    opacity: 0;
+    color: var(--down);
+  }
+  35% {
+    transform: none;
+    opacity: 1;
+    color: var(--down);
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+    color: inherit;
+  }
+}
+
+.digit-up,
+.digit-down {
+  display: inline-block;
+}
+
+.digit-up {
+  animation: svdigitup 900ms ease-out;
+}
+
+.digit-down {
+  animation: svdigitdown 900ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .digit-up,
+  .digit-down {
+    animation: none;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
