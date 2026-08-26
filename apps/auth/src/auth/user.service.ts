@@ -1,7 +1,16 @@
 import { Injectable } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
 import type { Portfolio, User } from '@prisma/client';
 import { PrismaService } from '@svinooh/db';
 import { randomSlug } from '../common/util';
+
+/**
+ * How long a sign-in link from the bot stays good. A day covers the case the
+ * link exists for — made on the desktop, opened on the phone later — and
+ * re-issuing one costs a single press in the bot, so expiry is an
+ * inconvenience rather than a lost account.
+ */
+const LINK_TTL_MS = 24 * 60 * 60_000;
 
 /**
  * Owns the User record and its portfolio. Split out of AuthService because the
@@ -58,5 +67,28 @@ export class UserService {
         owner: { create: { userId: user.id } },
       },
     });
+  }
+
+  /**
+   * Mint a link that signs its opener in. The bot puts it in the chat, so it is
+   * a bearer credential sitting in a place that already grants this account:
+   * whoever can read the chat can press Start and get a fresh one anyway.
+   *
+   * Issuing supersedes the user's earlier links, so an old message — forwarded,
+   * screenshotted, left on a shared screen — stops working the moment they sign
+   * in again. Expired rows from every user are swept on the way past.
+   */
+  async issueLoginLink(userId: string): Promise<string> {
+    const token = randomBytes(24).toString('base64url');
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.loginLink.deleteMany({
+        where: { OR: [{ userId }, { expiresAt: { lt: now } }] },
+      }),
+      this.prisma.loginLink.create({
+        data: { token, userId, expiresAt: new Date(now.getTime() + LINK_TTL_MS) },
+      }),
+    ]);
+    return token;
   }
 }

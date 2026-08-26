@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // native — for local development (macOS); debian-openssl-3.0.x — the runtime
   // of the Docker image on Railway (node:22-slim = Debian bookworm, OpenSSL 3.0)
   binaryTargets = ["native", "debian-openssl-3.0.x"]
@@ -21,6 +21,30 @@ model User {
   photoUrl   String?
   createdAt  DateTime         @default(now())
   owned      PortfolioOwner[]
+  loginLinks LoginLink[]
+}
+
+/// A sign-in link the bot puts in the chat. Opening it signs the visitor in as
+/// this user, on whatever device opened it — which is the point: Telegram opens
+/// links in its own browser, on a phone that may not be the machine the sign-in
+/// started on, and a session that only exists in the tab that began it is a
+/// session most people never reach.
+///
+/// It is a bearer credential, so it is short-lived, counted, and superseded:
+/// issuing a new one drops the user's older links, which means the newest
+/// message in the chat is always the only live link.
+model LoginLink {
+  token     String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  // Bounded rather than one-shot: this exact flow opens the same link two or
+  // three times (Telegram's browser, then "open in Safari", then a reload)
+  uses      Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 /// A portfolio is a standalone thing: a group of wallets behind a slug. It holds
@@ -28,17 +52,17 @@ model User {
 /// PortfolioOwner. Without an owner row it is an anonymous portfolio: it belongs
 /// to nobody, is public by nature and carries no user data at all.
 model Portfolio {
-  id        String              @id @default(cuid())
-  slug      String              @unique
+  id           String              @id @default(cuid())
+  slug         String              @unique
   // Optional, and empty by default: the slug is what identifies a portfolio.
   // An auto-generated name would either say nothing ("My portfolio", first
   // person, shown to strangers) or name a wallet, which defeats the point of
   // grouping several of them.
-  name      String?
-  wallets   Wallet[]
-  snapshots PortfolioSnapshot[]
-  owner     PortfolioOwner?
-  createdAt DateTime            @default(now())
+  name         String?
+  wallets      Wallet[]
+  snapshots    PortfolioSnapshot[]
+  owner        PortfolioOwner?
+  createdAt    DateTime            @default(now())
   // When someone last opened this portfolio. The wallet service uses it to
   // decide how often to rescan: what nobody looks at does not need to be fresh.
   lastViewedAt DateTime?
@@ -83,22 +107,22 @@ model Wallet {
 }
 
 model Position {
-  id       String  @id @default(cuid())
-  walletId String
-  wallet   Wallet  @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  id         String  @id @default(cuid())
+  walletId   String
+  wallet     Wallet  @relation(fields: [walletId], references: [id], onDelete: Cascade)
   // Protocol or ticker: "Pendle V2", "USDT"
-  symbol   String
+  symbol     String
   // Position kind: "Lending", "Liquidity Pool", "Deposit"
-  name     String?
+  name       String?
   // Extra detail: chain, pool/market name, the protocol's own description
-  note     String?
-  amount   Float?
-  priceUsd Float?
-  valueUsd Float
-  platform String?
-  category String  @default("token") // token | defi | staked | unpriced
+  note       String?
+  amount     Float?
+  priceUsd   Float?
+  valueUsd   Float
+  platform   String?
+  category   String  @default("token") // token | defi | staked | unpriced
   // Yield as a fraction (0.42 = 42% APY), when the source reports one
-  apy      Float?
+  apy        Float?
   // Health factor of a lending position (below 1 — liquidation)
   healthRate Float?
   // What the debt on this position costs, as a positive fraction (0.06 = 6% APY)
@@ -106,7 +130,7 @@ model Position {
   // Concentrated liquidity only: "in" | "out" of the position's price range
   range      String?
   // The underlying legs — PositionTokenDto[]: what's supplied, accrued, borrowed
-  tokens   Json?
+  tokens     Json?
 }
 
 model WalletSnapshot {
