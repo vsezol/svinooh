@@ -5,8 +5,8 @@ import type { CSSProperties, ReactNode } from 'react';
 export type Tab = 'portfolio' | 'notifications';
 
 /** The dock's pill slides between fixed slots, so both have to be one number */
-const DOCK_W = 64;
-const DOCK_H = 44;
+const DOCK_W = 70;
+const DOCK_H = 48;
 
 const ICON = {
   strokeWidth: 2,
@@ -76,7 +76,7 @@ const dockItem = (active: boolean, disabled: boolean): CSSProperties => ({
   transition: 'color 0.26s ease',
 });
 
-const DOCK_LABEL: CSSProperties = { fontSize: 9, fontWeight: 700, letterSpacing: '0.01em' };
+const DOCK_LABEL: CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.01em' };
 
 interface Props {
   tab: Tab;
@@ -190,7 +190,7 @@ export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
           position: 'fixed',
           left: '50%',
           transform: 'translateX(-50%)',
-          bottom: 'calc(8px + env(safe-area-inset-bottom))',
+          bottom: 'calc(4px + env(safe-area-inset-bottom))',
           zIndex: 60,
           background: 'color-mix(in srgb, var(--surf) 86%, transparent)',
           backdropFilter: 'blur(16px)',
@@ -211,7 +211,7 @@ export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
               left: 0,
               width: DOCK_W,
               height: DOCK_H,
-              borderRadius: 14,
+              borderRadius: 15,
               background: 'var(--acc)',
               transform: `translateX(${tab === 'notifications' ? DOCK_W : 0}px)`,
               transition: 'transform 0.46s cubic-bezier(0.34,1.42,0.5,1)',
@@ -219,15 +219,15 @@ export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
             }}
           />
           <div onClick={() => onTab('portfolio')} style={dockItem(tab === 'portfolio', false)}>
-            <ChartIcon size={17} />
+            <ChartIcon size={19} />
             <span style={DOCK_LABEL}>Portfolio</span>
           </div>
           <div onClick={() => onTab('notifications')} style={dockItem(tab === 'notifications', false)}>
-            <BellIcon size={17} />
+            <BellIcon size={19} />
             <span style={DOCK_LABEL}>Alerts</span>
           </div>
           <div title="AI agent — soon" style={dockItem(false, true)}>
-            <SparkIcon size={17} />
+            <SparkIcon size={19} />
             <span style={DOCK_LABEL}>AI agent</span>
           </div>
         </div>
