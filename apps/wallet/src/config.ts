@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { bool, int } from '@svinooh/common';
+import { int } from '@svinooh/common';
 
 const envPath = resolve(__dirname, '..', '.env');
 if (existsSync(envPath)) {
@@ -29,7 +29,6 @@ export const config = {
   dropConfirmCycles: int(process.env.SYNC_DROP_CONFIRM_CYCLES, 3),
   // Scan queue (RabbitMQ). Empty — the scan runs in-process (local dev).
   rabbitUrl: process.env.RABBITMQ_URL || null,
-  scanQueueName: process.env.SCAN_QUEUE_NAME || 'wallet.scan',
   // Pacing: a pause after each scan, to hit 429s less often.
   scanJobDelayMs: int(process.env.SCAN_JOB_DELAY_MS, 1500),
   // How many addresses to work through at once (1 = strictly one at a time).
@@ -37,16 +36,6 @@ export const config = {
   // How often to check that the queue has drained and re-enqueue wallets.
   scanReloadSec: int(process.env.SCAN_RELOAD_SEC, 15),
   httpTimeoutMs: int(process.env.HTTP_TIMEOUT_MS, 15_000),
-  // Ceiling for one Chrome scan. Has to clear goto (30s) + the selector wait
-  // (45s) + the total-stabilisation loop (~20s), or the watchdog kills scans
-  // that were about to succeed.
-  evmTimeoutMs: int(process.env.EVM_TIMEOUT_MS, 150_000),
   // Concurrency of the BTC/SOL/TRON HTTP scanners.
   httpConcurrency: int(process.env.SCAN_HTTP_CONCURRENCY, 4),
-  // EVM: primary path is HTTP to debank.com, with a headless Chrome fallback.
-  evmHttpEnabled: bool(process.env.EVM_HTTP_ENABLED, true),
-  evmHttpConcurrency: int(process.env.EVM_HTTP_CONCURRENCY, 3),
-  debankProxyUrl: process.env.DEBANK_PROXY_URL || null,
-  puppeteerExecutablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
-  chromeNoSandbox: bool(process.env.CHROME_NO_SANDBOX, false),
 };

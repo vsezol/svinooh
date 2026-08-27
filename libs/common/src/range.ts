@@ -1,5 +1,5 @@
 import type { PositionRange } from '@svinooh/shared';
-import type { ScanPositionToken } from './types';
+import type { ScanPositionToken } from '@svinooh/shared';
 
 /**
  * Whether a concentrated-liquidity position is still in range.

@@ -1,7 +1,7 @@
 import type { PositionTokenRole } from '@svinooh/shared';
 import { fetchJson } from './http';
-import { rangeFromLegs } from './range';
-import type { ScanPosition, ScanPositionToken, ScanResult } from './types';
+import { rangeFromLegs } from '@svinooh/common';
+import type { ScanPosition, ScanPositionToken, ScanResult } from '@svinooh/shared';
 
 /**
  * SOL: Jupiter portfolio API — a full DeFi aggregator (231 fetchers across
