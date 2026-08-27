@@ -651,3 +651,64 @@ body[data-theme='light'] .on-dark {
 .menu-item.danger {
   color: var(--down);
 }
+
+/* Only where there is a mouse — a hint about a keyboard modifier is noise on a phone */
+@media (hover: none), (pointer: coarse) {
+  .mouse-only {
+    display: none !important;
+  }
+}
+
+/* Five periods on a phone: the row keeps the tabs pinned right, so they give up
+   the padding rather than the scope selector giving up its name */
+@media (max-width: 480px) {
+  .period {
+    padding: 5px 8px;
+  }
+}
+
+/* Owner navigation — a rail beside the page on a desktop, a dock over it on a
+   phone. Both are rendered and the breakpoint picks, so the server never has to
+   guess which one the visitor is about to need. */
+.side-rail {
+  display: flex;
+}
+
+.tab-dock {
+  display: none;
+}
+
+@media (max-width: 719px) {
+  .side-rail {
+    display: none;
+  }
+  .tab-dock {
+    display: block;
+  }
+}
+
+.nav-item:hover {
+  color: var(--text);
+}
+
+.nav-collapse:hover {
+  color: var(--text);
+  border-color: var(--mut);
+}
+
+/* A threshold box: square rather than a pill, because a number typed into it is
+   read against the ones above and below it */
+.field-flat:focus {
+  border-color: var(--acc);
+}
+
+/* Room under the page for the dock that floats over it */
+.dock-room {
+  padding-bottom: 60px;
+}
+
+@media (max-width: 719px) {
+  .dock-room {
+    padding-bottom: calc(78px + env(safe-area-inset-bottom));
+  }
+}

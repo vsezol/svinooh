@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { HistoryDto, HistoryRange, PortfolioDto } from '@svinooh/shared';
 import { AnimatedUsd } from '../components/AnimatedUsd';
+import { AlertSettings } from '../components/AlertSettings';
 import { AreaChart } from '../components/AreaChart';
 import { AuthModal } from '../components/AuthModal';
 import { ClaimModal } from '../components/ClaimModal';
@@ -12,6 +13,7 @@ import { MetricCards } from '../components/MetricCards';
 import { GoPublicModal, VisibilityCard } from '../components/PortfolioVisibility';
 import { ScopeSelect } from '../components/ScopeSelect';
 import { ShareButton } from '../components/ShareButton';
+import { SideNav, type Tab } from '../components/SideNav';
 import { SyncedAgo } from '../components/SyncedAgo';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { WalletRow, type WalletActions } from '../components/WalletRow';
@@ -27,13 +29,7 @@ import {
   type PositionFilter,
 } from '../lib/blocks';
 import { fmtUsd, portfolioLabel, walletName } from '../lib/format';
-
-const PERIODS: Array<{ key: HistoryRange; label: string }> = [
-  { key: '24h', label: '24H' },
-  { key: '7d', label: '7D' },
-  { key: '30d', label: '30D' },
-  { key: 'all', label: 'ALL' },
-];
+import { PERIODS, WINDOW_MS } from '../lib/ranges';
 
 const FILTERS: Array<{ key: PositionFilter; label: string }> = [
   { key: 'all', label: 'ALL' },
@@ -116,9 +112,13 @@ function useHistory(slug: string, scope: string, period: HistoryRange, refreshKe
 
 export function PortfolioPage({ slug }: { slug: string }) {
   const router = useRouter();
-  const { me, logout } = useAuth();
+  const { me, config, logout } = useAuth();
   const { data, error, reload } = usePortfolio(slug, me?.id ?? null);
 
+  const [tab, setTab] = useState<Tab>('portfolio');
+  // Collapsed is the rail's own business and nobody else's — it survives a tab
+  // change and nothing else needs to know
+  const [sideCollapsed, setSideCollapsed] = useState(false);
   const [scope, setScope] = useState<string>('all');
   const [period, setPeriod] = useState<HistoryRange>('24h');
   const [filter, setFilter] = useState<PositionFilter>('all');
@@ -144,14 +144,23 @@ export function PortfolioPage({ slug }: { slug: string }) {
   const blocksByWallet = useMemo(() => wallets.map((w) => buildBlocks(w.positions)), [wallets]);
   const shownTotal = useMemo(() => filteredTotal(blocksByWallet, filter), [blocksByWallet, filter]);
 
+  // The series reaches back several windows so the chart has somewhere to
+  // scroll to, but this line answers the button: it starts at the first reading
+  // inside the chosen window, not at the oldest one that came with it. Scrolling
+  // the chart does not move it — "+0.42% · 24H" means the last 24 hours wherever
+  // you have wandered off to.
   const change = useMemo(() => {
     if (!history || history.values.length < 2) return null;
-    const first = history.values[0];
-    const last = history.values[history.values.length - 1];
+    const { values, times } = history;
+    const window = WINDOW_MS[period];
+    const opens = window === null ? -Infinity : times[times.length - 1] - window;
+    const at = times.findIndex((t) => t >= opens);
+    const first = values[at < 0 || at > values.length - 2 ? 0 : at];
+    const last = values[values.length - 1];
     const chg = last - first;
     const pct = first ? (chg / first) * 100 : 0;
     return { chg, pct, up: chg >= 0 };
-  }, [history]);
+  }, [history, period]);
 
   const addWallet = async () => {
     const address = input.trim();
@@ -247,6 +256,10 @@ export function PortfolioPage({ slug }: { slug: string }) {
   }
 
   const isOwner = data.isOwner;
+  // A visitor has no rail, so they can only ever be on the one tab the link
+  // pointed them at — whatever state says
+  const activeTab: Tab = isOwner ? tab : 'portfolio';
+  const syncMinutes = config?.syncIntervalMin ?? 5;
   // A portfolio nobody owns is open for building: anyone can add wallets to it
   // without an account. Taking wallets out, or renaming them, still needs one.
   const isUnowned = data.visibility === 'anonymous';
@@ -383,152 +396,173 @@ export function PortfolioPage({ slug }: { slug: string }) {
         </div>
       </div>
 
-      <div className="shell" style={{ padding: 'clamp(20px,4vw,36px) clamp(14px,3.5vw,28px) 60px' }}>
-        {/* total */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div>
-              <div className="eyebrow">
-                {selectedWallet ? 'WALLET BALANCE' : 'TOTAL BALANCE'} · {walletCount}{' '}
-                {walletCount === 1 ? 'WALLET' : 'WALLETS'}
+      <div
+        className={isOwner ? 'shell dock-room' : 'shell'}
+        style={{
+          paddingTop: 'clamp(20px,4vw,36px)',
+          paddingBottom: isOwner ? undefined : 60,
+          display: 'flex',
+          gap: 'clamp(18px,3vw,30px)',
+          alignItems: 'flex-start',
+        }}
+      >
+        {isOwner ? (
+          <SideNav tab={tab} onTab={setTab} collapsed={sideCollapsed} onCollapse={setSideCollapsed} />
+        ) : null}
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {activeTab === 'notifications' ? (
+            <AlertSettings slug={slug} wallets={wallets} syncMinutes={syncMinutes} />
+          ) : (
+            <>
+            {/* total */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div>
+                  <div className="eyebrow">
+                    {selectedWallet ? 'WALLET BALANCE' : 'TOTAL BALANCE'} · {walletCount}{' '}
+                    {walletCount === 1 ? 'WALLET' : 'WALLETS'}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginTop: 6 }}>
+                    <AnimatedUsd
+                      className="mono"
+                      value={headlineTotal}
+                      style={{ fontWeight: 600, fontSize: 'clamp(30px,6vw,44px)', letterSpacing: '-0.02em', lineHeight: 1 }}
+                    />
+                    {change ? (
+                      <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: change.up ? 'var(--up)' : 'var(--down)' }}>
+                        {(change.up ? '+' : '−') +
+                          fmtUsd(Math.abs(change.chg), 0) +
+                          ' (' +
+                          (change.up ? '+' : '') +
+                          change.pct.toFixed(2) +
+                          '%) · ' +
+                          period.toUpperCase()}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginTop: 6 }}>
-                <AnimatedUsd
-                  className="mono"
-                  value={headlineTotal}
-                  style={{ fontWeight: 600, fontSize: 'clamp(30px,6vw,44px)', letterSpacing: '-0.02em', lineHeight: 1 }}
-                />
-                {change ? (
-                  <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: change.up ? 'var(--up)' : 'var(--down)' }}>
-                    {(change.up ? '+' : '−') +
-                      fmtUsd(Math.abs(change.chg), 0) +
-                      ' (' +
-                      (change.up ? '+' : '') +
-                      change.pct.toFixed(2) +
-                      '%) · ' +
-                      period.toUpperCase()}
+
+              {isOwner ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <VisibilityCard
+                    visibility={data.visibility}
+                    busy={savingVisibility}
+                    onGoPublic={() => setConfirmPublic(true)}
+                    onGoPrivate={() => void setVisibility(false)}
+                  />
+                  <ShareButton title={`${portfolioLabel(data.name, data.slug)} · svinooh`} />
+                </div>
+              ) : (
+                <ShareButton title={`${portfolioLabel(data.name, data.slug)} · svinooh`} />
+              )}
+            </div>
+
+            <div
+              className="mono"
+              style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 12, fontSize: 10.5, color: 'var(--mut)', letterSpacing: '0.04em' }}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--acc)', animation: 'svpulse 2.4s ease infinite' }} />
+                <SyncedAgo iso={data.updatedAt} />
+              </span>
+              {isOwner ? <span>{visNote}</span> : null}
+            </div>
+
+            {/* scope + period, on one row: the period tabs stay pinned right on a phone */}
+            {hasChart ? (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'nowrap', marginTop: 22 }}>
+                  <ScopeSelect options={scopeOptions} value={scope} onChange={setScope} />
+                  <div style={{ display: 'flex', gap: 2, border: '1px solid var(--line)', borderRadius: 999, padding: 2, flexShrink: 0 }}>
+                    {PERIODS.map((p) => (
+                      <button key={p.key} className={`period ${period === p.key ? 'active' : ''}`} onClick={() => setPeriod(p.key)}>
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 14 }}>
+                  <AreaChart values={history?.values ?? []} times={history?.times ?? []} period={period} height="clamp(160px,26vw,240px)" />
+                </div>
+              </>
+            ) : null}
+
+            <MetricCards rewards={rewards} debt={debt} />
+
+            {/* add wallet */}
+            {canAdd ? (
+              <div style={{ marginTop: 26 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <input
+                    className="mono add-input"
+                    value={input}
+                    onChange={(e) => {
+                      setInput(e.target.value);
+                      setAddErr(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void addWallet();
+                    }}
+                    placeholder="Enter wallet address"
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                  <button className="btn-acc" style={{ height: 44, fontSize: 13, padding: '0 20px' }} onClick={() => void addWallet()} disabled={adding}>
+                    {adding ? <span className="spin" style={{ width: 15, height: 15, borderTopColor: 'var(--acc-ink)' }} /> : 'Add wallet'}
+                  </button>
+                </div>
+                {addErr ? (
+                  <div className="mono" style={{ marginTop: 7, fontSize: 11, color: 'var(--down)' }}>
+                    {addErr}
                   </div>
                 ) : null}
               </div>
-            </div>
-          </div>
+            ) : null}
 
-          {isOwner ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <VisibilityCard
-                visibility={data.visibility}
-                busy={savingVisibility}
-                onGoPublic={() => setConfirmPublic(true)}
-                onGoPrivate={() => void setVisibility(false)}
-              />
-              <ShareButton title={`${portfolioLabel(data.name, data.slug)} · svinooh`} />
-            </div>
-          ) : (
-            <ShareButton title={`${portfolioLabel(data.name, data.slug)} · svinooh`} />
-          )}
-        </div>
-
-        <div
-          className="mono"
-          style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 12, fontSize: 10.5, color: 'var(--mut)', letterSpacing: '0.04em' }}
-        >
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--acc)', animation: 'svpulse 2.4s ease infinite' }} />
-            <SyncedAgo iso={data.updatedAt} />
-          </span>
-          {isOwner ? <span>{visNote}</span> : null}
-        </div>
-
-        {/* scope + period, on one row: the period tabs stay pinned right on a phone */}
-        {hasChart ? (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'nowrap', marginTop: 22 }}>
-              <ScopeSelect options={scopeOptions} value={scope} onChange={setScope} />
-              <div style={{ display: 'flex', gap: 2, border: '1px solid var(--line)', borderRadius: 999, padding: 2, flexShrink: 0 }}>
-                {PERIODS.map((p) => (
-                  <button key={p.key} className={`period ${period === p.key ? 'active' : ''}`} onClick={() => setPeriod(p.key)}>
-                    {p.label}
+            {/* which positions to show, and what they add up to */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 26, marginBottom: 12 }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {FILTERS.map((f) => (
+                  <button key={f.key} className={`chip ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
+                    {f.label}
                   </button>
                 ))}
               </div>
-            </div>
-
-            <div style={{ marginTop: 14 }}>
-              <AreaChart values={history?.values ?? []} times={history?.times ?? []} period={period} height="clamp(160px,26vw,240px)" />
-            </div>
-          </>
-        ) : null}
-
-        <MetricCards rewards={rewards} debt={debt} />
-
-        {/* add wallet */}
-        {canAdd ? (
-          <div style={{ marginTop: 26 }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <input
-                className="mono add-input"
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  setAddErr(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void addWallet();
-                }}
-                placeholder="Enter wallet address"
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <button className="btn-acc" style={{ height: 44, fontSize: 13, padding: '0 20px' }} onClick={() => void addWallet()} disabled={adding}>
-                {adding ? <span className="spin" style={{ width: 15, height: 15, borderTopColor: 'var(--acc-ink)' }} /> : 'Add wallet'}
-              </button>
-            </div>
-            {addErr ? (
-              <div className="mono" style={{ marginTop: 7, fontSize: 11, color: 'var(--down)' }}>
-                {addErr}
+              <div className="mono" style={{ fontSize: 11, fontWeight: 500, color: 'var(--mut)' }}>
+                {filter === 'all' ? `${walletCount} ${walletCount === 1 ? 'wallet' : 'wallets'}` : 'Shown'} · {fmtUsd(shownTotal)}
               </div>
-            ) : null}
-          </div>
-        ) : null}
+            </div>
 
-        {/* which positions to show, and what they add up to */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 26, marginBottom: 12 }}>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {FILTERS.map((f) => (
-              <button key={f.key} className={`chip ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-          <div className="mono" style={{ fontSize: 11, fontWeight: 500, color: 'var(--mut)' }}>
-            {filter === 'all' ? `${walletCount} ${walletCount === 1 ? 'wallet' : 'wallets'}` : 'Shown'} · {fmtUsd(shownTotal)}
-          </div>
+            {visibleWallets.length === 0 ? (
+              <div className="card" style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--mut)', fontSize: 13 }}>
+                {wallets.length === 0
+                  ? canAdd
+                    ? 'No wallets yet. Paste an address above — the network is detected automatically.'
+                    : 'This portfolio has no wallets yet.'
+                  : 'Nothing matches this filter.'}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {visibleWallets.map((w) => (
+                  <WalletRow
+                    key={w.id}
+                    wallet={w}
+                    actions={walletActions}
+                    total={data.totalUsd}
+                    filter={filter}
+                    onRemove={() => void removeWallet(w.id)}
+                    onRename={(label) => void renameWallet(w.id, label)}
+                    onRequireAuth={startClaim}
+                  />
+                ))}
+              </div>
+            )}
+            </>
+          )}
         </div>
-
-        {visibleWallets.length === 0 ? (
-          <div className="card" style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--mut)', fontSize: 13 }}>
-            {wallets.length === 0
-              ? canAdd
-                ? 'No wallets yet. Paste an address above — the network is detected automatically.'
-                : 'This portfolio has no wallets yet.'
-              : 'Nothing matches this filter.'}
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {visibleWallets.map((w) => (
-              <WalletRow
-                key={w.id}
-                wallet={w}
-                actions={walletActions}
-                total={data.totalUsd}
-                filter={filter}
-                onRemove={() => void removeWallet(w.id)}
-                onRename={(label) => void renameWallet(w.id, label)}
-                onRequireAuth={startClaim}
-              />
-            ))}
-          </div>
-        )}
       </div>
 
       {confirmClaim ? (

@@ -36,14 +36,25 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.body.dataset.theme = theme;
     document.documentElement.dataset.theme = theme;
     // Installed as an app, this is the colour of the status bar and the window
-    // chrome around the page. The tags in the document answer the *system*
-    // setting; a theme chosen here has to say so itself, or the frame around a
-    // light page stays black.
-    for (const tag of document.querySelectorAll('meta[name="theme-color"]')) tag.remove();
-    const meta = document.createElement('meta');
-    meta.name = 'theme-color';
+    // chrome around the page. The tags the metadata puts there answer the
+    // *system* setting; a theme chosen here has to say so itself, or the frame
+    // around a light page stays black.
+    //
+    // It says so with a tag of its own, first in <head> — the browser takes the
+    // first theme-color whose media matches, and this one has no media, so it
+    // wins over both. Clearing the others out instead is what used to happen,
+    // and it broke every client-side navigation: React renders those tags and
+    // hoists them, so deleting the page they belong to meant removing nodes
+    // that were no longer in the document, which threw mid-commit and left the
+    // URL on the new route with the old page still on screen.
+    let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"][data-chosen]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'theme-color';
+      meta.dataset.chosen = '';
+      document.head.prepend(meta);
+    }
     meta.content = theme === 'light' ? '#f3f4f6' : '#08090c';
-    document.head.appendChild(meta);
     try {
       localStorage.setItem(KEY, theme);
     } catch {
