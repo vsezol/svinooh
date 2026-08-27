@@ -1,13 +1,20 @@
 import { Module } from '@nestjs/common';
-import { QueueModule } from '../queue/queue.module';
 import { MetricsCollectorsService } from './metrics-collectors.service';
 import { ScanConsumerService } from './scan-consumer.service';
 import { ScanProducerService } from './scan-producer.service';
+import { ScanResultConsumerService } from './scan-result-consumer.service';
 import { SyncService } from './sync.service';
 
 @Module({
-  imports: [QueueModule],
-  providers: [SyncService, ScanProducerService, ScanConsumerService, MetricsCollectorsService],
-  exports: [SyncService],
+  imports: [],
+  providers: [
+    SyncService,
+    ScanProducerService,
+    ScanConsumerService,
+    ScanResultConsumerService,
+    MetricsCollectorsService,
+  ],
+  // InternalScanController reaches for these to scan a just-added wallet
+  exports: [SyncService, ScanConsumerService, ScanResultConsumerService],
 })
 export class SyncModule {}

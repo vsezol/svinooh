@@ -157,16 +157,24 @@ restart.
 
 So it moved out, and the split is drawn where it costs least:
 
-- `scanner-evm` has **no database and no queue**. It takes an address and
-  returns what that address holds. Every decision about what to believe, what to
-  write and when stays in `wallet`, untouched, which is why the split changed no
-  behaviour at all.
-- The call between them is plain request/response over the private network. A
-  queue would have meant moving the sanity checks — a suspicious drop is
-  re-scanned immediately and only believed if it holds — and those are the last
-  thing that should be split across a message boundary.
-- Queues are **per chain** (`scan.evm`, `scan.sol`, `scan.tron`, `scan.btc`).
-  One queue made the slowest chain the speed of all of them.
+- `scanner-evm` **has no database**. It takes an address off `scan.evm`, scans
+  it, and puts the readings on `scan.result`. It has no opinion about whether a
+  number is believable and nowhere to write one down — which is what makes it
+  safe to run several of. Add a replica and it competes for the same queue with
+  its own browser; no two of them can disagree about what to store, because
+  neither stores anything.
+- **One consumer writes.** `scan.result` is drained by a single consumer in
+  `wallet` that decides what to believe and is the only thing in the system that
+  writes what a wallet is worth.
+- **Scan queues are per chain** (`scan.evm`, `scan.sol`, `scan.tron`,
+  `scan.btc`) because scanning costs wildly different amounts per chain and one
+  queue made the slowest chain the speed of all of them. **The result queue is
+  one**, because applying a result is the same few updates whatever it came
+  from.
+- A suspicious drop is still re-read before it is believed. The second reading
+  is taken by the scanner, while it still has the page open — the one place it
+  is nearly free — and travels with the first. Deciding between them stays with
+  the writer, which is the only thing that keeps the per-address streak.
 
 ### One tab, not one page load per wallet
 

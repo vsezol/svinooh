@@ -1,39 +1,47 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import * as amqp from 'amqplib';
-import { config } from '../config';
-import { sleep } from '@svinooh/common';
 
-export interface ScanJob {
-  chain: string;
-  address: string;
+export const RABBIT_URL = Symbol('RABBIT_URL');
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+interface Consumer {
+  handler: (message: unknown) => Promise<void>;
+  prefetch: number;
+  attached: boolean;
 }
 
 /**
- * A thin wrapper over RabbitMQ (amqplib): one durable queue per chain. The
- * producer pours addresses into the queue for their chain, a consumer works
- * through each. Without RABBITMQ_URL the service is disabled — scanning runs
- * in-process (see ScanProducer). It reconnects on its own when the connection
- * drops, and re-asserts every queue and re-attaches every consumer when it does.
+ * A thin wrapper over RabbitMQ (amqplib), shared by every service that either
+ * fills a queue or works through one.
+ *
+ * Durable queues, manual ack, and a reconnect loop that re-asserts every queue
+ * and re-attaches every consumer — a broker restart should cost a few seconds,
+ * not a deploy. Without a URL it is simply disabled, and the services fall back
+ * to running the same pipeline in-process, which is what makes local
+ * development work without a broker.
  */
 @Injectable()
 export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(RabbitService.name);
   private conn: Awaited<ReturnType<typeof amqp.connect>> | null = null;
   private channel: amqp.Channel | null = null;
-  /** queue name → what to do with a job from it, and how many to take at once */
-  private readonly consumers = new Map<
-    string,
-    { handler: (job: ScanJob) => Promise<void>; prefetch: number; attached: boolean }
-  >();
+  private readonly consumers = new Map<string, Consumer>();
+  /** attachAll is async and re-entrant; without this, registering four queues
+   *  in a loop starts four passes that all see the same queue as unattached and
+   *  subscribe to it four times over */
+  private attaching: Promise<void> | null = null;
   private closing = false;
 
+  constructor(@Inject(RABBIT_URL) private readonly url: string | null) {}
+
   get enabled(): boolean {
-    return !!config.rabbitUrl;
+    return !!this.url;
   }
 
   async onApplicationBootstrap() {
     if (!this.enabled) {
-      this.logger.log('RABBITMQ_URL not set — queue disabled (scanning in-process)');
+      this.logger.log('RABBITMQ_URL not set — queue disabled (running in-process)');
       return;
     }
     await this.connect();
@@ -42,7 +50,7 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
   private async connect(): Promise<void> {
     if (this.closing) return;
     try {
-      this.conn = await amqp.connect(config.rabbitUrl as string);
+      this.conn = await amqp.connect(this.url as string);
       this.conn.on('error', () => {});
       this.conn.on('close', () => {
         if (this.closing) return;
@@ -54,7 +62,6 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
       });
       this.channel = await this.conn.createChannel();
       this.logger.log('RabbitMQ connected');
-      for (const entry of this.consumers.values()) entry.attached = false;
       await this.attachAll();
     } catch (e) {
       this.logger.warn(`RabbitMQ connect failed: ${e instanceof Error ? e.message : e}`);
@@ -68,10 +75,10 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
     await this.connect();
   }
 
-  async enqueue(queue: string, job: ScanJob): Promise<void> {
+  async publish(queue: string, message: unknown): Promise<void> {
     if (!this.channel) return;
     await this.channel.assertQueue(queue, { durable: true });
-    this.channel.sendToQueue(queue, Buffer.from(JSON.stringify(job)), { persistent: true });
+    this.channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)), { persistent: true });
   }
 
   /** How many messages are waiting across these queues (0 if the connection is down) */
@@ -89,17 +96,26 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
     return total;
   }
 
-  registerConsumer(queue: string, handler: (job: ScanJob) => Promise<void>, prefetch: number): void {
-    this.consumers.set(queue, { handler, prefetch, attached: false });
+  consume<T>(queue: string, handler: (message: T) => Promise<void>, prefetch: number): void {
+    this.consumers.set(queue, {
+      handler: handler as (m: unknown) => Promise<void>,
+      prefetch,
+      attached: false,
+    });
     if (this.channel) void this.attachAll();
   }
 
   /**
    * Each queue gets its own channel, because prefetch is a property of the
-   * channel: sharing one would make every queue take the smallest prefetch any
-   * of them asked for.
+   * channel: sharing one would give every queue the smallest prefetch any of
+   * them asked for.
    */
-  private async attachAll(): Promise<void> {
+  private attachAll(): Promise<void> {
+    this.attaching = (this.attaching ?? Promise.resolve()).then(() => this.attachPending());
+    return this.attaching;
+  }
+
+  private async attachPending(): Promise<void> {
     if (!this.conn) return;
     for (const [queue, entry] of this.consumers) {
       if (entry.attached) continue;
@@ -120,24 +136,25 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
 
   private async handle(
     channel: amqp.Channel,
-    handler: (job: ScanJob) => Promise<void>,
+    handler: (message: unknown) => Promise<void>,
     msg: amqp.ConsumeMessage,
   ): Promise<void> {
-    let job: ScanJob | null = null;
+    let message: unknown;
     try {
-      job = JSON.parse(msg.content.toString()) as ScanJob;
+      message = JSON.parse(msg.content.toString());
     } catch {
-      channel.ack(msg); // garbage — drop it
+      channel.ack(msg); // garbage — drop it rather than redeliver it forever
       return;
     }
     try {
-      await handler(job);
+      await handler(message);
     } catch (e) {
-      this.logger.warn(
-        `Job ${job.chain}:${job.address} failed: ${e instanceof Error ? e.message : e}`,
-      );
+      this.logger.warn(`Message from ${msg.fields.routingKey} failed: ${e instanceof Error ? e.message : e}`);
     } finally {
-      channel.ack(msg); // always ack — the next top-up will re-scan
+      // Always ack. A scan that failed is re-enqueued by the next top-up with
+      // fresh information; redelivering the old job would only retry the same
+      // thing against the same broken source, faster.
+      channel.ack(msg);
     }
   }
 

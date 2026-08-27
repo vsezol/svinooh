@@ -1,6 +1,6 @@
 import type { Chain } from '@svinooh/shared';
 import { scanBtc } from './btc';
-import { scanEvmRemote } from './evm-remote';
+
 import { scanSol } from './sol';
 import { scanTron } from './tron';
 import type { ScanResult } from '@svinooh/shared';
@@ -12,7 +12,9 @@ export function scanAddress(chain: Chain, address: string): Promise<ScanResult> 
     case 'BTC':
       return scanBtc(address);
     case 'EVM':
-      return scanEvmRemote(address);
+      // Scanned by apps/scanner-evm, off its own queue — this service never
+      // calls it directly
+      throw new Error('EVM is scanned by the scanner-evm service, not here');
     case 'SOL':
       return scanSol(address);
     case 'TRON':

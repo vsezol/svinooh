@@ -21,8 +21,11 @@ if (existsSync(envPath)) {
  */
 export const config = {
   port: int(process.env.PORT, 3000),
-  // Shared with the wallet service, which calls in: the same string in both.
-  internalToken: process.env.INTERNAL_TOKEN || null,
+  rabbitUrl: process.env.RABBITMQ_URL || null,
+  // Pause after each scan. The pacing knob against DeBank: this service holds
+  // the slot for the whole pause, so the queue does not hand it another
+  // address until the pause is over.
+  scanJobDelayMs: int(process.env.SCAN_JOB_DELAY_MS, 1500),
   httpTimeoutMs: int(process.env.HTTP_TIMEOUT_MS, 15_000),
   // A browser scan is slow by nature — page load, chains resolving one by one
   evmTimeoutMs: int(process.env.EVM_TIMEOUT_MS, 150_000),

@@ -1,18 +1,16 @@
 import type { Chain } from '@svinooh/shared';
-import { config } from '../config';
 import { Semaphore } from '@svinooh/common';
+import { config } from '../config';
 
 /**
- * How many scans this service runs at once. EVM is one call out to the scanner
- * service, which does its own pacing and holds its own browser lock, so there
- * is nothing to serialise here beyond not asking it for ten things at once.
+ * How many of this service's own scans run at once. EVM is not among them — it
+ * is scanned by apps/scanner-evm, which paces itself off its own queue.
  */
 class ScanQueue {
-  private readonly evm = new Semaphore(config.evmConcurrency);
   private readonly http = new Semaphore(config.httpConcurrency);
 
-  run<T>(chain: Chain, fn: () => Promise<T>): Promise<T> {
-    return (chain === 'EVM' ? this.evm : this.http).run(fn);
+  run<T>(_chain: Chain, fn: () => Promise<T>): Promise<T> {
+    return this.http.run(fn);
   }
 }
 
