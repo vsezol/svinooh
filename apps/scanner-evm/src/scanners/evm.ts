@@ -1,9 +1,9 @@
 import { Logger } from '@nestjs/common';
-import { ScanHold } from '../common/scan-hold';
+import { ScanHold } from '@svinooh/common';
 import { config } from '../config';
 import { scanEvmBrowser } from './evm-browser';
 import { scanEvmHttp } from './evm-http';
-import type { ScanResult } from './types';
+import type { ScanResult } from '@svinooh/shared';
 
 const logger = new Logger('EvmScanner');
 

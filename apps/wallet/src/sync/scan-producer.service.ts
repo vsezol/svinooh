@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import type { Chain } from '@svinooh/shared';
 import { config } from '../config';
-import { sleep } from '../common/util';
+import { scanQueueName, sleep } from '@svinooh/common';
 import { RabbitService } from '../queue/rabbit.service';
 import { SyncService } from './sync.service';
 
@@ -11,6 +12,9 @@ import { SyncService } from './sync.service';
  * sources. Without RabbitMQ it runs the same pipeline in-process so dev works
  * without a broker.
  */
+const CHAINS: Chain[] = ['EVM', 'SOL', 'TRON', 'BTC'];
+const ALL_QUEUES = CHAINS.map(scanQueueName);
+
 @Injectable()
 export class ScanProducerService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(ScanProducerService.name);
@@ -41,9 +45,10 @@ export class ScanProducerService implements OnApplicationBootstrap, OnModuleDest
     if (this.toppingUp || this.stopped) return;
     this.toppingUp = true;
     try {
-      if ((await this.rabbit.messageCount()) > 0) return; // still working through it
+      if ((await this.rabbit.messageCount(ALL_QUEUES)) > 0) return; // still working through it
       const groups = await this.sync.listGroups();
-      for (const job of groups) await this.rabbit.enqueue(job);
+      // Each address goes to the queue for its own chain — see scanQueueName
+      for (const job of groups) await this.rabbit.enqueue(scanQueueName(job.chain as Chain), job);
       if (groups.length) this.logger.log(`Enqueued ${groups.length} addresses`);
     } catch (e) {
       this.logger.warn(`topUp failed: ${e instanceof Error ? e.message : e}`);

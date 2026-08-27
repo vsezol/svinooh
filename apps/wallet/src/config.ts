@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { bool, int } from '@svinooh/common';
+import { int } from '@svinooh/common';
 
 const envPath = resolve(__dirname, '..', '.env');
 if (existsSync(envPath)) {
@@ -37,16 +37,15 @@ export const config = {
   // How often to check that the queue has drained and re-enqueue wallets.
   scanReloadSec: int(process.env.SCAN_RELOAD_SEC, 15),
   httpTimeoutMs: int(process.env.HTTP_TIMEOUT_MS, 15_000),
-  // Ceiling for one Chrome scan. Has to clear goto (30s) + the selector wait
-  // (45s) + the total-stabilisation loop (~20s), or the watchdog kills scans
-  // that were about to succeed.
-  evmTimeoutMs: int(process.env.EVM_TIMEOUT_MS, 150_000),
+  // Where the EVM scanner service lives, and how long to wait on it. The wait
+  // has to outlast that service's own EVM_TIMEOUT_MS, or we would abandon a
+  // scan that is about to come back and then scan the same address again.
+  evmScannerUrl: (process.env.EVM_SCANNER_URL || '').replace(/\/+$/, ''),
+  evmScannerTimeoutMs: int(process.env.EVM_SCANNER_TIMEOUT_MS, 180_000),
+  internalToken: process.env.INTERNAL_TOKEN || null,
+  // In-flight EVM scans. One by default: the scanner holds a single browser, so
+  // asking it for more only queues them on the other side.
+  evmConcurrency: int(process.env.EVM_CONCURRENCY, 1),
   // Concurrency of the BTC/SOL/TRON HTTP scanners.
   httpConcurrency: int(process.env.SCAN_HTTP_CONCURRENCY, 4),
-  // EVM: primary path is HTTP to debank.com, with a headless Chrome fallback.
-  evmHttpEnabled: bool(process.env.EVM_HTTP_ENABLED, true),
-  evmHttpConcurrency: int(process.env.EVM_HTTP_CONCURRENCY, 3),
-  debankProxyUrl: process.env.DEBANK_PROXY_URL || null,
-  puppeteerExecutablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
-  chromeNoSandbox: bool(process.env.CHROME_NO_SANDBOX, false),
 };

@@ -7,7 +7,7 @@ import {
   type DebankProject,
   type DebankToken,
 } from './debank-portfolio';
-import type { ScanPosition, ScanResult } from './types';
+import type { ScanPosition, ScanResult } from '@svinooh/shared';
 
 /**
  * EVM balance via the debank.com web API (reverse-engineered signature, see
