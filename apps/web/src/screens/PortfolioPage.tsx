@@ -396,21 +396,25 @@ export function PortfolioPage({ slug }: { slug: string }) {
         </div>
       </div>
 
-      <div
-        className={isOwner ? 'shell dock-room' : 'shell'}
-        style={{
-          paddingTop: 'clamp(20px,4vw,36px)',
-          paddingBottom: isOwner ? undefined : 60,
-          display: 'flex',
-          gap: 'clamp(18px,3vw,30px)',
-          alignItems: 'flex-start',
-        }}
-      >
+      {/* The rail is against the window, not inside the page. So this row runs
+          the full width and the page keeps its own centred column beside it —
+          `flex:1` up to the shell's 1120px, with the auto margins it already
+          carries taking whatever is left over. A row at least a screen tall
+          gives the rail's edge something to run down when the page is short. */}
+      <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 'calc(100vh - 58px)' }}>
         {isOwner ? (
           <SideNav tab={tab} onTab={setTab} collapsed={sideCollapsed} onCollapse={setSideCollapsed} />
         ) : null}
 
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          className={isOwner ? 'shell dock-room' : 'shell'}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            paddingTop: 'clamp(20px,4vw,36px)',
+            paddingBottom: isOwner ? undefined : 60,
+          }}
+        >
           {activeTab === 'notifications' ? (
             <AlertSettings slug={slug} wallets={wallets} syncMinutes={syncMinutes} />
           ) : (

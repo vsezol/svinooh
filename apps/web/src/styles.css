@@ -671,7 +671,7 @@ body[data-theme='light'] .on-dark {
    phone. Both are rendered and the breakpoint picks, so the server never has to
    guess which one the visitor is about to need. */
 .side-rail {
-  display: flex;
+  display: block;
 }
 
 .tab-dock {

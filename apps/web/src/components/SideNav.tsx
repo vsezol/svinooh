@@ -103,83 +103,93 @@ export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
 
   return (
     <>
-      {/* desktop rail */}
+      {/* desktop rail — against the window's edge, not inside the page's column */}
       <div
         className="side-rail"
         style={{
-          width: collapsed ? 46 : 188,
+          width: collapsed ? 61 : 212,
           flexShrink: 0,
-          position: 'sticky',
-          top: 78,
-          flexDirection: 'column',
-          gap: 4,
+          borderRight: '1px solid var(--line)',
           transition: 'width 0.2s ease',
         }}
       >
+        {/* The rail is a full-height column so its edge runs the length of the
+            page; what is in it stays put under the header while the page moves */}
         <div
-          className="nav-item"
-          onClick={() => onTab('portfolio')}
-          title="Portfolio"
-          style={navItem(tab === 'portfolio', false, collapsed)}
-        >
-          <ChartIcon size={16} />
-          {label('Portfolio')}
-        </div>
-        <div
-          className="nav-item"
-          onClick={() => onTab('notifications')}
-          title="Notifications"
-          style={navItem(tab === 'notifications', false, collapsed)}
-        >
-          <BellIcon size={16} />
-          {label('Notifications')}
-        </div>
-        <div title="AI agent — soon" style={navItem(false, true, collapsed)}>
-          <SparkIcon size={16} />
-          {label('AI agent')}
-          {collapsed ? null : (
-            <span
-              className="mono"
-              style={{
-                marginLeft: 'auto',
-                fontSize: 8.5,
-                letterSpacing: '0.1em',
-                border: '1px solid var(--line2)',
-                borderRadius: 999,
-                padding: '2px 7px',
-              }}
-            >
-              SOON
-            </span>
-          )}
-        </div>
-        <div
-          className="nav-collapse"
-          onClick={() => onCollapse(!collapsed)}
-          title={collapsed ? 'Expand' : 'Collapse'}
           style={{
+            position: 'sticky',
+            top: 58,
+            padding: '16px 10px',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: 34,
-            borderRadius: 10,
-            border: '1px solid var(--line)',
-            color: 'var(--mut)',
-            cursor: 'pointer',
-            userSelect: 'none',
-            marginTop: 6,
+            flexDirection: 'column',
+            gap: 4,
           }}
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            {...ICON}
-            style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}
+          <div
+            className="nav-item"
+            onClick={() => onTab('portfolio')}
+            title="Portfolio"
+            style={navItem(tab === 'portfolio', false, collapsed)}
           >
-            <path d="M11 17l-5-5 5-5" />
-            <path d="M18 17l-5-5 5-5" />
-          </svg>
+            <ChartIcon size={16} />
+            {label('Portfolio')}
+          </div>
+          <div
+            className="nav-item"
+            onClick={() => onTab('notifications')}
+            title="Notifications"
+            style={navItem(tab === 'notifications', false, collapsed)}
+          >
+            <BellIcon size={16} />
+            {label('Notifications')}
+          </div>
+          <div title="AI agent — soon" style={navItem(false, true, collapsed)}>
+            <SparkIcon size={16} />
+            {label('AI agent')}
+            {collapsed ? null : (
+              <span
+                className="mono"
+                style={{
+                  marginLeft: 'auto',
+                  fontSize: 8.5,
+                  letterSpacing: '0.1em',
+                  border: '1px solid var(--line2)',
+                  borderRadius: 999,
+                  padding: '2px 7px',
+                }}
+              >
+                SOON
+              </span>
+            )}
+          </div>
+          <div
+            className="nav-collapse"
+            onClick={() => onCollapse(!collapsed)}
+            title={collapsed ? 'Expand' : 'Collapse'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: 34,
+              borderRadius: 10,
+              border: '1px solid var(--line)',
+              color: 'var(--mut)',
+              cursor: 'pointer',
+              userSelect: 'none',
+              marginTop: 6,
+            }}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              {...ICON}
+              style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}
+            >
+              <path d="M11 17l-5-5 5-5" />
+              <path d="M18 17l-5-5 5-5" />
+            </svg>
+          </div>
         </div>
       </div>
 
