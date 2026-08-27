@@ -60,7 +60,18 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
         this.logger.warn('RabbitMQ connection closed — reconnecting');
         void this.reconnect();
       });
-      this.channel = await this.conn.createChannel();
+      const channel = await this.conn.createChannel();
+      this.channel = channel;
+      // A channel error must not surface as an unhandled 'error' event (Node
+      // throws on those), and a main channel that closes under us must not leave
+      // publish() writing into a dead one — drop it and let the connection's own
+      // close/reconnect below rebuild everything from scratch.
+      channel.on('error', () => {});
+      channel.on('close', () => {
+        if (this.closing || this.channel !== channel) return;
+        this.channel = null;
+        void this.conn?.close().catch(() => {});
+      });
       this.logger.log('RabbitMQ connected');
       await this.attachAll();
     } catch (e) {
@@ -76,21 +87,39 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   async publish(queue: string, message: unknown): Promise<void> {
-    if (!this.channel) return;
-    await this.channel.assertQueue(queue, { durable: true });
-    this.channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)), { persistent: true });
+    const channel = this.channel;
+    if (!channel) return;
+    try {
+      await channel.assertQueue(queue, { durable: true });
+      channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)), { persistent: true });
+    } catch (e) {
+      // A failed publish is not worth throwing into the caller's enqueue loop:
+      // the next top-up re-enqueues whatever is still due, with fresh state.
+      this.logger.warn(`Publish to ${queue} failed: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   /** How many messages are waiting across these queues (0 if the connection is down) */
   async messageCount(queues: string[]): Promise<number> {
-    if (!this.channel) return 0;
+    const channel = this.channel;
+    if (!channel) return 0;
     let total = 0;
     for (const queue of queues) {
       try {
-        const q = await this.channel.checkQueue(queue);
+        // assertQueue, NOT checkQueue. checkQueue is a *passive* declare, and a
+        // passive declare of a queue that does not exist yet is a channel-level
+        // exception — it kills this shared channel, and the connection with it.
+        // That is exactly how a producer (wallet) whose consumer service
+        // (scanner-evm) had not been deployed took the whole broker connection
+        // into a 6-second reconnect loop. assertQueue is idempotent: it reports
+        // the depth and, if the queue is missing, creates it durable — the same
+        // declaration every producer and consumer here already makes — so a
+        // missing consumer degrades to "jobs pile up" instead of "nothing runs".
+        const q = await channel.assertQueue(queue, { durable: true });
         total += q.messageCount;
       } catch {
-        // a queue nobody has declared yet holds nothing
+        // a queue we still cannot assert contributes nothing, and must not
+        // abort the count for the others
       }
     }
     return total;
@@ -121,6 +150,13 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
       if (entry.attached) continue;
       try {
         const channel = await this.conn.createChannel();
+        channel.on('error', () => {});
+        // If this consumer's own channel closes, mark it unattached so a later
+        // attachAll (on reconnect) re-subscribes it, rather than leaving a
+        // consumer that has quietly stopped receiving.
+        channel.on('close', () => {
+          entry.attached = false;
+        });
         await channel.assertQueue(queue, { durable: true });
         await channel.prefetch(entry.prefetch);
         await channel.consume(queue, (msg) => {
@@ -143,7 +179,7 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
     try {
       message = JSON.parse(msg.content.toString());
     } catch {
-      channel.ack(msg); // garbage — drop it rather than redeliver it forever
+      this.safeAck(channel, msg); // garbage — drop it rather than redeliver it forever
       return;
     }
     try {
@@ -154,7 +190,22 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
       // Always ack. A scan that failed is re-enqueued by the next top-up with
       // fresh information; redelivering the old job would only retry the same
       // thing against the same broken source, faster.
+      this.safeAck(channel, msg);
+    }
+  }
+
+  /**
+   * ack that cannot crash the process. The channel can close under us between
+   * receiving a message and acking it — a shutdown, a reconnect — and an ack on
+   * a closed channel throws IllegalOperationError, which as an uncaught async
+   * rejection took the whole scanner down. The message stays unacked, so the
+   * broker redelivers it on the next connection.
+   */
+  private safeAck(channel: amqp.Channel, msg: amqp.ConsumeMessage): void {
+    try {
       channel.ack(msg);
+    } catch {
+      // channel already gone — leave it for redelivery
     }
   }
 
