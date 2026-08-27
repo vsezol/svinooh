@@ -4,8 +4,30 @@ import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 
 export type Tab = 'portfolio' | 'notifications';
 
-/** The gap the dock keeps from the bottom of what is on screen */
-const DOCK_GAP = 4;
+/**
+ * The gap the dock keeps from the bottom of what is on screen — 10px wherever
+ * the page owns that edge: a desktop window, an Android browser, an installed
+ * app resting on the home indicator.
+ */
+const DOCK_GAP = 10;
+
+/**
+ * In a Safari tab on iOS it is nothing at all.
+ *
+ * The page's area there stops where Safari's translucent toolbar begins:
+ * anything drawn past that line comes out behind the glass, tinting it rather
+ * than showing. Safari's own chrome is already the gap, and every point spent
+ * on another one only widens a band the dock cannot cross anyway.
+ */
+const DOCK_GAP_AT_SAFARI_TOOLBAR = 0;
+
+/** Chrome and Firefox on iOS are Safari underneath, with the same toolbar */
+function underSafariToolbar(): boolean {
+  const ua = navigator.userAgent;
+  // iPadOS calls itself a Macintosh; the touch points are what give it away
+  const ios = /iP(hone|ad|od)/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  return ios && !window.matchMedia('(display-mode: standalone)').matches;
+}
 
 /**
  * Keeps the dock on the bottom edge of what is actually visible.
@@ -35,11 +57,13 @@ function useDockToVisibleBottom(): React.RefObject<HTMLDivElement | null> {
       'position:fixed;bottom:0;left:0;width:0;visibility:hidden;pointer-events:none;height:env(safe-area-inset-bottom)';
     document.body.appendChild(probe);
 
+    const gap = underSafariToolbar() ? DOCK_GAP_AT_SAFARI_TOOLBAR : DOCK_GAP;
+
     let queued = false;
     const place = () => {
       queued = false;
       // The dock hangs upwards from this line — see .tab-dock's transform
-      el.style.top = `${vv.offsetTop + vv.height - DOCK_GAP - probe.offsetHeight}px`;
+      el.style.top = `${vv.offsetTop + vv.height - gap - probe.offsetHeight}px`;
     };
     const schedule = () => {
       if (queued) return;
