@@ -674,20 +674,32 @@ body[data-theme='light'] .on-dark {
   display: flex;
 }
 
-/* In a browser tab the layout viewport already stops above Safari's floating
-   toolbar, and iOS still reports a safe-area inset on top of that — adding it
-   here parked the dock a finger's width above the toolbar. A tab needs only the
-   small gap the toolbar itself keeps from the edge. */
+/* Hung from the *dynamic* viewport rather than sat on the bottom of its
+   containing block.
+
+   `bottom` on a fixed element measures from the layout viewport, and on iOS
+   that keeps the height the page had while Safari's toolbar was expanded. So
+   the moment the toolbar collapses into its little pill, the bottom the dock is
+   pinned to is no longer the bottom of anything visible, and the dock is
+   stranded a thumb's width up the screen with dead space under it.
+   100dvh is the viewport as it is right now, toolbar in or out, so the dock's
+   own bottom edge lands 4px above whatever the real bottom currently is —
+   the same gap Safari's own toolbar keeps from the edge of the screen.
+   translate(-50%,-100%) hangs it upwards from that line, so its height is not a
+   number anything here has to know. */
 .tab-dock {
   display: none;
-  bottom: 4px;
+  left: 50%;
+  top: calc(100dvh - 4px);
+  bottom: auto;
+  transform: translate(-50%, -100%);
 }
 
-/* Installed to the home screen there is no toolbar, and the inset is the home
-   indicator the dock does have to clear. */
+/* Installed to the home screen there is no toolbar to sit beside, and the inset
+   is the home indicator the dock does have to clear. */
 @media (display-mode: standalone) {
   .tab-dock {
-    bottom: calc(4px + env(safe-area-inset-bottom));
+    top: calc(100dvh - 4px - env(safe-area-inset-bottom));
   }
 }
 
