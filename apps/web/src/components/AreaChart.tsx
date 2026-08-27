@@ -18,6 +18,13 @@ interface Props {
   times: number[]; // ms, same length
   period: HistoryRange;
   height: string;
+  /**
+   * Drawn inside something that is already a card — the metric cards beside the
+   * chart. The gestures are the same; what goes is the furniture that would be
+   * saying it twice: the border around it, the dates along the bottom, and a
+   * hint about a modifier in a strip too short to measure anything in.
+   */
+  bare?: boolean;
 }
 
 /**
@@ -80,7 +87,7 @@ function dateLabel(ms: number, period: HistoryRange): string {
  * Nothing is drawn behind the line: gridlines on a 200px sparkline of one
  * portfolio are decoration that competes with the only thing worth reading.
  */
-export function AreaChart({ values, times, period, height }: Props) {
+export function AreaChart({ values, times, period, height, bare = false }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const series = useRef<ISeriesApi<'Area'> | null>(null);
@@ -343,7 +350,10 @@ export function AreaChart({ values, times, period, height }: Props) {
   const hovered = hover && hover.index >= 0 && hover.index < values.length ? hover.index : null;
 
   return (
-    <div className="card" style={{ position: 'relative', overflow: 'hidden', touchAction: 'pan-y' }}>
+    <div
+      className={bare ? undefined : 'card'}
+      style={{ position: 'relative', overflow: 'hidden', touchAction: 'pan-y' }}
+    >
       <div
         ref={box}
         style={{ height, width: '100%' }}
@@ -371,17 +381,22 @@ export function AreaChart({ values, times, period, height }: Props) {
       ) : null}
 
       {/* what the selection is worth, or the value under the cursor */}
+      {/* In a strip this short the reading would sit on the line it is
+          reporting, so it carries its own ground the way a tooltip does */}
       <div
           className="mono"
           style={{
             position: 'absolute',
-            top: 8,
-            left: 12,
-            fontSize: 11,
+            top: bare ? 4 : 8,
+            left: bare ? 6 : 12,
+            fontSize: bare ? 10.5 : 11,
             pointerEvents: 'none',
             display: 'flex',
             alignItems: 'baseline',
-            gap: 9,
+            gap: bare ? 7 : 9,
+            ...(bare
+              ? { background: 'var(--surf)', padding: '2px 6px', borderRadius: 6 }
+              : null),
           }}
         >
           {range ? (
@@ -403,7 +418,7 @@ export function AreaChart({ values, times, period, height }: Props) {
       {/* The measuring gesture has nothing on screen to reach for, and a
           modifier nobody knows about is a feature nobody has. Mouse only — a
           phone measures with two fingers and has no shift to hold. */}
-      {values.length && !selection && hovered === null ? (
+      {values.length && !selection && hovered === null && !bare ? (
         <div
           className="mono mouse-only"
           style={{
@@ -421,7 +436,7 @@ export function AreaChart({ values, times, period, height }: Props) {
         </div>
       ) : null}
 
-      {values.length ? (
+      {values.length && !bare ? (
         <div
           className="mono"
           style={{
