@@ -321,9 +321,26 @@ datacenter IP gets banned) is `DEBANK_PROXY_URL`.
 
 Reliability rules (a silently wrong number is worse than a failed request):
 
-- **Never two headless Chrome at once**: parallel instances choke each other and
-  silently return $0. The Chrome path is serialized by a lock (limit 1), while
-  the HTTP path runs with a pool (`EVM_HTTP_CONCURRENCY`, default 3).
+- **One page at a time per browser, and one browser per container.** Tabs are
+  not the unit of parallelism here, and this is measured rather than assumed —
+  the same six wallets, same machine:
+
+  | tabs at once | wall | peak Chrome RSS | correct totals | payloads captured |
+  |---|---|---|---|---|
+  | 1 | 52.8s | 977 MB | 6/6 | 6/6 |
+  | 3 | 46.3s | 1417 MB | 4/6 | 4/6 |
+  | 6 | 38.6s | 1853 MB | 3/6 | 3/6 |
+
+  27% faster for 90% more memory and half the wallets wrong — and wrong in the
+  worst way: two came back `$0`, and one came back $5,905,334 against a real
+  $42,171,814, which is plausible enough to be written down as true. The cause
+  is contention, not memory: debank.com is 11.8 MB of JavaScript across 23
+  files, and tabs parsing that at the same time starve each other's main thread
+  until the header never finishes rendering.
+
+  Scale by running more `scanner-evm` replicas instead. Each gets its own
+  browser and its own CPU, they compete for the same `scan.evm` queue, and none
+  of them can corrupt another's reading.
 - **Sanity check**: a drop of more than 25% triggers an immediate re-scan, and a
   drop is only believed once it holds for `SYNC_DROP_CONFIRM_CYCLES` cycles in a
   row. Until then the wallet keeps its last known value with `stale: true` and no
