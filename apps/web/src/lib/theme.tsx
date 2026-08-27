@@ -35,6 +35,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     // a light override that only lands on <body> leaves the page edges dark.
     document.body.dataset.theme = theme;
     document.documentElement.dataset.theme = theme;
+    // Installed as an app, this is the colour of the status bar and the window
+    // chrome around the page. The tags in the document answer the *system*
+    // setting; a theme chosen here has to say so itself, or the frame around a
+    // light page stays black.
+    for (const tag of document.querySelectorAll('meta[name="theme-color"]')) tag.remove();
+    const meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    meta.content = theme === 'light' ? '#f3f4f6' : '#08090c';
+    document.head.appendChild(meta);
     try {
       localStorage.setItem(KEY, theme);
     } catch {

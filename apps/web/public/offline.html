@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>svinooh — offline</title>
+    <style>
+      body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: #08090c;
+             color: #edeff4; font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 24px; }
+      .mark { width: 64px; height: 64px; margin: 0 auto 20px; }
+      h1 { font-size: 17px; font-weight: 800; margin: 0 0 8px; }
+      p { font-size: 13.5px; color: #9aa1af; margin: 0 0 22px; line-height: 1.6; max-width: 30ch; }
+      button { font: inherit; font-weight: 700; font-size: 13.5px; color: #07130c; background: #2bd576;
+               border: 0; border-radius: 999px; padding: 12px 22px; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div>
+      <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
+        <circle cx="220" cy="256" r="92" fill="none" stroke="#2bd576" stroke-width="47" />
+        <circle cx="292" cy="256" r="92" fill="none" stroke="#2bd576" stroke-width="47" />
+      </svg>
+      <h1>No connection</h1>
+      <p>A portfolio is only worth reading when it's current, so there's nothing cached to show you.</p>
+      <button onclick="location.reload()">Try again</button>
+    </div>
+  </body>
+</html>

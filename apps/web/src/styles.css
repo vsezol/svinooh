@@ -50,7 +50,15 @@ body {
   font-family: var(--sans);
   transition: background 0.25s ease;
   -webkit-font-smoothing: antialiased;
-  min-height: 100vh;
+  /* dvh, not vh: on a phone the browser's toolbars come and go, and vh is the
+     height with them gone — which leaves the last row of the page underneath
+     them */
+  min-height: 100dvh;
+  /* Clear of the home indicator, and of the floating toolbar that sits over the
+     bottom of the page in mobile Safari */
+  padding-bottom: env(safe-area-inset-bottom);
+  /* A pull past the end of a standalone window shouldn't bounce the whole app */
+  overscroll-behavior-y: none;
 }
 
 a {
@@ -238,7 +246,10 @@ body[data-theme='light'] .on-dark {
   width: 100%;
   max-width: 1120px;
   margin: 0 auto;
-  padding: 0 clamp(14px, 3.5vw, 28px);
+  /* Installed to a home screen the page runs under the notch and the rounded
+     corners, so the gutters grow by whatever the device says it needs */
+  padding-left: calc(clamp(14px, 3.5vw, 28px) + env(safe-area-inset-left));
+  padding-right: calc(clamp(14px, 3.5vw, 28px) + env(safe-area-inset-right));
 }
 
 /* svin[oo]h logo */
