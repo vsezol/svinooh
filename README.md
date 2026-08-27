@@ -141,6 +141,32 @@ so the API sees a couple of requests a minute rather than a couple per visitor.
 If it is unreachable the landing still renders and fills itself in from the
 browser, which is what it did before any of this — it degrades to working.
 
+## The chart, and the phone
+
+One gesture, one meaning, and nothing shares:
+
+| | |
+|---|---|
+| one finger, dragging | scrolls the chart |
+| one finger, held | a crosshair that follows it, for reading the value at a point |
+| two fingers | selects the span between them and says what the portfolio did across it |
+| a mouse drag | the same selection — a mouse has only the one gesture |
+
+There is no zoom. The period buttons decide how much history is on screen, and a
+second, gestural way to change it only ever leaves people at a scale they did
+not pick and cannot name. Scrolling still means something without it: a day of
+readings squeezed into a phone is two pixels a point, so below a legible density
+the chart stops trying to fit the period into the width, shows the recent end,
+and lets the rest be scrolled back to.
+
+It installs as an app — manifest, icons, its own window, a splash that isn't a
+white flash into a dark page — and the status bar follows the theme you picked
+rather than the one your phone is in. The service worker is deliberately small:
+it serves Next's content-hashed assets from disk so an installed app opens
+without waiting on the network, never touches `/api` because stale money is
+worse than no money, and falls back to a page that says "no connection" instead
+of the browser's dinosaur.
+
 ## API
 
 Everything goes through the api gateway; `/api/auth/*` is forwarded to the auth
@@ -249,6 +275,16 @@ Reliability rules (a silently wrong number is worse than a failed request):
   drop is only believed once it holds for `SYNC_DROP_CONFIRM_CYCLES` cycles in a
   row. Until then the wallet keeps its last known value with `stale: true` and no
   snapshot is written — so a source glitch never draws a sawtooth on the chart.
+- **A chart's first point is not evidence**: bad scans arrive in runs — measured
+  at 7 to 11 snapshots on a live portfolio, half an hour of a scanner having a
+  bad time. When a run straddles the edge of a window, the first sample in view
+  is a glitch and there is nothing to its left to catch it, so a 24h chart would
+  open at a fifth of the portfolio and report +342% on a day it had not moved.
+  The level a window opens at is therefore taken from the high-water mark of the
+  wallet's last 40 snapshots before it: a bad scan reads poor, never rich, so the
+  largest recent reading is the one that cannot be a glitch. Nothing is rewritten
+  to it — it only decides whether the first sample looks like a drop, and a drop
+  is held only when the series climbs back, so a real fall stays a real fall.
 - **A hold is not a failure**: when we skip a result on purpose — an unconfirmed
   drop, or the EVM backoff below — the wallet is left exactly as it was rather
   than marked `failed`. Telling someone their sync broke when we chose to skip a
