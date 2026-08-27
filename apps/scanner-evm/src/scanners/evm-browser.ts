@@ -55,10 +55,17 @@ const INTERCEPT_SCRIPT = String.raw`(() => {
     project_list: null,
     app_list: null,
     cache_balance_list: null,
+    // When the page last asked the API for anything. While it is still
+    // fetching, the number in the header is a subtotal, not a total.
+    lastApiAt: 0,
   });
   window.__svinoohExpect = (address) => {
     state.expect = String(address || '').toLowerCase();
     state.project_list = state.app_list = state.cache_balance_list = null;
+    state.lastApiAt = Date.now();
+  };
+  const noteApi = (url) => {
+    if (String(url).indexOf('api.debank.com') !== -1) state.lastApiAt = Date.now();
   };
   const keyOf = (url) => {
     for (const path of WANTED) if (url.indexOf(path) !== -1) return path.split('/').pop();
@@ -76,6 +83,7 @@ const INTERCEPT_SCRIPT = String.raw`(() => {
 
   const originalFetch = window.fetch;
   window.fetch = function (...args) {
+    try { noteApi(String((args[0] && args[0].url) || args[0] || '')); } catch (e) {}
     return originalFetch.apply(this, args).then((res) => {
       try {
         const url = String((args[0] && args[0].url) || args[0] || '');
@@ -87,6 +95,7 @@ const INTERCEPT_SCRIPT = String.raw`(() => {
 
   const originalOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function (method, url) {
+    try { noteApi(url); } catch (e) {}
     this.addEventListener('load', () => {
       try {
         save(String(url), this.responseText);
@@ -244,6 +253,77 @@ async function waitForCapture(page: Page, timeoutMs: number): Promise<boolean> {
   return false;
 }
 
+/** How the header total is read out of the page */
+const READ_SETTLE_SCRIPT = String.raw`(() => {
+  const el = document.querySelector('[class*="HeaderInfo_totalAssetInner"]');
+  const m = ((el && el.innerText) || '').match(/\$([\d,]+(?:\.\d+)?)/);
+  const s = window.__svinooh || {};
+  return {
+    total: m ? parseFloat(m[1].replace(/,/g, '')) : 0,
+    quietMs: s.lastApiAt ? Date.now() - s.lastApiAt : 0,
+  };
+})()`;
+
+/**
+ * When the number in the header is the whole number.
+ *
+ * DeBank resolves chains one at a time and the header counts up as they land,
+ * so reading it early does not give a slightly low figure — it gives a
+ * different one. Measured on two real wallets: $64 four seconds in against
+ * $29,462 a second later, and $3,616 against $27,667. Understating by eighty
+ * times is not a rounding error, it is a wallet that looks emptied, and the
+ * whole drop-confirmation machinery downstream exists to catch exactly that.
+ *
+ * Two signals, because neither is enough alone:
+ *
+ * - **The total stops moving.** The gaps between updates ran to 1.3s in those
+ *   measurements, on a fast connection with a warm page; the old rule waited
+ *   2.5s, which left about a second of margin. Five seconds is the plain,
+ *   conservative answer.
+ * - **The page stops asking.** Every intermediate reading came while the API
+ *   had been quiet 0.3s or less; the final one landed 1.3s after the last
+ *   request, and nothing was requested again for the next half minute. So
+ *   three seconds of silence, with the total already still, says the same
+ *   thing as five seconds of stillness — sooner.
+ *
+ * Whichever comes first, capped by `ceilingMs`, after which the last reading is
+ * what we have. Never settles on zero: an empty header is a page that has not
+ * started, not a wallet worth nothing.
+ *
+ * The cap is 30s and has to stay well under EVM_TIMEOUT_MS, which is the
+ * watchdog for the whole scan: navigation, the selector wait and this all come
+ * out of the same budget, and a settle that runs to its ceiling should still
+ * leave room to finish rather than be killed one step from the answer.
+ */
+async function settledTotal(page: Page, ceilingMs = 30_000): Promise<number> {
+  const STILL_MS = 5_000;
+  const STILL_WITH_QUIET_MS = 2_000;
+  const QUIET_MS = 3_000;
+  const STEP_MS = 250;
+
+  const deadline = Date.now() + ceilingMs;
+  let total = 0;
+  let unchangedSince = Date.now();
+
+  while (Date.now() < deadline) {
+    await sleep(STEP_MS);
+    const { total: read, quietMs } = (await page.evaluate(READ_SETTLE_SCRIPT)) as {
+      total: number;
+      quietMs: number;
+    };
+    if (read !== total) {
+      total = read;
+      unchangedSince = Date.now();
+      continue;
+    }
+    if (total <= 0) continue;
+    const still = Date.now() - unchangedSince;
+    if (still >= STILL_MS) break;
+    if (still >= STILL_WITH_QUIET_MS && quietMs >= QUIET_MS) break;
+  }
+  return total;
+}
+
 async function dropTab(): Promise<void> {
   const page = tab;
   tab = null;
@@ -307,22 +387,7 @@ async function scanEvmBrowserLocked(address: string): Promise<ScanResult> {
     // watchdog above is the real ceiling.
     await page.waitForSelector('[class*="HeaderInfo_totalAssetInner"]', { timeout: 45_000 });
 
-    // DeBank loads chains one at a time, and the total grows as each resolves.
-    // Reading right after waitForSelector yields an understated number:
-    // we wait for 5 identical non-zero readings in a row, 500ms apart.
-    let totalUsd = 0;
-    let last = -1;
-    let stable = 0;
-    for (let i = 0; i < 40; i++) {
-      await sleep(500);
-      totalUsd = (await page.evaluate(READ_TOTAL_SCRIPT)) as number;
-      if (totalUsd > 0 && totalUsd === last) {
-        if (++stable >= 5) break;
-      } else {
-        stable = 0;
-      }
-      last = totalUsd;
-    }
+    const totalUsd = await settledTotal(page);
 
     // A cold load is slower than the total settling, so the payloads may still
     // be in flight — give them a moment before deciding they aren't coming
