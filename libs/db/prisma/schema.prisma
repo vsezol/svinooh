@@ -33,6 +33,28 @@ model User {
 /// It is a bearer credential, so it is short-lived, counted, and superseded:
 /// issuing a new one drops the user's older links, which means the newest
 /// message in the chat is always the only live link.
+/// A sign-in the site started and is still waiting on.
+///
+/// The site opens t.me/<bot>?start=<token>; the bot answers that it was the
+/// person holding the phone. The tab polls until it is, then trades the row for
+/// a session. Five minutes, one use.
+///
+/// In a table rather than in memory because the bot and the gateway are
+/// separate services now: only one process may long-poll a bot token, so the
+/// one that hears the answer is not the one the tab is asking.
+model TelegramLogin {
+  token      String   @id
+  /// Set when the bot confirms who pressed Start; null while still waiting
+  telegramId BigInt?
+  firstName  String?
+  lastName   String?
+  username   String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 model LoginLink {
   token     String   @id
   userId    String
