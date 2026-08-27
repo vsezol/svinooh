@@ -1,6 +1,7 @@
 import type { PositionTokenRole } from '@svinooh/shared';
 import { fetchJson } from './http';
 import { rangeFromLegs } from '@svinooh/common';
+import { enrich, needsLendingFacts, NO_FACTS, solanaLendingFacts, solanaPoolFacts } from './defi';
 import type { ScanPosition, ScanPositionToken, ScanResult } from '@svinooh/shared';
 
 /**
@@ -183,12 +184,19 @@ async function fetchAssetInfo(mints: string[]): Promise<Map<string, JupAsset>> {
 }
 
 export async function scanSol(address: string): Promise<ScanResult> {
-  // 1) Jupiter DeFi portfolio: the sum of value across all elements of all fetchers
-  const portfolio = await fetchJson<{ fetcherResults?: Array<{ elements?: JupElement[] }> }>(
-    `${JUP_PORTFOLIO_API}/${address}?unpriced=false`,
-    { headers: { accept: 'application/json', 'x-api-key': JUP_API_KEY } },
-    { timeoutMs: 45_000 },
-  );
+  // 1) Jupiter DeFi portfolio: the sum of value across all elements of all fetchers.
+  //    Alongside it, the protocols themselves — Orca, Meteora and Kamino answer
+  //    what Jupiter does not: whether a concentrated position is actually in its
+  //    band, and what a loan's health and rate are. They run together because
+  //    neither waits on the other, and the facts are only read at the end.
+  const [portfolio, poolFacts] = await Promise.all([
+    fetchJson<{ fetcherResults?: Array<{ elements?: JupElement[] }> }>(
+      `${JUP_PORTFOLIO_API}/${address}?unpriced=false`,
+      { headers: { accept: 'application/json', 'x-api-key': JUP_API_KEY } },
+      { timeoutMs: 45_000 },
+    ),
+    solanaPoolFacts(address),
+  ]);
 
   let defi = 0;
   const elements: JupElement[] = [];
@@ -327,11 +335,20 @@ export async function scanSol(address: string): Promise<ScanResult> {
     }
   }
 
+  // Kamino is only worth its 38 markets when Jupiter described a loan without
+  // saying how healthy it is or what it costs, which is not the usual case
+  const lendingFacts = needsLendingFacts(positions)
+    ? await solanaLendingFacts(address)
+    : NO_FACTS;
+
   return {
     chain: 'SOL',
     address,
     totalUsd: defi + gmtrade,
-    positions,
+    // Jupiter decides what is held and what it is worth; the protocols only
+    // fill in the fields it leaves blank. Nothing here adds or removes a
+    // position, so a failed source costs detail and never a holding.
+    positions: enrich(enrich(positions, poolFacts), lendingFacts),
     breakdown: { defi, gmtrade },
     unpriced: unpriced.length ? unpriced : undefined,
   };
