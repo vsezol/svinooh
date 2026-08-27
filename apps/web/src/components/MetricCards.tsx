@@ -6,8 +6,11 @@ import { AreaChart } from './AreaChart';
 
 /**
  * Two readings the headline total can't give you: what you could collect right
- * now, and what you owe — each over the same window as the chart above them,
- * and read the same way: drag to move, shift-drag or two fingers to measure.
+ * now, and what you owe. Each card is the same chart as the one above, drawn
+ * edge to edge behind the figure: the period buttons up there drive all three,
+ * and the gestures are the same — drag to scroll, shift-drag or two fingers to
+ * measure, hover to read a value. The text floats above the chart and lets
+ * every pointer through, so the whole card is chart.
  *
  * A line only appears once there is one. Both have only been recorded since the
  * release that started recording them, so a portfolio scanned before that has
@@ -27,8 +30,8 @@ export function MetricCards({
   period: HistoryRange;
 }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10, marginTop: 22 }}>
-      <Card label="CLAIMABLE" series={claimableSeries} period={period}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 12, marginTop: 20 }}>
+      <Card label="CLAIMABLE" series={claimableSeries} period={period} tone="accent">
         <Figure value={fmtUsd(rewards.total)} accent />
         <Caption>
           {rewards.pools > 0 || rewards.other > 0
@@ -42,7 +45,7 @@ export function MetricCards({
         </Caption>
       </Card>
 
-      <Card label="TOTAL DEBT" series={debtSeries} period={period}>
+      <Card label="TOTAL DEBT" series={debtSeries} period={period} tone="muted">
         <Figure value={debt.total > 0 ? fmtUsd(debt.total) : '—'} />
       </Card>
 
@@ -54,35 +57,40 @@ function Card({
   label,
   series,
   period,
+  tone,
   children,
 }: {
   label: string;
   series: Series;
   period: HistoryRange;
+  tone: 'accent' | 'muted';
   children: React.ReactNode;
 }) {
+  const hasLine = series.values.length >= 2;
   return (
     <div
       style={{
+        position: 'relative',
         border: '1px solid var(--line)',
         borderRadius: 16,
         background: 'var(--surf)',
-        padding: '16px 18px',
-        display: 'flex',
-        flexDirection: 'column',
+        overflow: 'hidden',
       }}
     >
-      <div className="mono" style={{ fontSize: 10.5, letterSpacing: '0.16em', color: 'var(--mut)' }}>
-        {label}
-      </div>
-      {children}
-      {series.values.length >= 2 ? (
-        // Pushed to the bottom so two cards of different heights still line
-        // their charts up with each other
-        <div style={{ marginTop: 'auto', paddingTop: 12, marginLeft: -6, marginRight: -6 }}>
-          <AreaChart values={series.values} times={series.times} period={period} height="52px" bare />
+      {hasLine ? (
+        <div style={{ position: 'absolute', inset: 0 }}>
+          <AreaChart values={series.values} times={series.times} period={period} height="100%" bare tone={tone} />
         </div>
       ) : null}
+      {/* Above the chart but transparent to it: the text is read, never hit.
+          The bottom padding is the lane the line usually runs in — the text
+          stays out of it, and a card without a line yet doesn't reserve one */}
+      <div style={{ position: 'relative', padding: hasLine ? '18px 20px 64px' : '18px 20px', pointerEvents: 'none' }}>
+        <div className="mono" style={{ fontSize: 11, letterSpacing: '0.16em', color: 'var(--mut)' }}>
+          {label}
+        </div>
+        {children}
+      </div>
     </div>
   );
 }
@@ -92,10 +100,10 @@ function Figure({ value, accent }: { value: string; accent?: boolean }) {
     <div
       className="mono"
       style={{
-        fontWeight: 600,
-        fontSize: 24,
+        fontWeight: 700,
+        fontSize: 28,
         letterSpacing: '-0.01em',
-        marginTop: 8,
+        marginTop: 10,
         color: accent ? 'var(--acc-text)' : 'var(--text)',
       }}
     >
@@ -105,5 +113,5 @@ function Figure({ value, accent }: { value: string; accent?: boolean }) {
 }
 
 function Caption({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--mut)', marginTop: 5 }}>{children}</div>;
+  return <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--mut)', marginTop: 7 }}>{children}</div>;
 }
