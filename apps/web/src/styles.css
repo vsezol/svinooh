@@ -690,7 +690,7 @@ body[data-theme='light'] .on-dark {
 .tab-dock {
   display: none;
   left: 50%;
-  top: calc(100dvh - 4px);
+  top: calc(100dvh - 10px);
   bottom: auto;
   transform: translate(-50%, -100%);
 }
@@ -701,7 +701,7 @@ body[data-theme='light'] .on-dark {
    itself, because Safari does not keep dvh honest once its toolbar collapses. */
 @media (display-mode: standalone) {
   .tab-dock {
-    top: calc(100dvh - 4px - env(safe-area-inset-bottom));
+    top: calc(100dvh - 10px - env(safe-area-inset-bottom));
   }
 }
 
