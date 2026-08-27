@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import type { Page } from 'puppeteer';
 import { config } from '../config';
 import { sleep } from '@svinooh/common';
-import { getBrowser } from './browser';
+import { getBrowser, closeBrowser } from './browser';
 import {
   itemPositions,
   tokenPosition,
@@ -228,9 +228,41 @@ const logger = new Logger('EvmBrowser');
 let tab: Page | null = null;
 let tabScans = 0;
 
+/**
+ * The debank.com responses seen during the current scan — status codes only, so
+ * a failure can say WHY. A 429/403 is DeBank rate-limiting our IP (a proxy is
+ * the fix); an empty trace next to a navigation timeout is the page never
+ * answering at all — our own long-lived browser stalling, or an IP tarpit.
+ * Reset at the start of each scan; only debank hosts are kept.
+ */
+let netTrace: Array<{ url: string; status: number }> = [];
+
+function summarizeNet(trace: Array<{ url: string; status: number }>): string {
+  if (!trace.length) return 'no debank responses seen';
+  const byStatus = new Map<number, number>();
+  for (const r of trace) byStatus.set(r.status, (byStatus.get(r.status) ?? 0) + 1);
+  const counts = [...byStatus.entries()].map(([s, n]) => `${s}×${n}`).join(' ');
+  const last = trace[trace.length - 1];
+  return `${counts} (last ${last.status} ${last.url})`;
+}
+
 async function freshTab(): Promise<Page> {
   const browser = await getBrowser();
   const page = await browser.newPage();
+  // Record debank.com response codes, so a failed scan can be told apart:
+  // 429/403 is DeBank; nothing at all is the page never answering. Best-effort —
+  // if the engine emits no Network events, an empty trace is itself the signal.
+  page.on('response', (res) => {
+    try {
+      const url = res.url();
+      if (url.includes('debank.com')) {
+        netTrace.push({ url: url.replace(/^https?:\/\//, '').slice(0, 80), status: res.status() });
+        if (netTrace.length > 60) netTrace.shift();
+      }
+    } catch {
+      // a response we cannot read tells us nothing; skip it
+    }
+  });
   // Best-effort: lightpanda does not implement setUserAgent/setViewport and logs
   // them as no-ops. Chrome honours both. Neither is load-bearing for the scan.
   await page
@@ -353,6 +385,7 @@ async function scanEvmBrowserLocked(address: string): Promise<ScanResult> {
   if (!tab) tab = await freshTab();
   const page = tab;
   tabScans++;
+  netTrace = []; // scope the response trace to this scan
 
   // Safeguard against a hung page: on timeout the tab goes, and everything
   // pending on it rejects. The next scan opens a new one.
@@ -446,8 +479,17 @@ async function scanEvmBrowserLocked(address: string): Promise<ScanResult> {
 
     return { chain: 'EVM', address, totalUsd, positions, breakdown };
   } catch (error) {
-    // A tab that failed once is not to be trusted with the next wallet
+    const message = error instanceof Error ? error.message : String(error);
+    // Say what debank actually returned, so the cause is diagnosable rather than
+    // guessed: a 429/403 is DeBank throttling our IP (a proxy is the fix); an
+    // empty trace is the page never answering (our browser stalling, or a tarpit).
+    logger.warn(`${address}: browser scan failed (${message}) — debank ${summarizeNet(netTrace)}`);
+    // Restart the WHOLE browser, not just the tab. If it is our long-lived
+    // lightpanda process that has degraded, the next scan on a fresh one
+    // succeeds; if it still fails on a brand-new browser (same egress IP), the
+    // problem is DeBank / the IP, not us. Either way, the next attempt tells us.
     await dropTab();
+    await closeBrowser();
     throw error;
   } finally {
     clearTimeout(watchdog);
