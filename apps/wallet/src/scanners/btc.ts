@@ -1,5 +1,5 @@
 import { fetchJson } from './http';
-import type { ScanResult } from './types';
+import type { ScanResult } from '@svinooh/shared';
 
 interface AddressStats {
   funded_txo_sum: number;

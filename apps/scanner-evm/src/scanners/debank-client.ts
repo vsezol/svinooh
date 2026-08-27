@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Impit, type ImpitResponse } from 'impit';
 import { config } from '../config';
-import { sleep } from '../common/util';
+import { sleep } from '@svinooh/common';
 
 /**
  * Client for the public debank.com web API. The DeBank web page signs each of

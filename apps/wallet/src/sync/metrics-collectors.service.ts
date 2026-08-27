@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Gauge } from 'prom-client';
-import { MetricsService } from '@svinooh/common';
+import type { Chain } from '@svinooh/shared';
+import { MetricsService, scanQueueName } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import { RabbitService } from '../queue/rabbit.service';
 
@@ -9,6 +10,8 @@ import { RabbitService } from '../queue/rabbit.service';
  * status, how many portfolios, the scan queue depth. They live here because they
  * need Prisma and Rabbit — MetricsService is kept dependency-free.
  */
+const SCAN_QUEUES: string[] = (['EVM', 'SOL', 'TRON', 'BTC'] as Chain[]).map(scanQueueName);
+
 @Injectable()
 export class MetricsCollectorsService implements OnModuleInit {
   constructor(
@@ -53,11 +56,11 @@ export class MetricsCollectorsService implements OnModuleInit {
 
     new Gauge({
       name: 'svinooh_scan_queue_depth',
-      help: 'Pending scan jobs in the RabbitMQ queue',
+      help: 'Pending scan jobs across every chain queue',
       registers,
       async collect() {
         try {
-          this.set(await rabbit.messageCount());
+          this.set(await rabbit.messageCount(SCAN_QUEUES));
         } catch {
           /* no-op */
         }

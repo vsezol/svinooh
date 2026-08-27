@@ -1,14 +1,20 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import type { Chain } from '@svinooh/shared';
 import { config } from '../config';
-import { sleep } from '../common/util';
+import { scanQueueName, sleep } from '@svinooh/common';
 import type { ScanJob } from '../queue/rabbit.service';
 import { RabbitService } from '../queue/rabbit.service';
 import { SyncService } from './sync.service';
 
 /**
- * Works through the queue one address at a time (prefetch=1) and pauses after
- * each scan — a steady "slow and steady", without bursts of requests to sources.
+ * Works through the light chains one address at a time (prefetch=1), pausing
+ * after each scan — steady, without bursts of requests to the sources.
+ *
+ * EVM is not among them: it is scanned by its own service, off its own queue.
+ * A browser scan takes seconds and used to set the pace for chains that need a
+ * single HTTP request.
  */
+const OWN_CHAINS: Chain[] = ['SOL', 'TRON', 'BTC'];
 @Injectable()
 export class ScanConsumerService implements OnApplicationBootstrap {
   private readonly logger = new Logger(ScanConsumerService.name);
@@ -20,9 +26,15 @@ export class ScanConsumerService implements OnApplicationBootstrap {
 
   onApplicationBootstrap() {
     if (!this.rabbit.enabled) return;
-    this.rabbit.registerConsumer((job) => this.handle(job), config.scanPrefetch);
+    for (const chain of OWN_CHAINS) {
+      this.rabbit.registerConsumer(
+        scanQueueName(chain),
+        (job: ScanJob) => this.handle(job),
+        config.scanPrefetch,
+      );
+    }
     this.logger.log(
-      `Consumer: prefetch=${config.scanPrefetch}, ${config.scanJobDelayMs}ms pause between scans`,
+      `Consumer: ${OWN_CHAINS.join('/')} at prefetch=${config.scanPrefetch}, ${config.scanJobDelayMs}ms pause between scans`,
     );
   }
 

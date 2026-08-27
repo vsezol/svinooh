@@ -3,8 +3,6 @@
 
 FROM node:22-slim AS build
 WORKDIR /app
-# Chrome isn't needed at build time — puppeteer doesn't download it
-ENV PUPPETEER_SKIP_DOWNLOAD=1
 
 COPY package.json package-lock.json nx.json tsconfig.base.json ./
 COPY apps/wallet/package.json apps/wallet/
@@ -23,20 +21,9 @@ RUN npm run -w @svinooh/db build \
   && npm run -w apps/wallet build
 
 FROM node:22-slim
-# System chromium for puppeteer (EVM Chrome fallback); the container sandbox is
-# disabled via a flag (CHROME_NO_SANDBOX)
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
-    chromium \
-    ca-certificates \
-    fonts-liberation \
-    fonts-noto-color-emoji \
-  && rm -rf /var/lib/apt/lists/*
-
-ENV NODE_ENV=production \
-  PUPPETEER_SKIP_DOWNLOAD=1 \
-  PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
-  CHROME_NO_SANDBOX=1
+# No browser here any more: EVM scanning moved to apps/scanner-evm, and with it
+# Chromium, its fonts and about half of this image.
+ENV NODE_ENV=production
 
 WORKDIR /app
 COPY --from=build /app/node_modules node_modules
@@ -52,4 +39,3 @@ EXPOSE 3000
 # no-op.
 CMD ["node", "-r", "@svinooh/common/dist/tracing", "apps/wallet/dist/main.js"]
 
-# build trigger

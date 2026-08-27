@@ -17,7 +17,10 @@ apps/
   api/    — gateway (NestJS): portfolios, history, Redis cache, JWT verification,
             /auth/* proxied to the auth service
   auth/   — sign-in (NestJS): Telegram bot and login widget, issues JWTs, owns User
-  wallet/ — scanning (NestJS): RabbitMQ queue, the chain scanners, snapshots
+  wallet/ — scanning (NestJS): decides what is due, one RabbitMQ queue per
+            chain, the SOL/TRON/BTC scanners, snapshots
+  scanner-evm/ — the EVM scanner (NestJS): headless Chrome, and nothing else.
+            No database, no queue: an address in, what it holds out
   web/    — Next.js (App Router): the landing is prerendered, the portfolio
             page is a client render. Charts, Telegram login
 libs/
@@ -35,7 +38,8 @@ ops/
 ```
 web ──HTTPS+JWT──▶ api ──HTTP /auth/*───▶ auth ──▶ Telegram Bot API
                     │
-                    ├──HTTP /internal/scan──▶ wallet ──▶ RabbitMQ (its own scan queue)
+                    ├──HTTP /internal/scan──▶ wallet ──▶ RabbitMQ (scan.evm, scan.sol, …)
+                    │                            └──HTTP /internal/scan──▶ scanner-evm ──▶ Chrome
                     ├──▶ Redis (assembled-portfolio cache)
                     └──▶ Postgres ◀── auth, wallet
 ```
@@ -140,6 +144,47 @@ The page is rebuilt at most once a minute and served from the cache in between,
 so the API sees a couple of requests a minute rather than a couple per visitor.
 If it is unreachable the landing still renders and fills itself in from the
 browser, which is what it did before any of this — it degrades to working.
+
+## Why EVM scans in its own service
+
+Every chain but one is a single HTTP request. EVM is a headless browser, because
+DeBank's API stopped accepting our signature (see below) and the way back in is
+to let their own page sign for us and read what it fetched. That browser is
+heavy, keeps state between requests, leaks if left alone, hangs, and gets
+throttled into a ten-minute backoff — and while it shared a process with the
+others, a wallet on Solana waited behind all of that and died with it on every
+restart.
+
+So it moved out, and the split is drawn where it costs least:
+
+- `scanner-evm` has **no database and no queue**. It takes an address and
+  returns what that address holds. Every decision about what to believe, what to
+  write and when stays in `wallet`, untouched, which is why the split changed no
+  behaviour at all.
+- The call between them is plain request/response over the private network. A
+  queue would have meant moving the sanity checks — a suspicious drop is
+  re-scanned immediately and only believed if it holds — and those are the last
+  thing that should be split across a message boundary.
+- Queues are **per chain** (`scan.evm`, `scan.sol`, `scan.tron`, `scan.btc`).
+  One queue made the slowest chain the speed of all of them.
+
+### One tab, not one page load per wallet
+
+The scanner keeps a single browser with a single tab open and moves it between
+profiles the way a person clicking a link does, rather than loading debank.com
+from scratch for every wallet. Measured on two real wallets: **12.4s for the
+first scan, 5.2s for the rest** — the SPA boot, its bundle and its fonts are
+paid once instead of once per wallet.
+
+Two things make that safe, and both were found by it going wrong:
+
+- **The interceptor is told whose payloads to keep.** A tab that has just shown
+  one wallet must not file its leftovers under the next one.
+- **A page that answers from memory is not a scan.** Navigating back to an
+  address the app has already seen fetches nothing, so the interceptor stays
+  empty and the positions quietly fall back to what the DOM shows — the same
+  total, none of the detail, and no sign anything was lost. The scanner now
+  waits for the payloads and reloads the page properly if they never come.
 
 ## The chart, and the phone
 
@@ -396,7 +441,8 @@ api     DATABASE_URL, JWT_SECRET, REDIS_URL, AUTH_SERVICE_URL, WALLET_SERVICE_UR
         WEB_ORIGIN, LOKI_URL, OTEL_EXPORTER_OTLP_ENDPOINT, SERVICE_NAME
 auth    DATABASE_URL, JWT_SECRET (same as api), TELEGRAM_BOT_TOKEN,
         TELEGRAM_BOT_USERNAME, WEB_URL, AUTH_DEV_MODE=false, LOKI_URL, OTEL_…
-wallet  DATABASE_URL, RABBITMQ_URL, CHROME_NO_SANDBOX=1, LOKI_URL, OTEL_…
+wallet  DATABASE_URL, RABBITMQ_URL, EVM_SCANNER_URL, INTERNAL_TOKEN, LOKI_URL, OTEL_…
+scanner-evm  CHROME_NO_SANDBOX=1, INTERNAL_TOKEN (same string as wallet's), LOKI_URL, OTEL_…
 web     NEXT_PUBLIC_API_URL = https://<api domain>  (inlined into the browser
                                                bundle at build time — rebuild
                                                after changing it; the server
@@ -404,7 +450,9 @@ web     NEXT_PUBLIC_API_URL = https://<api domain>  (inlined into the browser
                                                landing)
 ```
 
-The wallet service needs ≥ 1 GB of memory (headless Chrome). Migrations are
+`scanner-evm` needs ≥ 1 GB of memory (headless Chrome); `wallet` no longer does.
+`EVM_SCANNER_URL` is the scanner's private address —
+`http://${{scanner-evm.RAILWAY_PRIVATE_DOMAIN}}:${{scanner-evm.PORT}}`. Migrations are
 applied automatically when the api starts (`prisma migrate deploy`) — it is the
 only service that writes the schema.
 

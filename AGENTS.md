@@ -37,6 +37,43 @@ and whether it is public live in a separate table, `PortfolioOwner`:
   Visibility is a property of the *ownership*, not of the portfolio, because an
   ownerless portfolio has no one to be private from.
 
+## Naming
+
+One shape for every name, so nothing has to be looked up twice.
+
+**Services, directories and packages: lowercase kebab-case, role first.**
+
+```
+apps/api           @svinooh/api           railway: api
+apps/auth          @svinooh/auth          railway: auth
+apps/wallet        @svinooh/wallet        railway: wallet
+apps/web           @svinooh/web           railway: web
+apps/scanner-evm   @svinooh/scanner-evm   railway: scanner-evm
+libs/common        @svinooh/common
+```
+
+The directory, the npm name and the Railway service are the **same string** —
+if you know one you know the others. Never capitalised, never camelCase, never a
+suffix describing where it came from (`grafana-repo`).
+
+A qualifier goes after the role, not before: `scanner-evm`, not `evm-scanner`.
+Roles group together in an alphabetical list, which is how you actually read a
+service list once there is more than one of a kind.
+
+**Queues: `scan.<chain>`** — lowercase, dot-namespaced, the chain exactly as the
+`Chain` enum spells it in lower case: `scan.evm`, `scan.sol`, `scan.tron`,
+`scan.btc`.
+
+**Environment variables: SCREAMING_SNAKE_CASE**, named for what they configure
+and not for the service reading them: `SYNC_INTERVAL_MIN`, `RABBITMQ_URL`,
+`CHROME_NO_SANDBOX`. A variable two services both read has one name in both.
+
+Two Railway services are off-convention and can only be renamed from the
+dashboard (the API has no field for it): `Postgres` and `Redis` are Railway's
+own defaults, and renaming them rewrites every `${{Postgres.DATABASE_URL}}`
+reference — worth doing deliberately, not in passing. `grafana-repo` is free to
+rename, nothing references it.
+
 ## Issue tracking
 
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.

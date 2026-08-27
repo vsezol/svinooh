@@ -1,19 +1,18 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Wallet } from '@prisma/client';
 import type { Chain } from '@svinooh/shared';
 import { config } from '../config';
-import { ScanHold } from '../common/scan-hold';
+import { ScanHold } from '@svinooh/common';
 import { MetricsService } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import type { ScanJob } from '../queue/rabbit.service';
 import { scanAddress } from '../scanners';
-import { closeBrowser } from '../scanners/browser';
-import type { ScanResult } from '../scanners/types';
+import type { ScanResult } from '@svinooh/shared';
 import { scanQueue } from './scan-queue';
 
 @Injectable()
-export class SyncService implements OnModuleDestroy {
+export class SyncService {
   private readonly logger = new Logger(SyncService.name);
   /** In-flight scans keyed by `${chain}:${address}` — keeps the loop and the "scan on add" from running the same address twice */
   private readonly inFlight = new Set<string>();
@@ -25,9 +24,6 @@ export class SyncService implements OnModuleDestroy {
     private readonly metrics: MetricsService,
   ) {}
 
-  async onModuleDestroy() {
-    await closeBrowser();
-  }
 
   /**
    * The addresses that are DUE for a rescan, most urgent first.
