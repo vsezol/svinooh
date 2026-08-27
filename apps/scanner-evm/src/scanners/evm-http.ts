@@ -100,7 +100,7 @@ export async function scanEvmHttp(rawAddress: string): Promise<ScanResult> {
   }
   if (curveLast !== null && curveLast > 1 && totalUsd < curveLast * 0.9) {
     throw new DebankError(
-      `sum $${totalUsd.toFixed(2)} is >10% below the curve's $${curveLast.toFixed(2)} — likely undercount, fall back to Chrome`,
+      `sum $${totalUsd.toFixed(2)} is >10% below the curve's $${curveLast.toFixed(2)} — likely undercount, fall back to the browser`,
     );
   }
 
