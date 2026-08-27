@@ -651,3 +651,10 @@ body[data-theme='light'] .on-dark {
 .menu-item.danger {
   color: var(--down);
 }
+
+/* Only where there is a mouse — a hint about a keyboard modifier is noise on a phone */
+@media (hover: none), (pointer: coarse) {
+  .mouse-only {
+    display: none !important;
+  }
+}
