@@ -674,8 +674,21 @@ body[data-theme='light'] .on-dark {
   display: flex;
 }
 
+/* In a browser tab the layout viewport already stops above Safari's floating
+   toolbar, and iOS still reports a safe-area inset on top of that — adding it
+   here parked the dock a finger's width above the toolbar. A tab needs only the
+   small gap the toolbar itself keeps from the edge. */
 .tab-dock {
   display: none;
+  bottom: 4px;
+}
+
+/* Installed to the home screen there is no toolbar, and the inset is the home
+   indicator the dock does have to clear. */
+@media (display-mode: standalone) {
+  .tab-dock {
+    bottom: calc(4px + env(safe-area-inset-bottom));
+  }
 }
 
 @media (max-width: 719px) {
@@ -709,6 +722,6 @@ body[data-theme='light'] .on-dark {
 
 @media (max-width: 719px) {
   .dock-room {
-    padding-bottom: calc(86px + env(safe-area-inset-bottom));
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
   }
 }
