@@ -297,3 +297,53 @@ export interface UpdateWalletAlertsDto {
   healthFactorBelow?: number | null;
   borrowApyAbove?: number | null;
 }
+
+/**
+ * What a protocol's own API knows about a position that an aggregator does not.
+ *
+ * A fact never becomes a position. Jupiter and DeBank decide what a wallet holds
+ * and what it is worth; a fact only answers what they left blank — whether a
+ * concentrated position is inside its band, and what a loan's health and rate
+ * are. A protocol that disagrees about value is not consulted about it.
+ */
+export interface PoolFact {
+  /** Stable across cycles: the protocol's own address for this position */
+  id: string;
+  platform: 'orca' | 'meteora' | 'uniswap';
+  /** The pair, upper-cased and ordered, e.g. "CBBTC|USDC" — how a fact finds its position */
+  pair: string;
+  inRange: boolean;
+  lowerPrice: number;
+  upperPrice: number;
+  currentPrice: number;
+  /** "USDC per cbBTC" */
+  priceLabel: string;
+  isFullRange: boolean;
+}
+
+/** What a lending market says about a loan, per borrowed asset */
+export interface LendingFact {
+  id: string;
+  platform: 'kamino' | 'aave';
+  market: string;
+  /** Upper-cased symbol of the borrowed asset — how a fact finds its position */
+  token: string;
+  healthFactor: number;
+  /** Borrow APY as a percentage: 6.2 is 6.2% */
+  borrowRate: number | null;
+}
+
+/**
+ * Everything the protocols could see this cycle, and which of them could not.
+ *
+ * `failed` matters as much as the facts: a source that threw has told us
+ * nothing, and nothing is not the same as "no positions". Anything that decides
+ * what changed since last time has to keep the two apart, or it will report
+ * every position of a briefly unreachable protocol as gone.
+ */
+export interface DefiFacts {
+  pools: PoolFact[];
+  lending: LendingFact[];
+  /** Sources that could not be reached, by platform */
+  failed: string[];
+}

@@ -4,6 +4,8 @@ import { config } from '../config';
 import { scanEvmBrowser } from './evm-browser';
 import { scanEvmHttp } from './evm-http';
 import type { ScanResult } from '@svinooh/shared';
+import { enrich, NO_FACTS } from '@svinooh/common';
+import { evmFacts } from './defi';
 
 const logger = new Logger('EvmScanner');
 
@@ -67,7 +69,7 @@ function noteHttpFailure(): void {
   }
 }
 
-export async function scanEvm(address: string): Promise<ScanResult> {
+async function scanDebank(address: string): Promise<ScanResult> {
   if (httpAllowedNow()) {
     try {
       const result = await scanEvmHttp(address);
@@ -110,4 +112,25 @@ export async function scanEvm(address: string): Promise<ScanResult> {
     );
   }
   throw lastError;
+}
+
+/**
+ * DeBank, plus the protocols themselves for what DeBank does not say.
+ *
+ * DeBank decides what the wallet holds and what it is worth. Uniswap answers
+ * whether a concentrated position is inside its band from the pool's own tick,
+ * where svinooh otherwise infers it from which side of the pair is left; Aave
+ * answers what a loan costs, which DeBank reports nowhere. Neither adds a
+ * position or changes a value.
+ *
+ * The facts are gathered alongside the DeBank scan rather than after it: both
+ * are slow, neither waits on the other, and a wallet with no Uniswap position
+ * and no Aave debt costs one call per network to find that out.
+ */
+export async function scanEvm(address: string): Promise<ScanResult> {
+  const [result, facts] = await Promise.all([
+    scanDebank(address),
+    evmFacts(address).catch(() => NO_FACTS),
+  ]);
+  return { ...result, positions: enrich(result.positions, facts) };
 }
