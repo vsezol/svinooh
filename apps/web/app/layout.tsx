@@ -2,16 +2,18 @@ import type { Metadata, Viewport } from 'next';
 import { Providers } from './providers';
 import '../src/styles.css';
 
-const FAVICON =
-  'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%2308090C%22/><circle cx=%2213%22 cy=%2216%22 r=%224%22 fill=%22none%22 stroke=%22%232BD576%22 stroke-width=%222%22/><circle cx=%2219%22 cy=%2216%22 r=%224%22 fill=%22none%22 stroke=%22%232BD576%22 stroke-width=%222%22/></svg>';
-
 export const metadata: Metadata = {
   title: 'svinooh — every DeFi position, no exceptions',
   description:
     'Crypto portfolio tracker across EVM, Solana, TRON and Bitcoin. Tokens, LP, staking, lending — the DeFi positions other trackers miss, counted at full value.',
+  // One set of icons everywhere — the tab, the home screen, the app window —
+  // so the mark can never be one thing in one place and another somewhere else
   icons: {
-    icon: [{ url: FAVICON }, { url: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
-    apple: '/apple-touch-icon.png',
+    icon: [
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: '/apple-touch-icon-180.png',
   },
   // Installed to a home screen it is an app, and an app has a name, not a
   // headline with a tagline in it
