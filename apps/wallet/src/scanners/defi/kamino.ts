@@ -1,5 +1,5 @@
 import { fetchJson, HttpError } from '../http';
-import type { LendingFact } from './types';
+import type { LendingFact } from '@svinooh/shared';
 
 const KAMINO_API = 'https://api.kamino.finance';
 const NULL_PUBKEY = '11111111111111111111111111111111';

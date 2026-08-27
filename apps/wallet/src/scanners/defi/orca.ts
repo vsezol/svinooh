@@ -1,6 +1,7 @@
 import { fetchJson } from '../http';
 import { solanaRpc } from './solana-rpc';
-import { pairKey, type PoolFact } from './types';
+import type { PoolFact } from '@svinooh/shared';
+import { pairKey } from '@svinooh/common';
 
 const ORCA_API = 'https://api.orca.so/v2/solana';
 const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
