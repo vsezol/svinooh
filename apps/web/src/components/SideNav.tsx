@@ -5,8 +5,8 @@ import type { CSSProperties, ReactNode } from 'react';
 export type Tab = 'portfolio' | 'notifications';
 
 /** The dock's pill slides between fixed slots, so both have to be one number */
-const DOCK_W = 77;
-const DOCK_H = 53;
+const DOCK_W = 72;
+const DOCK_H = 42;
 
 const ICON = {
   strokeWidth: 2,
@@ -68,7 +68,7 @@ const dockItem = (active: boolean, disabled: boolean): CSSProperties => ({
   flexDirection: 'column',
   alignItems: 'center',
   justifyContent: 'center',
-  gap: 2,
+  gap: 1,
   cursor: disabled ? 'default' : 'pointer',
   userSelect: 'none',
   color: active ? 'var(--acc-ink)' : 'var(--mut)',
@@ -186,19 +186,21 @@ export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
       {/* phone dock */}
       <div
         className="tab-dock"
+        // `bottom` lives in the stylesheet: what clears the bottom of the
+        // screen is a browser toolbar in a tab and the home indicator in an
+        // installed app, and only a media query can tell those apart
         style={{
           position: 'fixed',
           left: '50%',
           transform: 'translateX(-50%)',
-          bottom: 'env(safe-area-inset-bottom)',
           zIndex: 60,
           background: 'color-mix(in srgb, var(--surf) 86%, transparent)',
           backdropFilter: 'blur(16px)',
           WebkitBackdropFilter: 'blur(16px)',
           border: '1px solid var(--line2)',
-          borderRadius: 18,
-          padding: 4,
-          boxShadow: '0 16px 34px -16px rgba(0,0,0,0.6)',
+          borderRadius: 16,
+          padding: 3,
+          boxShadow: '0 14px 30px -16px rgba(0,0,0,0.6)',
         }}
       >
         <div style={{ position: 'relative', display: 'flex' }}>
@@ -211,7 +213,7 @@ export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
               left: 0,
               width: DOCK_W,
               height: DOCK_H,
-              borderRadius: 16,
+              borderRadius: 13,
               background: 'var(--acc)',
               transform: `translateX(${tab === 'notifications' ? DOCK_W : 0}px)`,
               transition: 'transform 0.46s cubic-bezier(0.34,1.42,0.5,1)',
@@ -219,15 +221,15 @@ export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
             }}
           />
           <div onClick={() => onTab('portfolio')} style={dockItem(tab === 'portfolio', false)}>
-            <ChartIcon size={21} />
+            <ChartIcon size={19} />
             <span style={DOCK_LABEL}>Portfolio</span>
           </div>
           <div onClick={() => onTab('notifications')} style={dockItem(tab === 'notifications', false)}>
-            <BellIcon size={21} />
+            <BellIcon size={19} />
             <span style={DOCK_LABEL}>Alerts</span>
           </div>
           <div title="AI agent — soon" style={dockItem(false, true)}>
-            <SparkIcon size={21} />
+            <SparkIcon size={19} />
             <span style={DOCK_LABEL}>AI agent</span>
           </div>
         </div>
