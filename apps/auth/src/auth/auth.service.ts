@@ -63,13 +63,21 @@ export class AuthService {
     );
   }
 
-  /** Start bot sign-in — a link that opens the Telegram app */
-  telegramStart(): TelegramStartDto {
+  /**
+   * Start bot sign-in — a link that opens the Telegram app.
+   *
+   * The row is written before the link is handed out, and awaited. It used to
+   * be a `Map` and writing to it took no time at all; a table does, and a link
+   * given out first can be pressed before its row exists — the bot would then
+   * find nothing to mark, say nothing about it, and leave the tab waiting on a
+   * sign-in that had already happened.
+   */
+  async telegramStart(): Promise<TelegramStartDto> {
     if (!config.botToken || !config.botUsername) {
       throw new ServiceUnavailableException('Telegram sign-in is not configured');
     }
     const token = randomBytes(24).toString('base64url');
-    void this.logins.create(token);
+    await this.logins.create(token);
     return {
       token,
       botUsername: config.botUsername,
