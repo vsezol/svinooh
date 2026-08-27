@@ -27,13 +27,25 @@ interface Selection {
   toX: number;
 }
 
-/** Drag moves it, with a finger or a mouse; the wheel is spent on zooming */
+/**
+ * One finger scrolls the chart. A mouse drag does not — that gesture belongs to
+ * selecting a range — and neither does the wheel, which belongs to the page.
+ */
 const SCROLL = {
   mouseWheel: false,
-  pressedMouseMove: true,
+  pressedMouseMove: false,
   horzTouchDrag: true,
   vertTouchDrag: false,
 } as const;
+
+/**
+ * The narrowest a point may be drawn before the chart stops trying to fit the
+ * whole period into the width and becomes scrollable instead. A day of history
+ * squeezed into a phone is a couple of pixels per reading — a shape, not a
+ * chart. Below this it shows the recent end at a legible density and lets you
+ * scroll back for the rest.
+ */
+const MIN_POINT_PX = 3;
 
 const token = (name: string): string =>
   getComputedStyle(document.body).getPropertyValue(name).trim() || '#2bd576';
@@ -48,11 +60,23 @@ function dateLabel(ms: number, period: HistoryRange): string {
 /**
  * TradingView's Lightweight Charts (Apache-2.0).
  *
- * It behaves like a chart: drag moves it, the wheel and a pinch zoom, a double
- * click on the scale puts it back. Measuring a span — drag across it and read
- * what the portfolio did over it — is the same gesture, so it moved onto
- * shift-drag. Scrolling is what people reach for first and it should be what
- * they get.
+ * One gesture, one meaning, and nothing shares:
+ *
+ *  - one finger, dragging — scrolls the chart
+ *  - one finger, held — the library's tracking crosshair, for reading the value
+ *    at a point; it follows the finger until the next tap
+ *  - two fingers — selects the span between them and says what the portfolio
+ *    did across it
+ *  - a mouse drag — the same selection, since a mouse has only the one gesture
+ *
+ * Both are pointer events, which already carry an id per finger and say which
+ * input they came from; the library has no selection of its own to borrow, and
+ * a gesture library would hand back a pinch — a distance and a centre — when
+ * what this needs is where each of the two fingers actually is.
+ *
+ * Zoom is deliberately absent. The period buttons decide how much history is on
+ * screen, and a second, gestural way to change it only ever leaves people at a
+ * scale they did not pick and cannot name.
  *
  * Nothing is drawn behind the line: gridlines on a 200px sparkline of one
  * portfolio are decoration that competes with the only thing worth reading.
@@ -62,6 +86,8 @@ export function AreaChart({ values, times, period, height }: Props) {
   const chart = useRef<IChartApi | null>(null);
   const series = useRef<ISeriesApi<'Area'> | null>(null);
   const drag = useRef<{ startX: number; moved: boolean } | null>(null);
+  /** Fingers currently on the chart, by pointer id → x. Two of them select a span. */
+  const touches = useRef(new Map<number, number>());
   const { theme } = useTheme();
 
   const [hover, setHover] = useState<{ index: number } | null>(null);
@@ -86,19 +112,11 @@ export function AreaChart({ values, times, period, height }: Props) {
     if (!box.current) return;
     const c = createChart(box.current, {
       autoSize: true,
-      // Drag it, wheel it, pinch it — the chart moves, the way a chart should.
-      // Measuring a span is still here, on shift-drag, because those are the
-      // same gesture and scrolling is the one people reach for first.
       handleScroll: SCROLL,
-      // The wheel and a pinch zoom in; scrolling only means anything once
-      // something is off-screen, so without this the drag would move nothing
-      // and the chart would look broken rather than fitted.
-      handleScale: {
-        mouseWheel: true,
-        pinch: true,
-        axisPressedMouseMove: false,
-        axisDoubleClickReset: true,
-      },
+      // No zooming, by choice. The period buttons decide how much history is on
+      // screen; a second, gestural way to change it only ever leaves people at a
+      // scale they did not pick and cannot name.
+      handleScale: false,
       layout: { background: { color: 'transparent' }, attributionLogo: false },
       leftPriceScale: { visible: false },
       rightPriceScale: { visible: false },
@@ -140,7 +158,18 @@ export function AreaChart({ values, times, period, height }: Props) {
 
   useEffect(() => {
     series.current?.setData(data);
-    chart.current?.timeScale().fitContent();
+    const scale = chart.current?.timeScale();
+    const width = box.current?.clientWidth ?? 0;
+    if (scale && width && values.length) {
+      if (width / values.length >= MIN_POINT_PX) {
+        scale.fitContent();
+      } else {
+        // Too many readings for the width: draw them at a legible size, park
+        // the view on the newest, and let the rest be scrolled back to
+        scale.applyOptions({ barSpacing: MIN_POINT_PX });
+        scale.scrollToRealTime();
+      }
+    }
     setSelection(null);
     // Re-running on every array identity would reset the selection on each
     // poll; the length and the endpoints are what actually change the picture.
@@ -160,29 +189,34 @@ export function AreaChart({ values, times, period, height }: Props) {
     return typeof c === 'number' ? c : 0;
   };
 
-  /**
-   * Shift turns the drag from scrolling into measuring. The chart's own
-   * scrolling has to be switched off while it is held, or the two gestures
-   * both act on the same pointer and the chart slides out from under the
-   * selection.
-   */
-  useEffect(() => {
-    const set = (measuring: boolean) => {
-      chart.current?.applyOptions({ handleScroll: measuring ? false : SCROLL });
-      if (!measuring) setSelection(null);
-    };
-    const down = (e: KeyboardEvent) => e.key === 'Shift' && set(true);
-    const up = (e: KeyboardEvent) => e.key === 'Shift' && set(false);
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-    return () => {
-      window.removeEventListener('keydown', down);
-      window.removeEventListener('keyup', up);
-    };
-  }, []);
+  const spanBetween = (from: number, to: number): void => {
+    const a = indexAt(from);
+    const b = indexAt(to);
+    if (a == null || b == null || Math.abs(a - b) < 1) return;
+    const [lo, hi] = a < b ? [a, b] : [b, a];
+    setSelection({ fromIndex: lo, toIndex: hi, fromX: xAt(lo), toX: xAt(hi) });
+  };
 
+  /**
+   * Both gestures, on one event model.
+   *
+   * Pointer events already say which input each one came from and carry an id
+   * per finger, which is all this needs — and `touch-action: pan-y` on the card
+   * is what stops the browser claiming a two-finger gesture for itself, so
+   * there is nothing to preventDefault and no reason to reach past React for a
+   * non-passive listener.
+   */
   const onPointerDown = (e: React.PointerEvent) => {
-    if (!e.shiftKey) return;
+    if (e.pointerType === 'touch') {
+      touches.current.set(e.pointerId, e.clientX);
+      const [a, b] = [...touches.current.values()];
+      if (touches.current.size === 2) {
+        // Or the chart would scroll out from under the fingers measuring it
+        chart.current?.applyOptions({ handleScroll: false });
+        spanBetween(a, b);
+      }
+      return;
+    }
     const index = indexAt(e.clientX);
     if (index == null) return;
     drag.current = { startX: index, moved: false };
@@ -190,6 +224,13 @@ export function AreaChart({ values, times, period, height }: Props) {
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
+    if (e.pointerType === 'touch') {
+      if (!touches.current.has(e.pointerId)) return;
+      touches.current.set(e.pointerId, e.clientX);
+      const [a, b] = [...touches.current.values()];
+      if (touches.current.size === 2) spanBetween(a, b);
+      return;
+    }
     if (!drag.current) return;
     const index = indexAt(e.clientX);
     if (index == null) return;
@@ -201,6 +242,13 @@ export function AreaChart({ values, times, period, height }: Props) {
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
+    if (e.pointerType === 'touch') {
+      touches.current.delete(e.pointerId);
+      // Only once the hand is off: lifting one finger of two would otherwise
+      // hand the other one a scroll it never asked for
+      if (touches.current.size === 0) chart.current?.applyOptions({ handleScroll: SCROLL });
+      return;
+    }
     // A tap, not a drag — clear whatever was selected
     if (drag.current && !drag.current.moved) setSelection(null);
     drag.current = null;
