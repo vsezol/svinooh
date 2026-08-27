@@ -51,3 +51,11 @@ export type ScanOutcome =
       recheck: ScanResult | null;
     }
   | { chain: Chain; address: string; ok: false; error: string };
+
+/**
+ * Where a scan announces what it found, for whoever decides who should hear
+ * about it. Separate from the scan-result queue on purpose: that one is how a
+ * scanner hands work back to the wallet service, and this one is what the wallet
+ * service says once the work is done and written.
+ */
+export const WALLET_STATE_QUEUE = 'wallet.state';
