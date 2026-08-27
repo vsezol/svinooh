@@ -64,7 +64,7 @@ function noteHttpFailure(): void {
   if (consecutiveFailures >= BREAKER_THRESHOLD && openedUntil === 0) {
     openedUntil = Date.now() + BREAKER_COOLDOWN_MS;
     logger.warn(
-      `DeBank HTTP path opened for ${BREAKER_COOLDOWN_MS / 60_000} min after ${consecutiveFailures} consecutive misses — scans go via Chrome`,
+      `DeBank HTTP path opened for ${BREAKER_COOLDOWN_MS / 60_000} min after ${consecutiveFailures} consecutive misses — scans go via the browser`,
     );
   }
 }
@@ -79,7 +79,7 @@ async function scanDebank(address: string): Promise<ScanResult> {
     } catch (error) {
       noteHttpFailure();
       const message = error instanceof Error ? error.message : String(error);
-      logger.warn(`${address}: HTTP path failed (${message}) → falling back to Chrome`);
+      logger.warn(`${address}: HTTP path failed (${message}) → falling back to the browser`);
     }
   }
 
@@ -93,13 +93,13 @@ async function scanDebank(address: string): Promise<ScanResult> {
     try {
       const result = await scanEvmBrowser(address);
       chromeFailures = 0;
-      logger.log(`${address}: Chrome debank $${result.totalUsd.toFixed(2)}`);
+      logger.log(`${address}: browser debank $${result.totalUsd.toFixed(2)}`);
       return result;
     } catch (error) {
       lastError = error;
       const message = error instanceof Error ? error.message : String(error);
       if (attempt < CHROME_ATTEMPTS) {
-        logger.warn(`${address}: Chrome attempt ${attempt} failed (${message}) → retrying`);
+        logger.warn(`${address}: browser attempt ${attempt} failed (${message}) → retrying`);
       }
     }
   }
