@@ -206,3 +206,39 @@ export interface ApiErrorDto {
   /** Machine-readable code: UNSUPPORTED_NETWORK, WALLET_EXISTS, ... */
   code?: string;
 }
+
+/**
+ * What one wallet is watched for, and told about over Telegram.
+ *
+ *   GET   /api/portfolios/:slug/alerts                   → AlertSettingsDto
+ *   PATCH /api/portfolios/:slug/wallets/:walletId/alerts → WalletAlertsDto
+ *
+ * Both owner-only. What somebody watches their own money for says as much about
+ * them as the money does, so it is never part of the portfolio a link hands to a
+ * stranger — it is fetched separately, by the one person entitled to it.
+ *
+ * A wallet nobody has configured still answers, with the defaults. The client is
+ * then never in the position of inventing a threshold and showing it as if the
+ * server had agreed to it.
+ */
+export interface WalletAlertsDto {
+  walletId: string;
+  /** An LP position leaving its liquidity range — or coming back into it */
+  rangeAlerts: boolean;
+  /** Told when the health factor falls below this. null — nobody is watching */
+  healthFactorBelow: number | null;
+  /** Told when the borrow rate climbs above this, in percent. null — not watched */
+  borrowApyAbove: number | null;
+}
+
+export interface AlertSettingsDto {
+  /** Every wallet in the portfolio that has finished its first sync */
+  wallets: WalletAlertsDto[];
+}
+
+/** A patch: a field left out is a field left alone */
+export interface UpdateWalletAlertsDto {
+  rangeAlerts?: boolean;
+  healthFactorBelow?: number | null;
+  borrowApyAbove?: number | null;
+}
