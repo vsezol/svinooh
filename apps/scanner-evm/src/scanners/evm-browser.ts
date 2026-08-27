@@ -46,6 +46,11 @@ const browserLock = new Semaphore(1);
  * gets rate-limited, while the page's own requests keep working.
  */
 const INTERCEPT_SCRIPT = String.raw`(() => {
+  // Idempotent: installed via evaluateOnNewDocument on Chrome, and re-run once
+  // after navigation for lightpanda (which does not always honour it). The guard
+  // makes the second call a no-op instead of double-wrapping fetch/XHR.
+  if (window.__svinoohInstalled) return;
+  window.__svinoohInstalled = true;
   const WANTED = ['/portfolio/project_list', '/portfolio/app_list', '/token/cache_balance_list'];
   const state = (window.__svinooh = {
     // Which profile the page is showing right now. Payloads for anybody else
@@ -226,12 +231,17 @@ let tabScans = 0;
 async function freshTab(): Promise<Page> {
   const browser = await getBrowser();
   const page = await browser.newPage();
-  await page.setUserAgent(
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
-  );
-  await page.setViewport({ width: 1440, height: 2000 });
-  // Has to be in place before the page's own scripts run
-  await page.evaluateOnNewDocument(INTERCEPT_SCRIPT);
+  // Best-effort: lightpanda does not implement setUserAgent/setViewport and logs
+  // them as no-ops. Chrome honours both. Neither is load-bearing for the scan.
+  await page
+    .setUserAgent(
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+    )
+    .catch(() => {});
+  await page.setViewport({ width: 1440, height: 2000 }).catch(() => {});
+  // Chrome runs this before the page's own scripts. lightpanda may skip it — the
+  // scan re-injects (guarded) after navigation, so capture works either way.
+  await page.evaluateOnNewDocument(INTERCEPT_SCRIPT).catch(() => {});
   return page;
 }
 
@@ -357,6 +367,10 @@ async function scanEvmBrowserLocked(address: string): Promise<ScanResult> {
         waitUntil: 'domcontentloaded',
         timeout: 30_000,
       });
+      // lightpanda safety net: if evaluateOnNewDocument was skipped, install the
+      // hooks now. The SPA fetches its portfolio after load, so this still lands
+      // before the calls we care about. Guarded, so a no-op on Chrome.
+      await page.evaluate(INTERCEPT_SCRIPT).catch(() => {});
       await page.evaluate(`window.__svinoohExpect && window.__svinoohExpect(${JSON.stringify(address)})`);
     };
 
