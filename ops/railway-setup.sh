@@ -14,7 +14,7 @@
 # WHAT IT DOES / DOESN'T
 #   - Creates every service and sets its source (Docker image or this repo).
 #   - Sets every service's variables, including the cross-service references
-#     that are the easy thing to forget (RABBITMQ_URL, DATABASE_URL, OTEL, …).
+#     that are the easy thing to forget (RABBITMQ_URL, DATABASE_URL, LOKI_URL, …).
 #   - It does NOT set each app's build config (Dockerfile path / config-as-code
 #     path). That already lives in the repo, per service, as apps/<svc>/railway.json
 #     (and ops/<svc>/railway.json). The Railway CLI can't reliably point a
@@ -63,7 +63,8 @@ PG_URL='${{Postgres.DATABASE_URL}}'
 REDIS_URL='${{Redis.REDIS_URL}}'
 RABBIT_URL='amqp://${{rabbitmq.RABBITMQ_DEFAULT_USER}}:${{rabbitmq.RABBITMQ_DEFAULT_PASS}}@${{rabbitmq.RAILWAY_PRIVATE_DOMAIN}}:5672'
 LOKI_URL='http://${{loki.RAILWAY_PRIVATE_DOMAIN}}:3100'
-OTEL_URL='http://${{tempo.RAILWAY_PRIVATE_DOMAIN}}:4318'
+# Tracing (Tempo + OTEL_EXPORTER_OTLP_ENDPOINT) was removed — it idled at
+# ~0.5 GB for traces nobody read. Logs (Loki) and metrics (Prometheus) stay.
 AUTH_URL='http://${{auth.RAILWAY_PRIVATE_DOMAIN}}:3000'
 WALLET_URL='http://${{wallet.RAILWAY_PRIVATE_DOMAIN}}:3000'
 API_PUBLIC='https://${{api.RAILWAY_PUBLIC_DOMAIN}}'
@@ -89,8 +90,6 @@ add_image rabbitmq "rabbitmq:3.13-management"
 echo "== observability =="
 add_image loki "grafana/loki:3.1.1"              # config from image; volume /loki
 setvars loki   "RAILWAY_RUN_UID=0"
-add_repo tempo                                    # config: ops/tempo/railway.json ; volume /var/tempo
-setvars tempo  "RAILWAY_RUN_UID=0"
 add_repo prometheus                               # config: ops/prometheus/railway.json ; volume /prometheus
 setvars prometheus "RAILWAY_RUN_UID=0"
 add_repo grafana                                  # config: ops/grafana/railway.json ; volume /var/lib/grafana ; PUBLIC
@@ -113,7 +112,7 @@ setvars api \
   "WEB_ORIGIN=${PUBLIC_WEB_ORIGIN}" \
   "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" "TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}" \
   "SYNC_INTERVAL_MIN=5" \
-  "LOKI_URL=${LOKI_URL}" "OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_URL}" \
+  "LOKI_URL=${LOKI_URL}" \
   "SERVICE_NAME=svinooh-api"
 
 # auth — Telegram sign-in, JWT issuer. config apps/auth/railway.json
@@ -124,7 +123,7 @@ setvars auth \
   "JWT_SECRET=${JWT_SECRET}" \
   "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" "TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}" \
   "WEB_URL=${PUBLIC_WEB_ORIGIN}" \
-  "LOKI_URL=${LOKI_URL}" "OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_URL}" \
+  "LOKI_URL=${LOKI_URL}" \
   "SERVICE_NAME=svinooh-auth"
 
 # wallet — scan orchestration + SOL/TRON/BTC scanners + result writer.
@@ -135,7 +134,7 @@ setvars wallet \
   "DATABASE_URL=${PG_URL}" \
   "RABBITMQ_URL=${RABBIT_URL}" \
   "CHROME_NO_SANDBOX=1" \
-  "LOKI_URL=${LOKI_URL}" "OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_URL}" \
+  "LOKI_URL=${LOKI_URL}" \
   "SERVICE_NAME=svinooh-wallet"
 
 # scanner-evm — the EVM browser scanner. THE service whose absence caused the
@@ -148,7 +147,7 @@ setvars scanner-evm \
   "RABBITMQ_URL=${RABBIT_URL}" \
   "SCANNER_ENGINE=lightpanda" \
   "CHROME_NO_SANDBOX=1" \
-  "LOKI_URL=${LOKI_URL}" "OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_URL}" \
+  "LOKI_URL=${LOKI_URL}" \
   "SERVICE_NAME=svinooh-scanner-evm"
 
 # web — Next.js. PUBLIC (svinooh.com). Dockerfile apps/web/Dockerfile ; port 4173
@@ -172,7 +171,6 @@ The Railway CLI does not set these reliably; do them once in the dashboard
      wallet       → apps/wallet/railway.json
      scanner-evm  → apps/scanner-evm/railway.json
      web          → apps/web/railway.json          (or Dockerfile path apps/web/Dockerfile)
-     tempo        → ops/tempo/railway.json
      prometheus   → ops/prometheus/railway.json
      grafana      → ops/grafana/railway.json
    Root Directory stays "/" for all of them (the Docker build context is the
@@ -182,8 +180,7 @@ The Railway CLI does not set these reliably; do them once in the dashboard
    expects (data lives here; size to taste):
      Postgres → its plugin volume     Redis → its plugin volume
      rabbitmq → /var/lib/rabbitmq      loki  → /loki
-     tempo    → /var/tempo             prometheus → /prometheus
-     grafana  → /var/lib/grafana
+     prometheus → /prometheus          grafana → /var/lib/grafana
    Every service with a volume also needs RAILWAY_RUN_UID=0 (already set above),
    because Railway mounts volumes as root while the images run non-root.
 

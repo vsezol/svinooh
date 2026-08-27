@@ -16,40 +16,6 @@ datasources:
     type: loki
     access: proxy
     url: http://loki.railway.internal:3100
-    jsonData:
-      derivedFields:
-        # Every log line written inside a traced request carries trace_id=<id>
-        # (see LokiLogger). This turns it into a link straight to that trace.
-        - name: TraceID
-          matcherType: regex
-          matcherRegex: 'trace_id=([0-9a-f]{32})'
-          url: '${__value.raw}'
-          datasourceUid: tempo
-          urlDisplayLabel: View trace
-
-  - name: Tempo
-    uid: tempo
-    type: tempo
-    access: proxy
-    url: http://tempo.railway.internal:3200
-    jsonData:
-      nodeGraph:
-        enabled: true
-      serviceMap:
-        datasourceUid: prometheus
-      # And back the other way: from a span to the logs of that request
-      tracesToLogsV2:
-        datasourceUid: loki
-        spanStartTimeShift: '-2m'
-        spanEndTimeShift: '2m'
-        filterByTraceID: true
-        tags:
-          - key: service.name
-            value: app
-      tracesToMetrics:
-        datasourceUid: prometheus
-        spanStartTimeShift: '-2m'
-        spanEndTimeShift: '2m'
-        tags:
-          - key: service.name
-            value: app
+    # Tempo (traces) was removed — it idled at ~0.5 GB for tracing nobody read.
+    # Logs (Loki) and metrics (Prometheus) stay. To bring tracing back, re-add a
+    # Tempo datasource here and a Loki derivedFields TraceID link into it.
