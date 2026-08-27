@@ -66,11 +66,27 @@ const POINTS_PER_WINDOW = 200;
  * of it to scroll to.
  */
 const RANGES: Record<HistoryRange, { windowMs: number | null; bucket: string | null }> = {
-  '1h': { windowMs: 3600e3, bucket: null }, // raw points — the sync interval is the step
+  '1h': { windowMs: 3600e3, bucket: null }, // fetched raw; gridded to GRID_STEP_MS below
   '24h': { windowMs: 24 * 3600e3, bucket: null },
   '7d': { windowMs: 7 * 86400e3, bucket: '30 minutes' },
   '30d': { windowMs: 30 * 86400e3, bucket: '2 hours' },
   all: { windowMs: null, bucket: '6 hours' },
+};
+
+/**
+ * The width of one slot on the chart's time grid — see toTimeGrid. The chart
+ * (lightweight-charts) spaces points by index, not by time, so a run of scans a
+ * minute apart and a pair three minutes apart draw at the same width unless the
+ * series is first laid onto a fixed grid. This is what one index step is worth.
+ * For the bucketed ranges it MUST match RANGES.bucket, so the SQL buckets and
+ * the grid that fills the gaps between them line up.
+ */
+const GRID_STEP_MS: Record<HistoryRange, number> = {
+  '1h': 60_000, // 1 min
+  '24h': 5 * 60_000, // 5 min
+  '7d': 30 * 60_000, // 30 min — matches bucket '30 minutes'
+  '30d': 2 * 3_600_000, // 2 h — matches bucket '2 hours'
+  all: 6 * 3_600_000, // 6 h — matches bucket '6 hours'
 };
 
 /** Where a range's query starts: SCREENS windows back, or the beginning for `all` */
@@ -137,15 +153,48 @@ function smoothSeries(
 }
 
 /** Downsamples the series to max points (always keeping the last one) */
-function downsample(points: HistoryPointDto[], max: number): HistoryPointDto[] {
+function downsample<T>(points: T[], max: number): T[] {
   if (points.length <= max) return points;
   const step = Math.ceil(points.length / max);
-  const out: HistoryPointDto[] = [];
+  const out: T[] = [];
   for (let i = 0; i < points.length; i += step) out.push(points[i]);
   const last = points[points.length - 1];
   if (out[out.length - 1] !== last) out.push(last);
   return out;
 }
+
+interface Sample {
+  t: number;
+  usd: number;
+}
+
+/**
+ * Lays an unevenly-timed series onto a uniform time grid, so the chart — which
+ * spaces points by index, not by time — ends up spacing them by time. Every
+ * slot is `stepMs` wide, and each holds the last reading at or before it:
+ * carry-forward, not interpolation, because the value between two scans is the
+ * last one we actually saw, not a straight line drawn through the gap. A stretch
+ * with no scans then reads as a flat run as wide as the stretch, instead of
+ * collapsing to a single step the way raw snapshots do.
+ *
+ * The first and last real timestamps are preserved exactly, so the window math
+ * on the client (which pins to the newest reading) still lands where it should.
+ */
+function toTimeGrid(points: Sample[], stepMs: number): Sample[] {
+  if (points.length < 2 || stepMs <= 0) return points;
+  const end = points[points.length - 1].t;
+  const out: Sample[] = [];
+  let i = 0;
+  for (let t = points[0].t; t < end; t += stepMs) {
+    while (i + 1 < points.length && points[i + 1].t <= t) i++;
+    out.push({ t, usd: points[i].usd });
+  }
+  out.push(points[points.length - 1]); // the latest reading, exact and on the edge
+  return out;
+}
+
+const toPoints = (samples: Sample[]): HistoryPointDto[] =>
+  samples.map((s) => ({ t: new Date(s.t).toISOString(), usd: s.usd }));
 
 /** Redis cache key for the assembled portfolio */
 function cacheKey(slug: string): string {
@@ -558,17 +607,22 @@ export class PortfolioService {
     // (initially = the starting ones, so a "new" wallet is present from t0)
     events.sort((a, b) => a.t - b.t);
     const current = new Map<string, number>(baseline);
-    const points: HistoryPointDto[] = [];
+    const raw: Sample[] = [];
     for (const e of events) {
       current.set(e.id, e.v);
       let sum = 0;
       for (const v of current.values()) sum += v;
-      points.push({ t: new Date(e.t).toISOString(), usd: round2(sum) });
+      raw.push({ t: e.t, usd: round2(sum) });
     }
-    // Enough for every window in the reach to be drawn at the density one
-    // window deserves — capping the whole series at a screenful, as this did
-    // when a range *was* one screen, would hand back a day in twenty points.
-    return downsample(points, RANGES[range].windowMs === null ? 220 : POINTS_PER_WINDOW * SCREENS);
+    // Onto a uniform time grid first, so the chart spaces these by time and not
+    // by index — otherwise scans a minute apart and scans five minutes apart sit
+    // the same distance apart. Then thin to a drawable count: enough for every
+    // window in the reach to be drawn at the density one window deserves —
+    // capping the whole series at a screenful would hand back a day in twenty
+    // points.
+    const grid = toTimeGrid(raw, GRID_STEP_MS[range]);
+    const cap = RANGES[range].windowMs === null ? 220 : POINTS_PER_WINDOW * SCREENS;
+    return toPoints(downsample(grid, cap));
   }
 
   /**
@@ -664,6 +718,7 @@ export class PortfolioService {
     const { bucket } = RANGES[range];
     const since = windowStart(range);
 
+    let raw: Sample[];
     if (!bucket) {
       const where = { [fkColumn]: id, ...(since ? { createdAt: { gte: since } } : {}) };
       const rows =
@@ -678,19 +733,27 @@ export class PortfolioService {
               orderBy: { createdAt: 'asc' },
               select: { createdAt: true, totalUsd: true },
             });
-      return rows.map((row) => ({ t: row.createdAt.toISOString(), usd: round2(row.totalUsd) }));
+      raw = rows.map((row) => ({ t: row.createdAt.getTime(), usd: round2(row.totalUsd) }));
+    } else {
+      const rows = await this.prisma.$queryRaw<Array<{ bucket: Date; usd: number }>>(Prisma.sql`
+        SELECT date_bin(${bucket}::interval, "createdAt", TIMESTAMP '2020-01-01') AS bucket,
+               AVG("totalUsd")::float8 AS usd
+        FROM ${Prisma.raw(`"${table}"`)}
+        WHERE ${Prisma.raw(`"${fkColumn}"`)} = ${id}
+          ${since ? Prisma.sql`AND "createdAt" >= ${since}` : Prisma.empty}
+        GROUP BY bucket
+        ORDER BY bucket ASC
+      `);
+      raw = rows.map((row) => ({ t: row.bucket.getTime(), usd: round2(Number(row.usd)) }));
     }
 
-    const rows = await this.prisma.$queryRaw<Array<{ bucket: Date; usd: number }>>(Prisma.sql`
-      SELECT date_bin(${bucket}::interval, "createdAt", TIMESTAMP '2020-01-01') AS bucket,
-             AVG("totalUsd")::float8 AS usd
-      FROM ${Prisma.raw(`"${table}"`)}
-      WHERE ${Prisma.raw(`"${fkColumn}"`)} = ${id}
-        ${since ? Prisma.sql`AND "createdAt" >= ${since}` : Prisma.empty}
-      GROUP BY bucket
-      ORDER BY bucket ASC
-    `);
-    return rows.map((row) => ({ t: row.bucket.toISOString(), usd: round2(Number(row.usd)) }));
+    // Same uniform-grid treatment as the portfolio series: spaced by time, gaps
+    // carried forward, then thinned to a drawable count. The SQL buckets are
+    // already on a grid but skip the empty ones; this fills them back in so the
+    // spacing reads true.
+    const grid = toTimeGrid(raw, GRID_STEP_MS[range]);
+    const cap = RANGES[range].windowMs === null ? 220 : POINTS_PER_WINDOW * SCREENS;
+    return toPoints(downsample(grid, cap));
   }
 
   private toWalletDto(wallet: WalletWithPositions, staleBefore: number): WalletDto {
