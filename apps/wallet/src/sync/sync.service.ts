@@ -4,8 +4,9 @@ import type { Wallet } from '@prisma/client';
 import type { Chain } from '@svinooh/shared';
 import { config } from '../config';
 import { ScanHold } from '@svinooh/common';
-import { MetricsService, type ScanJob } from '@svinooh/common';
+import { MetricsService, RabbitService, WALLET_STATE_QUEUE, type ScanJob } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
+import { alertableStates } from './wallet-state';
 import { scanAddress } from '../scanners';
 import type { ScanPosition, ScanResult } from '@svinooh/shared';
 
@@ -41,6 +42,7 @@ export class SyncService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly metrics: MetricsService,
+    private readonly rabbit: RabbitService,
   ) {}
 
 
@@ -183,6 +185,41 @@ export class SyncService {
           },
         }),
       ]);
+      await this.announce(wallet, result);
+    }
+  }
+
+  /**
+   * Says what the wallet looks like now, for whoever decides who should hear
+   * about it.
+   *
+   * Published after the positions are written, not before: a reader that came
+   * to look would otherwise find the previous scan's rows and answer about the
+   * wrong state. It carries no owner and no settings — who watches this wallet
+   * is the reader's business, and a scan should not have to know.
+   *
+   * A failure to publish is logged and swallowed. The scan succeeded and its
+   * result is stored; losing the announcement costs one cycle of alerts, and
+   * failing the scan over it would cost the balance too.
+   */
+  private async announce(wallet: Wallet, result: ScanResult): Promise<void> {
+    const positions = alertableStates(result.positions);
+    if (!positions.length) return;
+    try {
+      await this.rabbit.publish(WALLET_STATE_QUEUE, {
+        walletId: wallet.id,
+        portfolioId: wallet.portfolioId,
+        address: wallet.address,
+        chain: wallet.chain as Chain,
+        positions,
+        // The scanners drop what they could not reach before this point, so
+        // nothing here can name it yet. Carrying it is what will let a reader
+        // hold a position's previous state instead of calling it gone.
+        unreachable: [],
+        at: new Date().toISOString(),
+      });
+    } catch (error) {
+      this.logger.warn(`could not announce ${wallet.address}: ${(error as Error).message}`);
     }
   }
 

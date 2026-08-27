@@ -4,6 +4,7 @@ export * from './rabbit/rabbit.service';
 export * from './rabbit/rabbit.module';
 export * from './util';
 export * from './range';
+export * from './defi-facts';
 export * from './scan-hold';
 export * from './semaphore';
 export * from './auth.guard';
