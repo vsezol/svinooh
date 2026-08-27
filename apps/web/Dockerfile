@@ -25,8 +25,11 @@ ENV NODE_ENV=production
 ENV PORT=4173
 ENV HOSTNAME=0.0.0.0
 # Next's standalone output: the server plus only the dependencies it actually
-# traced, so there is no node_modules tree to copy
+# traced, so there is no node_modules tree to copy. It does not carry the built
+# assets or public/ though — both have to come across by hand, and a missing
+# public/ is silent: every icon and the service worker simply 404.
 COPY --from=build /app/apps/web/.next/standalone ./
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build /app/apps/web/public ./apps/web/public
 EXPOSE 4173
 CMD ["node", "apps/web/server.js"]
