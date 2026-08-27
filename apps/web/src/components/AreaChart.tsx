@@ -10,6 +10,7 @@ import {
 } from 'lightweight-charts';
 import type { HistoryRange } from '@svinooh/shared';
 import { fmtUsd } from '../lib/format';
+import { WINDOW_MS } from '../lib/ranges';
 import { useTheme } from '../lib/theme';
 
 interface Props {
@@ -42,21 +43,12 @@ const SCROLL = {
   vertTouchDrag: false,
 } as const;
 
-/**
- * The narrowest a point may be drawn before the chart stops trying to fit the
- * whole period into the width and becomes scrollable instead. A day of history
- * squeezed into a phone is a couple of pixels per reading — a shape, not a
- * chart. Below this it shows the recent end at a legible density and lets you
- * scroll back for the rest.
- */
-const MIN_POINT_PX = 3;
-
 const token = (name: string): string =>
   getComputedStyle(document.body).getPropertyValue(name).trim() || '#2bd576';
 
 function dateLabel(ms: number, period: HistoryRange): string {
   const d = new Date(ms);
-  return period === '24h'
+  return period === '1h' || period === '24h'
     ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
     : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
@@ -106,6 +98,8 @@ export function AreaChart({ values, times, period, height }: Props) {
   const [selection, setSelection] = useState<Selection | null>(null);
   /** Where the selected span currently falls on screen — see the effect that keeps it there */
   const [band, setBand] = useState<{ left: number; width: number } | null>(null);
+  /** The stretch of time on screen, in ms — what the labels underneath report */
+  const [shown, setShown] = useState<{ from: number; to: number } | null>(null);
 
   // Lightweight Charts wants seconds, strictly ascending and unique — the
   // history can carry two points inside one second after downsampling.
@@ -157,6 +151,23 @@ export function AreaChart({ values, times, period, height }: Props) {
     };
   }, []);
 
+  /**
+   * Now that the chart holds more than it shows, the labels underneath cannot
+   * go on naming the ends of the data — they name the ends of the window, and
+   * follow it as it moves.
+   */
+  useEffect(() => {
+    const scale = chart.current?.timeScale();
+    if (!scale) return;
+    const read = () => {
+      const range = scale.getVisibleRange();
+      setShown(range ? { from: (range.from as number) * 1000, to: (range.to as number) * 1000 } : null);
+    };
+    read();
+    scale.subscribeVisibleTimeRangeChange(read);
+    return () => scale.unsubscribeVisibleTimeRangeChange(read);
+  }, []);
+
   // Colours follow the theme
   useEffect(() => {
     if (!chart.current || !series.current) return;
@@ -170,24 +181,28 @@ export function AreaChart({ values, times, period, height }: Props) {
     chart.current.applyOptions({ crosshair: { vertLine: { color: mut } } });
   }, [theme]);
 
+  /**
+   * The period is the width of the window: 24H puts one day across the chart
+   * and leaves the days before it to be scrolled back to. What arrives covers
+   * several windows, so what is shown has to be cut to one — the newest one.
+   *
+   * Until there is more history than the window is wide there is nothing to cut
+   * and nothing to scroll, and the line fills the width the way it always did.
+   */
   useEffect(() => {
     series.current?.setData(data);
     const scale = chart.current?.timeScale();
-    const width = box.current?.clientWidth ?? 0;
-    if (scale && width && values.length) {
-      if (width / values.length >= MIN_POINT_PX) {
-        scale.fitContent();
-      } else {
-        // Too many readings for the width: draw them at a legible size, park
-        // the view on the newest, and let the rest be scrolled back to
-        scale.applyOptions({ barSpacing: MIN_POINT_PX });
-        scale.scrollToRealTime();
-      }
+    if (scale && data.length) {
+      const window = WINDOW_MS[period];
+      const last = data[data.length - 1].time as number;
+      const from = window === null ? null : last - Math.floor(window / 1000);
+      if (from === null || from <= (data[0].time as number)) scale.fitContent();
+      else scale.setVisibleRange({ from: from as UTCTimestamp, to: last as UTCTimestamp });
     }
     setSelection(null);
     // Re-running on every array identity would reset the selection on each
     // poll; the length and the endpoints are what actually change the picture.
-  }, [values.length, times[0], times[times.length - 1], values[values.length - 1]]);
+  }, [period, values.length, times[0], times[times.length - 1], values[values.length - 1]]);
 
   /** Screen x → index in the series */
   const indexAt = (clientX: number): number | null => {
@@ -421,8 +436,12 @@ export function AreaChart({ values, times, period, height }: Props) {
             pointerEvents: 'none',
           }}
         >
-          <span>{dateLabel(times[0], period)}</span>
-          <span>NOW</span>
+          <span>{dateLabel(shown ? shown.from : times[0], period)}</span>
+          {/* Scrolled off the live edge, the right-hand end is a time like any
+              other; sitting on it, it is the only one worth naming. */}
+          <span>
+            {shown && shown.to < times[times.length - 1] - 1000 ? dateLabel(shown.to, period) : 'NOW'}
+          </span>
         </div>
       ) : null}
     </div>

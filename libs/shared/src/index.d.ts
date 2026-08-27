@@ -140,7 +140,13 @@ export interface PublicPortfolioDto {
   anonymous: boolean;
 }
 
-export type HistoryRange = '24h' | '7d' | '30d' | 'all';
+/**
+ * The width of the window the chart draws, not how much history it is given:
+ * 24H means a day fills the width and the days before it are scrolled back to.
+ * `all` is the exception — the whole history at a glance, with nothing either
+ * side of it.
+ */
+export type HistoryRange = '1h' | '24h' | '7d' | '30d' | 'all';
 
 export interface HistoryPointDto {
   t: string;

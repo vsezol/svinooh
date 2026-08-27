@@ -27,13 +27,7 @@ import {
   type PositionFilter,
 } from '../lib/blocks';
 import { fmtUsd, portfolioLabel, walletName } from '../lib/format';
-
-const PERIODS: Array<{ key: HistoryRange; label: string }> = [
-  { key: '24h', label: '24H' },
-  { key: '7d', label: '7D' },
-  { key: '30d', label: '30D' },
-  { key: 'all', label: 'ALL' },
-];
+import { PERIODS, WINDOW_MS } from '../lib/ranges';
 
 const FILTERS: Array<{ key: PositionFilter; label: string }> = [
   { key: 'all', label: 'ALL' },
@@ -144,14 +138,23 @@ export function PortfolioPage({ slug }: { slug: string }) {
   const blocksByWallet = useMemo(() => wallets.map((w) => buildBlocks(w.positions)), [wallets]);
   const shownTotal = useMemo(() => filteredTotal(blocksByWallet, filter), [blocksByWallet, filter]);
 
+  // The series reaches back several windows so the chart has somewhere to
+  // scroll to, but this line answers the button: it starts at the first reading
+  // inside the chosen window, not at the oldest one that came with it. Scrolling
+  // the chart does not move it — "+0.42% · 24H" means the last 24 hours wherever
+  // you have wandered off to.
   const change = useMemo(() => {
     if (!history || history.values.length < 2) return null;
-    const first = history.values[0];
-    const last = history.values[history.values.length - 1];
+    const { values, times } = history;
+    const window = WINDOW_MS[period];
+    const opens = window === null ? -Infinity : times[times.length - 1] - window;
+    const at = times.findIndex((t) => t >= opens);
+    const first = values[at < 0 || at > values.length - 2 ? 0 : at];
+    const last = values[values.length - 1];
     const chg = last - first;
     const pct = first ? (chg / first) * 100 : 0;
     return { chg, pct, up: chg >= 0 };
-  }, [history]);
+  }, [history, period]);
 
   const addWallet = async () => {
     const address = input.trim();
