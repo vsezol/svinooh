@@ -297,3 +297,100 @@ export interface UpdateWalletAlertsDto {
   healthFactorBelow?: number | null;
   borrowApyAbove?: number | null;
 }
+
+/**
+ * What a protocol's own API knows about a position that an aggregator does not.
+ *
+ * A fact never becomes a position. Jupiter and DeBank decide what a wallet holds
+ * and what it is worth; a fact only answers what they left blank — whether a
+ * concentrated position is inside its band, and what a loan's health and rate
+ * are. A protocol that disagrees about value is not consulted about it.
+ */
+export interface PoolFact {
+  /** Stable across cycles: the protocol's own address for this position */
+  id: string;
+  platform: 'orca' | 'meteora' | 'uniswap';
+  /** The pair, upper-cased and ordered, e.g. "CBBTC|USDC" — how a fact finds its position */
+  pair: string;
+  inRange: boolean;
+  lowerPrice: number;
+  upperPrice: number;
+  currentPrice: number;
+  /** "USDC per cbBTC" */
+  priceLabel: string;
+  isFullRange: boolean;
+}
+
+/** What a lending market says about a loan, per borrowed asset */
+export interface LendingFact {
+  id: string;
+  platform: 'kamino' | 'aave';
+  market: string;
+  /** Upper-cased symbol of the borrowed asset — how a fact finds its position */
+  token: string;
+  healthFactor: number;
+  /** Borrow APY as a percentage: 6.2 is 6.2% */
+  borrowRate: number | null;
+}
+
+/**
+ * Everything the protocols could see this cycle, and which of them could not.
+ *
+ * `failed` matters as much as the facts: a source that threw has told us
+ * nothing, and nothing is not the same as "no positions". Anything that decides
+ * what changed since last time has to keep the two apart, or it will report
+ * every position of a briefly unreachable protocol as gone.
+ */
+export interface DefiFacts {
+  pools: PoolFact[];
+  lending: LendingFact[];
+  /** Sources that could not be reached, by platform */
+  failed: string[];
+}
+
+/**
+ * One thing in a wallet that can be alerted on, and the key that recognises it
+ * next time.
+ *
+ * The key has to survive a sync, and a `Position` row does not: every scan
+ * deletes the wallet's positions and writes them again, so their ids are new
+ * each time. Where a protocol answered for itself the key is its own address
+ * for the position, which is as stable as identity gets. Where only the
+ * aggregator saw it, the key is built from the platform and what it is called —
+ * stable while the protocol keeps calling it the same thing, and a renamed
+ * position simply reads as a new one and re-baselines quietly.
+ */
+export interface WalletPositionState {
+  key: string;
+  /** What a message about this position should call it: "cbBTC/USDC", "Venus · Lending" */
+  label: string;
+  /** null — not a position with a band, or nobody could say */
+  inRange: boolean | null;
+  healthFactor: number | null;
+  /** Percent, as the thresholds are written: 6.2 is 6.2% */
+  borrowApyPct: number | null;
+}
+
+/**
+ * What a wallet looked like the moment a scan landed.
+ *
+ * Published by the wallet service and read by whatever decides who should hear
+ * about it. It carries no owner and no settings on purpose: who watches this
+ * wallet and what they asked to be told is the reader's business, and a scan
+ * should not have to know.
+ *
+ * `unreachable` is as important as the positions. A protocol that could not be
+ * reached has said nothing, and a reader that treats silence as "no positions"
+ * will announce that every position of a briefly unreachable protocol has gone.
+ */
+export interface WalletStateEvent {
+  walletId: string;
+  portfolioId: string;
+  address: string;
+  chain: Chain;
+  positions: WalletPositionState[];
+  /** Protocols that could not be reached on this scan, by platform */
+  unreachable: string[];
+  /** ISO 8601 */
+  at: string;
+}
