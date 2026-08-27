@@ -1,7 +1,8 @@
 import type { PositionTokenRole } from '@svinooh/shared';
 import { fetchJson } from './http';
 import { rangeFromLegs } from '@svinooh/common';
-import { enrich, needsLendingFacts, NO_FACTS, solanaLendingFacts, solanaPoolFacts } from './defi';
+import { enrich, needsLendingFacts, NO_FACTS } from '@svinooh/common';
+import { solanaLendingFacts, solanaPoolFacts } from './defi';
 import type { ScanPosition, ScanPositionToken, ScanResult } from '@svinooh/shared';
 
 /**
