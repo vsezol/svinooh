@@ -2,6 +2,7 @@ import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import {
   MetricsService,
   RabbitService,
+  ScanHold,
   scanQueueName,
   SCAN_RESULT_QUEUE,
   sleep,
@@ -69,11 +70,23 @@ export class ScanConsumerService implements OnApplicationBootstrap {
         `${job.address}: $${result.totalUsd.toFixed(2)}, ${result.positions.length} positions (${Date.now() - started}ms)`,
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.metrics.scans.inc({ chain: 'EVM', result: 'failed' });
-      this.metrics.errors.inc({ type: 'scan' });
-      this.logger.warn(`${job.address} failed: ${message}`);
-      await this.publish({ chain: 'EVM', address: job.address, ok: false, error: message });
+      if (error instanceof ScanHold) {
+        // A deliberate backoff (DeBank throttled us), NOT a failure. Publishing
+        // an ok:false here made the writer mark the wallet "sync failed" and
+        // counted a failed scan + an error on every held job — a whole
+        // dashboard of red for a pause we chose. So: don't publish, don't count
+        // it failed. The address is re-enqueued next cycle; the wallet keeps its
+        // last value and goes stale on its own if the hold lasts, which is the
+        // honest signal.
+        this.metrics.scans.inc({ chain: 'EVM', result: 'held' });
+        this.logger.debug?.(`${job.address} held: ${error.message}`);
+      } else {
+        const message = error instanceof Error ? error.message : String(error);
+        this.metrics.scans.inc({ chain: 'EVM', result: 'failed' });
+        this.metrics.errors.inc({ type: 'scan' });
+        this.logger.warn(`${job.address} failed: ${message}`);
+        await this.publish({ chain: 'EVM', address: job.address, ok: false, error: message });
+      }
     }
     await sleep(config.scanJobDelayMs); // hold the slot through the pause — that is the pacing
   }

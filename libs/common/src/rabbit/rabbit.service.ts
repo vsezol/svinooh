@@ -179,7 +179,7 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
     try {
       message = JSON.parse(msg.content.toString());
     } catch {
-      channel.ack(msg); // garbage — drop it rather than redeliver it forever
+      this.safeAck(channel, msg); // garbage — drop it rather than redeliver it forever
       return;
     }
     try {
@@ -190,7 +190,22 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
       // Always ack. A scan that failed is re-enqueued by the next top-up with
       // fresh information; redelivering the old job would only retry the same
       // thing against the same broken source, faster.
+      this.safeAck(channel, msg);
+    }
+  }
+
+  /**
+   * ack that cannot crash the process. The channel can close under us between
+   * receiving a message and acking it — a shutdown, a reconnect — and an ack on
+   * a closed channel throws IllegalOperationError, which as an uncaught async
+   * rejection took the whole scanner down. The message stays unacked, so the
+   * broker redelivers it on the next connection.
+   */
+  private safeAck(channel: amqp.Channel, msg: amqp.ConsumeMessage): void {
+    try {
       channel.ack(msg);
+    } catch {
+      // channel already gone — leave it for redelivery
     }
   }
 
