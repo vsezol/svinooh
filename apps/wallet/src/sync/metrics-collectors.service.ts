@@ -1,16 +1,18 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Gauge } from 'prom-client';
 import type { Chain } from '@svinooh/shared';
-import { MetricsService, scanQueueName } from '@svinooh/common';
+import { MetricsService, RabbitService, scanQueueName, SCAN_RESULT_QUEUE } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
-import { RabbitService } from '../queue/rabbit.service';
 
 /**
  * Business gauges computed at scrape time (async collect): how many wallets by
  * status, how many portfolios, the scan queue depth. They live here because they
  * need Prisma and Rabbit — MetricsService is kept dependency-free.
  */
-const SCAN_QUEUES: string[] = (['EVM', 'SOL', 'TRON', 'BTC'] as Chain[]).map(scanQueueName);
+const SCAN_QUEUES: string[] = [
+  ...(['EVM', 'SOL', 'TRON', 'BTC'] as Chain[]).map(scanQueueName),
+  SCAN_RESULT_QUEUE,
+];
 
 @Injectable()
 export class MetricsCollectorsService implements OnModuleInit {

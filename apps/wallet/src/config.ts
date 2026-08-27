@@ -29,7 +29,6 @@ export const config = {
   dropConfirmCycles: int(process.env.SYNC_DROP_CONFIRM_CYCLES, 3),
   // Scan queue (RabbitMQ). Empty — the scan runs in-process (local dev).
   rabbitUrl: process.env.RABBITMQ_URL || null,
-  scanQueueName: process.env.SCAN_QUEUE_NAME || 'wallet.scan',
   // Pacing: a pause after each scan, to hit 429s less often.
   scanJobDelayMs: int(process.env.SCAN_JOB_DELAY_MS, 1500),
   // How many addresses to work through at once (1 = strictly one at a time).
@@ -37,15 +36,6 @@ export const config = {
   // How often to check that the queue has drained and re-enqueue wallets.
   scanReloadSec: int(process.env.SCAN_RELOAD_SEC, 15),
   httpTimeoutMs: int(process.env.HTTP_TIMEOUT_MS, 15_000),
-  // Where the EVM scanner service lives, and how long to wait on it. The wait
-  // has to outlast that service's own EVM_TIMEOUT_MS, or we would abandon a
-  // scan that is about to come back and then scan the same address again.
-  evmScannerUrl: (process.env.EVM_SCANNER_URL || '').replace(/\/+$/, ''),
-  evmScannerTimeoutMs: int(process.env.EVM_SCANNER_TIMEOUT_MS, 180_000),
-  internalToken: process.env.INTERNAL_TOKEN || null,
-  // In-flight EVM scans. One by default: the scanner holds a single browser, so
-  // asking it for more only queues them on the other side.
-  evmConcurrency: int(process.env.EVM_CONCURRENCY, 1),
   // Concurrency of the BTC/SOL/TRON HTTP scanners.
   httpConcurrency: int(process.env.SCAN_HTTP_CONCURRENCY, 4),
 };
