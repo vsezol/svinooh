@@ -10,3 +10,6 @@ dist/
 
 # lightpanda binary (downloaded, not committed)
 apps/scanner-evm/bin/
+
+# beads issue tracker: local state, never committed — merge-conflict magnet
+.beads/
