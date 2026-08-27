@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUserId, OptionalAuthGuard, RequiredAuthGuard } from '@svinooh/common';
+import type { UpdateWalletAlertsDto } from '@svinooh/shared';
 import { normalizeRange, PortfolioService } from './portfolio.service';
 
 @Controller('portfolios')
@@ -64,6 +65,29 @@ export class PortfolioController {
     @Body() body: { isPublic?: boolean },
   ) {
     return this.portfolios.setVisibility(slug, userId, body?.isPublic === true);
+  }
+
+  /**
+   * What every wallet in the portfolio is watched for, and changing one
+   * wallet's settings. Owner-only, and deliberately not part of the portfolio
+   * itself: what somebody watches their own money for is not something a
+   * shared link should hand to a stranger.
+   */
+  @Get(':slug/alerts')
+  @UseGuards(RequiredAuthGuard)
+  alerts(@Param('slug') slug: string, @CurrentUserId() userId: string) {
+    return this.portfolios.alerts(slug, userId);
+  }
+
+  @Patch(':slug/wallets/:walletId/alerts')
+  @UseGuards(RequiredAuthGuard)
+  setWalletAlerts(
+    @Param('slug') slug: string,
+    @Param('walletId') walletId: string,
+    @CurrentUserId() userId: string,
+    @Body() body: UpdateWalletAlertsDto,
+  ) {
+    return this.portfolios.setWalletAlerts(slug, walletId, userId, body ?? {});
   }
 
   @Get(':slug/history')
