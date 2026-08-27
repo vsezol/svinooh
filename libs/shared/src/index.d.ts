@@ -151,6 +151,16 @@ export type HistoryRange = '1h' | '24h' | '7d' | '30d' | 'all';
 export interface HistoryPointDto {
   t: string;
   usd: number;
+  /**
+   * What could have been collected, and what was owed, at that moment.
+   *
+   * `null` for a reading taken before either was recorded — which is every
+   * reading older than the release that started storing them. A chart draws
+   * from where the readings begin rather than pretending a portfolio owed
+   * nothing before we started counting.
+   */
+  claimableUsd: number | null;
+  debtUsd: number | null;
 }
 
 export interface HistoryDto {

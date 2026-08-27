@@ -138,6 +138,11 @@ model WalletSnapshot {
   walletId  String
   wallet    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
   totalUsd  Float
+  // What could have been collected and what was owed at this reading. Nullable
+  // because every row written before they were recorded has neither, and zero
+  // would be a claim we cannot make about them.
+  claimableUsd Float?
+  debtUsd      Float?
   breakdown Json?
   createdAt DateTime @default(now())
 
