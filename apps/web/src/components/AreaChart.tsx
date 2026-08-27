@@ -19,12 +19,15 @@ interface Props {
   period: HistoryRange;
   height: string;
   /**
-   * Drawn inside something that is already a card — the metric cards beside the
-   * chart. The gestures are the same; what goes is the furniture that would be
-   * saying it twice: the border around it, the dates along the bottom, and a
-   * hint about a modifier in a strip too short to measure anything in.
+   * Drawn as the whole background of a metric card: the same chart and the
+   * same gestures, edge to edge. What goes is the furniture the card provides
+   * for itself — the border, the dates along the bottom, the modifier hint —
+   * and the line is held to the lower half so the card's text has clear air
+   * above it. The readout moves to the top right, out from under that text.
    */
   bare?: boolean;
+  /** The debt card draws in the muted grey — owing money is not a gain */
+  tone?: 'accent' | 'muted';
 }
 
 /**
@@ -87,7 +90,7 @@ function dateLabel(ms: number, period: HistoryRange): string {
  * Nothing is drawn behind the line: gridlines on a 200px sparkline of one
  * portfolio are decoration that competes with the only thing worth reading.
  */
-export function AreaChart({ values, times, period, height, bare = false }: Props) {
+export function AreaChart({ values, times, period, height, bare = false, tone = 'accent' }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const series = useRef<ISeriesApi<'Area'> | null>(null);
@@ -147,6 +150,9 @@ export function AreaChart({ values, times, period, height, bare = false }: Props
     });
     chart.current = c;
     series.current = c.addSeries(AreaSeries, { lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
+    // As a card's background the line keeps to the lower third, clear of the
+    // card's own text above it
+    if (bare) series.current.priceScale().applyOptions({ scaleMargins: { top: 0.66, bottom: 0.1 } });
     c.subscribeCrosshairMove((param) => {
       const index = param.logical;
       setHover(index == null ? null : { index: Math.round(index) });
@@ -178,15 +184,19 @@ export function AreaChart({ values, times, period, height, bare = false }: Props
   // Colours follow the theme
   useEffect(() => {
     if (!chart.current || !series.current) return;
-    const acc = token('--acc');
     const mut = token('--mut');
+    // The grey line softened a step, the way the design draws it — full-strength
+    // grey reads nearly as loud as the accent on a dark card. As hex-with-alpha:
+    // the library parses line colours itself and does not know color-mix().
+    const line =
+      tone === 'muted' ? (/^#[0-9a-f]{6}$/i.test(mut) ? `${mut}d9` : mut) : token('--acc');
     series.current.applyOptions({
-      lineColor: acc,
-      topColor: `color-mix(in srgb, ${acc} 22%, transparent)`,
-      bottomColor: `color-mix(in srgb, ${acc} 0%, transparent)`,
+      lineColor: line,
+      topColor: `color-mix(in srgb, ${line} ${tone === 'muted' ? 14 : 22}%, transparent)`,
+      bottomColor: `color-mix(in srgb, ${line} 0%, transparent)`,
     });
     chart.current.applyOptions({ crosshair: { vertLine: { color: mut } } });
-  }, [theme]);
+  }, [theme, tone]);
 
   /**
    * The period is the width of the window: 24H puts one day across the chart
@@ -352,7 +362,7 @@ export function AreaChart({ values, times, period, height, bare = false }: Props
   return (
     <div
       className={bare ? undefined : 'card'}
-      style={{ position: 'relative', overflow: 'hidden', touchAction: 'pan-y' }}
+      style={{ position: 'relative', overflow: 'hidden', touchAction: 'pan-y', height: bare ? '100%' : undefined }}
     >
       <div
         ref={box}
@@ -381,22 +391,21 @@ export function AreaChart({ values, times, period, height, bare = false }: Props
       ) : null}
 
       {/* what the selection is worth, or the value under the cursor */}
-      {/* In a strip this short the reading would sit on the line it is
-          reporting, so it carries its own ground the way a tooltip does */}
+      {/* In a card the top left belongs to the card's own text, so the reading
+          moves to the top right and carries its own ground the way a tooltip
+          does — it may sit over the line it is reporting */}
       <div
           className="mono"
           style={{
             position: 'absolute',
-            top: bare ? 4 : 8,
-            left: bare ? 6 : 12,
+            top: 8,
+            ...(bare ? { right: 10 } : { left: 12 }),
             fontSize: bare ? 10.5 : 11,
             pointerEvents: 'none',
             display: 'flex',
             alignItems: 'baseline',
             gap: bare ? 7 : 9,
-            ...(bare
-              ? { background: 'var(--surf)', padding: '2px 6px', borderRadius: 6 }
-              : null),
+            ...(bare ? { background: 'var(--surf)', padding: '2px 6px', borderRadius: 6 } : null),
           }}
         >
           {range ? (
