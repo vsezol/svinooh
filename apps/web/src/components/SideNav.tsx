@@ -186,13 +186,11 @@ export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
       {/* phone dock */}
       <div
         className="tab-dock"
-        // `bottom` lives in the stylesheet: what clears the bottom of the
-        // screen is a browser toolbar in a tab and the home indicator in an
-        // installed app, and only a media query can tell those apart
+        // Placement lives in the stylesheet — see .tab-dock. It needs a
+        // dynamic-viewport unit to follow the bottom of an iOS screen, and a
+        // media query to tell a browser toolbar from a home indicator.
         style={{
           position: 'fixed',
-          left: '50%',
-          transform: 'translateX(-50%)',
           zIndex: 60,
           background: 'color-mix(in srgb, var(--surf) 86%, transparent)',
           backdropFilter: 'blur(16px)',
