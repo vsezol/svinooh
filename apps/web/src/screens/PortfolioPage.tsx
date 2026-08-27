@@ -29,6 +29,7 @@ import {
   type PositionFilter,
 } from '../lib/blocks';
 import { fmtUsd, portfolioLabel, walletName } from '../lib/format';
+import { EMPTY_SERIES, seriesOf, type Series } from '../lib/history';
 import { PERIODS, WINDOW_MS } from '../lib/ranges';
 
 const FILTERS: Array<{ key: PositionFilter; label: string }> = [
@@ -80,9 +81,15 @@ function usePortfolio(slug: string, viewerId: string | null) {
   return { data, error, reload };
 }
 
-/** History for the selected scope (whole portfolio / a specific wallet) and period */
+/**
+ * History for the selected scope (whole portfolio / a specific wallet) and
+ * period — three lines off the same readings, so they share a time axis and one
+ * request.
+ */
 function useHistory(slug: string, scope: string, period: HistoryRange, refreshKey: string | null) {
-  const [points, setPoints] = useState<{ values: number[]; times: number[] } | null>(null);
+  const [points, setPoints] = useState<{ total: Series; claimable: Series; debt: Series } | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -95,11 +102,12 @@ function useHistory(slug: string, scope: string, period: HistoryRange, refreshKe
         const h = await api<HistoryDto>(path);
         if (cancelled) return;
         setPoints({
-          values: h.points.map((p) => p.usd),
-          times: h.points.map((p) => new Date(p.t).getTime()),
+          total: seriesOf(h.points, (p) => p.usd),
+          claimable: seriesOf(h.points, (p) => p.claimableUsd),
+          debt: seriesOf(h.points, (p) => p.debtUsd),
         });
       } catch {
-        if (!cancelled) setPoints({ values: [], times: [] });
+        if (!cancelled) setPoints({ total: EMPTY_SERIES, claimable: EMPTY_SERIES, debt: EMPTY_SERIES });
       }
     })();
     return () => {
@@ -150,8 +158,8 @@ export function PortfolioPage({ slug }: { slug: string }) {
   // the chart does not move it — "+0.42% · 24H" means the last 24 hours wherever
   // you have wandered off to.
   const change = useMemo(() => {
-    if (!history || history.values.length < 2) return null;
-    const { values, times } = history;
+    if (!history || history.total.values.length < 2) return null;
+    const { values, times } = history.total;
     const window = WINDOW_MS[period];
     const opens = window === null ? -Infinity : times[times.length - 1] - window;
     const at = times.findIndex((t) => t >= opens);
@@ -271,7 +279,7 @@ export function PortfolioPage({ slug }: { slug: string }) {
   // An empty chart frame that explains history arrives later is the biggest
   // thing on a fresh portfolio and says nothing — it appears once there is a
   // line to draw.
-  const hasChart = wallets.some((w) => w.totalUsd !== null) && (history?.values.length ?? 0) >= 2;
+  const hasChart = wallets.some((w) => w.totalUsd !== null) && (history?.total.values.length ?? 0) >= 2;
 
   const scopeOptions = [
     { id: 'all', label: 'All wallets', valueUsd: data.totalUsd },
@@ -485,12 +493,23 @@ export function PortfolioPage({ slug }: { slug: string }) {
                 </div>
 
                 <div style={{ marginTop: 14 }}>
-                  <AreaChart values={history?.values ?? []} times={history?.times ?? []} period={period} height="clamp(160px,26vw,240px)" />
+                  <AreaChart
+                    values={history?.total.values ?? []}
+                    times={history?.total.times ?? []}
+                    period={period}
+                    height="clamp(160px,26vw,240px)"
+                  />
                 </div>
               </>
             ) : null}
 
-            <MetricCards rewards={rewards} debt={debt} />
+            <MetricCards
+              rewards={rewards}
+              debt={debt}
+              claimableSeries={history?.claimable ?? EMPTY_SERIES}
+              debtSeries={history?.debt ?? EMPTY_SERIES}
+              period={period}
+            />
 
             {/* add wallet */}
             {canAdd ? (
