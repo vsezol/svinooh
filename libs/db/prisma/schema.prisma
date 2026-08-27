@@ -107,6 +107,28 @@ model Wallet {
   @@unique([portfolioId, address])
 }
 
+/// What was last true of a position, so the next scan can tell what changed.
+///
+/// Keyed by the position key the scan announces rather than by a `Position`
+/// row: those are deleted and rewritten every scan, so their ids would say
+/// everything had closed and reopened. A row here is a memory, not a holding —
+/// a position that goes away leaves its row behind until the wallet does, which
+/// costs a few bytes and avoids ever re-announcing a change on the way back.
+model WalletAlertState {
+  walletId       String
+  positionKey    String
+  /// null — this position has no band, or nobody could say
+  inRange        Boolean?
+  /// Whether the health factor was under the owner's threshold last time
+  healthBreached Boolean  @default(false)
+  /// Whether the borrow rate was over it
+  borrowBreached Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+
+  @@id([walletId, positionKey])
+  @@index([walletId])
+}
+
 /// What this wallet is watched for, and told about over Telegram.
 ///
 /// One row per wallet, written only by its owner. A wallet nobody has

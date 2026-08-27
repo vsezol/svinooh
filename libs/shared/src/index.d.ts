@@ -394,3 +394,46 @@ export interface WalletStateEvent {
   /** ISO 8601 */
   at: string;
 }
+
+/** Why somebody is being told about a position */
+export type AlertKind = 'range' | 'health' | 'borrow';
+
+/**
+ * A single thing that changed and was worth saying.
+ *
+ * `direction` is what actually happened, not how bad it is: `entered` is a
+ * position that has just crossed into the state its owner asked to hear about,
+ * `recovered` is one that has come back out of it. Both are worth a message —
+ * being told the danger has passed is half of why anybody turns an alert on.
+ */
+export interface AlertItem {
+  kind: AlertKind;
+  direction: 'entered' | 'recovered';
+  /** What to call the position: "cbBTC/USDC", "Venus · Lending" */
+  position: string;
+  /** What the reading was: the health factor, or the rate in percent */
+  value: number | null;
+  /** The threshold it crossed, in the same units. null for a range, which has no number */
+  threshold: number | null;
+}
+
+/**
+ * Something a person asked to be told, addressed to them.
+ *
+ * Published by the alert collector and read by the bot. It carries the Telegram
+ * id rather than a user id because the bot has no database and no business
+ * having one: it is a view, and everything it needs to send a message is here.
+ *
+ * Nothing identifying anybody else is in it. A wallet address and a portfolio
+ * slug belong to the person being written to, which is the only person who will
+ * ever see this.
+ */
+export interface AlertEvent {
+  telegramId: string;
+  portfolioSlug: string;
+  /** The owner's own label for the wallet, or null — the bot falls back to the network */
+  walletLabel: string | null;
+  walletAddress: string;
+  chain: Chain;
+  items: AlertItem[];
+}
