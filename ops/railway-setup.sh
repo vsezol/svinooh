@@ -39,6 +39,10 @@
 #   TELEGRAM_BOT_TOKEN       shared by api + auth
 #   TELEGRAM_BOT_USERNAME    the bot's @handle (public, but set explicitly)
 #   GRAFANA_ADMIN_PASSWORD   grafana admin login
+#   INTERNAL_SECRET          shared by auth + bot-telegram (must be identical).
+#                            It guards the one route that mints a signed-in link
+#                            for any Telegram id — auth refuses everything when
+#                            it is unset, so this is not optional.
 #   PUBLIC_WEB_ORIGIN        e.g. https://svinooh.com
 #
 set -euo pipefail
@@ -50,6 +54,7 @@ BRANCH="main"
 : "${TELEGRAM_BOT_TOKEN:?export TELEGRAM_BOT_TOKEN}"
 : "${TELEGRAM_BOT_USERNAME:?export TELEGRAM_BOT_USERNAME}"
 : "${GRAFANA_ADMIN_PASSWORD:?export GRAFANA_ADMIN_PASSWORD}"
+: "${INTERNAL_SECRET:?export INTERNAL_SECRET}"
 : "${PUBLIC_WEB_ORIGIN:=https://svinooh.com}"
 
 command -v railway >/dev/null || { echo "railway CLI not found"; exit 1; }
@@ -123,6 +128,7 @@ setvars auth \
   "JWT_SECRET=${JWT_SECRET}" \
   "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" "TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}" \
   "WEB_URL=${PUBLIC_WEB_ORIGIN}" \
+  "INTERNAL_SECRET=${INTERNAL_SECRET}" \
   "LOKI_URL=${LOKI_URL}" \
   "SERVICE_NAME=svinooh-auth"
 
@@ -150,6 +156,31 @@ setvars scanner-evm \
   "LOKI_URL=${LOKI_URL}" \
   "SERVICE_NAME=svinooh-scanner-evm"
 
+# monitor-alerts — reads wallet.state, decides what each owner should be told,
+# publishes alerts.telegram. THE second service whose absence is felt silently:
+# wallet publishes wallet.state to a durable queue whether or not anything
+# drains it, so without this the queue grows and nobody is ever told anything.
+# config apps/monitor-alerts/railway.json
+add_repo monitor-alerts
+setvars monitor-alerts \
+  "NODE_ENV=production" "PORT=3000" \
+  "DATABASE_URL=${PG_URL}" \
+  "RABBITMQ_URL=${RABBIT_URL}"
+
+# bot-telegram — the Telegram bot: long-polls for /start, and drains
+# alerts.telegram. It must run as EXACTLY ONE replica — Telegram allows a single
+# long-poll consumer per bot token, and two would fight over updates.
+# It has no database: it asks auth for a sign-in link over the private network,
+# which is what INTERNAL_SECRET protects. config apps/bot-telegram/railway.json
+add_repo bot-telegram
+setvars bot-telegram \
+  "NODE_ENV=production" "PORT=3000" \
+  "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" \
+  "INTERNAL_SECRET=${INTERNAL_SECRET}" \
+  "AUTH_URL=${AUTH_URL}" \
+  "WEB_URL=${PUBLIC_WEB_ORIGIN}" \
+  "RABBITMQ_URL=${RABBIT_URL}"
+
 # web — Next.js. PUBLIC (svinooh.com). Dockerfile apps/web/Dockerfile ; port 4173
 # NEXT_PUBLIC_API_URL is inlined into the browser bundle at BUILD time — a
 # change needs a rebuild, not just a restart.
@@ -170,6 +201,8 @@ The Railway CLI does not set these reliably; do them once in the dashboard
      auth         → apps/auth/railway.json
      wallet       → apps/wallet/railway.json
      scanner-evm  → apps/scanner-evm/railway.json
+     monitor-alerts → apps/monitor-alerts/railway.json
+     bot-telegram → apps/bot-telegram/railway.json
      web          → apps/web/railway.json          (or Dockerfile path apps/web/Dockerfile)
      prometheus   → ops/prometheus/railway.json
      grafana      → ops/grafana/railway.json
@@ -191,6 +224,10 @@ The Railway CLI does not set these reliably; do them once in the dashboard
 
 4. Migrations — the api runs `prisma migrate deploy` on boot; it is the only
    service that writes the schema. Nothing else needs DB migration rights.
+
+5. Replicas — bot-telegram must stay at ONE. Telegram allows a single long-poll
+   consumer per bot token; a second replica would take half the updates and
+   answer nobody consistently.
 ========================================================================================
 MANUAL
 echo "done — review the MANUAL STEPS above."
