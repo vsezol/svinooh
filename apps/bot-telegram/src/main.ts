@@ -102,7 +102,10 @@ async function answer(update: TgUpdate, log: Log): Promise<void> {
   const token = text.startsWith('/start') ? text.slice('/start'.length).trim() : '';
 
   try {
-    const res = await fetch(`${config.authUrl}/auth/internal/telegram/start`, {
+    // Not under /auth: that prefix belongs to the routes the public gateway
+    // proxies, and this one is only ever reached over the private network —
+    // same shape as the wallet service's /internal/scan
+    const res = await fetch(`${config.authUrl}/internal/telegram/start`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
