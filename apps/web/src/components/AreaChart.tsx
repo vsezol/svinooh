@@ -69,6 +69,11 @@ function dateLabel(ms: number, period: HistoryRange): string {
  *    did across it
  *  - a mouse drag — the same selection, since a mouse has only the one gesture
  *
+ * Both are pointer events, which already carry an id per finger and say which
+ * input they came from; the library has no selection of its own to borrow, and
+ * a gesture library would hand back a pinch — a distance and a centre — when
+ * what this needs is where each of the two fingers actually is.
+ *
  * Zoom is deliberately absent. The period buttons decide how much history is on
  * screen, and a second, gestural way to change it only ever leaves people at a
  * scale they did not pick and cannot name.
@@ -81,6 +86,8 @@ export function AreaChart({ values, times, period, height }: Props) {
   const chart = useRef<IChartApi | null>(null);
   const series = useRef<ISeriesApi<'Area'> | null>(null);
   const drag = useRef<{ startX: number; moved: boolean } | null>(null);
+  /** Fingers currently on the chart, by pointer id → x. Two of them select a span. */
+  const touches = useRef(new Map<number, number>());
   const { theme } = useTheme();
 
   const [hover, setHover] = useState<{ index: number } | null>(null);
@@ -182,61 +189,34 @@ export function AreaChart({ values, times, period, height }: Props) {
     return typeof c === 'number' ? c : 0;
   };
 
+  const spanBetween = (from: number, to: number): void => {
+    const a = indexAt(from);
+    const b = indexAt(to);
+    if (a == null || b == null || Math.abs(a - b) < 1) return;
+    const [lo, hi] = a < b ? [a, b] : [b, a];
+    setSelection({ fromIndex: lo, toIndex: hi, fromX: xAt(lo), toX: xAt(hi) });
+  };
+
   /**
-   * Two fingers select a span; the chart is told to sit still while they are
-   * down, or it would scroll under them as they move.
+   * Both gestures, on one event model.
    *
-   * Native listeners rather than React's, because stopping the browser from
-   * treating two fingers as a page gesture needs preventDefault, and React
-   * attaches touch handlers passively — where preventDefault does nothing.
-   */
-  useEffect(() => {
-    const el = box.current;
-    if (!el) return;
-
-    const spanOf = (touches: TouchList): Selection | null => {
-      const a = indexAt(touches[0].clientX);
-      const b = indexAt(touches[1].clientX);
-      if (a == null || b == null || Math.abs(a - b) < 1) return null;
-      const [from, to] = a < b ? [a, b] : [b, a];
-      return { fromIndex: from, toIndex: to, fromX: xAt(from), toX: xAt(to) };
-    };
-
-    const start = (e: TouchEvent) => {
-      if (e.touches.length !== 2) return;
-      chart.current?.applyOptions({ handleScroll: false });
-      setSelection(spanOf(e.touches));
-    };
-    const move = (e: TouchEvent) => {
-      if (e.touches.length !== 2) return;
-      e.preventDefault();
-      const span = spanOf(e.touches);
-      if (span) setSelection(span);
-    };
-    const end = (e: TouchEvent) => {
-      if (e.touches.length === 0) chart.current?.applyOptions({ handleScroll: SCROLL });
-    };
-
-    el.addEventListener('touchstart', start, { passive: true });
-    el.addEventListener('touchmove', move, { passive: false });
-    el.addEventListener('touchend', end, { passive: true });
-    el.addEventListener('touchcancel', end, { passive: true });
-    return () => {
-      el.removeEventListener('touchstart', start);
-      el.removeEventListener('touchmove', move);
-      el.removeEventListener('touchend', end);
-      el.removeEventListener('touchcancel', end);
-    };
-    // indexAt/xAt read refs, so they stay correct without being dependencies
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [values.length]);
-
-  /**
-   * A mouse drag across the chart selects a span. Nothing competes for it: the
-   * chart only scrolls under a finger, and the wheel is left to the page.
+   * Pointer events already say which input each one came from and carry an id
+   * per finger, which is all this needs — and `touch-action: pan-y` on the card
+   * is what stops the browser claiming a two-finger gesture for itself, so
+   * there is nothing to preventDefault and no reason to reach past React for a
+   * non-passive listener.
    */
   const onPointerDown = (e: React.PointerEvent) => {
-    if (e.pointerType === 'touch') return;
+    if (e.pointerType === 'touch') {
+      touches.current.set(e.pointerId, e.clientX);
+      const [a, b] = [...touches.current.values()];
+      if (touches.current.size === 2) {
+        // Or the chart would scroll out from under the fingers measuring it
+        chart.current?.applyOptions({ handleScroll: false });
+        spanBetween(a, b);
+      }
+      return;
+    }
     const index = indexAt(e.clientX);
     if (index == null) return;
     drag.current = { startX: index, moved: false };
@@ -244,7 +224,14 @@ export function AreaChart({ values, times, period, height }: Props) {
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
-    if (e.pointerType === 'touch' || !drag.current) return;
+    if (e.pointerType === 'touch') {
+      if (!touches.current.has(e.pointerId)) return;
+      touches.current.set(e.pointerId, e.clientX);
+      const [a, b] = [...touches.current.values()];
+      if (touches.current.size === 2) spanBetween(a, b);
+      return;
+    }
+    if (!drag.current) return;
     const index = indexAt(e.clientX);
     if (index == null) return;
     const from = Math.min(drag.current.startX, index);
@@ -255,7 +242,13 @@ export function AreaChart({ values, times, period, height }: Props) {
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
-    if (e.pointerType === 'touch') return;
+    if (e.pointerType === 'touch') {
+      touches.current.delete(e.pointerId);
+      // Only once the hand is off: lifting one finger of two would otherwise
+      // hand the other one a scroll it never asked for
+      if (touches.current.size === 0) chart.current?.applyOptions({ handleScroll: SCROLL });
+      return;
+    }
     // A tap, not a drag — clear whatever was selected
     if (drag.current && !drag.current.moved) setSelection(null);
     drag.current = null;
