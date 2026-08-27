@@ -24,6 +24,10 @@ export const config = {
   devMode: bool(process.env.AUTH_DEV_MODE, false),
   // Public URL of the web app — for the "back to site" button in the bot.
   webUrl: (process.env.WEB_URL || 'https://svinooh.com').replace(/\/+$/, ''),
+  // Shared with the bot, which is the only thing allowed to ask for a sign-in
+  // link on somebody's behalf. Unset means the internal route refuses
+  // everything rather than standing open.
+  internalSecret: process.env.INTERNAL_SECRET || null,
   // Reported in /auth/config; the gateway overrides it with its own value.
   syncIntervalMin: int(process.env.SYNC_INTERVAL_MIN, 5),
 };

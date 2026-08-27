@@ -19,7 +19,7 @@ import type {
 import { config } from '../config';
 import { PrismaService } from '@svinooh/db';
 import { verifyTelegramLogin } from './telegram';
-import { TelegramBotService } from './telegram-bot.service';
+import { TelegramLoginService } from './telegram-login.service';
 import { UserService } from './user.service';
 
 /** How many times one sign-in link may be opened — see UserService.issueLoginLink */
@@ -30,7 +30,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
-    private readonly bot: TelegramBotService,
+    private readonly logins: TelegramLoginService,
     private readonly users: UserService,
   ) {}
 
@@ -69,7 +69,7 @@ export class AuthService {
       throw new ServiceUnavailableException('Telegram sign-in is not configured');
     }
     const token = randomBytes(24).toString('base64url');
-    this.bot.create(token);
+    void this.logins.create(token);
     return {
       token,
       botUsername: config.botUsername,
@@ -79,16 +79,19 @@ export class AuthService {
 
   /** Poll the bot sign-in status */
   async telegramPoll(token: string): Promise<TelegramPollDto> {
-    const entry = this.bot.get(token);
-    if (!entry) throw new UnauthorizedException('Sign-in session expired, start again');
-    if (entry.status !== 'authenticated' || !entry.user) return { pending: true };
-    this.bot.consume(token); // one-time use
+    const who = await this.logins.take(token);
+    if (!who) {
+      // Still waiting and already gone need different things said to them: one
+      // is "keep holding", the other is "start again"
+      if (await this.logins.pending(token)) return { pending: true };
+      throw new UnauthorizedException('Sign-in session expired, start again');
+    }
     return this.finishLogin(
       await this.users.upsertTelegram({
-        id: entry.user.id,
-        firstName: entry.user.first_name,
-        lastName: entry.user.last_name,
-        username: entry.user.username,
+        id: who.id,
+        firstName: who.first_name,
+        lastName: who.last_name,
+        username: who.username,
       }),
     );
   }
