@@ -37,15 +37,26 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
   const [tracking, setTracking] = useState(false);
   const [trackErr, setTrackErr] = useState<string | null>(null);
 
-  // Only when the server didn't already hand it over — otherwise the page would
-  // fetch what it is already showing, and move again when it arrived
+  /**
+   * The list is checked against the API on every load, whether or not the page
+   * arrived with one in it. The page is a cached one — rebuilt at most once a
+   * minute — and this list is the one thing on it that says who is visible. A
+   * portfolio taken private has to leave the moment it is taken private, and
+   * skipping this because the HTML already had a list is what kept it on screen
+   * for as long as the tab stayed open.
+   *
+   * The card underneath is only swapped when it is a different portfolio. The
+   * same one with its numbers a minute newer is not worth restarting the replay
+   * for, and that is the movement this used to skip the fetch to avoid.
+   */
   useEffect(() => {
-    if (preloaded.pubs.length) return;
     void loadLandingData((path) => api(path))
       .then((data) => {
         setPubs(data.pubs);
-        setDemo(data.demo);
-        setDemoHistory(data.history);
+        if (data.demo?.slug !== preloaded.demo?.slug) {
+          setDemo(data.demo);
+          setDemoHistory(data.history);
+        }
       })
       .catch(() => {});
     // Once, on mount: `preloaded` never changes within a page's life
