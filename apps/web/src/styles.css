@@ -658,3 +658,11 @@ body[data-theme='light'] .on-dark {
     display: none !important;
   }
 }
+
+/* Five periods on a phone: the row keeps the tabs pinned right, so they give up
+   the padding rather than the scope selector giving up its name */
+@media (max-width: 480px) {
+  .period {
+    padding: 5px 8px;
+  }
+}
