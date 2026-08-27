@@ -696,7 +696,9 @@ body[data-theme='light'] .on-dark {
 }
 
 /* Installed to the home screen there is no toolbar to sit beside, and the inset
-   is the home indicator the dock does have to clear. */
+   is the home indicator the dock does have to clear. Both of these are only the
+   opening guess: useDockToVisibleBottom measures the real edge and writes `top`
+   itself, because Safari does not keep dvh honest once its toolbar collapses. */
 @media (display-mode: standalone) {
   .tab-dock {
     top: calc(100dvh - 4px - env(safe-area-inset-bottom));

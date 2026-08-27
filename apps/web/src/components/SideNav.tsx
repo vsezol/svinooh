@@ -1,8 +1,70 @@
 'use client';
 
-import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 
 export type Tab = 'portfolio' | 'notifications';
+
+/** The gap the dock keeps from the bottom of what is on screen */
+const DOCK_GAP = 4;
+
+/**
+ * Keeps the dock on the bottom edge of what is actually visible.
+ *
+ * Neither CSS length can find that edge on iOS. `bottom` measures from the
+ * layout viewport, which keeps the height the page had while Safari's toolbar
+ * was expanded; `100dvh` is meant to be the viewport as it is now, but Safari
+ * does not re-resolve it when the toolbar collapses under a scroll — measured
+ * on an iPhone mid-scroll it still read 714 while 754 was on screen, which is
+ * the 40px of dead air under the dock this exists to remove.
+ *
+ * visualViewport is the one thing that answers honestly, and it fires when the
+ * toolbar moves. Installed to a home screen there is no toolbar and the bottom
+ * of the screen is the home indicator instead, which the probe measures as a
+ * safe-area inset — in a browser tab that inset is 0, so one line covers both.
+ */
+function useDockToVisibleBottom(): React.RefObject<HTMLDivElement | null> {
+  const dock = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = dock.current;
+    const vv = window.visualViewport;
+    if (!el || !vv) return;
+
+    const probe = document.createElement('div');
+    probe.style.cssText =
+      'position:fixed;bottom:0;left:0;width:0;visibility:hidden;pointer-events:none;height:env(safe-area-inset-bottom)';
+    document.body.appendChild(probe);
+
+    let queued = false;
+    const place = () => {
+      queued = false;
+      // The dock hangs upwards from this line — see .tab-dock's transform
+      el.style.top = `${vv.offsetTop + vv.height - DOCK_GAP - probe.offsetHeight}px`;
+    };
+    const schedule = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(place);
+    };
+
+    place();
+    vv.addEventListener('resize', schedule);
+    vv.addEventListener('scroll', schedule);
+    // The toolbar collapses under a scroll, and Safari has been known to settle
+    // the viewport without saying so
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('orientationchange', schedule);
+    return () => {
+      vv.removeEventListener('resize', schedule);
+      vv.removeEventListener('scroll', schedule);
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('orientationchange', schedule);
+      probe.remove();
+    };
+  }, []);
+
+  return dock;
+}
 
 /** The dock's pill slides between fixed slots, so both have to be one number */
 const DOCK_W = 72;
@@ -98,6 +160,7 @@ interface Props {
  * door with nothing behind it.
  */
 export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
+  const dock = useDockToVisibleBottom();
   const label = (text: string): ReactNode =>
     collapsed ? null : <span style={{ whiteSpace: 'nowrap' }}>{text}</span>;
 
@@ -185,10 +248,11 @@ export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
 
       {/* phone dock */}
       <div
+        ref={dock}
         className="tab-dock"
-        // Placement lives in the stylesheet — see .tab-dock. It needs a
-        // dynamic-viewport unit to follow the bottom of an iOS screen, and a
-        // media query to tell a browser toolbar from a home indicator.
+        // Where the bottom of the screen is gets measured, not declared — see
+        // useDockToVisibleBottom. The stylesheet's `top` is the guess it starts
+        // from, for the frame before the first measurement lands.
         style={{
           position: 'fixed',
           zIndex: 60,
