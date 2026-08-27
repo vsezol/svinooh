@@ -10,6 +10,7 @@ import {
 } from 'lightweight-charts';
 import type { HistoryRange } from '@svinooh/shared';
 import { fmtUsd } from '../lib/format';
+import { WINDOW_MS } from '../lib/ranges';
 import { useTheme } from '../lib/theme';
 
 interface Props {
@@ -19,40 +20,35 @@ interface Props {
   height: string;
 }
 
-/** What a drag across the chart selected */
+/**
+ * What a drag across the chart selected, as two readings rather than two
+ * pixel positions — the chart scrolls underneath it now, and a span pinned to
+ * pixels would stay behind while the readings it measures slid away.
+ */
 interface Selection {
   fromIndex: number;
   toIndex: number;
-  fromX: number;
-  toX: number;
 }
 
 /**
- * One finger scrolls the chart. A mouse drag does not — that gesture belongs to
- * selecting a range — and neither does the wheel, which belongs to the page.
+ * A drag moves the chart, with a finger or with a mouse — it is the first thing
+ * anyone tries, and a chart that does not move under it reads as broken. The
+ * wheel stays out of it: the chart sits in the middle of a page people scroll
+ * past, and a chart that swallows the wheel traps them on it.
  */
 const SCROLL = {
   mouseWheel: false,
-  pressedMouseMove: false,
+  pressedMouseMove: true,
   horzTouchDrag: true,
   vertTouchDrag: false,
 } as const;
-
-/**
- * The narrowest a point may be drawn before the chart stops trying to fit the
- * whole period into the width and becomes scrollable instead. A day of history
- * squeezed into a phone is a couple of pixels per reading — a shape, not a
- * chart. Below this it shows the recent end at a legible density and lets you
- * scroll back for the rest.
- */
-const MIN_POINT_PX = 3;
 
 const token = (name: string): string =>
   getComputedStyle(document.body).getPropertyValue(name).trim() || '#2bd576';
 
 function dateLabel(ms: number, period: HistoryRange): string {
   const d = new Date(ms);
-  return period === '24h'
+  return period === '1h' || period === '24h'
     ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
     : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
@@ -67,7 +63,10 @@ function dateLabel(ms: number, period: HistoryRange): string {
  *    at a point; it follows the finger until the next tap
  *  - two fingers — selects the span between them and says what the portfolio
  *    did across it
- *  - a mouse drag — the same selection, since a mouse has only the one gesture
+ *  - a mouse drag — scrolls the chart, the same as one finger
+ *  - shift and a mouse drag — the same selection. A mouse has one button and
+ *    two things to do with it, so one of them takes a modifier; TradingView
+ *    measures on shift-drag as well, and this is their chart.
  *
  * Both are pointer events, which already carry an id per finger and say which
  * input they came from; the library has no selection of its own to borrow, and
@@ -85,13 +84,22 @@ export function AreaChart({ values, times, period, height }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const series = useRef<ISeriesApi<'Area'> | null>(null);
-  const drag = useRef<{ startX: number; moved: boolean } | null>(null);
+  /**
+   * The mouse gesture in progress. `measuring` is decided at the press, not
+   * read per move: letting go of shift halfway through a measurement should
+   * finish it, not turn it into a scroll.
+   */
+  const drag = useRef<{ index: number; clientX: number; measuring: boolean; moved: boolean } | null>(null);
   /** Fingers currently on the chart, by pointer id → x. Two of them select a span. */
   const touches = useRef(new Map<number, number>());
   const { theme } = useTheme();
 
   const [hover, setHover] = useState<{ index: number } | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
+  /** Where the selected span currently falls on screen — see the effect that keeps it there */
+  const [band, setBand] = useState<{ left: number; width: number } | null>(null);
+  /** The stretch of time on screen, in ms — what the labels underneath report */
+  const [shown, setShown] = useState<{ from: number; to: number } | null>(null);
 
   // Lightweight Charts wants seconds, strictly ascending and unique — the
   // history can carry two points inside one second after downsampling.
@@ -143,6 +151,23 @@ export function AreaChart({ values, times, period, height }: Props) {
     };
   }, []);
 
+  /**
+   * Now that the chart holds more than it shows, the labels underneath cannot
+   * go on naming the ends of the data — they name the ends of the window, and
+   * follow it as it moves.
+   */
+  useEffect(() => {
+    const scale = chart.current?.timeScale();
+    if (!scale) return;
+    const read = () => {
+      const range = scale.getVisibleRange();
+      setShown(range ? { from: (range.from as number) * 1000, to: (range.to as number) * 1000 } : null);
+    };
+    read();
+    scale.subscribeVisibleTimeRangeChange(read);
+    return () => scale.unsubscribeVisibleTimeRangeChange(read);
+  }, []);
+
   // Colours follow the theme
   useEffect(() => {
     if (!chart.current || !series.current) return;
@@ -156,24 +181,28 @@ export function AreaChart({ values, times, period, height }: Props) {
     chart.current.applyOptions({ crosshair: { vertLine: { color: mut } } });
   }, [theme]);
 
+  /**
+   * The period is the width of the window: 24H puts one day across the chart
+   * and leaves the days before it to be scrolled back to. What arrives covers
+   * several windows, so what is shown has to be cut to one — the newest one.
+   *
+   * Until there is more history than the window is wide there is nothing to cut
+   * and nothing to scroll, and the line fills the width the way it always did.
+   */
   useEffect(() => {
     series.current?.setData(data);
     const scale = chart.current?.timeScale();
-    const width = box.current?.clientWidth ?? 0;
-    if (scale && width && values.length) {
-      if (width / values.length >= MIN_POINT_PX) {
-        scale.fitContent();
-      } else {
-        // Too many readings for the width: draw them at a legible size, park
-        // the view on the newest, and let the rest be scrolled back to
-        scale.applyOptions({ barSpacing: MIN_POINT_PX });
-        scale.scrollToRealTime();
-      }
+    if (scale && data.length) {
+      const window = WINDOW_MS[period];
+      const last = data[data.length - 1].time as number;
+      const from = window === null ? null : last - Math.floor(window / 1000);
+      if (from === null || from <= (data[0].time as number)) scale.fitContent();
+      else scale.setVisibleRange({ from: from as UTCTimestamp, to: last as UTCTimestamp });
     }
     setSelection(null);
     // Re-running on every array identity would reset the selection on each
     // poll; the length and the endpoints are what actually change the picture.
-  }, [values.length, times[0], times[times.length - 1], values[values.length - 1]]);
+  }, [period, values.length, times[0], times[times.length - 1], values[values.length - 1]]);
 
   /** Screen x → index in the series */
   const indexAt = (clientX: number): number | null => {
@@ -193,9 +222,32 @@ export function AreaChart({ values, times, period, height }: Props) {
     const a = indexAt(from);
     const b = indexAt(to);
     if (a == null || b == null || Math.abs(a - b) < 1) return;
-    const [lo, hi] = a < b ? [a, b] : [b, a];
-    setSelection({ fromIndex: lo, toIndex: hi, fromX: xAt(lo), toX: xAt(hi) });
+    setSelection(a < b ? { fromIndex: a, toIndex: b } : { fromIndex: b, toIndex: a });
   };
+
+  /**
+   * The span is drawn in pixels over a chart that moves, so it is placed again
+   * every time the view does — scroll away from a measured span and the band
+   * goes with the readings it measures, and off the edge with them.
+   */
+  useEffect(() => {
+    const scale = chart.current?.timeScale();
+    if (!scale) return;
+    const place = () => {
+      if (!selection) {
+        setBand(null);
+        return;
+      }
+      const a = xAt(selection.fromIndex);
+      const b = xAt(selection.toIndex);
+      setBand({ left: Math.min(a, b), width: Math.abs(b - a) });
+    };
+    place();
+    scale.subscribeVisibleLogicalRangeChange(place);
+    return () => scale.unsubscribeVisibleLogicalRangeChange(place);
+    // xAt reads refs, so it stays correct without being a dependency
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selection]);
 
   /**
    * Both gestures, on one event model.
@@ -219,7 +271,13 @@ export function AreaChart({ values, times, period, height }: Props) {
     }
     const index = indexAt(e.clientX);
     if (index == null) return;
-    drag.current = { startX: index, moved: false };
+    drag.current = { index, clientX: e.clientX, measuring: e.shiftKey, moved: false };
+    if (!e.shiftKey) return;
+    // Both gestures are the same button held and moved, so the chart is told to
+    // sit still for the length of a measurement — otherwise it scrolls out from
+    // under the span being measured. The library reads this on every move, so
+    // switching it here, after its own press handler has run, is in time.
+    chart.current?.applyOptions({ handleScroll: false });
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
 
@@ -232,13 +290,17 @@ export function AreaChart({ values, times, period, height }: Props) {
       return;
     }
     if (!drag.current) return;
+    // In pixels, not in readings: a scroll drags the chart along with the
+    // cursor, so the reading under it barely changes and a real drag would go
+    // on looking like a click
+    if (Math.abs(e.clientX - drag.current.clientX) > 2) drag.current.moved = true;
+    if (!drag.current.measuring) return;
     const index = indexAt(e.clientX);
     if (index == null) return;
-    const from = Math.min(drag.current.startX, index);
-    const to = Math.max(drag.current.startX, index);
-    if (to - from < 1) return; // not a drag yet
-    drag.current.moved = true;
-    setSelection({ fromIndex: from, toIndex: to, fromX: xAt(from), toX: xAt(to) });
+    const from = Math.min(drag.current.index, index);
+    const to = Math.max(drag.current.index, index);
+    if (to - from < 1) return; // not a span yet
+    setSelection({ fromIndex: from, toIndex: to });
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
@@ -246,13 +308,22 @@ export function AreaChart({ values, times, period, height }: Props) {
       touches.current.delete(e.pointerId);
       // Only once the hand is off: lifting one finger of two would otherwise
       // hand the other one a scroll it never asked for
-      if (touches.current.size === 0) chart.current?.applyOptions({ handleScroll: SCROLL });
+      if (touches.current.size === 0) {
+        chart.current?.applyOptions({ handleScroll: SCROLL });
+        // A measurement made with two fingers lasts as long as they do. There
+        // is no cursor to leave it under and no click to dismiss it with, so
+        // the span that outlives the hand is a band nobody can get rid of —
+        // and the next thing anyone does is scroll, which would drag it along.
+        setSelection(null);
+      }
       return;
     }
-    // A tap, not a drag — clear whatever was selected
+    // A click, not a drag — clear whatever was selected
     if (drag.current && !drag.current.moved) setSelection(null);
+    if (drag.current?.measuring) chart.current?.applyOptions({ handleScroll: SCROLL });
     drag.current = null;
-    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+    const el = e.currentTarget as HTMLElement;
+    if (el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
   };
 
   const range = selection
@@ -283,14 +354,14 @@ export function AreaChart({ values, times, period, height }: Props) {
       />
 
       {/* the selected span */}
-      {selection ? (
+      {band ? (
         <div
           style={{
             position: 'absolute',
             top: 0,
             bottom: 0,
-            left: Math.min(selection.fromX, selection.toX),
-            width: Math.abs(selection.toX - selection.fromX),
+            left: band.left,
+            width: band.width,
             background: 'color-mix(in srgb, var(--acc) 12%, transparent)',
             borderLeft: '1px solid color-mix(in srgb, var(--acc) 55%, transparent)',
             borderRight: '1px solid color-mix(in srgb, var(--acc) 55%, transparent)',
@@ -329,6 +400,27 @@ export function AreaChart({ values, times, period, height }: Props) {
           ) : null}
       </div>
 
+      {/* The measuring gesture has nothing on screen to reach for, and a
+          modifier nobody knows about is a feature nobody has. Mouse only — a
+          phone measures with two fingers and has no shift to hold. */}
+      {values.length && !selection && hovered === null ? (
+        <div
+          className="mono mouse-only"
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 12,
+            fontSize: 9.5,
+            letterSpacing: '0.1em',
+            color: 'var(--mut)',
+            opacity: 0.7,
+            pointerEvents: 'none',
+          }}
+        >
+          SHIFT-DRAG TO MEASURE
+        </div>
+      ) : null}
+
       {values.length ? (
         <div
           className="mono"
@@ -344,8 +436,12 @@ export function AreaChart({ values, times, period, height }: Props) {
             pointerEvents: 'none',
           }}
         >
-          <span>{dateLabel(times[0], period)}</span>
-          <span>NOW</span>
+          <span>{dateLabel(shown ? shown.from : times[0], period)}</span>
+          {/* Scrolled off the live edge, the right-hand end is a time like any
+              other; sitting on it, it is the only one worth naming. */}
+          <span>
+            {shown && shown.to < times[times.length - 1] - 1000 ? dateLabel(shown.to, period) : 'NOW'}
+          </span>
         </div>
       ) : null}
     </div>
