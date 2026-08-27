@@ -33,6 +33,20 @@ export const config = {
   // Primary path is a signed HTTP call to debank.com; the browser is the fallback
   evmHttpEnabled: bool(process.env.EVM_HTTP_ENABLED, true),
   puppeteerExecutablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
+  // Which engine drives the browser scan. 'lightpanda' is the light Zig headless
+  // browser (CDP over WebSocket, ~2.5-3x less RAM than Chrome on our workload);
+  // 'chrome' is puppeteer-launched Chromium. Anything but 'chrome' means
+  // lightpanda — it is the default while we soak it. Both speak CDP, so the scan
+  // code below is engine-agnostic.
+  scannerEngine: process.env.SCANNER_ENGINE === 'chrome' ? ('chrome' as const) : ('lightpanda' as const),
+  // Where the lightpanda binary is. Empty => look next to the service, then PATH.
+  lightpandaPath: process.env.LIGHTPANDA_PATH || null,
+  lightpandaHost: process.env.LIGHTPANDA_HOST || '127.0.0.1',
+  // 0 => the OS picks a free port and we read it back from lightpanda's output.
+  // This is deliberate: a fixed port collides with a server leaked by a crashed
+  // predecessor, and we'd silently connect to one we can't manage. Set a
+  // non-zero LIGHTPANDA_PORT only if you need a known port.
+  lightpandaPort: int(process.env.LIGHTPANDA_PORT, 0),
   debankProxyUrl: process.env.DEBANK_PROXY_URL || null,
   // Chromium in a container has no user namespaces to sandbox with
   chromeNoSandbox: bool(process.env.CHROME_NO_SANDBOX, false),

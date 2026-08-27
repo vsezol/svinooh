@@ -24,20 +24,39 @@ RUN npm run -w @svinooh/common build \
   && npm run -w apps/scanner-evm build
 
 FROM node:22-slim
-# System chromium for puppeteer; the container sandbox is disabled via a flag
-# (CHROME_NO_SANDBOX) because a container has no user namespaces to sandbox with
+# Two browser engines behind SCANNER_ENGINE:
+#  - lightpanda (default): a ~76 MB Zig headless browser, downloaded below.
+#  - chromium (fallback): system package; its sandbox is disabled via a flag
+#    (CHROME_NO_SANDBOX) because a container has no user namespaces to sandbox with.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     chromium \
     ca-certificates \
+    curl \
     fonts-liberation \
     fonts-noto-color-emoji \
   && rm -rf /var/lib/apt/lists/*
 
+# lightpanda binary for the build platform. Pinned to the version the engine was
+# benchmarked and verified against; bump deliberately. TARGETARCH is provided by
+# BuildKit (amd64 / arm64).
+ARG TARGETARCH=amd64
+ARG LIGHTPANDA_VERSION=0.3.7
+RUN case "$TARGETARCH" in \
+      amd64) LP_ARCH=x86_64 ;; \
+      arm64) LP_ARCH=aarch64 ;; \
+      *) echo "unsupported TARGETARCH=$TARGETARCH" >&2; exit 1 ;; \
+    esac \
+  && curl -fsSL -o /usr/local/bin/lightpanda \
+       "https://github.com/lightpanda-io/browser/releases/download/${LIGHTPANDA_VERSION}/lightpanda-${LP_ARCH}-linux" \
+  && chmod +x /usr/local/bin/lightpanda \
+  && /usr/local/bin/lightpanda version
+
 ENV NODE_ENV=production \
   PUPPETEER_SKIP_DOWNLOAD=1 \
   PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
-  CHROME_NO_SANDBOX=1
+  CHROME_NO_SANDBOX=1 \
+  SCANNER_ENGINE=lightpanda
 
 WORKDIR /app
 COPY --from=build /app/node_modules node_modules
