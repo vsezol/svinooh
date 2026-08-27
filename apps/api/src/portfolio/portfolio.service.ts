@@ -137,6 +137,25 @@ function smoothSeries(
 }
 
 /** Downsamples the series to max points (always keeping the last one) */
+/**
+ * Adds up what every wallet last reported, or says it does not know. A single
+ * wallet with nothing recorded — every wallet, before the release that started
+ * recording it — makes the sum unknown rather than smaller.
+ */
+/** Rounds a reading that may not have been taken at all */
+function nullableRound(value: number | null | undefined): number | null {
+  return value === null || value === undefined ? null : round2(Number(value));
+}
+
+function totalOf(byWallet: Map<string, number | null>): number | null {
+  let sum = 0;
+  for (const v of byWallet.values()) {
+    if (v === null) return null;
+    sum += v;
+  }
+  return round2(sum);
+}
+
 function downsample(points: HistoryPointDto[], max: number): HistoryPointDto[] {
   if (points.length <= max) return points;
   const step = Math.ceil(points.length / max);
@@ -524,16 +543,30 @@ export class PortfolioService {
     const snaps = await this.prisma.walletSnapshot.findMany({
       where: { walletId: { in: walletIds }, ...(since ? { createdAt: { gte: since } } : {}) },
       orderBy: { createdAt: 'asc' },
-      select: { walletId: true, createdAt: true, totalUsd: true },
+      select: {
+        walletId: true,
+        createdAt: true,
+        totalUsd: true,
+        claimableUsd: true,
+        debtUsd: true,
+      },
     });
     if (!snaps.length) return [];
 
     // group snapshots by wallet (already sorted by time) and smooth each one —
     // removing short-lived glitch dips that recover on their own
-    const byWallet = new Map<string, Array<{ t: number; v: number }>>();
+    const byWallet = new Map<
+      string,
+      Array<{ t: number; v: number; claimable: number | null; debt: number | null }>
+    >();
     for (const s of snaps) {
       const arr = byWallet.get(s.walletId) ?? [];
-      arr.push({ t: s.createdAt.getTime(), v: s.totalUsd });
+      arr.push({
+        t: s.createdAt.getTime(),
+        v: s.totalUsd,
+        claimable: s.claimableUsd,
+        debt: s.debtUsd,
+      });
       byWallet.set(s.walletId, arr);
     }
 
@@ -546,11 +579,38 @@ export class PortfolioService {
 
     // each wallet's starting point (carry-back) — the first smoothed value in the range
     const baseline = new Map<string, number>();
-    const events: Array<{ t: number; id: string; v: number }> = [];
+    // Same idea for the other two, so a wallet added mid-window does not look
+    // like a debt appearing out of nowhere. They are seeded from the wallet's
+    // own first reading rather than from a level query: what came before the
+    // window is only recorded for the total.
+    const baseClaimable = new Map<string, number | null>();
+    const baseDebt = new Map<string, number | null>();
+    const events: Array<{
+      t: number;
+      id: string;
+      v: number;
+      claimable: number | null;
+      debt: number | null;
+    }> = [];
     for (const [id, series] of byWallet) {
       const smooth = smoothSeries(series, prior.get(id));
       baseline.set(id, smooth[0].v);
-      for (const p of smooth) events.push({ t: p.t, id, v: p.v });
+      baseClaimable.set(id, series[0].claimable);
+      baseDebt.set(id, series[0].debt);
+      // Only the total is smoothed. The glitch test holds a drop that recovers
+      // to where it was, which is exactly what these two do not do: claiming
+      // takes the claimable to zero and it stays there, and repaying does the
+      // same to a debt. Running the total's test over them would hold a real
+      // claim as if it had never happened.
+      for (let i = 0; i < smooth.length; i++) {
+        events.push({
+          t: smooth[i].t,
+          id,
+          v: smooth[i].v,
+          claimable: series[i].claimable,
+          debt: series[i].debt,
+        });
+      }
     }
     for (const [id, v] of prior) if (!baseline.has(id)) baseline.set(id, v);
 
@@ -558,12 +618,25 @@ export class PortfolioService {
     // (initially = the starting ones, so a "new" wallet is present from t0)
     events.sort((a, b) => a.t - b.t);
     const current = new Map<string, number>(baseline);
+    const claimable = new Map<string, number | null>(baseClaimable);
+    const debt = new Map<string, number | null>(baseDebt);
     const points: HistoryPointDto[] = [];
     for (const e of events) {
       current.set(e.id, e.v);
+      claimable.set(e.id, e.claimable);
+      debt.set(e.id, e.debt);
       let sum = 0;
       for (const v of current.values()) sum += v;
-      points.push({ t: new Date(e.t).toISOString(), usd: round2(sum) });
+      points.push({
+        t: new Date(e.t).toISOString(),
+        usd: round2(sum),
+        // One wallet that has not reported these yet makes the whole sum
+        // unknown. Treating its silence as a zero would draw a portfolio as
+        // owing less than it does, which is the one direction that must not
+        // happen by accident.
+        claimableUsd: totalOf(claimable),
+        debtUsd: totalOf(debt),
+      });
     }
     // Enough for every window in the reach to be drawn at the density one
     // window deserves — capping the whole series at a screenful, as this did
@@ -666,31 +739,59 @@ export class PortfolioService {
 
     if (!bucket) {
       const where = { [fkColumn]: id, ...(since ? { createdAt: { gte: since } } : {}) };
-      const rows =
-        table === 'PortfolioSnapshot'
-          ? await this.prisma.portfolioSnapshot.findMany({
-              where: where as Prisma.PortfolioSnapshotWhereInput,
-              orderBy: { createdAt: 'asc' },
-              select: { createdAt: true, totalUsd: true },
-            })
-          : await this.prisma.walletSnapshot.findMany({
-              where: where as Prisma.WalletSnapshotWhereInput,
-              orderBy: { createdAt: 'asc' },
-              select: { createdAt: true, totalUsd: true },
-            });
-      return rows.map((row) => ({ t: row.createdAt.toISOString(), usd: round2(row.totalUsd) }));
+      // Only a wallet records what it could collect and what it owes. The
+      // portfolio's own snapshots carry a total and nothing else, which is why
+      // the portfolio series is assembled from its wallets rather than read
+      // from here.
+      if (table === 'PortfolioSnapshot') {
+        const rows = await this.prisma.portfolioSnapshot.findMany({
+          where: where as Prisma.PortfolioSnapshotWhereInput,
+          orderBy: { createdAt: 'asc' },
+          select: { createdAt: true, totalUsd: true },
+        });
+        return rows.map((row) => ({
+          t: row.createdAt.toISOString(),
+          usd: round2(row.totalUsd),
+          claimableUsd: null,
+          debtUsd: null,
+        }));
+      }
+      const rows = await this.prisma.walletSnapshot.findMany({
+        where: where as Prisma.WalletSnapshotWhereInput,
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true, totalUsd: true, claimableUsd: true, debtUsd: true },
+      });
+      return rows.map((row) => ({
+        t: row.createdAt.toISOString(),
+        usd: round2(row.totalUsd),
+        claimableUsd: nullableRound(row.claimableUsd),
+        debtUsd: nullableRound(row.debtUsd),
+      }));
     }
 
-    const rows = await this.prisma.$queryRaw<Array<{ bucket: Date; usd: number }>>(Prisma.sql`
+    // AVG skips nulls, so a bucket straddling the release that started
+    // recording these averages what was recorded and answers null only where
+    // nothing was
+    const claimed = table === 'WalletSnapshot';
+    const rows = await this.prisma.$queryRaw<
+      Array<{ bucket: Date; usd: number; claimable: number | null; debt: number | null }>
+    >(Prisma.sql`
       SELECT date_bin(${bucket}::interval, "createdAt", TIMESTAMP '2020-01-01') AS bucket,
-             AVG("totalUsd")::float8 AS usd
+             AVG("totalUsd")::float8 AS usd,
+             ${claimed ? Prisma.sql`AVG("claimableUsd")::float8` : Prisma.sql`NULL::float8`} AS claimable,
+             ${claimed ? Prisma.sql`AVG("debtUsd")::float8` : Prisma.sql`NULL::float8`} AS debt
       FROM ${Prisma.raw(`"${table}"`)}
       WHERE ${Prisma.raw(`"${fkColumn}"`)} = ${id}
         ${since ? Prisma.sql`AND "createdAt" >= ${since}` : Prisma.empty}
       GROUP BY bucket
       ORDER BY bucket ASC
     `);
-    return rows.map((row) => ({ t: row.bucket.toISOString(), usd: round2(Number(row.usd)) }));
+    return rows.map((row) => ({
+      t: row.bucket.toISOString(),
+      usd: round2(Number(row.usd)),
+      claimableUsd: nullableRound(row.claimable),
+      debtUsd: nullableRound(row.debt),
+    }));
   }
 
   private toWalletDto(wallet: WalletWithPositions, staleBefore: number): WalletDto {

@@ -7,7 +7,32 @@ import { ScanHold } from '@svinooh/common';
 import { MetricsService, type ScanJob } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import { scanAddress } from '../scanners';
-import type { ScanResult } from '@svinooh/shared';
+import type { ScanPosition, ScanResult } from '@svinooh/shared';
+
+/**
+ * What the wallet could collect right now, and what it owes.
+ *
+ * Both are read off the legs of each position rather than off the position's
+ * own total: a lending position's value is already net of its debt, so the debt
+ * is only visible one level down. Borrow legs arrive negative and are counted
+ * as what they are — an amount owed, which is a positive number.
+ *
+ * The same two sums are derived in the browser for the cards on the portfolio
+ * page (`web/src/lib/blocks.ts`). They are computed here as well because a
+ * chart needs them at the moment of the reading, and there is no reading to go
+ * back to afterwards.
+ */
+function accrued(positions: ScanPosition[]): { claimableUsd: number; debtUsd: number } {
+  let claimableUsd = 0;
+  let debtUsd = 0;
+  for (const position of positions) {
+    for (const token of position.tokens ?? []) {
+      if (token.role === 'reward') claimableUsd += token.valueUsd;
+      else if (token.role === 'borrow') debtUsd += Math.abs(token.valueUsd);
+    }
+  }
+  return { claimableUsd, debtUsd };
+}
 
 @Injectable()
 export class SyncService {
@@ -150,7 +175,12 @@ export class SyncService {
           },
         }),
         this.prisma.walletSnapshot.create({
-          data: { walletId: wallet.id, totalUsd: result.totalUsd, breakdown: result.breakdown },
+          data: {
+            walletId: wallet.id,
+            totalUsd: result.totalUsd,
+            ...accrued(result.positions),
+            breakdown: result.breakdown,
+          },
         }),
       ]);
     }
