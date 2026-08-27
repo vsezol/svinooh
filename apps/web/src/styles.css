@@ -709,6 +709,6 @@ body[data-theme='light'] .on-dark {
 
 @media (max-width: 719px) {
   .dock-room {
-    padding-bottom: calc(78px + env(safe-area-inset-bottom));
+    padding-bottom: calc(86px + env(safe-area-inset-bottom));
   }
 }
