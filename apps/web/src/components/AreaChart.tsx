@@ -293,7 +293,14 @@ export function AreaChart({ values, times, period, height }: Props) {
       touches.current.delete(e.pointerId);
       // Only once the hand is off: lifting one finger of two would otherwise
       // hand the other one a scroll it never asked for
-      if (touches.current.size === 0) chart.current?.applyOptions({ handleScroll: SCROLL });
+      if (touches.current.size === 0) {
+        chart.current?.applyOptions({ handleScroll: SCROLL });
+        // A measurement made with two fingers lasts as long as they do. There
+        // is no cursor to leave it under and no click to dismiss it with, so
+        // the span that outlives the hand is a band nobody can get rid of —
+        // and the next thing anyone does is scroll, which would drag it along.
+        setSelection(null);
+      }
       return;
     }
     // A click, not a drag — clear whatever was selected
