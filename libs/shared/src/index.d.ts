@@ -347,3 +347,50 @@ export interface DefiFacts {
   /** Sources that could not be reached, by platform */
   failed: string[];
 }
+
+/**
+ * One thing in a wallet that can be alerted on, and the key that recognises it
+ * next time.
+ *
+ * The key has to survive a sync, and a `Position` row does not: every scan
+ * deletes the wallet's positions and writes them again, so their ids are new
+ * each time. Where a protocol answered for itself the key is its own address
+ * for the position, which is as stable as identity gets. Where only the
+ * aggregator saw it, the key is built from the platform and what it is called —
+ * stable while the protocol keeps calling it the same thing, and a renamed
+ * position simply reads as a new one and re-baselines quietly.
+ */
+export interface WalletPositionState {
+  key: string;
+  /** What a message about this position should call it: "cbBTC/USDC", "Venus · Lending" */
+  label: string;
+  /** null — not a position with a band, or nobody could say */
+  inRange: boolean | null;
+  healthFactor: number | null;
+  /** Percent, as the thresholds are written: 6.2 is 6.2% */
+  borrowApyPct: number | null;
+}
+
+/**
+ * What a wallet looked like the moment a scan landed.
+ *
+ * Published by the wallet service and read by whatever decides who should hear
+ * about it. It carries no owner and no settings on purpose: who watches this
+ * wallet and what they asked to be told is the reader's business, and a scan
+ * should not have to know.
+ *
+ * `unreachable` is as important as the positions. A protocol that could not be
+ * reached has said nothing, and a reader that treats silence as "no positions"
+ * will announce that every position of a briefly unreachable protocol has gone.
+ */
+export interface WalletStateEvent {
+  walletId: string;
+  portfolioId: string;
+  address: string;
+  chain: Chain;
+  positions: WalletPositionState[];
+  /** Protocols that could not be reached on this scan, by platform */
+  unreachable: string[];
+  /** ISO 8601 */
+  at: string;
+}
