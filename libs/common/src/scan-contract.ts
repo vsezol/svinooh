@@ -59,3 +59,6 @@ export type ScanOutcome =
  * service says once the work is done and written.
  */
 export const WALLET_STATE_QUEUE = 'wallet.state';
+
+/** Where the collector puts what somebody should be told. Read by the bot. */
+export const ALERTS_QUEUE = 'alerts.telegram';
