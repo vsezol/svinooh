@@ -13,8 +13,9 @@ RUN npm ci -w apps/bot-telegram -w @svinooh/common --no-audit --no-fund
 COPY libs/shared libs/shared
 COPY libs/common libs/common
 COPY apps/bot-telegram apps/bot-telegram
-RUN npm run build \
-  && npm run -w @svinooh/common build \
+# The bot has no database, so libs/db is neither installed nor built here —
+# only the shared types and the common lib it actually imports
+RUN npm run -w @svinooh/common build \
   && npm run -w apps/bot-telegram build
 
 FROM node:22-slim
