@@ -8,6 +8,7 @@ import {
 import { Prisma } from '@prisma/client';
 import type { Portfolio, PortfolioOwner, Position, Wallet } from '@prisma/client';
 import type {
+  AlertSettingsDto,
   Chain,
   HistoryDto,
   HistoryPointDto,
@@ -19,6 +20,8 @@ import type {
   PositionRange,
   PositionTokenDto,
   PublicPortfolioDto,
+  UpdateWalletAlertsDto,
+  WalletAlertsDto,
   WalletDto,
   WalletSyncStatus,
 } from '@svinooh/shared';
@@ -224,6 +227,30 @@ const toPoints = (samples: Sample[]): HistoryPointDto[] =>
     claimableUsd: s.claimable,
     debtUsd: s.debt,
   }));
+
+/**
+ * What a wallet is watched for until its owner says otherwise. The client shows
+ * these before the first answer arrives, so the two lists have to agree — see
+ * web/src/lib/alerts.ts.
+ */
+const ALERT_DEFAULTS = {
+  rangeAlerts: true,
+  healthFactorBelow: 1.1,
+  borrowApyAbove: 12,
+} as const;
+
+/** A wallet with no row of its own is a wallet on the defaults */
+function toAlertsDto(
+  walletId: string,
+  row: { rangeAlerts: boolean; healthFactorBelow: number | null; borrowApyAbove: number | null } | null,
+): WalletAlertsDto {
+  return { walletId, ...(row ? { rangeAlerts: row.rangeAlerts, healthFactorBelow: row.healthFactorBelow, borrowApyAbove: row.borrowApyAbove } : ALERT_DEFAULTS) };
+}
+
+/** A threshold nobody is watching, or a number that can actually be crossed */
+function threshold(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
 
 /** Redis cache key for the assembled portfolio */
 function cacheKey(slug: string): string {
@@ -486,6 +513,63 @@ export class PortfolioService {
     });
     await this.cache.del(cacheKey(slug));
     return { visibility: isPublic ? 'public' : 'private' };
+  }
+
+  /**
+   * What every wallet in the portfolio is watched for.
+   *
+   * Answers for a wallet nobody has configured too, with the defaults. A client
+   * that had to fill in the gaps itself would be showing a threshold as if the
+   * server had agreed to it, and the two would drift the first time a default
+   * changed on one side.
+   *
+   * Owner-only. A wallet still on its first sync is left out: what it holds
+   * decides which of these settings can ever fire, and it has not said yet.
+   */
+  async alerts(slug: string, userId: string): Promise<AlertSettingsDto> {
+    const portfolio = await this.requireOwned(slug, userId);
+    const wallets = await this.prisma.wallet.findMany({
+      where: { portfolioId: portfolio.id, status: { not: 'pending' } },
+      select: { id: true, alerts: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return { wallets: wallets.map((w) => toAlertsDto(w.id, w.alerts)) };
+  }
+
+  /**
+   * Change one wallet's settings. A patch: a field left out is left alone, and
+   * a threshold set to null is nobody watching it — which is why an absent key
+   * and an explicit null have to stay distinguishable all the way down.
+   */
+  async setWalletAlerts(
+    slug: string,
+    walletId: string,
+    userId: string,
+    patch: UpdateWalletAlertsDto,
+  ): Promise<WalletAlertsDto> {
+    const portfolio = await this.requireOwned(slug, userId);
+    const wallet = await this.prisma.wallet.findFirst({
+      where: { id: walletId, portfolioId: portfolio.id },
+      select: { id: true },
+    });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
+    const data = {
+      ...('rangeAlerts' in patch ? { rangeAlerts: patch.rangeAlerts === true } : {}),
+      ...('healthFactorBelow' in patch
+        ? { healthFactorBelow: threshold(patch.healthFactorBelow) }
+        : {}),
+      ...('borrowApyAbove' in patch ? { borrowApyAbove: threshold(patch.borrowApyAbove) } : {}),
+    };
+    const saved = await this.prisma.walletAlerts.upsert({
+      where: { walletId },
+      // The row is the wallet's settings, so creating one has to start from the
+      // same defaults the client was shown, not from whatever the patch happened
+      // to mention
+      create: { walletId, ...ALERT_DEFAULTS, ...data },
+      update: data,
+    });
+    return toAlertsDto(walletId, saved);
   }
 
   /** Set or clear the portfolio's name. Empty clears it — back to just the slug. */

@@ -102,8 +102,30 @@ model Wallet {
   createdAt    DateTime         @default(now())
   positions    Position[]
   snapshots    WalletSnapshot[]
+  alerts       WalletAlerts?
 
   @@unique([portfolioId, address])
+}
+
+/// What this wallet is watched for, and told about over Telegram.
+///
+/// One row per wallet, written only by its owner. A wallet nobody has
+/// configured has no row at all and is answered with the defaults, so the
+/// absence of a row is a wallet on the defaults rather than a wallet nobody
+/// can be told about.
+///
+/// A threshold is null when nobody is watching it. That is a different thing
+/// from zero, which would be a threshold that can never be crossed.
+model WalletAlerts {
+  walletId          String   @id
+  wallet            Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  /// An LP position leaving its liquidity range, or coming back into it
+  rangeAlerts       Boolean  @default(true)
+  /// Told when the health factor falls below this
+  healthFactorBelow Float?
+  /// Told when the borrow rate climbs above this, in percent
+  borrowApyAbove    Float?
+  updatedAt         DateTime @updatedAt
 }
 
 model Position {
