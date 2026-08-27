@@ -9,13 +9,32 @@ export const metadata: Metadata = {
   title: 'svinooh — every DeFi position, no exceptions',
   description:
     'Crypto portfolio tracker across EVM, Solana, TRON and Bitcoin. Tokens, LP, staking, lending — the DeFi positions other trackers miss, counted at full value.',
-  icons: { icon: FAVICON },
+  icons: {
+    icon: [{ url: FAVICON }, { url: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+    apple: '/apple-touch-icon.png',
+  },
+  // Installed to a home screen it is an app, and an app has a name, not a
+  // headline with a tagline in it
+  applicationName: 'svinooh',
+  appleWebApp: { capable: true, title: 'svinooh', statusBarStyle: 'black-translucent' },
+  // Relative URLs in metadata need a base; the canonical link needs one too
+  metadataBase: new URL('https://svinooh.com'),
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  // The page paints under the notch and the home indicator; the layout keeps
+  // itself clear of them with env(safe-area-inset-*)
   viewportFit: 'cover',
+  // Pinching the page would fight the chart's own two-finger gesture, and a
+  // portfolio has nothing to zoom into
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f3f4f6' },
+    { media: '(prefers-color-scheme: dark)', color: '#08090c' },
+  ],
 };
 
 /**

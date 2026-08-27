@@ -38,8 +38,16 @@ type PortfolioWithOwner = Portfolio & { owner: PortfolioOwner | null };
  */
 const ANONYMOUS_WALLET_LIMIT = 10;
 
-/** How many snapshots before a window are averaged into "what it was worth then" */
-const LEVEL_SAMPLES = 12;
+/**
+ * How far back to look for what a wallet was worth going into a window.
+ *
+ * Measured, not guessed: on a live portfolio the scanner's bad patches run 7 to
+ * 11 snapshots long — a scan fails for half an hour, not for one minute. Twelve
+ * samples was therefore a window a glitch could be the majority of, which is
+ * exactly how it kept surviving. Forty is a couple of hours at the current
+ * cadence, and no observed run comes close to owning that.
+ */
+const LEVEL_SAMPLES = 40;
 
 const RANGES: Record<HistoryRange, { sinceMs: number | null; bucket: string | null }> = {
   '24h': { sinceMs: 24 * 3600e3, bucket: null }, // raw 5-minute points
@@ -539,18 +547,18 @@ export class PortfolioService {
   }
 
   /**
-   * What each wallet was worth going into `before` — the median of its last
-   * dozen snapshots, not its last one.
+   * What each wallet was worth going into `before` — the high-water mark of its
+   * recent snapshots, not its last one and not their middle.
    *
-   * A bad scan is not one sample. The scanner glitches for a few minutes and
-   * writes several understated snapshots in a row, so "the value just before
-   * the window" lands inside the glitch about as often as it lands outside it,
-   * and a level taken from there is the glitch itself. The median of a dozen
-   * only moves if most of them are bad.
+   * A bad scan reads a wallet as poorer than it is; nothing makes it read as
+   * richer. So the largest recent value is the one reading that cannot be a
+   * glitch, and taking it survives a bad patch of any length — which matters,
+   * because the bad patches here are long enough to outvote a median.
    *
-   * It cannot invent value either: a wallet that genuinely dropped and stayed
-   * down never recovers to its old level, and smoothSeries only holds a sample
-   * that does.
+   * Reaching high cannot invent value. Nothing is ever rewritten to this level:
+   * it only decides whether the first sample in the window looks like a drop,
+   * and smoothSeries holds a drop only when the series climbs back to it. A
+   * wallet that genuinely fell never does, so a real fall stays a real fall.
    */
   private async levelsBefore(walletIds: string[], before: Date): Promise<Map<string, number>> {
     if (!walletIds.length) return new Map();
@@ -564,18 +572,9 @@ export class PortfolioService {
         ) recent WHERE rn <= ${LEVEL_SAMPLES}
       `,
     );
-    const byWallet = new Map<string, number[]>();
-    for (const r of rows) {
-      const arr = byWallet.get(r.walletId) ?? [];
-      arr.push(r.totalUsd);
-      byWallet.set(r.walletId, arr);
-    }
-    return new Map(
-      [...byWallet].map(([id, values]) => {
-        values.sort((a, b) => a - b);
-        return [id, values[Math.floor(values.length / 2)]];
-      }),
-    );
+    const levels = new Map<string, number>();
+    for (const r of rows) levels.set(r.walletId, Math.max(levels.get(r.walletId) ?? 0, r.totalUsd));
+    return levels;
   }
 
   async walletHistory(slug: string, walletId: string, range: HistoryRange): Promise<HistoryDto> {
