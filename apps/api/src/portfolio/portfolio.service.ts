@@ -49,15 +49,38 @@ const ANONYMOUS_WALLET_LIMIT = 10;
  */
 const LEVEL_SAMPLES = 40;
 
-const RANGES: Record<HistoryRange, { sinceMs: number | null; bucket: string | null }> = {
-  '24h': { sinceMs: 24 * 3600e3, bucket: null }, // raw 5-minute points
-  '7d': { sinceMs: 7 * 86400e3, bucket: '30 minutes' },
-  '30d': { sinceMs: 30 * 86400e3, bucket: '2 hours' },
-  all: { sinceMs: null, bucket: '6 hours' },
+/**
+ * How many windows of history a range reaches back for. A period is the width
+ * of the chart's window, so the readings on either side of it have to exist for
+ * there to be anything to scroll to — and this is where that stops, before the
+ * query turns into a year of five-minute readings.
+ */
+const SCREENS = 6;
+
+/** Readings drawn across one window. What is fetched is this times SCREENS. */
+const POINTS_PER_WINDOW = 200;
+
+/**
+ * Each period is a window width and a resolution to draw it at. `all` has no
+ * width: it is the whole history at a glance, and there is nothing either side
+ * of it to scroll to.
+ */
+const RANGES: Record<HistoryRange, { windowMs: number | null; bucket: string | null }> = {
+  '1h': { windowMs: 3600e3, bucket: null }, // raw points — the sync interval is the step
+  '24h': { windowMs: 24 * 3600e3, bucket: null },
+  '7d': { windowMs: 7 * 86400e3, bucket: '30 minutes' },
+  '30d': { windowMs: 30 * 86400e3, bucket: '2 hours' },
+  all: { windowMs: null, bucket: '6 hours' },
 };
 
+/** Where a range's query starts: SCREENS windows back, or the beginning for `all` */
+function windowStart(range: HistoryRange): Date | null {
+  const { windowMs } = RANGES[range];
+  return windowMs === null ? null : new Date(Date.now() - windowMs * SCREENS);
+}
+
 export function normalizeRange(raw: string | undefined): HistoryRange {
-  return raw === '7d' || raw === '30d' || raw === 'all' ? raw : '24h';
+  return raw === '1h' || raw === '7d' || raw === '30d' || raw === 'all' ? raw : '24h';
 }
 
 /**
@@ -497,8 +520,7 @@ export class PortfolioService {
     range: HistoryRange,
   ): Promise<HistoryPointDto[]> {
     if (!walletIds.length) return [];
-    const { sinceMs } = RANGES[range];
-    const since = sinceMs ? new Date(Date.now() - sinceMs) : null;
+    const since = windowStart(range);
     const snaps = await this.prisma.walletSnapshot.findMany({
       where: { walletId: { in: walletIds }, ...(since ? { createdAt: { gte: since } } : {}) },
       orderBy: { createdAt: 'asc' },
@@ -543,7 +565,10 @@ export class PortfolioService {
       for (const v of current.values()) sum += v;
       points.push({ t: new Date(e.t).toISOString(), usd: round2(sum) });
     }
-    return downsample(points, 220);
+    // Enough for every window in the reach to be drawn at the density one
+    // window deserves — capping the whole series at a screenful, as this did
+    // when a range *was* one screen, would hand back a day in twenty points.
+    return downsample(points, RANGES[range].windowMs === null ? 220 : POINTS_PER_WINDOW * SCREENS);
   }
 
   /**
@@ -626,8 +651,9 @@ export class PortfolioService {
   }
 
   /**
-   * Series for the charts. 24h uses raw points (step = sync interval); longer
-   * ranges are aggregated into date_bin buckets on the Postgres side.
+   * Series for the charts. The short windows use raw points (step = sync
+   * interval); the longer ones are aggregated into date_bin buckets on the
+   * Postgres side, at the resolution their window is drawn at.
    */
   private async series(
     table: 'PortfolioSnapshot' | 'WalletSnapshot',
@@ -635,8 +661,8 @@ export class PortfolioService {
     id: string,
     range: HistoryRange,
   ): Promise<HistoryPointDto[]> {
-    const { sinceMs, bucket } = RANGES[range];
-    const since = sinceMs ? new Date(Date.now() - sinceMs) : null;
+    const { bucket } = RANGES[range];
+    const since = windowStart(range);
 
     if (!bucket) {
       const where = { [fkColumn]: id, ...(since ? { createdAt: { gte: since } } : {}) };
