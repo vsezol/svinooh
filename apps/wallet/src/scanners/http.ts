@@ -1,5 +1,5 @@
 import { config } from '../config';
-import { sleep } from '../common/util';
+import { sleep } from '@svinooh/common';
 
 export class HttpError extends Error {
   constructor(

@@ -1,19 +1,16 @@
 import type { Chain } from '@svinooh/shared';
+import { Semaphore } from '@svinooh/common';
 import { config } from '../config';
-import { Semaphore } from '../scanners/semaphore';
 
 /**
- * EVM now goes primarily over HTTP (debank reverse-signature), so it can run
- * with a small pool rather than strictly one at a time. The "never two headless
- * Chrome at once" guarantee is held by a separate lock inside evm-browser.ts —
- * which was the cause of the silent $0 with parallel instances.
+ * How many of this service's own scans run at once. EVM is not among them — it
+ * is scanned by apps/scanner-evm, which paces itself off its own queue.
  */
 class ScanQueue {
-  private readonly evm = new Semaphore(config.evmHttpConcurrency);
   private readonly http = new Semaphore(config.httpConcurrency);
 
-  run<T>(chain: Chain, fn: () => Promise<T>): Promise<T> {
-    return (chain === 'EVM' ? this.evm : this.http).run(fn);
+  run<T>(_chain: Chain, fn: () => Promise<T>): Promise<T> {
+    return this.http.run(fn);
   }
 }
 

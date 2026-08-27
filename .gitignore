@@ -7,3 +7,6 @@ dist/
 *.log
 .DS_Store
 .claude/
+
+# lightpanda binary (downloaded, not committed)
+apps/scanner-evm/bin/

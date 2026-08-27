@@ -1,7 +1,9 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import type { Chain } from '@svinooh/shared';
+import { RabbitService, scanQueueName, sleep, type ScanJob } from '@svinooh/common';
 import { config } from '../config';
-import { sleep } from '../common/util';
-import { RabbitService } from '../queue/rabbit.service';
+import { ScanConsumerService } from './scan-consumer.service';
+import { ScanResultConsumerService } from './scan-result-consumer.service';
 import { SyncService } from './sync.service';
 
 /**
@@ -11,6 +13,9 @@ import { SyncService } from './sync.service';
  * sources. Without RabbitMQ it runs the same pipeline in-process so dev works
  * without a broker.
  */
+const CHAINS: Chain[] = ['EVM', 'SOL', 'TRON', 'BTC'];
+const ALL_QUEUES = CHAINS.map(scanQueueName);
+
 @Injectable()
 export class ScanProducerService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(ScanProducerService.name);
@@ -21,6 +26,8 @@ export class ScanProducerService implements OnApplicationBootstrap, OnModuleDest
   constructor(
     private readonly rabbit: RabbitService,
     private readonly sync: SyncService,
+    private readonly scanner: ScanConsumerService,
+    private readonly writer: ScanResultConsumerService,
   ) {}
 
   onApplicationBootstrap() {
@@ -41,9 +48,10 @@ export class ScanProducerService implements OnApplicationBootstrap, OnModuleDest
     if (this.toppingUp || this.stopped) return;
     this.toppingUp = true;
     try {
-      if ((await this.rabbit.messageCount()) > 0) return; // still working through it
+      if ((await this.rabbit.messageCount(ALL_QUEUES)) > 0) return; // still working through it
       const groups = await this.sync.listGroups();
-      for (const job of groups) await this.rabbit.enqueue(job);
+      // Each address goes to the queue for its own chain — see scanQueueName
+      for (const job of groups) await this.rabbit.publish(scanQueueName(job.chain), job);
       if (groups.length) this.logger.log(`Enqueued ${groups.length} addresses`);
     } catch (e) {
       this.logger.warn(`topUp failed: ${e instanceof Error ? e.message : e}`);
@@ -52,17 +60,22 @@ export class ScanProducerService implements OnApplicationBootstrap, OnModuleDest
     }
   }
 
-  /** Broker-less fallback: the same pipeline, but sequential and with a pause */
+  /**
+   * Broker-less fallback, for local development: the same steps, wired straight
+   * to each other instead of through queues. EVM is skipped — it lives in
+   * another service now, and reaching it without a broker is not a thing this
+   * loop can do.
+   */
   private async inProcessLoop(): Promise<void> {
     while (!this.stopped) {
       try {
-        const groups = await this.sync.listGroups();
-        for (const job of groups) {
+        const jobs = (await this.sync.listGroups()).filter((j) => j.chain !== 'EVM');
+        for (const job of jobs) {
           if (this.stopped) break;
-          await this.sync.scanOne(job);
+          await this.writer.apply(await this.scanner.scanInProcess(job));
           await sleep(config.scanJobDelayMs);
         }
-        if (!groups.length) await sleep(5000);
+        if (!jobs.length) await sleep(5000);
       } catch (e) {
         this.logger.warn(`in-process loop: ${e instanceof Error ? e.message : e}`);
         await sleep(3000);

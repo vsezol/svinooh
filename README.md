@@ -17,7 +17,11 @@ apps/
   api/    — gateway (NestJS): portfolios, history, Redis cache, JWT verification,
             /auth/* proxied to the auth service
   auth/   — sign-in (NestJS): Telegram bot and login widget, issues JWTs, owns User
-  wallet/ — scanning (NestJS): RabbitMQ queue, the chain scanners, snapshots
+  wallet/ — scanning (NestJS): decides what is due, one RabbitMQ queue per
+            chain, the SOL/TRON/BTC scanners, snapshots
+  scanner-evm/ — the EVM scanner (NestJS): a headless browser (lightpanda or
+            Chrome via SCANNER_ENGINE), and nothing else. No database, no
+            queue: an address in, what it holds out
   web/    — Next.js (App Router): the landing is prerendered, the portfolio
             page is a client render. Charts, Telegram login
 libs/
@@ -35,7 +39,8 @@ ops/
 ```
 web ──HTTPS+JWT──▶ api ──HTTP /auth/*───▶ auth ──▶ Telegram Bot API
                     │
-                    ├──HTTP /internal/scan──▶ wallet ──▶ RabbitMQ (its own scan queue)
+                    ├──HTTP /internal/scan──▶ wallet ──▶ RabbitMQ (scan.evm, scan.sol, …)
+                    │                            └──HTTP /internal/scan──▶ scanner-evm ──▶ browser (lightpanda)
                     ├──▶ Redis (assembled-portfolio cache)
                     └──▶ Postgres ◀── auth, wallet
 ```
@@ -141,6 +146,55 @@ so the API sees a couple of requests a minute rather than a couple per visitor.
 If it is unreachable the landing still renders and fills itself in from the
 browser, which is what it did before any of this — it degrades to working.
 
+## Why EVM scans in its own service
+
+Every chain but one is a single HTTP request. EVM is a headless browser, because
+DeBank's API stopped accepting our signature (see below) and the way back in is
+to let their own page sign for us and read what it fetched. That browser is
+heavy, keeps state between requests, leaks if left alone, hangs, and gets
+throttled into a ten-minute backoff — and while it shared a process with the
+others, a wallet on Solana waited behind all of that and died with it on every
+restart.
+
+So it moved out, and the split is drawn where it costs least:
+
+- `scanner-evm` **has no database**. It takes an address off `scan.evm`, scans
+  it, and puts the readings on `scan.result`. It has no opinion about whether a
+  number is believable and nowhere to write one down — which is what makes it
+  safe to run several of. Add a replica and it competes for the same queue with
+  its own browser; no two of them can disagree about what to store, because
+  neither stores anything.
+- **One consumer writes.** `scan.result` is drained by a single consumer in
+  `wallet` that decides what to believe and is the only thing in the system that
+  writes what a wallet is worth.
+- **Scan queues are per chain** (`scan.evm`, `scan.sol`, `scan.tron`,
+  `scan.btc`) because scanning costs wildly different amounts per chain and one
+  queue made the slowest chain the speed of all of them. **The result queue is
+  one**, because applying a result is the same few updates whatever it came
+  from.
+- A suspicious drop is still re-read before it is believed. The second reading
+  is taken by the scanner, while it still has the page open — the one place it
+  is nearly free — and travels with the first. Deciding between them stays with
+  the writer, which is the only thing that keeps the per-address streak.
+
+### One tab, not one page load per wallet
+
+The scanner keeps a single browser with a single tab open and moves it between
+profiles the way a person clicking a link does, rather than loading debank.com
+from scratch for every wallet. Measured on two real wallets: **12.4s for the
+first scan, 5.2s for the rest** — the SPA boot, its bundle and its fonts are
+paid once instead of once per wallet.
+
+Two things make that safe, and both were found by it going wrong:
+
+- **The interceptor is told whose payloads to keep.** A tab that has just shown
+  one wallet must not file its leftovers under the next one.
+- **A page that answers from memory is not a scan.** Navigating back to an
+  address the app has already seen fetches nothing, so the interceptor stays
+  empty and the positions quietly fall back to what the DOM shows — the same
+  total, none of the detail, and no sign anything was lost. The scanner now
+  waits for the payloads and reloads the page properly if they never come.
+
 ## The chart, and the phone
 
 One gesture, one meaning, and nothing shares:
@@ -241,7 +295,7 @@ Jupiter reports headroom in `[0, 1)` while DeBank reports a classic health
 factor; headroom is converted with `1 / (1 − headroom)` so one number means one
 thing across every chain.
 
-### EVM: HTTP first, Chrome as the fallback
+### EVM: HTTP first, a headless browser as the fallback
 
 EVM primarily goes over HTTP to the debank.com web API, reproducing the client
 signature (`x-api-nonce`/`x-api-sign`/`x-api-ts`) — the same requests the
@@ -259,18 +313,78 @@ curve we treat the run as incomplete and fall back to Chrome rather than writing
 an understated number.
 
 On **any** HTTP miss (stale signature, 429/Cloudflare, IP ban, undercount) it
-transparently falls back to headless Chrome, which reads the rendered page. That
-fallback also **intercepts the JSON the page fetches for itself**, so it produces
-the same per-position detail as the direct API path — which matters because from
-a datacenter IP the direct call is the thing that gets rate-limited. Disable the
-HTTP path entirely with `EVM_HTTP_ENABLED=false`; a proxy for DeBank (if the
-datacenter IP gets banned) is `DEBANK_PROXY_URL`.
+transparently falls back to a headless browser (lightpanda by default — see
+below), which reads the rendered page. That fallback also **intercepts the JSON
+the page fetches for itself**, so it produces the same per-position detail as the
+direct API path — which matters because from a datacenter IP the direct call is
+the thing that gets rate-limited. Disable the HTTP path entirely with
+`EVM_HTTP_ENABLED=false`; a proxy for DeBank (if the datacenter IP gets banned)
+is `DEBANK_PROXY_URL`.
+
+#### The browser engine: lightpanda by default (`SCANNER_ENGINE`)
+
+The browser exists only to run DeBank's own JavaScript so it signs its own
+requests; we intercept the answers. That JS doesn't need Chrome — it needs *a*
+browser. So the engine is a flag, `SCANNER_ENGINE`, with two values behind one
+CDP-driven code path:
+
+- **`lightpanda`** (default) — a headless browser built from scratch in Zig,
+  driven over CDP exactly like Chrome. Run as a long-lived `lightpanda serve`
+  child we connect to.
+- **`chrome`** — puppeteer-launched Chromium, the fallback engine that has always
+  worked.
+
+Measured on three real wallets, one browser, peak process-tree RSS (summed
+ps-RSS *overstates* Chrome — its shared framework pages are counted in each
+helper process — so read Chrome's number as an upper bound):
+
+| engine | wall (3 wallets) | peak RSS | correct | data |
+|---|---|---|---|---|
+| Chrome (baseline) | 29.0s | 1307 MB | 3/3 | full |
+| Chrome (trimmed: block images/fonts/media + flags) | 28.8s | 1247 MB | 3/3 | full |
+| **lightpanda** | **23.1s** | **404 MB** | **3/3** | full |
+| jsdom | 92.5s | 372 MB | 0/3 | none |
+| happy-dom | 25.9s | 108 MB | 0/3 | none |
+
+Two findings decided it. **Trimming Chrome barely helps** (~5%): the cost is
+executing DeBank's 11.8 MB of JS, which we can't block without breaking the scan
+— images and fonts are noise next to it. **The DOM shims can't run the app at
+all**: happy-dom loads only the 2.9 KB shell; jsdom fetches and executes all 17
+bundle files but crashes on `canvas.getContext` before a single API call. Only a
+real engine works, and lightpanda is a real engine at ~⅓ the RAM. Verified
+through the actual scan path (warm-tab reuse, `waitForSelector`, capture): on the
+vitalik wallet both engines return the same 1024 positions with 74 detailed legs
+across 66 chains, totals within cents.
+
+Caveats, because this is a soak, not a coronation: it's three wallets over one
+round, and lightpanda no-ops `setUserAgent` — it advertises its own UA, which
+DeBank currently serves, worth watching if they start fingerprinting.
+`SCANNER_ENGINE=chrome` flips back instantly if the wider soak turns up trouble.
+The RAM win **multiplies with the horizontal scaling below** — ⅓ the memory per
+instance is 3× the instances per box.
 
 Reliability rules (a silently wrong number is worse than a failed request):
 
-- **Never two headless Chrome at once**: parallel instances choke each other and
-  silently return $0. The Chrome path is serialized by a lock (limit 1), while
-  the HTTP path runs with a pool (`EVM_HTTP_CONCURRENCY`, default 3).
+- **One page at a time per browser, and one browser per container.** Tabs are
+  not the unit of parallelism here, and this is measured rather than assumed —
+  the same six wallets, same machine:
+
+  | tabs at once | wall | peak Chrome RSS | correct totals | payloads captured |
+  |---|---|---|---|---|
+  | 1 | 52.8s | 977 MB | 6/6 | 6/6 |
+  | 3 | 46.3s | 1417 MB | 4/6 | 4/6 |
+  | 6 | 38.6s | 1853 MB | 3/6 | 3/6 |
+
+  27% faster for 90% more memory and half the wallets wrong — and wrong in the
+  worst way: two came back `$0`, and one came back $5,905,334 against a real
+  $42,171,814, which is plausible enough to be written down as true. The cause
+  is contention, not memory: debank.com is 11.8 MB of JavaScript across 23
+  files, and tabs parsing that at the same time starve each other's main thread
+  until the header never finishes rendering.
+
+  Scale by running more `scanner-evm` replicas instead. Each gets its own
+  browser and its own CPU, they compete for the same `scan.evm` queue, and none
+  of them can corrupt another's reading.
 - **Sanity check**: a drop of more than 25% triggers an immediate re-scan, and a
   drop is only believed once it holds for `SYNC_DROP_CONFIRM_CYCLES` cycles in a
   row. Until then the wallet keeps its last known value with `stale: true` and no
@@ -396,7 +510,10 @@ api     DATABASE_URL, JWT_SECRET, REDIS_URL, AUTH_SERVICE_URL, WALLET_SERVICE_UR
         WEB_ORIGIN, LOKI_URL, OTEL_EXPORTER_OTLP_ENDPOINT, SERVICE_NAME
 auth    DATABASE_URL, JWT_SECRET (same as api), TELEGRAM_BOT_TOKEN,
         TELEGRAM_BOT_USERNAME, WEB_URL, AUTH_DEV_MODE=false, LOKI_URL, OTEL_…
-wallet  DATABASE_URL, RABBITMQ_URL, CHROME_NO_SANDBOX=1, LOKI_URL, OTEL_…
+wallet  DATABASE_URL, RABBITMQ_URL, EVM_SCANNER_URL, INTERNAL_TOKEN, LOKI_URL, OTEL_…
+scanner-evm  SCANNER_ENGINE=lightpanda (default; =chrome to fall back),
+             CHROME_NO_SANDBOX=1 (only used by the chrome engine),
+             INTERNAL_TOKEN (same string as wallet's), LOKI_URL, OTEL_…
 web     NEXT_PUBLIC_API_URL = https://<api domain>  (inlined into the browser
                                                bundle at build time — rebuild
                                                after changing it; the server
@@ -404,7 +521,13 @@ web     NEXT_PUBLIC_API_URL = https://<api domain>  (inlined into the browser
                                                landing)
 ```
 
-The wallet service needs ≥ 1 GB of memory (headless Chrome). Migrations are
+`scanner-evm` carries a browser: the default lightpanda engine peaks around
+400 MB, so ~512 MB is enough; keep ≥ 1 GB if you run `SCANNER_ENGINE=chrome`.
+`wallet` no longer needs any of it. The lightpanda binary is downloaded into the
+image at build time (see the Dockerfile); locally, `apps/scanner-evm/scripts/fetch-lightpanda.sh`
+puts it where the service looks.
+`EVM_SCANNER_URL` is the scanner's private address —
+`http://${{scanner-evm.RAILWAY_PRIVATE_DOMAIN}}:${{scanner-evm.PORT}}`. Migrations are
 applied automatically when the api starts (`prisma migrate deploy`) — it is the
 only service that writes the schema.
 

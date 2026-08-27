@@ -1,6 +1,6 @@
 import type { PositionTokenRole } from '@svinooh/shared';
-import { rangeFromLegs } from './range';
-import type { ScanPosition, ScanPositionToken } from './types';
+import { rangeFromLegs } from '@svinooh/common';
+import type { ScanPosition, ScanPositionToken } from '@svinooh/shared';
 
 /**
  * Shape of the debank.com portfolio payloads, and how we turn them into

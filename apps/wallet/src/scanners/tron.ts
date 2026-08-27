@@ -1,5 +1,5 @@
 import { fetchJson } from './http';
-import type { ScanPosition, ScanPositionToken, ScanResult } from './types';
+import type { ScanPosition, ScanPositionToken, ScanResult } from '@svinooh/shared';
 
 /**
  * TRON: TronGrid (the official public API) for balances, DefiLlama for prices.
