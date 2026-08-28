@@ -684,46 +684,77 @@ body[data-theme='light'] .on-dark {
   display: flex;
 }
 
-/* A tab bar, edge to edge, meeting the bottom of the screen — the shape every
-   other app on a phone uses, and the one shape with no gap to argue about. A
-   floating pill has to hold a margin off the bottom, and on iOS that margin
-   lands on top of the one Safari's own toolbar already keeps, which is the dead
-   band this used to sit above.
-
-   `top` is hung from the dynamic viewport as an opening guess and then measured
-   properly by useDockToVisibleBottom: `bottom` on a fixed element measures from
-   the layout viewport, which on iOS keeps the height the page had while
-   Safari's toolbar was expanded, and Safari does not keep dvh honest either
-   once that toolbar collapses. translate(0,-100%) hangs the bar upwards from
-   that line, so its height is not a number anything here has to know.
-
-   The glass is the point: at 72% the page slides under it and blurs, so the bar
-   reads as a layer over the page rather than a slab pasted on top of it. */
-.tab-dock {
+/* Tabs across the top, under the header they stick to — the shape a chat app
+   uses, and the one that leaves the bottom of the screen to the browser, which
+   on iOS was never going to share it anyway. */
+.top-tabs {
   display: none;
-  position: fixed;
-  z-index: 60;
-  left: 0;
-  right: 0;
-  top: 100dvh;
-  bottom: auto;
-  transform: translateY(-100%);
-  background: color-mix(in srgb, var(--surf) 72%, transparent);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  backdrop-filter: blur(20px) saturate(180%);
-  border-top: 1px solid var(--line);
-  /* The glass runs to the very bottom of the screen and the home indicator is
-     held off from inside, the way a native tab bar does it — rather than the
-     whole bar floating above the indicator with a stripe of page under it. */
-  padding-bottom: env(safe-area-inset-bottom);
+  position: sticky;
+  /* The header's own height, plus its hairline, plus whatever the notch takes */
+  top: calc(59px + env(safe-area-inset-top));
+  z-index: 45;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+
+/* The strip the two pages ride, and the window that clips it.
+
+   `clip` rather than `hidden`: it cuts the page next door off at the edge
+   without turning this into a scroll container, which would have taken the
+   sticky elements inside it hostage. `pan-y` is the other half of the deal
+   with the browser — vertical scrolling stays the browser's, and everything
+   sideways is ours to interpret. */
+.pager-window {
+  overflow-x: clip;
+  touch-action: pan-y;
+}
+
+.pager {
+  display: flex;
+  align-items: flex-start;
+  width: 200%;
+}
+
+.pane {
+  width: 50%;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 @media (max-width: 719px) {
   .side-rail {
     display: none;
   }
-  .tab-dock {
+  .top-tabs {
     display: block;
+  }
+  /* Side by side the strip is as tall as its taller page, which leaves the
+     shorter one ending in a screenful of nothing to scroll through. So the
+     page that isn't open folds away — but only once the strip has stopped, or
+     the page being swiped away would vanish from under the finger. */
+  .pager:not([data-moving='true']) .pane[data-active='false'] {
+    height: 0;
+    overflow: hidden;
+  }
+}
+
+/* A desktop has a rail and no swiping, so the strip flattens: one page across
+   the full width, and the one that isn't open is not rendered at all. The
+   transform is the phone's scroll position through the pages, and an inline
+   style, so this is the one place that has to shout it down. */
+@media (min-width: 720px) {
+  .pager {
+    display: block;
+    width: 100%;
+    transform: none !important;
+  }
+  .pane {
+    width: 100%;
+  }
+  .pane[data-active='false'] {
+    display: none;
   }
 }
 
@@ -742,13 +773,3 @@ body[data-theme='light'] .on-dark {
   border-color: var(--acc);
 }
 
-/* Room under the page for the dock that floats over it */
-.dock-room {
-  padding-bottom: 60px;
-}
-
-@media (max-width: 719px) {
-  .dock-room {
-    padding-bottom: calc(62px + env(safe-area-inset-bottom));
-  }
-}
