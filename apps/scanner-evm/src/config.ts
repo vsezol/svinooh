@@ -26,12 +26,8 @@ export const config = {
   // the slot for the whole pause, so the queue does not hand it another
   // address until the pause is over.
   scanJobDelayMs: int(process.env.SCAN_JOB_DELAY_MS, 1500),
-  httpTimeoutMs: int(process.env.HTTP_TIMEOUT_MS, 15_000),
   // A browser scan is slow by nature — page load, chains resolving one by one
   evmTimeoutMs: int(process.env.EVM_TIMEOUT_MS, 150_000),
-  evmHttpConcurrency: int(process.env.EVM_HTTP_CONCURRENCY, 3),
-  // Primary path is a signed HTTP call to debank.com; the browser is the fallback
-  evmHttpEnabled: bool(process.env.EVM_HTTP_ENABLED, true),
   puppeteerExecutablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
   // Which engine drives the browser scan. 'lightpanda' is the light Zig headless
   // browser (CDP over WebSocket, ~2.5-3x less RAM than Chrome on our workload);
@@ -47,7 +43,6 @@ export const config = {
   // predecessor, and we'd silently connect to one we can't manage. Set a
   // non-zero LIGHTPANDA_PORT only if you need a known port.
   lightpandaPort: int(process.env.LIGHTPANDA_PORT, 0),
-  debankProxyUrl: process.env.DEBANK_PROXY_URL || null,
   // Chromium in a container has no user namespaces to sandbox with
   chromeNoSandbox: bool(process.env.CHROME_NO_SANDBOX, false),
 };

@@ -4,9 +4,9 @@ import type { ScanPosition, ScanPositionToken } from '@svinooh/shared';
 
 /**
  * Shape of the debank.com portfolio payloads, and how we turn them into
- * positions. Shared by both EVM paths: the signed HTTP call (evm-http.ts) and
- * the responses the rendered page makes on its own, which Chrome intercepts
- * (evm-browser.ts). Same JSON either way, so the same parsing.
+ * positions. These are the responses the rendered page makes on its own, which
+ * the headless browser intercepts (evm-browser.ts) — the same JSON DeBank's own
+ * front end reads.
  *
  * A protocol is NOT one position: `portfolio_item_list` splits it by kind
  * ("Lending", "Liquidity Pool", "Deposit", "Staked"), and each item carries the

@@ -295,31 +295,26 @@ Jupiter reports headroom in `[0, 1)` while DeBank reports a classic health
 factor; headroom is converted with `1 / (1 − headroom)` so one number means one
 thing across every chain.
 
-### EVM: HTTP first, a headless browser as the fallback
+### EVM: a headless browser reads the rendered page
 
-EVM primarily goes over HTTP to the debank.com web API, reproducing the client
-signature (`x-api-nonce`/`x-api-sign`/`x-api-ts`) — the same requests the
-browser of any anonymous visitor to a profile page makes (that data is free and
-needs no login; we don't touch the separate paid Portfolio API with a key). A TS
-port of [debank-re](https://github.com/lukks/debank-re) plus `impit` (Chrome's
-TLS fingerprint — without it Cloudflare cuts us off on JA3).
+EVM balances come from the rendered debank.com profile page, read in a headless
+browser (lightpanda by default — see below) — exactly the page any anonymous
+visitor sees (that data is free and needs no login; we don't touch the separate
+paid Portfolio API with a key). The browser runs DeBank's own JavaScript so the
+page signs its own requests, and we **intercept the JSON the page fetches for
+itself** — so we get the full per-position detail (supply/reward/borrow legs,
+APY, health factor), not just the totals the DOM shows.
 
 The total is assembled exactly as DeBank's front end does — the sum of three
 non-overlapping sources: `project_list` + `app_list` + `cache_balance_list`.
 **`app_list` is required**: Hyperliquid and similar "apps" live there (on the
 control wallet that's $3,512 of $27,485) — skip it and you silently undercount.
-Cross-check against `total_net_curve`: if our sum is more than 10% below the
-curve we treat the run as incomplete and fall back to Chrome rather than writing
-an understated number.
 
-On **any** HTTP miss (stale signature, 429/Cloudflare, IP ban, undercount) it
-transparently falls back to a headless browser (lightpanda by default — see
-below), which reads the rendered page. That fallback also **intercepts the JSON
-the page fetches for itself**, so it produces the same per-position detail as the
-direct API path — which matters because from a datacenter IP the direct call is
-the thing that gets rate-limited. Disable the HTTP path entirely with
-`EVM_HTTP_ENABLED=false`; a proxy for DeBank (if the datacenter IP gets banned)
-is `DEBANK_PROXY_URL`.
+There used to be a signed HTTP path in front of this — a TS port of
+[debank-re](https://github.com/lukks/debank-re) plus `impit` (Chrome's TLS
+fingerprint), calling api.debank.com directly. From a datacenter IP it returned
+a persistent 429 and every scan fell through to the browser anyway, so it was
+removed rather than kept as a path that only ever cost ~2s per scan to fail.
 
 #### The browser engine: lightpanda by default (`SCANNER_ENGINE`)
 
@@ -533,7 +528,9 @@ only service that writes the schema.
 
 ⚠️ DeBank sits behind Cloudflare: datacenter IPs see 429s and captchas. That's
 the first thing to check if EVM scans start failing on Railway while working
-locally — the Chrome fallback covers it, `DEBANK_PROXY_URL` covers it better.
+locally. The browser scan shares that egress IP, so a persistent 429 is either a
+throttle to ride out — the scanner backs off and holds last-known values — or one
+to route around with a residential/rotating proxy at the browser level.
 
 ## What's next (groundwork)
 

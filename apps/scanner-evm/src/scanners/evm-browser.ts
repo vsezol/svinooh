@@ -14,19 +14,19 @@ import { Semaphore } from '@svinooh/common';
 import type { ScanPosition, ScanResult } from '@svinooh/shared';
 
 /**
- * EVM FALLBACK: headless Chrome reads the rendered debank.com page — exactly
- * the one any anonymous visitor sees. The primary path is evm-http.ts (same
- * data, but straight over the API); we fall back here when the HTTP path fails
- * (stale signature, Cloudflare/IP ban, undercounted total).
+ * EVM balance: a headless browser reads the rendered debank.com page — exactly
+ * the one any anonymous visitor sees. This is the only path now; the signed HTTP
+ * call to api.debank.com that used to front it 429'd from every datacenter IP
+ * and was removed (see evm.ts).
  *
  * Reading the rendered page is exactly what a person does in a browser; no
  * signature is forged here, and all the code runs on debank.com's side. Slow
  * (20–40s), but it survives changes to their API.
  *
- * NEVER launch two headless Chrome instances at once: parallel instances choke
- * each other and SILENTLY return $0 instead of the real balance. Below is
- * browserLock (Semaphore 1), so no matter how many EVM scans fall back to
- * Chrome at the same time, there is always exactly one in the browser.
+ * NEVER launch two headless browsers at once: parallel instances choke each
+ * other and SILENTLY return $0 instead of the real balance. Below is browserLock
+ * (Semaphore 1), so no matter how many EVM scans arrive at the same time, there
+ * is always exactly one in the browser.
  *
  * The page code is passed as STRINGS, not functions: esbuild/tsx with keepNames
  * injects a __name helper into serialized functions that isn't present in the
@@ -373,13 +373,16 @@ async function dropTab(): Promise<void> {
   await page?.close().catch(() => {});
 }
 
-export function scanEvmBrowser(address: string): Promise<ScanResult> {
+export function scanEvmBrowser(
+  address: string,
+  opts: { patient?: boolean } = {},
+): Promise<ScanResult> {
   // The lock wraps the actual work: while one scan holds the browser, the rest
-  // wait here instead of launching a second Chrome
-  return browserLock.run(() => scanEvmBrowserLocked(address));
+  // wait here instead of launching a second browser
+  return browserLock.run(() => scanEvmBrowserLocked(address, opts.patient ?? false));
 }
 
-async function scanEvmBrowserLocked(address: string): Promise<ScanResult> {
+async function scanEvmBrowserLocked(address: string, patient: boolean): Promise<ScanResult> {
   if (tab && (tab.isClosed() || tabScans >= SCANS_PER_TAB)) await dropTab();
   const firstLoad = tab === null;
   if (!tab) tab = await freshTab();
@@ -387,9 +390,19 @@ async function scanEvmBrowserLocked(address: string): Promise<ScanResult> {
   tabScans++;
   netTrace = []; // scope the response trace to this scan
 
+  // A patient pass (the retry from evm.ts) gives the two waits that actually
+  // expire on heavy wallets more room: the navigation, and the wait for the
+  // header total to render. A big wallet — the reference whale is 693 positions
+  // across 60 API calls — can answer 200 to every one of them and still not have
+  // painted the total inside 45s. The watchdog grows with them, so a
+  // slow-but-fine render finishes instead of being killed one step short.
+  const gotoTimeoutMs = patient ? 45_000 : 30_000;
+  const selectorTimeoutMs = patient ? 60_000 : 45_000;
+  const watchdogMs = config.evmTimeoutMs + (patient ? 30_000 : 0);
+
   // Safeguard against a hung page: on timeout the tab goes, and everything
   // pending on it rejects. The next scan opens a new one.
-  const watchdog = setTimeout(() => void dropTab(), config.evmTimeoutMs);
+  const watchdog = setTimeout(() => void dropTab(), watchdogMs);
 
   try {
     // Tell the interceptor whose payloads to keep before anything is fetched
@@ -398,7 +411,7 @@ async function scanEvmBrowserLocked(address: string): Promise<ScanResult> {
     const hardLoad = async () => {
       await page.goto(`https://debank.com/profile/${address}`, {
         waitUntil: 'domcontentloaded',
-        timeout: 30_000,
+        timeout: gotoTimeoutMs,
       });
       // lightpanda safety net: if evaluateOnNewDocument was skipped, install the
       // hooks now. The SPA fetches its portfolio after load, so this still lands
@@ -429,10 +442,11 @@ async function scanEvmBrowserLocked(address: string): Promise<ScanResult> {
       }
     }
 
-    // 45s, not 25s: when DeBank throttles us the page still renders, just
-    // slowly, and every hard failure we've had was this wait expiring. The
-    // watchdog above is the real ceiling.
-    await page.waitForSelector('[class*="HeaderInfo_totalAssetInner"]', { timeout: 45_000 });
+    // The wait that expires when DeBank throttles us: the page still renders,
+    // just slowly, and every hard failure we've had was this expiring. 45s
+    // normally, 60s on a patient retry for a heavy wallet. The watchdog above is
+    // the real ceiling.
+    await page.waitForSelector('[class*="HeaderInfo_totalAssetInner"]', { timeout: selectorTimeoutMs });
 
     const totalUsd = await settledTotal(page);
 
