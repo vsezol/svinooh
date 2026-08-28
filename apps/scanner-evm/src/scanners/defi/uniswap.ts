@@ -69,6 +69,7 @@ function priceAt(tick: number, decimals0: number, decimals1: number): number {
 async function positionsOn(key: NetworkKey, address: string): Promise<PoolFact[]> {
   const deployment = DEPLOYMENTS[key];
   if (!deployment) return [];
+  const chainLabel = NETWORKS.find((n) => n.key === key)?.label ?? key;
 
   return withRpc(key, async (provider) => {
     const manager = new Contract(deployment.positionManager, POSITION_MANAGER_ABI, provider);
@@ -100,6 +101,10 @@ async function positionsOn(key: NetworkKey, address: string): Promise<PoolFact[]
           id: `uniswap:${key}:${tokenId.toString()}`,
           platform: 'uniswap',
           pair: pairKey(token0.symbol, token1.symbol),
+          pairLabel: `${token0.symbol}/${token1.symbol}`,
+          // uint24 hundredths of a basis point, as the pool is keyed: 3000 is 0.3%
+          feePct: Number(position.fee as bigint) / 10_000,
+          chainLabel,
           inRange: tick >= lower && tick < upper,
           lowerPrice: priceAt(lower, token0.decimals, token1.decimals),
           upperPrice: priceAt(upper, token0.decimals, token1.decimals),

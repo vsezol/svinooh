@@ -43,6 +43,10 @@ export async function send(chatId: number | string, text: string, replyMarkup?: 
     body: JSON.stringify({
       chat_id: chatId,
       text,
+      // Bold for the headings and monospace for the address, which is there to
+      // be tapped and copied. Everything interpolated into a message is escaped
+      // at the point it is built — see format.ts
+      parse_mode: 'HTML',
       // The link is there to be read and pressed, not turned into a preview
       // card the size of the message
       disable_web_page_preview: true,
