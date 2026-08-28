@@ -2,6 +2,19 @@ import type { HistoryRange } from '@svinooh/shared';
 import type { Series } from './history';
 
 /**
+ * Whether the agent tab is reachable at all.
+ *
+ * The tab is built and it works; it is simply not switched on yet, because it
+ * answers off the portfolio in the browser rather than off a service. Flipping
+ * this to `true` is the whole release — both navigations read it, so neither
+ * can end up offering a page the other hides.
+ *
+ * Deliberately not an env var: it is a decision about what is finished, and it
+ * changes in a commit somebody can point at.
+ */
+export const AGENT_ENABLED = false;
+
+/**
  * What the agent is allowed to say back.
  *
  * An answer is a list of blocks, not a string. The questions people ask about a

@@ -1,13 +1,21 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { AGENT_ENABLED } from '../lib/agent';
 import type { Tab } from './SideNav';
 
-/** The three pages, in the order they sit in — and the order a finger swipes them */
+/**
+ * The pages, in the order they sit in — and the order a finger swipes them.
+ *
+ * The agent is in the list only once it is switched on (see AGENT_ENABLED).
+ * Everything counts off this array — the strip, the moving underline, and how
+ * many pages the pager has — so leaving it out is the whole of hiding it here,
+ * and there is no way for the phone to reach a page the rail does not offer.
+ */
 export const TABS: Array<{ key: Tab; label: string }> = [
   { key: 'portfolio', label: 'Portfolio' },
   { key: 'notifications', label: 'Alerts' },
-  { key: 'agent', label: 'AI agent' },
+  ...(AGENT_ENABLED ? ([{ key: 'agent', label: 'AI agent' }] as const) : []),
 ];
 
 /** Where a tab sits on the strip. The rail and the pager both count from here. */
