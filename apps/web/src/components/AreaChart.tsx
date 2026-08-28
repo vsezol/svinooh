@@ -125,6 +125,21 @@ export function AreaChart({ values, times, period, height, bare = false, tone = 
     return out;
   })();
 
+  /**
+   * A cheap stand-in for the whole series, for the effect that pushes it in.
+   * That effect cannot depend on the arrays themselves — a poll hands back new
+   * ones whether or not anything moved, and clearing a measurement every minute
+   * is worse than the thing it fixes — but the length and the endpoints alone
+   * are not enough either: switching wallets replaces every reading while
+   * leaving the time grid exactly where it was, and the wallet you just left
+   * stayed drawn on the card.
+   */
+  const fingerprint = (() => {
+    let sum = 0;
+    for (const v of values) sum += v;
+    return `${values.length}:${times[0] ?? 0}:${times[times.length - 1] ?? 0}:${sum}`;
+  })();
+
   // Build once; data and colours are pushed in by the effects below
   useEffect(() => {
     if (!box.current) return;
@@ -217,9 +232,7 @@ export function AreaChart({ values, times, period, height, bare = false, tone = 
       else scale.setVisibleRange({ from: from as UTCTimestamp, to: last as UTCTimestamp });
     }
     setSelection(null);
-    // Re-running on every array identity would reset the selection on each
-    // poll; the length and the endpoints are what actually change the picture.
-  }, [period, values.length, times[0], times[times.length - 1], values[values.length - 1]]);
+  }, [period, fingerprint]);
 
   /** Screen x → index in the series */
   const indexAt = (clientX: number): number | null => {
