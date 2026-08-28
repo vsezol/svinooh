@@ -11,5 +11,8 @@ dist/
 # lightpanda binary (downloaded, not committed)
 apps/scanner-evm/bin/
 
-# beads issue tracker: local state, never committed — merge-conflict magnet
+# beads issue tracker. Local state, and it stays local: everything bd writes is
+# a working copy of a database, so two branches touching it conflict on every
+# merge for no gain. Nothing under here is ever committed — not the JSONL
+# exports, not the backup directory, not the dolt store. Do not run `bd sync`.
 .beads/
