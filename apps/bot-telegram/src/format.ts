@@ -72,13 +72,16 @@ function title(item: AlertItem): string {
 }
 
 /**
- * How a threshold line qualifies itself: crossed just now, still where it was
- * an hour ago, or back on the right side of the line.
+ * A reading, picked out, and which side of the line it fell on: `2.8 << 4` is a
+ * health factor under a threshold of 4, `13.9% >> 12%` a borrow rate over one.
+ *
+ * Which side it is on is the whole message, so it is a comparator and not a
+ * sentence — and it is read off the two numbers rather than off what the
+ * collector decided, so it cannot end up disagreeing with them.
  */
-function against(direction: AlertItem['direction'], over: boolean): string {
-  if (direction === 'recovered') return over ? 'back under your' : 'back above your';
-  const side = over ? 'over your' : 'under your';
-  return direction === 'still' ? `still ${side}` : side;
+function against(value: number, threshold: number, unit = ''): string {
+  const sign = value >= threshold ? '&gt;&gt;' : '&lt;&lt;';
+  return `<b>${num(value)}${unit}</b> ${sign} ${num(threshold)}${unit}`;
 }
 
 /** What changed, and what the reading was — never one without the other */
@@ -93,9 +96,9 @@ function status(item: AlertItem): string {
       return `Status: ${state}${at ? ` ${at}` : ''} (${was})`;
     }
     case 'health':
-      return `Status: HEALTH FACTOR ${num(value)}, ${against(item.direction, false)} ${num(threshold)}`;
+      return `Health factor: ${against(value, threshold)}`;
     case 'borrow':
-      return `Status: BORROW APY ${num(value)}%, ${against(item.direction, true)} ${num(threshold)}%`;
+      return `Borrow APY: ${against(value, threshold, '%')}`;
   }
 }
 

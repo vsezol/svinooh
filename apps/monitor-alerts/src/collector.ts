@@ -52,9 +52,7 @@ export class Collector {
       : DEFAULTS;
 
     const previous = await this.remembered(event.walletId);
-    // One clock for the whole scan, so two positions that breached together go
-    // on repeating together instead of drifting a few seconds apart per cycle
-    const { items, next } = decide(event.positions, settings, previous, new Date());
+    const { items, next } = decide(event.positions, settings, previous);
 
     // Said before it is written down. If this throws, nothing is remembered and
     // the next scan decides the same thing again — an alert arriving twice is a
@@ -80,13 +78,7 @@ export class Collector {
     return new Map(
       rows.map((row) => [
         row.positionKey,
-        {
-          inRange: row.inRange,
-          healthBreached: row.healthBreached,
-          borrowBreached: row.borrowBreached,
-          healthNotifiedAt: row.healthNotifiedAt,
-          borrowNotifiedAt: row.borrowNotifiedAt,
-        },
+        { inRange: row.inRange, healthBreached: row.healthBreached, borrowBreached: row.borrowBreached },
       ]),
     );
   }
