@@ -4,13 +4,12 @@ import type { CSSProperties } from 'react';
 import type { TronResourcesDto } from '@svinooh/shared';
 
 /**
- * What a Tron wallet can spend, and what it has lent out — one strip, two rows
- * at most.
+ * What a Tron wallet can spend, and what it has lent out.
  *
  * Tron charges in resources rather than in TRX: energy runs contract calls,
  * bandwidth pays for a transaction's bytes, and both regenerate. Staked TRX can
  * be delegated to another account, which locks and later unlocks — and that
- * unlock is the one thing here somebody acts on, so it stays on its own line.
+ * unlock is the one thing here somebody acts on, so it keeps a line of its own.
  *
  * None of it is money, which is why it sits apart from the position blocks
  * instead of among them: adding it to the total would be wrong, and leaving it
@@ -25,22 +24,23 @@ const count = (n: number): string =>
 const trx = (n: number): string =>
   Number.isFinite(n) ? (Math.round(n * 100) / 100).toLocaleString('en-US') : '?';
 
-/** One resource on one line: name, what is left of what there is, and a bar */
+/** One resource: the name, what is left of what there is, and the same as a bar */
 function Meter({ name, free, total }: { name: string; free: number; total: number }) {
   const share = total > 0 ? Math.max(0, Math.min(1, free / total)) : 0;
   return (
-    <div style={{ flex: 1, minWidth: 160, display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span className="mono" style={LABEL}>
-        {name}
-      </span>
-      <span className="mono" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-        {count(free)}
-        <span style={{ color: 'var(--mut)' }}> / {count(total)}</span>
-      </span>
+    <div style={{ flex: 1, minWidth: 150 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+        <span className="mono" style={LABEL}>
+          {name}
+        </span>
+        <span className="mono" style={{ fontSize: 12.5, whiteSpace: 'nowrap' }}>
+          {count(free)}
+          <span style={{ color: 'var(--mut)' }}> / {count(total)}</span>
+        </span>
+      </div>
       <div
         style={{
-          flex: 1,
-          minWidth: 36,
+          marginTop: 7,
           height: 4,
           borderRadius: 999,
           background: 'var(--line2)',
@@ -94,29 +94,28 @@ export function TronResources({ tron }: { tron: TronResourcesDto }) {
         border: '1px solid var(--line)',
         borderRadius: 12,
         background: 'var(--surf2)',
-        padding: '8px 14px',
-        display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        columnGap: 18,
-        rowGap: 6,
+        padding: '12px 14px',
       }}
     >
-      <Meter name="ENERGY" free={tron.energyFree} total={energyTotal} />
-      <Meter name="BANDWIDTH" free={tron.bandwidthFree} total={bandwidthTotal} />
+      <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap' }}>
+        <Meter name="ENERGY" free={tron.energyFree} total={energyTotal} />
+        <Meter name="BANDWIDTH" free={tron.bandwidthFree} total={bandwidthTotal} />
+      </div>
 
-      {/* A wallet with nothing lent out gets no line saying so — the strip is
+      {/* A wallet with nothing lent out gets no line saying so — the card is
           about what is there */}
       {tron.hasDelegation ? (
         <div
           style={{
-            flexBasis: '100%',
+            marginTop: 11,
+            paddingTop: 10,
+            borderTop: '1px solid var(--line)',
             display: 'flex',
             flexWrap: 'wrap',
             alignItems: 'baseline',
-            columnGap: 10,
-            rowGap: 2,
-            fontSize: 12,
+            columnGap: 12,
+            rowGap: 3,
+            fontSize: 12.5,
           }}
         >
           <span className="mono" style={LABEL}>
@@ -125,8 +124,10 @@ export function TronResources({ tron }: { tron: TronResourcesDto }) {
           <span>{delegated.length ? delegated.join(' · ') : 'Yes'}</span>
           <span
             style={{
+              marginLeft: 'auto',
               color: tron.reclaimableNow ? 'var(--acc)' : 'var(--mut)',
               fontWeight: tron.reclaimableNow ? 700 : 400,
+              fontSize: 12,
             }}
           >
             {reclaimLine(tron)}
