@@ -7,15 +7,11 @@ export interface Settings {
   borrowApyAbove: number | null;
 }
 
-/** What was last true of a position, and when we last said so */
+/** What was last true of a position */
 export interface Remembered {
   inRange: boolean | null;
   healthBreached: boolean;
   borrowBreached: boolean;
-  /** When the owner was last told the health factor was under the line — null: nothing outstanding */
-  healthNotifiedAt: Date | null;
-  /** The same clock for the borrow rate */
-  borrowNotifiedAt: Date | null;
 }
 
 export interface Decision {
@@ -24,29 +20,7 @@ export interface Decision {
   next: Map<string, Remembered>;
 }
 
-const FRESH: Remembered = {
-  inRange: null,
-  healthBreached: false,
-  borrowBreached: false,
-  healthNotifiedAt: null,
-  borrowNotifiedAt: null,
-};
-
-/**
- * How long a standing breach keeps quiet before it says so again.
- *
- * A wallet is scanned every few minutes, so repeating on every scan would be
- * twelve messages an hour and the first thing anybody would do is mute the bot
- * — which is the one outcome that makes the alert worse than nothing. An hour
- * is often enough that a health factor sliding towards liquidation cannot be
- * missed, and rare enough to still read as a warning rather than as noise.
- */
-const REPEAT_MS = 60 * 60 * 1000;
-
-/** A breach that has gone unmentioned long enough to mention again */
-function due(last: Date | null, at: Date): boolean {
-  return last === null || at.getTime() - last.getTime() >= REPEAT_MS;
-}
+const FRESH: Remembered = { inRange: null, healthBreached: false, borrowBreached: false };
 
 /**
  * What changed since last time, and what is worth saying about it.
@@ -62,29 +36,28 @@ function due(last: Date | null, at: Date): boolean {
  *    already out of range when we first look has been for an unknown while, and
  *    that is not this scan's news.
  *
- *  - **A threshold is a condition, and it keeps saying so until it stops.** A
- *    health factor under the line is a position walking towards liquidation and
- *    a borrow rate over it is money leaking every hour; both persist until
- *    somebody repays, adds collateral, or decides the threshold was wrong. So
- *    they are raised on the crossing — including on the first sighting, when
- *    somebody who has just asked to be warned is owed the warning now — and
- *    then again every REPEAT_MS for as long as they stand. The repeat carries
- *    the current reading, so a row of them shows which way it is going.
+ *  - **A threshold is a condition, and it says so on every check until it
+ *    stops.** A health factor under the line is a position walking towards
+ *    liquidation and a borrow rate over it is money leaking every hour; both
+ *    persist until somebody repays, adds collateral, or decides the threshold
+ *    was wrong. So every scan that still finds one says so, carrying the
+ *    reading it found — a row of them is the position getting worse or better
+ *    in front of you. There is no clock and nothing to remember about when we
+ *    last spoke: what is true now is what gets sent.
  *
  *  - **Coming back is worth a message too.** Being told the danger has passed
  *    is half of why anybody turns an alert on, and it is the only thing that
  *    makes the silence in between mean something.
  *
  * A threshold nobody set is nobody watching, so nothing is compared against it
- * — and turning an alert off does not just silence it, it forgets the state and
- * the clock, so turning it back on baselines rather than firing about a
- * crossing that happened while nobody was listening.
+ * — and turning an alert off does not just silence it, it forgets the state, so
+ * turning it back on baselines rather than firing about a crossing that
+ * happened while nobody was listening.
  */
 export function decide(
   positions: WalletPositionState[],
   settings: Settings,
   previous: Map<string, Remembered>,
-  at: Date,
 ): Decision {
   const items: AlertItem[] = [];
   const next = new Map<string, Remembered>();
@@ -125,21 +98,18 @@ export function decide(
     if (health !== null && position.healthFactor !== null) {
       const breached = position.healthFactor < health;
       now.healthBreached = breached;
-      // The clock carries forward untouched unless something is said: reset it
-      // on every scan and the repeat would never come round
-      now.healthNotifiedAt = breached ? before.healthNotifiedAt : null;
-      // A first sighting remembers "not breached", so a position already under
-      // the line differs from it and speaks at once
-      const crossed = breached !== before.healthBreached;
-      if (crossed || (breached && due(before.healthNotifiedAt, at))) {
+      // Under the line: said, every time, including the first sighting —
+      // somebody who has just asked to be warned about liquidation is owed the
+      // warning now. Not under it: said once, on the way back out. Which is why
+      // the previous state is remembered at all.
+      if (breached || before.healthBreached) {
         items.push({
           ...about,
           kind: 'health',
-          direction: !breached ? 'recovered' : crossed ? 'entered' : 'still',
+          direction: breached ? 'entered' : 'recovered',
           value: position.healthFactor,
           threshold: health,
         });
-        now.healthNotifiedAt = breached ? at : null;
       }
     }
 
@@ -147,17 +117,14 @@ export function decide(
     if (borrow !== null && position.borrowApyPct !== null) {
       const breached = position.borrowApyPct > borrow;
       now.borrowBreached = breached;
-      now.borrowNotifiedAt = breached ? before.borrowNotifiedAt : null;
-      const crossed = breached !== before.borrowBreached;
-      if (crossed || (breached && due(before.borrowNotifiedAt, at))) {
+      if (breached || before.borrowBreached) {
         items.push({
           ...about,
           kind: 'borrow',
-          direction: !breached ? 'recovered' : crossed ? 'entered' : 'still',
+          direction: breached ? 'entered' : 'recovered',
           value: position.borrowApyPct,
           threshold: borrow,
         });
-        now.borrowNotifiedAt = breached ? at : null;
       }
     }
 

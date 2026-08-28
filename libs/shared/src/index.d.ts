@@ -448,20 +448,18 @@ export type AlertKind = 'range' | 'health' | 'borrow';
 /**
  * A single thing that changed and was worth saying.
  *
- * `direction` is what actually happened, not how bad it is: `entered` is a
- * position that has just crossed into the state its owner asked to hear about,
+ * `direction` is which side of the line the position is on, not how bad it is:
+ * `entered` is a position in the state its owner asked to hear about, and
  * `recovered` is one that has come back out of it. Both are worth a message —
  * being told the danger has passed is half of why anybody turns an alert on.
  *
- * `still` is neither: a threshold that was already breached and has gone on
- * being breached long enough to say so again. A range never has one, because
- * leaving a band is an event and there is nothing to add by repeating it; a
- * health factor or a borrow rate is a condition, and it keeps asking until
- * somebody answers it.
+ * A range only ever produces one on the crossing. A health factor or a borrow
+ * rate produces one on every check for as long as it stands, so `entered` there
+ * means "is", not "has just".
  */
 export interface AlertItem {
   kind: AlertKind;
-  direction: 'entered' | 'recovered' | 'still';
+  direction: 'entered' | 'recovered';
   /** The protocol the message groups this under: "Meteora", "Aave" */
   platform: string;
   /** What to call the position within it: "cbBTC/USDC", "Lending" */
