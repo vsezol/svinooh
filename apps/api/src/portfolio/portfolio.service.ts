@@ -30,6 +30,7 @@ import { config } from '../config';
 import { PrismaService } from '@svinooh/db';
 import { detectChain, normalizeAddress } from '../scanners/detect';
 import { CacheService } from '../cache/cache.service';
+import { setting } from '@svinooh/common';
 
 type WalletWithPositions = Wallet & { positions: Position[] };
 type PortfolioWithOwner = Portfolio & { owner: PortfolioOwner | null };
@@ -431,7 +432,7 @@ export class PortfolioService {
     });
     if (!portfolio) throw new NotFoundException('Portfolio not found');
 
-    const staleBefore = Date.now() - 3 * config.syncIntervalMin * 60_000;
+    const staleBefore = Date.now() - 3 * setting('sync.intervalMin') * 60_000;
     const wallets = portfolio.wallets
       .map((wallet) => this.toWalletDto(wallet, staleBefore))
       .sort(walletOrder);

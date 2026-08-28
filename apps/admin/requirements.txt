@@ -1,0 +1,8 @@
+fastapi==0.121.2
+uvicorn[standard]==0.41.0
+sqladmin==0.21.0
+sqlalchemy==2.0.44
+psycopg[binary]==3.2.12
+itsdangerous==2.2.0
+jinja2==3.1.6
+python-multipart==0.0.20

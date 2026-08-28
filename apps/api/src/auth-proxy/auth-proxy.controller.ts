@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Headers, HttpException, Post, Query } from '@nestjs/common';
 import { config } from '../config';
+import { setting } from '@svinooh/common';
 
 /**
  * The api gateway does not own auth — it forwards /auth/* to the auth service
@@ -41,7 +42,7 @@ export class AuthProxyController {
   @Get('config')
   async getConfig(): Promise<Record<string, unknown>> {
     const cfg = (await forward('GET', '/auth/config')) as Record<string, unknown>;
-    return { ...cfg, syncIntervalMin: config.syncIntervalMin };
+    return { ...cfg, syncIntervalMin: setting('sync.intervalMin') };
   }
 
   @Post('telegram')

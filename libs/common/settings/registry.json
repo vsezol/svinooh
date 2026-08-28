@@ -1,0 +1,290 @@
+{
+  "$comment": "The tunables, declared once. Two stacks read this file — the Node services through libs/common/src/settings.ts and the Python admin through apps/admin/registry.py — so a knob is added here and appears in both, with the same bounds and the same default. It is data rather than code precisely because neither stack should own it.",
+  "version": 1,
+  "groups": [
+    {
+      "key": "sync",
+      "label": "Sync cadence",
+      "about": "How often a wallet is rescanned. This is the top of the funnel: everything below it only decides how the work already asked for gets done."
+    },
+    {
+      "key": "queue",
+      "label": "Throughput",
+      "about": "How fast the work is handed out once it is due. Turning these up costs upstream rate limits, not our own CPU."
+    },
+    {
+      "key": "limits",
+      "label": "Timeouts and give-up",
+      "about": "When a scan stops being slow and starts being lost."
+    }
+  ],
+  "settings": [
+    {
+      "key": "sync.intervalMin",
+      "group": "sync",
+      "label": "Rescan interval, wallets in use",
+      "about": "A wallet somebody has open, or that belongs to an account. The real pacing knob: the queue only takes addresses that are due, so this — not scan speed — is what sets the load.",
+      "type": "int",
+      "unit": "min",
+      "default": 5,
+      "min": 1,
+      "max": 240,
+      "env": "SYNC_INTERVAL_MIN",
+      "readBy": [
+        "wallet",
+        "api",
+        "auth"
+      ],
+      "note": "Read by three services. The api marks a wallet stale at 3× this and reports it to the browser, so this being one value in one place is the point.",
+      "live": true
+    },
+    {
+      "key": "sync.idleIntervalMin",
+      "group": "sync",
+      "label": "Rescan interval, idle wallets",
+      "about": "Wallets that only live in anonymous portfolios nobody has opened lately. Still refreshed, just not on anyone's behalf.",
+      "type": "int",
+      "unit": "min",
+      "default": 30,
+      "min": 1,
+      "max": 1440,
+      "env": "SYNC_IDLE_INTERVAL_MIN",
+      "readBy": [
+        "wallet"
+      ],
+      "live": true
+    },
+    {
+      "key": "sync.activeWindowMin",
+      "group": "sync",
+      "label": "How recently a portfolio counts as in use",
+      "about": "Long enough that a tab left open keeps its wallets on the fast tier.",
+      "type": "int",
+      "unit": "min",
+      "default": 15,
+      "min": 1,
+      "max": 240,
+      "env": "SYNC_ACTIVE_WINDOW_MIN",
+      "readBy": [
+        "wallet"
+      ],
+      "live": true
+    },
+    {
+      "key": "scan.reloadSec",
+      "group": "queue",
+      "label": "Queue top-up interval",
+      "about": "How often the producer looks for addresses that have come due. Cheap — an address that is not due is simply not enqueued.",
+      "type": "int",
+      "unit": "sec",
+      "default": 15,
+      "min": 5,
+      "max": 600,
+      "env": "SCAN_RELOAD_SEC",
+      "readBy": [
+        "wallet"
+      ],
+      "live": true
+    },
+    {
+      "key": "scan.prefetch",
+      "group": "queue",
+      "label": "Addresses per scanner at once",
+      "about": "1 is strictly one at a time. Raising it multiplies the request rate against the same upstream sources, which is what earns a 429.",
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 16,
+      "env": "SCAN_PREFETCH",
+      "readBy": [
+        "wallet"
+      ],
+      "live": true
+    },
+    {
+      "key": "scan.jobDelayMs",
+      "group": "queue",
+      "label": "Pause after each scan",
+      "about": "The pacing knob against DeBank. The scanner holds its queue slot for the whole pause, so nothing else is handed to it meanwhile.",
+      "type": "int",
+      "unit": "ms",
+      "default": 1500,
+      "min": 0,
+      "max": 60000,
+      "env": "SCAN_JOB_DELAY_MS",
+      "readBy": [
+        "scanner-evm",
+        "wallet"
+      ],
+      "live": false,
+      "note": "The scanner service has no database and cannot pick this up live; it applies there on the next deploy. The wallet service's own in-process loop reads it live."
+    },
+    {
+      "key": "scan.httpConcurrency",
+      "group": "queue",
+      "label": "Parallel requests per HTTP scan",
+      "about": "Inside one BTC, SOL or TRON scan. Separate from prefetch, which is how many scans run at all.",
+      "type": "int",
+      "default": 4,
+      "min": 1,
+      "max": 32,
+      "env": "SCAN_HTTP_CONCURRENCY",
+      "readBy": [
+        "wallet"
+      ],
+      "live": true
+    },
+    {
+      "key": "scan.claimTtlMin",
+      "group": "limits",
+      "label": "Scan claim lease",
+      "about": "How long an address is believed to be in flight before it counts as free again.",
+      "type": "int",
+      "unit": "min",
+      "default": 10,
+      "min": 1,
+      "max": 120,
+      "env": "SCAN_CLAIM_TTL_MIN",
+      "readBy": [
+        "wallet"
+      ],
+      "live": true
+    },
+    {
+      "key": "scan.stuckPendingMin",
+      "group": "limits",
+      "label": "When a first scan is called broken",
+      "about": "A wallet that has never been scanned, with no claim outstanding, waiting this long. Well past one lease on purpose — a wallet queued behind a hundred others is not a failed one.",
+      "type": "int",
+      "unit": "min",
+      "default": 15,
+      "min": 1,
+      "max": 240,
+      "env": "SCAN_STUCK_PENDING_MIN",
+      "readBy": [
+        "wallet"
+      ],
+      "live": true
+    },
+    {
+      "key": "scan.httpTimeoutMs",
+      "group": "limits",
+      "label": "HTTP scan timeout",
+      "about": "Per request in the BTC, SOL and TRON scanners.",
+      "type": "int",
+      "unit": "ms",
+      "default": 15000,
+      "min": 1000,
+      "max": 120000,
+      "env": "HTTP_TIMEOUT_MS",
+      "readBy": [
+        "wallet"
+      ],
+      "live": true
+    },
+    {
+      "key": "scan.evmTimeoutMs",
+      "group": "limits",
+      "label": "EVM browser scan timeout",
+      "about": "A browser scan is slow by nature — a page load with chains resolving one by one.",
+      "type": "int",
+      "unit": "ms",
+      "default": 150000,
+      "min": 10000,
+      "max": 600000,
+      "env": "EVM_TIMEOUT_MS",
+      "readBy": [
+        "scanner-evm"
+      ],
+      "live": false
+    },
+    {
+      "key": "alerts.prefetch",
+      "group": "queue",
+      "label": "Alert events at once",
+      "about": "How many wallet-state events the alert collector works through in parallel. The work is a couple of queries.",
+      "type": "int",
+      "default": 4,
+      "min": 1,
+      "max": 32,
+      "env": "ALERTS_PREFETCH",
+      "readBy": [
+        "monitor-alerts"
+      ],
+      "live": false,
+      "note": "A consumer's prefetch is fixed when it subscribes, so this one takes effect on the next deploy of monitor-alerts."
+    }
+  ],
+  "rules": [
+    {
+      "id": "claim-outlasts-scan",
+      "about": "The lease has to outlast the slowest scan that can still come back — an EVM scan runs to its timeout and runs TWICE when it re-reads a suspicious drop, plus the pause after it. Under that and an address still being scanned gets re-enqueued, which is the whole thing the lease exists to stop.",
+      "left": "scan.claimTtlMin",
+      "leftScale": 60000,
+      "op": ">=",
+      "right": [
+        "scan.evmTimeoutMs",
+        "scan.evmTimeoutMs",
+        "scan.jobDelayMs"
+      ]
+    },
+    {
+      "id": "stuck-outlasts-claim",
+      "about": "Calling a wallet broken before its lease has even expired would say a wallet still being scanned had failed.",
+      "left": "scan.stuckPendingMin",
+      "leftScale": 1,
+      "op": ">=",
+      "right": [
+        "scan.claimTtlMin"
+      ]
+    },
+    {
+      "id": "idle-not-faster-than-active",
+      "about": "The slow tier being faster than the fast tier means the tiers are the wrong way round.",
+      "left": "sync.idleIntervalMin",
+      "leftScale": 1,
+      "op": ">=",
+      "right": [
+        "sync.intervalMin"
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "key": "conservative",
+      "label": "Conservative",
+      "about": "For when the upstreams are rate-limiting us. Half the request rate, wallets refreshed a third as often.",
+      "values": {
+        "sync.intervalMin": 15,
+        "sync.idleIntervalMin": 60,
+        "scan.prefetch": 1,
+        "scan.jobDelayMs": 3000,
+        "scan.httpConcurrency": 2
+      }
+    },
+    {
+      "key": "normal",
+      "label": "Normal",
+      "about": "What the services shipped with.",
+      "values": {
+        "sync.intervalMin": 5,
+        "sync.idleIntervalMin": 30,
+        "scan.prefetch": 1,
+        "scan.jobDelayMs": 1500,
+        "scan.httpConcurrency": 4
+      }
+    },
+    {
+      "key": "aggressive",
+      "label": "Aggressive",
+      "about": "Fresher data, more requests. Watch the 429 rate in Grafana after applying it.",
+      "values": {
+        "sync.intervalMin": 2,
+        "sync.idleIntervalMin": 15,
+        "scan.prefetch": 2,
+        "scan.jobDelayMs": 500,
+        "scan.httpConcurrency": 8
+      }
+    }
+  ]
+}

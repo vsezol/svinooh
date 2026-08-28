@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import type { Chain } from '@svinooh/shared';
-import { RabbitService, scanQueueName, sleep, type ScanJob } from '@svinooh/common';
+import { RabbitService, scanQueueName, sleep, type ScanJob, setting } from '@svinooh/common';
 import { config } from '../config';
 import { ScanConsumerService } from './scan-consumer.service';
 import { ScanResultConsumerService } from './scan-result-consumer.service';
@@ -41,10 +41,10 @@ export class ScanProducerService implements OnApplicationBootstrap, OnModuleDest
 
   onApplicationBootstrap() {
     if (this.rabbit.enabled) {
-      this.logger.log(`Producer: topping the queue up every ${config.scanReloadSec}s`);
+      this.logger.log(`Producer: topping the queue up every ${setting('scan.reloadSec')}s`);
     } else {
       void this.inProcessLoop();
-      this.logger.log(`Producer: RabbitMQ off — scanning in-process, pause ${config.scanJobDelayMs}ms`);
+      this.logger.log(`Producer: RabbitMQ off — scanning in-process, pause ${setting('scan.jobDelayMs')}ms`);
     }
   }
 
@@ -58,7 +58,7 @@ export class ScanProducerService implements OnApplicationBootstrap, OnModuleDest
    * The first tick lands one interval in, which doubles as the wait the broker
    * and the consumers need to come up.
    */
-  @Interval('scan-top-up', config.scanReloadSec * 1000)
+  @Interval('scan-top-up', setting('scan.reloadSec') * 1000)
   async tick(): Promise<void> {
     if (this.ticking || !this.rabbit.enabled) return;
     this.ticking = true;
@@ -137,7 +137,7 @@ export class ScanProducerService implements OnApplicationBootstrap, OnModuleDest
           if (!(await this.sync.claimForScan(job.chain, job.address))) continue;
           ran++;
           await this.writer.apply(await this.scanner.scanInProcess(job));
-          await sleep(config.scanJobDelayMs);
+          await sleep(setting('scan.jobDelayMs'));
         }
         if (!ran) await sleep(5000);
       } catch (e) {

@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { Wallet } from '@prisma/client';
 import type { Chain } from '@svinooh/shared';
 import { config } from '../config';
-import { ScanHold } from '@svinooh/common';
+import { ScanHold, setting } from '@svinooh/common';
 import { MetricsService, RabbitService, WALLET_STATE_QUEUE, type ScanJob } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import { alertableStates } from './wallet-state';
@@ -80,7 +80,7 @@ export class SyncService {
     });
 
     const now = Date.now();
-    const activeSince = now - config.syncActiveWindowMin * 60_000;
+    const activeSince = now - setting('sync.activeWindowMin') * 60_000;
     const groups = new Map<
       string,
       {
@@ -128,7 +128,7 @@ export class SyncService {
       }
     }
 
-    const claimedSince = now - config.scanClaimTtlMin * 60_000;
+    const claimedSince = now - setting('scan.claimTtlMin') * 60_000;
     const due = [...groups.values()]
       // Already on its way. Without this the producer republished a brand-new
       // address on every tick for the whole length of its scan — see
@@ -138,7 +138,7 @@ export class SyncService {
       .map((g) => {
         const fast = g.owned || g.active;
         const intervalMs =
-          (fast ? config.syncIntervalMin : config.syncIdleIntervalMin) * 60_000;
+          (fast ? setting('sync.intervalMin') : setting('sync.idleIntervalMin')) * 60_000;
         return { ...g, fast, overdueBy: g.lastSyncedAt === null ? Infinity : now - g.lastSyncedAt - intervalMs };
       })
       .filter((g) => g.overdueBy >= 0)
@@ -262,7 +262,7 @@ export class SyncService {
    * all of them.
    */
   async claimForScan(chain: string, address: string): Promise<boolean> {
-    const staleBefore = new Date(Date.now() - config.scanClaimTtlMin * 60_000);
+    const staleBefore = new Date(Date.now() - setting('scan.claimTtlMin') * 60_000);
     const { count } = await this.prisma.wallet.updateMany({
       where: {
         chain,
@@ -307,8 +307,8 @@ export class SyncService {
    */
   async failStuckPending(): Promise<number> {
     const now = Date.now();
-    const claimedSince = new Date(now - config.scanClaimTtlMin * 60_000);
-    const waitingSince = new Date(now - config.scanStuckPendingMin * 60_000);
+    const claimedSince = new Date(now - setting('scan.claimTtlMin') * 60_000);
+    const waitingSince = new Date(now - setting('scan.stuckPendingMin') * 60_000);
     const { count } = await this.prisma.wallet.updateMany({
       where: {
         status: 'pending',

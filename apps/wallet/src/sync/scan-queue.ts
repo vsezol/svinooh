@@ -1,5 +1,5 @@
 import type { Chain } from '@svinooh/shared';
-import { Semaphore } from '@svinooh/common';
+import { Semaphore, setting } from '@svinooh/common';
 import { config } from '../config';
 
 /**
@@ -7,7 +7,7 @@ import { config } from '../config';
  * is scanned by apps/scanner-evm, which paces itself off its own queue.
  */
 class ScanQueue {
-  private readonly http = new Semaphore(config.httpConcurrency);
+  private readonly http = new Semaphore(setting('scan.httpConcurrency'));
 
   run<T>(_chain: Chain, fn: () => Promise<T>): Promise<T> {
     return this.http.run(fn);

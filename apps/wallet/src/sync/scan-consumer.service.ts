@@ -7,6 +7,7 @@ import {
   sleep,
   type ScanJob,
   type ScanOutcome,
+  setting,
 } from '@svinooh/common';
 import type { Chain, ScanResult } from '@svinooh/shared';
 import { config } from '../config';
@@ -36,16 +37,16 @@ export class ScanConsumerService implements OnApplicationBootstrap {
   onApplicationBootstrap() {
     if (!this.rabbit.enabled) return;
     for (const chain of OWN_CHAINS) {
-      this.rabbit.consume<ScanJob>(scanQueueName(chain), (job) => this.handle(job), config.scanPrefetch);
+      this.rabbit.consume<ScanJob>(scanQueueName(chain), (job) => this.handle(job), setting('scan.prefetch'));
     }
     this.logger.log(
-      `Consuming ${OWN_CHAINS.map(scanQueueName).join(', ')} at prefetch=${config.scanPrefetch}`,
+      `Consuming ${OWN_CHAINS.map(scanQueueName).join(', ')} at prefetch=${setting('scan.prefetch')}`,
     );
   }
 
   private async handle(job: ScanJob): Promise<void> {
     await this.publish(await this.scanInProcess(job));
-    await sleep(config.scanJobDelayMs); // keep the slot busy through the pause — that is the pacing
+    await sleep(setting('scan.jobDelayMs')); // keep the slot busy through the pause — that is the pacing
   }
 
   /** The scan itself, with no queue involved — also the local-development path */

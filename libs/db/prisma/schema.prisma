@@ -153,6 +153,23 @@ model Wallet {
 /// everything had closed and reopened. A row here is a memory, not a holding —
 /// a position that goes away leaves its row behind until the wallet does, which
 /// costs a few bytes and avoids ever re-announcing a change on the way back.
+/// One tunable, as the admin last set it.
+///
+/// Only the keys somebody has actually changed have rows: everything else falls
+/// through to the environment and then to the default declared in
+/// libs/settings/registry.json. So an empty table is a system running exactly as
+/// it shipped, and the table reads as a list of decisions rather than as a
+/// second copy of the defaults.
+model Setting {
+  key       String   @id
+  /// Json rather than String: the registry already says what type a key is, and
+  /// storing 5 as "5" means every reader has to agree on how to parse it back
+  value     Json
+  /// Who changed it, for when a number turns out to have been a mistake
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+}
+
 model WalletAlertState {
   walletId       String
   positionKey    String
