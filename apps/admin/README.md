@@ -53,3 +53,16 @@ Then http://localhost:3010/admin.
 
 With neither password variable set, nobody can sign in — which is the right
 behaviour for a service that has been deployed before it was configured.
+
+## Deployment
+
+Railway deprecated config-as-code, so there is no `railway.json` here — the
+service carries its own configuration: Dockerfile `apps/admin/Dockerfile`,
+healthcheck `/health`, restart on failure, and watch patterns `apps/admin/**`
+and `libs/common/settings/**`, so it only rebuilds when its own files or the
+registry change.
+
+It has no public domain by default. Give it one only when you need it from
+outside, and set `ADMIN_PASSWORD_HASH` first — with no password set the panel
+refuses every sign-in, which is the right behaviour but not one to rely on as
+your only lock.
