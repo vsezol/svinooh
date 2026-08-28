@@ -660,34 +660,39 @@ export class PortfolioService {
   async history(slug: string, range: HistoryRange): Promise<HistoryDto> {
     const portfolio = await this.prisma.portfolio.findUnique({
       where: { slug },
-      include: { wallets: { select: { id: true } } },
+      include: { wallets: { select: { chain: true, address: true } } },
     });
     if (!portfolio) throw new NotFoundException('Portfolio not found');
-    const points = await this.reconstructPortfolioSeries(
-      portfolio.wallets.map((w) => w.id),
-      range,
-    );
+    const points = await this.reconstructPortfolioSeries(portfolio.wallets, range);
     return { range, points };
   }
 
   /**
    * Portfolio value series without the "jumps" caused by adding wallets: we
-   * assemble it from wallet snapshots, where each wallet's value is carried back
-   * across the whole range by its earliest known value. This way adding a wallet
-   * doesn't look like a profit: change = Σ(current) − Σ(starting) = the sum of
-   * real per-wallet profit, and change% = Σprofit / Σstarting.
+   * assemble it from per-address snapshots, where each address's value is carried
+   * back across the whole range by its earliest known value. This way adding a
+   * wallet doesn't look like a profit: change = Σ(current) − Σ(starting) = the
+   * sum of real per-wallet profit, and change% = Σprofit / Σstarting.
+   *
+   * Keyed by (chain, address), not by Wallet row: a wallet reused in a new
+   * portfolio brings the address's whole history with it, so the line reaches
+   * back to before the portfolio existed rather than starting flat at t0.
    */
   private async reconstructPortfolioSeries(
-    walletIds: string[],
+    pairs: Array<{ chain: string; address: string }>,
     range: HistoryRange,
   ): Promise<HistoryPointDto[]> {
-    if (!walletIds.length) return [];
+    if (!pairs.length) return [];
     const since = windowStart(range);
-    const snaps = await this.prisma.walletSnapshot.findMany({
-      where: { walletId: { in: walletIds }, ...(since ? { createdAt: { gte: since } } : {}) },
+    const snaps = await this.prisma.addressSnapshot.findMany({
+      where: {
+        OR: pairs.map((p) => ({ chain: p.chain, address: p.address })),
+        ...(since ? { createdAt: { gte: since } } : {}),
+      },
       orderBy: { createdAt: 'asc' },
       select: {
-        walletId: true,
+        chain: true,
+        address: true,
         createdAt: true,
         totalUsd: true,
         claimableUsd: true,
@@ -696,21 +701,22 @@ export class PortfolioService {
     });
     if (!snaps.length) return [];
 
-    // group snapshots by wallet (already sorted by time) and smooth each one —
+    // group snapshots by address (already sorted by time) and smooth each one —
     // removing short-lived glitch dips that recover on their own
-    const byWallet = new Map<
+    const byAddress = new Map<
       string,
       Array<{ t: number; v: number; claimable: number | null; debt: number | null }>
     >();
     for (const s of snaps) {
-      const arr = byWallet.get(s.walletId) ?? [];
+      const key = `${s.chain}:${s.address}`;
+      const arr = byAddress.get(key) ?? [];
       arr.push({
         t: s.createdAt.getTime(),
         v: s.totalUsd,
         claimable: s.claimableUsd,
         debt: s.debtUsd,
       });
-      byWallet.set(s.walletId, arr);
+      byAddress.set(key, arr);
     }
 
     // What each wallet was worth just before the window opened. Two jobs: it
@@ -718,7 +724,7 @@ export class PortfolioService {
     // for wallets that have no snapshot in the range at all (never synced
     // during the whole period), so the total covers every wallet and the line
     // isn't understated.
-    const prior = since ? await this.levelsBefore(walletIds, since) : new Map<string, number>();
+    const prior = since ? await this.levelsBefore(pairs, since) : new Map<string, number>();
 
     // each wallet's starting point (carry-back) — the first smoothed value in the range
     const baseline = new Map<string, number>();
@@ -735,7 +741,7 @@ export class PortfolioService {
       claimable: number | null;
       debt: number | null;
     }> = [];
-    for (const [id, series] of byWallet) {
+    for (const [id, series] of byAddress) {
       const smooth = smoothSeries(series, prior.get(id));
       baseline.set(id, smooth[0].v);
       baseClaimable.set(id, series[0].claimable);
@@ -806,29 +812,39 @@ export class PortfolioService {
    * and smoothSeries holds a drop only when the series climbs back to it. A
    * wallet that genuinely fell never does, so a real fall stays a real fall.
    */
-  private async levelsBefore(walletIds: string[], before: Date): Promise<Map<string, number>> {
-    if (!walletIds.length) return new Map();
-    const rows = await this.prisma.$queryRaw<Array<{ walletId: string; totalUsd: number }>>(
+  private async levelsBefore(
+    pairs: Array<{ chain: string; address: string }>,
+    before: Date,
+  ): Promise<Map<string, number>> {
+    if (!pairs.length) return new Map();
+    const wanted = Prisma.join(pairs.map((p) => Prisma.sql`(${p.chain}, ${p.address})`));
+    const rows = await this.prisma.$queryRaw<Array<{ chain: string; address: string; totalUsd: number }>>(
       Prisma.sql`
-        SELECT "walletId", "totalUsd" FROM (
-          SELECT "walletId", "totalUsd",
-                 row_number() OVER (PARTITION BY "walletId" ORDER BY "createdAt" DESC) AS rn
-          FROM "WalletSnapshot"
-          WHERE "walletId" IN (${Prisma.join(walletIds)}) AND "createdAt" < ${before}
+        SELECT "chain", "address", "totalUsd" FROM (
+          SELECT "chain", "address", "totalUsd",
+                 row_number() OVER (PARTITION BY "chain", "address" ORDER BY "createdAt" DESC) AS rn
+          FROM "AddressSnapshot"
+          WHERE ("chain", "address") IN (${wanted}) AND "createdAt" < ${before}
         ) recent WHERE rn <= ${LEVEL_SAMPLES}
       `,
     );
     const levels = new Map<string, number>();
-    for (const r of rows) levels.set(r.walletId, Math.max(levels.get(r.walletId) ?? 0, r.totalUsd));
+    for (const r of rows) {
+      const key = `${r.chain}:${r.address}`;
+      levels.set(key, Math.max(levels.get(key) ?? 0, r.totalUsd));
+    }
     return levels;
   }
 
   async walletHistory(slug: string, walletId: string, range: HistoryRange): Promise<HistoryDto> {
     const wallet = await this.prisma.wallet.findFirst({
       where: { id: walletId, portfolio: { slug } },
+      select: { chain: true, address: true },
     });
     if (!wallet) throw new NotFoundException('Wallet not found');
-    const points = await this.series('WalletSnapshot', 'walletId', wallet.id, range);
+    // By (chain, address): a wallet's own history shows the address's full past,
+    // including the stretch recorded while it lived in another portfolio.
+    const points = await this.addressSeries(wallet.chain, wallet.address, range);
     return { range, points };
   }
 
@@ -872,14 +888,17 @@ export class PortfolioService {
   }
 
   /**
-   * Series for the charts. The short windows use raw points (step = sync
-   * interval); the longer ones are aggregated into date_bin buckets on the
-   * Postgres side, at the resolution their window is drawn at.
+   * One address's series for the charts. The short windows use raw points
+   * (step = sync interval); the longer ones are aggregated into date_bin buckets
+   * on the Postgres side, at the resolution their window is drawn at.
+   *
+   * Reads AddressSnapshot by (chain, address), so this is the same history the
+   * address contributes to every portfolio that holds it — a wallet's own chart
+   * and the portfolio total are two views of the same underlying readings.
    */
-  private async series(
-    table: 'PortfolioSnapshot' | 'WalletSnapshot',
-    fkColumn: 'portfolioId' | 'walletId',
-    id: string,
+  private async addressSeries(
+    chain: string,
+    address: string,
     range: HistoryRange,
   ): Promise<HistoryPointDto[]> {
     const { bucket } = RANGES[range];
@@ -887,50 +906,30 @@ export class PortfolioService {
 
     let raw: Sample[];
     if (!bucket) {
-      const where = { [fkColumn]: id, ...(since ? { createdAt: { gte: since } } : {}) };
-      // Only a wallet records what it could collect and what it owes. The
-      // portfolio's own snapshots carry a total and nothing else, which is why
-      // the portfolio series is assembled from its wallets rather than read
-      // from here.
-      if (table === 'PortfolioSnapshot') {
-        const rows = await this.prisma.portfolioSnapshot.findMany({
-          where: where as Prisma.PortfolioSnapshotWhereInput,
-          orderBy: { createdAt: 'asc' },
-          select: { createdAt: true, totalUsd: true },
-        });
-        raw = rows.map((row) => ({
-          t: row.createdAt.getTime(),
-          usd: round2(row.totalUsd),
-          claimable: null,
-          debt: null,
-        }));
-      } else {
-        const rows = await this.prisma.walletSnapshot.findMany({
-          where: where as Prisma.WalletSnapshotWhereInput,
-          orderBy: { createdAt: 'asc' },
-          select: { createdAt: true, totalUsd: true, claimableUsd: true, debtUsd: true },
-        });
-        raw = rows.map((row) => ({
-          t: row.createdAt.getTime(),
-          usd: round2(row.totalUsd),
-          claimable: nullableRound(row.claimableUsd),
-          debt: nullableRound(row.debtUsd),
-        }));
-      }
+      const rows = await this.prisma.addressSnapshot.findMany({
+        where: { chain, address, ...(since ? { createdAt: { gte: since } } : {}) },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true, totalUsd: true, claimableUsd: true, debtUsd: true },
+      });
+      raw = rows.map((row) => ({
+        t: row.createdAt.getTime(),
+        usd: round2(row.totalUsd),
+        claimable: nullableRound(row.claimableUsd),
+        debt: nullableRound(row.debtUsd),
+      }));
     } else {
       // AVG skips nulls, so a bucket straddling the release that started
       // recording these averages what was recorded and answers null only where
       // nothing was
-      const claimed = table === 'WalletSnapshot';
       const rows = await this.prisma.$queryRaw<
         Array<{ bucket: Date; usd: number; claimable: number | null; debt: number | null }>
       >(Prisma.sql`
         SELECT date_bin(${bucket}::interval, "createdAt", TIMESTAMP '2020-01-01') AS bucket,
                AVG("totalUsd")::float8 AS usd,
-               ${claimed ? Prisma.sql`AVG("claimableUsd")::float8` : Prisma.sql`NULL::float8`} AS claimable,
-               ${claimed ? Prisma.sql`AVG("debtUsd")::float8` : Prisma.sql`NULL::float8`} AS debt
-        FROM ${Prisma.raw(`"${table}"`)}
-        WHERE ${Prisma.raw(`"${fkColumn}"`)} = ${id}
+               AVG("claimableUsd")::float8 AS claimable,
+               AVG("debtUsd")::float8 AS debt
+        FROM "AddressSnapshot"
+        WHERE "chain" = ${chain} AND "address" = ${address}
           ${since ? Prisma.sql`AND "createdAt" >= ${since}` : Prisma.empty}
         GROUP BY bucket
         ORDER BY bucket ASC

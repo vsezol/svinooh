@@ -224,3 +224,32 @@ model PortfolioSnapshot {
 
   @@index([portfolioId, createdAt])
 }
+
+/// The history of what an address is worth — total, what could be collected, and
+/// what is owed — keyed by (chain, address) rather than by a Wallet row.
+///
+/// A Wallet is scoped to one portfolio (@@unique([portfolioId, address])), so the
+/// same address added to a second portfolio is a different row with a different
+/// id. Keying history off that row meant reusing a wallet — or removing it from
+/// one portfolio and adding it to another — started its history over from empty.
+/// Keyed here by the address itself, the history is one thing every portfolio
+/// holding that address shares, and it outlives any single Wallet row.
+///
+/// It carries no portfolio, no owner and no label. What an address is worth is a
+/// fact about a public address, identical in every portfolio that holds it, so
+/// sharing it across them leaks nothing about anyone — see the privacy rule.
+/// Written once per scan (not once per Wallet row that happens to hold it).
+model AddressSnapshot {
+  id           String   @id @default(cuid())
+  chain        String
+  address      String
+  totalUsd     Float
+  // What could have been collected and what was owed at this reading — read off
+  // the position legs. Nullable for rows written before they were recorded.
+  claimableUsd Float?
+  debtUsd      Float?
+  breakdown    Json?
+  createdAt    DateTime @default(now())
+
+  @@index([chain, address, createdAt])
+}
