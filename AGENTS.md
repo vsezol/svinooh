@@ -93,6 +93,28 @@ bd update <id> --claim  # Claim work atomically
 bd close <id>           # Complete work
 ```
 
+### The hook that enforces it
+
+`.gitignore` was not enough. `bd` force-adds its own files and commits them
+itself — which is how `.beads/backup/*` reached main *after* the commit that
+took beads out of git for good, and then rode into unrelated branches, because a
+worktree branched off a local checkout inherits whatever `bd` had just committed
+there. It also points `core.hooksPath` at its own directory, per worktree, which
+quietly disables every other hook in that worktree.
+
+The whole history has since been rewritten to remove `.beads` from every commit
+on every branch. `.githooks/pre-commit` is what stops that being needed twice: it
+refuses any commit whose index contains a `.beads/` path. Enable it once per
+clone, and check that nothing has taken the setting over:
+
+```bash
+git config core.hooksPath .githooks
+git config --show-origin --get-all core.hooksPath   # expect exactly one line
+```
+
+A second line pointing into `.beads/hooks` is `bd` having claimed the hooks —
+`git config --worktree --unset core.hooksPath` gives them back.
+
 Types: `bug`, `feature`, `task`, `epic`, `chore`. Priorities run `0` (critical)
 to `4` (backlog), and `2` is the default. Add `--json` when reading the output
 programmatically, and link work you find along the way with

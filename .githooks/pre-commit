@@ -1,0 +1,33 @@
+#!/bin/sh
+# Nothing under .beads/ is ever committed.
+#
+# .gitignore already says so, and that was not enough: `bd` force-adds its own
+# files and commits them itself, which is how `.beads/backup/*` landed on main
+# AFTER the commit that took beads out of git for good. Those commits then rode
+# into unrelated branches, because a worktree branched off a local checkout
+# inherits whatever `bd` had just committed there.
+#
+# The whole history was rewritten once to remove them. This is what stops it
+# being needed twice: .gitignore is advice, and an index check is not.
+#
+# Enable it (once per clone — hooks are not themselves version-controlled):
+#     git config core.hooksPath .githooks
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR | grep '^\.beads/' || true)
+
+if [ -n "$staged" ]; then
+  echo "pre-commit: refusing to commit beads state." >&2
+  echo >&2
+  echo "$staged" | sed 's/^/  /' >&2
+  echo >&2
+  echo "The tracker is local scratch: it conflicts on every merge and belongs to" >&2
+  echo "nobody but this checkout. Unstage it:" >&2
+  echo >&2
+  echo "    git restore --staged .beads" >&2
+  echo >&2
+  echo "If a commit genuinely has to carry one of these (it does not), use" >&2
+  echo "--no-verify and be sure you mean it." >&2
+  exit 1
+fi
+
+exit 0
