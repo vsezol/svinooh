@@ -66,7 +66,10 @@ function Card({
   tone: 'accent' | 'muted';
   children: React.ReactNode;
 }) {
-  const hasLine = series.values.length >= 2;
+  // Zero all the way across is not a line, it is an axis: a wallet that has
+  // never owed anything would get a flat rule drawn under a figure already
+  // reading "—". A card earns its chart once there is something in it to see.
+  const hasLine = series.values.length >= 2 && series.values.some((v) => v !== 0);
   return (
     <div
       style={{

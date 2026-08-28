@@ -147,8 +147,19 @@ export function PortfolioPage({ slug }: { slug: string }) {
   }, [data, scope]);
 
   const wallets = data?.wallets ?? [];
-  const rewards = useMemo(() => rewardsTotals(wallets), [wallets]);
-  const debt = useMemo(() => debtTotals(wallets), [wallets]);
+  /**
+   * What the two metric cards are about. The scope selector already re-points
+   * the headline figure and all three charts at one wallet; these read it the
+   * same way, so a card cannot end up reporting the portfolio's claimable over
+   * a line drawn from one wallet's — the figure and the line under it saying
+   * different things about the same card.
+   */
+  const scoped = useMemo(
+    () => (scope === 'all' ? wallets : wallets.filter((w) => w.id === scope)),
+    [wallets, scope],
+  );
+  const rewards = useMemo(() => rewardsTotals(scoped), [scoped]);
+  const debt = useMemo(() => debtTotals(scoped), [scoped]);
   const blocksByWallet = useMemo(() => wallets.map((w) => buildBlocks(w.positions)), [wallets]);
   const shownTotal = useMemo(() => filteredTotal(blocksByWallet, filter), [blocksByWallet, filter]);
 
