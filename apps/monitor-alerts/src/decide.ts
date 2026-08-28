@@ -60,19 +60,25 @@ export function decide(
     const before = previous.get(position.key) ?? FRESH;
     const seen = previous.has(position.key);
     const now: Remembered = { ...FRESH };
+    // What every item about this position says about itself, whatever crossed.
+    // The reading and the threshold are per-check and go on top.
+    //
+    // Defaulted rather than trusted: during a deploy the queue still holds
+    // states published by a wallet service that predates these fields, and an
+    // alert that throws on the way past is an alert nobody gets.
+    const about = {
+      platform: position.platform ?? '',
+      position: position.label,
+      band: position.band ?? null,
+      loan: position.loan ?? null,
+    };
 
     if (settings.rangeAlerts && position.inRange !== null) {
       now.inRange = position.inRange;
       // Silent on the first sighting: an unknown length of time out of range is
       // not news, and it is not this scan's doing
       if (seen && before.inRange !== null && before.inRange !== position.inRange) {
-        items.push({
-          kind: 'range',
-          direction: position.inRange ? 'recovered' : 'entered',
-          position: position.label,
-          value: null,
-          threshold: null,
-        });
+        items.push({ ...about, kind: 'range', direction: position.inRange ? 'recovered' : 'entered', value: null, threshold: null });
       }
     }
 
@@ -84,9 +90,9 @@ export function decide(
       // the line differs from it and speaks at once
       if (breached !== before.healthBreached) {
         items.push({
+          ...about,
           kind: 'health',
           direction: breached ? 'entered' : 'recovered',
-          position: position.label,
           value: position.healthFactor,
           threshold: health,
         });
@@ -99,9 +105,9 @@ export function decide(
       now.borrowBreached = breached;
       if (breached !== before.borrowBreached) {
         items.push({
+          ...about,
           kind: 'borrow',
           direction: breached ? 'entered' : 'recovered',
-          position: position.label,
           value: position.borrowApyPct,
           threshold: borrow,
         });

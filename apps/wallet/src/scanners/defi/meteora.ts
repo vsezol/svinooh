@@ -72,6 +72,10 @@ export async function meteoraPools(address: string): Promise<PoolFact[]> {
           id: `meteora:${p.positionAddress}`,
           platform: 'meteora' as const,
           pair: pairKey(symX, symY),
+          pairLabel: `${symX}/${symY}`,
+          // Already a percentage on this API — 0.04 is the 0.04% pool
+          feePct: typeof pool.baseFee === 'number' ? pool.baseFee : null,
+          chainLabel: 'Solana',
           inRange: !p.isOutOfRange,
           lowerPrice: Number(p.minPrice),
           upperPrice: Number(p.maxPrice),
