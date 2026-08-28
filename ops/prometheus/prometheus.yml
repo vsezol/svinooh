@@ -1,7 +1,10 @@
 # Prometheus for svinooh. Scrapes the services over Railway's internal network.
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  # 60s, not 15s: for a one-user project 15-second resolution buys nothing and
+  # quadruples the samples the TSDB has to hold. rate() queries use a [5m]+
+  # window, which is still 5+ points here.
+  scrape_interval: 60s
+  evaluation_interval: 60s
   external_labels:
     project: svinooh
 
@@ -25,12 +28,8 @@ scrape_configs:
     static_configs:
       - targets: ['wallet.railway.internal:3000']
 
-  # The observability stack watches itself too — if log or trace ingestion
-  # breaks, that should be visible here rather than by noticing missing data
+  # The observability stack watches itself too — if log ingestion breaks, that
+  # should be visible here rather than by noticing missing data
   - job_name: loki
     static_configs:
       - targets: ['loki.railway.internal:3100']
-
-  - job_name: tempo
-    static_configs:
-      - targets: ['tempo.railway.internal:3200']
