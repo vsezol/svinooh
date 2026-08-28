@@ -132,6 +132,13 @@ export function usePager(index: number, onIndex: (index: number) => void, count:
   }, [index]);
 
   const onTouchStart = (e: React.TouchEvent) => {
+    // Some things on the page own the sideways drag themselves — the charts,
+    // where it scrolls back through the history. A gesture that starts on one
+    // of those is theirs, and the pager never sees it.
+    if ((e.target as HTMLElement | null)?.closest?.('[data-no-swipe]')) {
+      gesture.current = null;
+      return;
+    }
     const t = e.touches[0];
     gesture.current = { x: t.clientX, y: t.clientY, horizontal: null };
   };

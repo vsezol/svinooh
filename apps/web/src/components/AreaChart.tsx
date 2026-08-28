@@ -361,6 +361,10 @@ export function AreaChart({ values, times, period, height, bare = false, tone = 
 
   return (
     <div
+      // A sideways drag here belongs to the chart — it is how you scroll back
+      // through the history — so the pager that carries this page leaves any
+      // gesture starting inside alone. See usePager.
+      data-no-swipe=""
       className={bare ? undefined : 'card'}
       style={{ position: 'relative', overflow: 'hidden', touchAction: 'pan-y', height: bare ? '100%' : undefined }}
     >
