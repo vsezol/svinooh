@@ -1,6 +1,5 @@
 import type { HistoryDto, HistoryPointDto, HistoryRange } from '@svinooh/shared';
 import { api, whenNetworkIdle } from './api';
-import { WINDOW_MS } from './ranges';
 
 /** A line ready to be drawn: values and the moments they were read at */
 export interface Series {
@@ -9,35 +8,6 @@ export interface Series {
 }
 
 export const EMPTY_SERIES: Series = { values: [], times: [] };
-
-/** What a reading did across a window, in money and in percent */
-export interface Change {
-  chg: number;
-  pct: number;
-  up: boolean;
-}
-
-/**
- * What the period button asks: how much this changed over the last 24 hours,
- * or week, or all of it.
- *
- * A series reaches back further than the window so the chart has somewhere to
- * scroll, so this starts at the first reading inside the window rather than at
- * the oldest one that came with it. Scrolling the chart does not move it —
- * "+0.42% · 24H" means the last 24 hours wherever you have wandered off to.
- */
-export function changeOver({ values, times }: Series, period: HistoryRange): Change | null {
-  if (values.length < 2) return null;
-  const window = WINDOW_MS[period];
-  const opens = window === null ? -Infinity : times[times.length - 1] - window;
-  const at = times.findIndex((t) => t >= opens);
-  // Nothing inside the window but the last reading is not a span; fall back to
-  // the whole series rather than comparing a value with itself
-  const first = values[at < 0 || at > values.length - 2 ? 0 : at];
-  const last = values[values.length - 1];
-  const chg = last - first;
-  return { chg, pct: first ? (chg / first) * 100 : 0, up: chg >= 0 };
-}
 
 /**
  * One reading out of each point, from where the readings begin.
