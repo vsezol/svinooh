@@ -1,14 +1,25 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { AGENT_ENABLED } from '../lib/agent';
 import type { Tab } from './SideNav';
 
-/** Portfolio, Alerts, and the one that isn't ready — in the order they sit in */
-const TABS: Array<{ key: Tab | null; label: string }> = [
+/**
+ * The pages, in the order they sit in — and the order a finger swipes them.
+ *
+ * The agent is in the list only once it is switched on (see AGENT_ENABLED).
+ * Everything counts off this array — the strip, the moving underline, and how
+ * many pages the pager has — so leaving it out is the whole of hiding it here,
+ * and there is no way for the phone to reach a page the rail does not offer.
+ */
+export const TABS: Array<{ key: Tab; label: string }> = [
   { key: 'portfolio', label: 'Portfolio' },
   { key: 'notifications', label: 'Alerts' },
-  { key: null, label: 'AI agent' },
+  ...(AGENT_ENABLED ? ([{ key: 'agent', label: 'AI agent' }] as const) : []),
 ];
+
+/** Where a tab sits on the strip. The rail and the pager both count from here. */
+export const tabIndex = (tab: Tab): number => Math.max(0, TABS.findIndex((t) => t.key === tab));
 
 /** How far a finger has to carry the page before letting go turns it over */
 const SWIPE_COMMIT = 70;
@@ -23,7 +34,7 @@ const RUBBER = 0.25;
 const LOCK_AFTER = 10;
 const LOCK_BIAS = 1.2;
 
-const tabStyle = (active: boolean, disabled: boolean): CSSProperties => ({
+const tabStyle = (active: boolean): CSSProperties => ({
   flex: 1,
   display: 'flex',
   alignItems: 'center',
@@ -31,11 +42,10 @@ const tabStyle = (active: boolean, disabled: boolean): CSSProperties => ({
   height: 46,
   fontWeight: 700,
   fontSize: 13.5,
-  cursor: disabled ? 'default' : 'pointer',
+  cursor: 'pointer',
   userSelect: 'none',
   whiteSpace: 'nowrap',
   color: active ? 'var(--acc-text)' : 'var(--mut)',
-  opacity: disabled ? 0.45 : 1,
   transition: 'color 0.25s ease',
 });
 
@@ -49,33 +59,14 @@ const tabStyle = (active: boolean, disabled: boolean): CSSProperties => ({
  * flash of the wrong navigation on every load.
  */
 export function MobileTabs({ tab, onTab }: { tab: Tab; onTab: (tab: Tab) => void }) {
-  const index = tab === 'notifications' ? 1 : 0;
+  const index = tabIndex(tab);
 
   return (
     <div className="top-tabs">
       <div className="shell" style={{ position: 'relative', display: 'flex' }}>
         {TABS.map((t) => (
-          <div
-            key={t.label}
-            onClick={t.key ? () => onTab(t.key as Tab) : undefined}
-            style={tabStyle(t.key === tab, !t.key)}
-          >
+          <div key={t.key} onClick={() => onTab(t.key)} style={tabStyle(t.key === tab)}>
             {t.label}
-            {t.key ? null : (
-              <span
-                className="mono"
-                style={{
-                  fontSize: 8,
-                  letterSpacing: '0.08em',
-                  border: '1px solid var(--line2)',
-                  borderRadius: 999,
-                  padding: '1px 6px',
-                  marginLeft: 6,
-                }}
-              >
-                SOON
-              </span>
-            )}
           </div>
         ))}
         {/* One line that moves, rather than a border that appears under whichever

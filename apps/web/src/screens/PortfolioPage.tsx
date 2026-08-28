@@ -13,7 +13,8 @@ import { MetricCards } from '../components/MetricCards';
 import { GoPublicModal, VisibilityCard } from '../components/PortfolioVisibility';
 import { ScopeSelect } from '../components/ScopeSelect';
 import { ShareButton } from '../components/ShareButton';
-import { MobileTabs, usePager } from '../components/MobileTabs';
+import { MobileTabs, TABS, tabIndex, usePager } from '../components/MobileTabs';
+import { AgentChat } from '../components/agent/AgentChat';
 import { SideNav, type Tab } from '../components/SideNav';
 import { SyncedAgo } from '../components/SyncedAgo';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -37,7 +38,23 @@ import {
   prefetchHistory,
   type History,
 } from '../lib/history';
+import { localAnswerer } from '../lib/agent-local';
 import { PERIODS, WINDOW_MS } from '../lib/ranges';
+
+/** What the window moved by, in money and in percent: "+$432 (+0.51%)" */
+interface Change {
+  chg: number;
+  pct: number;
+  up: boolean;
+}
+
+const changeLabel = (change: Change): string =>
+  (change.up ? '+' : '−') +
+  fmtUsd(Math.abs(change.chg), 0) +
+  ' (' +
+  (change.up ? '+' : '') +
+  change.pct.toFixed(2) +
+  '%)';
 
 const FILTERS: Array<{ key: PositionFilter; label: string }> = [
   { key: 'all', label: 'ALL' },
@@ -223,10 +240,27 @@ export function PortfolioPage({ slug }: { slug: string }) {
 
   // Above the loading states, where the hooks all have to be: the strip only
   // needs which tab is open, which is state rather than anything fetched
-  const pager = usePager(
-    tab === 'notifications' ? 1 : 0,
-    (index) => setTab(index === 1 ? 'notifications' : 'portfolio'),
-    2,
+  const pager = usePager(tabIndex(tab), (index) => setTab(TABS[index].key), TABS.length);
+
+  /**
+   * What the agent is allowed to look at: the portfolio already on screen.
+   *
+   * Nothing is fetched for it and nothing is sent anywhere — the answering is a
+   * local stand-in until the service exists, and it reads the same numbers the
+   * page is drawing. Rebuilt when the data or the window changes, so an answer
+   * quotes what the reader can see rather than what was true when the tab
+   * opened.
+   */
+  const answer = useMemo(
+    () =>
+      localAnswerer({
+        wallets: data?.wallets ?? [],
+        totalUsd: data?.totalUsd ?? 0,
+        history: history?.data.total ?? EMPTY_HISTORY.total,
+        period: history?.period ?? period,
+        change: change ? { label: changeLabel(change), up: change.up } : null,
+      }),
+    [data, history, period, change],
   );
 
   const addWallet = async () => {
@@ -502,13 +536,7 @@ export function PortfolioPage({ slug }: { slug: string }) {
                     />
                     {change ? (
                       <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: change.up ? 'var(--up)' : 'var(--down)' }}>
-                        {(change.up ? '+' : '−') +
-                          fmtUsd(Math.abs(change.chg), 0) +
-                          ' (' +
-                          (change.up ? '+' : '') +
-                          change.pct.toFixed(2) +
-                          '%) · ' +
-                          drawn.toUpperCase()}
+                        {`${changeLabel(change)} · ${drawn.toUpperCase()}`}
                       </div>
                     ) : null}
                   </div>
@@ -647,6 +675,12 @@ export function PortfolioPage({ slug }: { slug: string }) {
             {isOwner ? (
               <div className="pane" data-active={activeTab === 'notifications'}>
                 <AlertSettings slug={slug} wallets={wallets} syncMinutes={syncMinutes} />
+              </div>
+            ) : null}
+
+            {isOwner ? (
+              <div className="pane" data-active={activeTab === 'agent'}>
+                <AgentChat answer={answer} />
               </div>
             ) : null}
           </div>

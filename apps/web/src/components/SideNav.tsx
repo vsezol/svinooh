@@ -1,8 +1,9 @@
 'use client';
 
 import type { CSSProperties, ReactNode } from 'react';
+import { AGENT_ENABLED } from '../lib/agent';
 
-export type Tab = 'portfolio' | 'notifications';
+export type Tab = 'portfolio' | 'notifications' | 'agent';
 
 const ICON = {
   strokeWidth: 2,
@@ -63,7 +64,8 @@ interface Props {
 }
 
 /**
- * The owner's two places, and the one that isn't ready.
+ * The owner's places — three of them once the agent is switched on, two until
+ * then. See AGENT_ENABLED.
  *
  * The rail beside the page on a desktop. A phone gets tabs across the top
  * instead — see MobileTabs — and the stylesheet is what picks between them, so
@@ -110,7 +112,12 @@ export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
           <BellIcon size={16} />
           {label('Notifications')}
         </div>
-        <div title="AI agent — soon" style={navItem(false, true, collapsed)}>
+        <div
+          {...(AGENT_ENABLED
+            ? { className: 'nav-item', onClick: () => onTab('agent'), title: 'AI agent' }
+            : { title: 'AI agent — soon' })}
+          style={navItem(AGENT_ENABLED && tab === 'agent', !AGENT_ENABLED, collapsed)}
+        >
           <SparkIcon size={16} />
           {label('AI agent')}
           {collapsed ? null : (
@@ -125,7 +132,7 @@ export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
                 padding: '2px 7px',
               }}
             >
-              SOON
+              {AGENT_ENABLED ? 'BETA' : 'SOON'}
             </span>
           )}
         </div>

@@ -699,7 +699,7 @@ body[data-theme='light'] .on-dark {
   border-bottom: 1px solid var(--line);
 }
 
-/* The strip the two pages ride, and the window that clips it.
+/* The strip the pages ride, and the window that clips it.
 
    `clip` rather than `hidden`: it cuts the page next door off at the edge
    without turning this into a scroll container, which would have taken the
@@ -711,14 +711,18 @@ body[data-theme='light'] .on-dark {
   touch-action: pan-y;
 }
 
+/* One track per page, and each page exactly one screen wide. Written as a
+   count rather than as 200%/50% so that adding a page is adding a page — see
+   TABS in MobileTabs. */
 .pager {
+  --panes: 3;
   display: flex;
   align-items: flex-start;
-  width: 200%;
+  width: calc(var(--panes) * 100%);
 }
 
 .pane {
-  width: 50%;
+  width: calc(100% / var(--panes));
   flex-shrink: 0;
   min-width: 0;
 }
@@ -730,10 +734,10 @@ body[data-theme='light'] .on-dark {
   .top-tabs {
     display: block;
   }
-  /* Side by side the strip is as tall as its taller page, which leaves the
-     shorter one ending in a screenful of nothing to scroll through. So the
-     page that isn't open folds away — but only once the strip has stopped, or
-     the page being swiped away would vanish from under the finger. */
+  /* Side by side the strip is as tall as its tallest page, which leaves the
+     shorter ones ending in a screenful of nothing to scroll through. So a page
+     that isn't open folds away — but only once the strip has stopped, or the
+     page being swiped away would vanish from under the finger. */
   .pager:not([data-moving='true']) .pane[data-active='false'] {
     height: 0;
     overflow: hidden;
@@ -773,3 +777,67 @@ body[data-theme='light'] .on-dark {
   border-color: var(--acc);
 }
 
+/* The agent tab fills the screen instead of scrolling with the page: the
+   composer belongs at the bottom edge, and a page that scrolls underneath a
+   conversation puts it somewhere different on every answer.
+
+   The margins pull back the padding the page put around every tab — this one
+   wants the whole strip under the header — and the padding here puts a
+   measured amount of it back. */
+.agent-chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 360px;
+  height: calc(100dvh - 59px - env(safe-area-inset-top));
+  margin: calc(-1 * clamp(20px, 4vw, 36px)) 0 -60px;
+  padding: 14px 0 22px;
+}
+
+/* The openers. They scroll sideways rather than wrapping, so the row is one
+   line whatever the width — and the scrollbar goes, because a bar under six
+   chips reads as a second thing to operate. */
+.agent-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scrollbar-width: none;
+}
+
+.agent-chips::-webkit-scrollbar {
+  display: none;
+  height: 0;
+}
+
+.agent-chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--mut);
+  background: var(--surf);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.agent-chip:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--mut);
+}
+
+.agent-chip:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+@media (max-width: 719px) {
+  .agent-chat {
+    /* the tabs across the top take their share of the screen too */
+    height: calc(100dvh - 59px - 47px - env(safe-area-inset-top));
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+}

@@ -243,19 +243,64 @@ const LENDING_PROTOCOLS =
 /** Kinds that mean "assets sitting in the protocol", as opposed to staking or farming */
 const DEPOSIT_KIND = /^(yield|deposit|supplied|lending)/i;
 
-function isLending(block: Block): boolean {
-  const kind = block.typeLabel ?? '';
-  if (IS_LENDING_KIND.test(kind)) return true;
+/**
+ * Is this a liquidity position, by the kind its protocol calls it.
+ *
+ * Exported because more than one part of the UI needs the answer and none of
+ * them should be deciding it for themselves — what counts as a pool is one
+ * fact, and a second copy of it is a second thing to be wrong.
+ */
+export function isPoolKind(kind: string | null | undefined): boolean {
+  return !!kind && IS_POOL_KIND.test(kind);
+}
+
+/**
+ * Is this a loan, from the pieces rather than from a `Block` — for callers that
+ * hold positions and not blocks. Same rule as `isLending` below, which is now
+ * this function with a block taken apart.
+ */
+export function isLendingLike(
+  kind: string | null | undefined,
+  protocol: string,
+  hasBorrowLeg: boolean,
+): boolean {
+  const label = kind ?? '';
+  if (IS_LENDING_KIND.test(label)) return true;
   // Borrowing against a position makes it a loan whatever the source calls it
-  if (block.rows.some((r) => r.role === 'borrow')) return true;
-  return LENDING_PROTOCOLS.test(block.proto) && DEPOSIT_KIND.test(kind);
+  if (hasBorrowLeg) return true;
+  return LENDING_PROTOCOLS.test(protocol) && DEPOSIT_KIND.test(label);
+}
+
+function isLending(block: Block): boolean {
+  return isLendingLike(
+    block.typeLabel,
+    block.proto,
+    block.rows.some((r) => r.role === 'borrow'),
+  );
+}
+
+/**
+ * A holding the market is currently pricing as a dollar.
+ *
+ * Read off the price the scanner already found, rather than matched against a
+ * list of tickers. A list is a second definition of what a stablecoin is: it
+ * has to be edited every time one launches, it is wrong about every chain's
+ * wrapped variant, and it is never right for long. The price is a fact we were
+ * already given, and for a question about exposure "priced at a dollar" is the
+ * claim actually being made.
+ *
+ * The band is wide enough for ordinary spread and narrow enough that nothing
+ * volatile drifts into it.
+ */
+export function isStablePrice(priceUsd: number | null | undefined): boolean {
+  return priceUsd != null && Math.abs(priceUsd - 1) <= 0.01;
 }
 
 export function blockMatches(block: Block, filter: PositionFilter): boolean {
   if (filter === 'all') return true;
   // The "Wallet" block is plain holdings — it is neither a pool nor a loan
   if (!block.typeLabel) return false;
-  return filter === 'pools' ? IS_POOL_KIND.test(block.typeLabel) : isLending(block);
+  return filter === 'pools' ? isPoolKind(block.typeLabel) : isLending(block);
 }
 
 /** Total value of everything the filter is currently showing */
