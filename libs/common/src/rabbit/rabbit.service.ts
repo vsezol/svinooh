@@ -86,16 +86,26 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
     await this.connect();
   }
 
-  async publish(queue: string, message: unknown): Promise<void> {
+  /**
+   * Hands a message to the broker, and says whether it got there.
+   *
+   * It still never throws — a failed publish is not worth unwinding a caller's
+   * enqueue loop, and the next top-up re-enqueues whatever is still due with
+   * fresh state. But it has to be answerable: a caller that took something out
+   * on the strength of this publish (a scan claim, say) needs to put it back
+   * rather than leave an address marked as being worked on by a job that was
+   * never sent. A disconnected client is `false`, not a silent success.
+   */
+  async publish(queue: string, message: unknown): Promise<boolean> {
     const channel = this.channel;
-    if (!channel) return;
+    if (!channel) return false;
     try {
       await channel.assertQueue(queue, { durable: true });
       channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)), { persistent: true });
+      return true;
     } catch (e) {
-      // A failed publish is not worth throwing into the caller's enqueue loop:
-      // the next top-up re-enqueues whatever is still due, with fresh state.
       this.logger.warn(`Publish to ${queue} failed: ${e instanceof Error ? e.message : e}`);
+      return false;
     }
   }
 

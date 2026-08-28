@@ -35,6 +35,20 @@ export const config = {
   scanPrefetch: int(process.env.SCAN_PREFETCH, 1),
   // How often to check that the queue has drained and re-enqueue wallets.
   scanReloadSec: int(process.env.SCAN_RELOAD_SEC, 15),
+  // How long a scan claim (Wallet.scanQueuedAt) is believed before the address
+  // counts as free again.
+  // It has to outlast the slowest scan that can still come back: an EVM one runs
+  // to EVM_TIMEOUT_MS (150s) and runs TWICE when it re-reads a suspicious drop,
+  // plus the pause after it. Under that and we would re-enqueue an address that
+  // is still being scanned, which is the whole thing the lease exists to stop.
+  // Over it only costs a genuinely lost job a longer wait.
+  scanClaimTtlMin: int(process.env.SCAN_CLAIM_TTL_MIN, 10),
+  // When a wallet that has never been scanned stops being "on its way" and
+  // starts being broken: no claim is outstanding for its address and it has been
+  // pending this long. Deliberately well past one claim TTL — a wallet waiting
+  // its turn in a long queue is not a failed one, and saying so would be worse
+  // than the spinner it replaces.
+  scanStuckPendingMin: int(process.env.SCAN_STUCK_PENDING_MIN, 15),
   httpTimeoutMs: int(process.env.HTTP_TIMEOUT_MS, 15_000),
   // Concurrency of the BTC/SOL/TRON HTTP scanners.
   httpConcurrency: int(process.env.SCAN_HTTP_CONCURRENCY, 4),

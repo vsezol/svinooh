@@ -28,7 +28,7 @@ import type {
 import { randomSlug, round2 } from '../common/util';
 import { config } from '../config';
 import { PrismaService } from '@svinooh/db';
-import { detectChain } from '../scanners/detect';
+import { detectChain, normalizeAddress } from '../scanners/detect';
 import { CacheService } from '../cache/cache.service';
 
 type WalletWithPositions = Wallet & { positions: Position[] };
@@ -257,6 +257,27 @@ function cacheKey(slug: string): string {
   return `pf:${slug}`;
 }
 
+/**
+ * How long this view may be served before it is rebuilt — the cache's TTL is the
+ * page's polling period, in both of the periods the page has.
+ *
+ * Nothing invalidates this cache when a scan lands: the wallet service writes to
+ * Postgres and has never heard of Redis, so a background update is only ever
+ * picked up by the entry expiring. That makes the TTL the delay on every number
+ * on the page, and a wallet waiting for its FIRST scan is where that delay is
+ * felt: the page polls it every 3 seconds (PortfolioPage), and a scan that
+ * finished in ten seconds then sat behind a 60-second entry — the poll asking
+ * over and over for a result the cache already had and would not hand over.
+ *
+ * The steady state is the other period, 60 seconds, which is what the page falls
+ * back to once nothing is pending, and there is no point refreshing faster than
+ * anybody asks.
+ */
+function cacheTtlFor(view: CachedView): number {
+  const pending = view.dto.wallets.some((w) => w.status === 'pending');
+  return pending ? config.cachePendingTtlSec : config.cacheTtlSec;
+}
+
 function unsupportedNetwork(): BadRequestException {
   return new BadRequestException({
     statusCode: 400,
@@ -342,10 +363,7 @@ export class PortfolioService {
     const raw = String(addressRaw || '').trim();
     const chain = detectChain(raw);
     if (!chain) throw unsupportedNetwork();
-    // EVM addresses are case-insensitive, so the same wallet typed with and
-    // without checksum casing must not spawn two portfolios. Base58 chains are
-    // left alone — there case is part of the address.
-    const address = chain === 'EVM' ? raw.toLowerCase() : raw;
+    const address = normalizeAddress(chain, raw);
 
     // An existing anonymous portfolio for exactly this one wallet, nothing else
     const existing = await this.prisma.portfolio.findFirst({
@@ -372,18 +390,21 @@ export class PortfolioService {
    * Public view: a portfolio is visible via its link without signing in. Served
    * from cache (Redis) — the owner-independent part is cached, and the isOwner
    * flag is applied on read. The cache is invalidated on owner edits; background
-   * updates are picked up via TTL (config.cacheTtlSec).
+   * updates are picked up via TTL (see cacheTtlFor).
    */
   async getBySlug(slug: string, userId: string | null): Promise<PortfolioDto> {
     const key = cacheKey(slug);
     let view = await this.cache.get<CachedView>(key);
     if (!view) {
       view = await this.buildView(slug);
-      await this.cache.set(key, view, config.cacheTtlSec);
+      await this.cache.set(key, view, cacheTtlFor(view));
       // Record the visit so the wallet service knows this portfolio is being
-      // looked at and keeps it fresh. Only on a cache MISS, which the 60s TTL
-      // already throttles to at most one write a minute per portfolio — and
-      // never in the way of the response.
+      // looked at and keeps it fresh. Only on a cache MISS, which the TTL
+      // throttles to one write per portfolio per TTL — and never in the way of
+      // the response. While a wallet is pending that is a write every 3s rather
+      // than every 60s, which is a single indexed UPDATE against a window that
+      // ends with the first scan (and that the stuck-pending sweep in the wallet
+      // service bounds even when no scan ever comes back).
       this.touchViewed(slug);
     }
     const isOwner = userId !== null && view.ownerUserId === userId;
@@ -590,11 +611,14 @@ export class PortfolioService {
    */
   async addWallet(slug: string, userId: string | null, addressRaw: string): Promise<WalletDto> {
     const portfolio = await this.requireWritable(slug, userId);
-    const address = String(addressRaw || '').trim();
-    if (!address) throw new BadRequestException('Empty address');
+    const raw = String(addressRaw || '').trim();
+    if (!raw) throw new BadRequestException('Empty address');
 
-    const chain = detectChain(address);
+    const chain = detectChain(raw);
     if (!chain) throw unsupportedNetwork();
+    // Same spelling as the landing stores, or the same wallet enters this
+    // portfolio twice and is counted twice in its total — see normalizeAddress
+    const address = normalizeAddress(chain, raw);
 
     // A portfolio nobody owns is also a portfolio nobody is responsible for, so
     // it doesn't get to grow without limit — every wallet is rescanned forever.

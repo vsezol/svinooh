@@ -118,6 +118,23 @@ model Wallet {
   // serve the stale value with an explicit stale flag instead of losing it
   lastTotalUsd Float?
   lastSyncedAt DateTime?
+  /// Set when this address was handed to a scan queue, cleared when a result
+  /// comes back. It is the answer to "is a scan already on its way?", which the
+  /// queue itself cannot give: RabbitMQ's messageCount reports READY messages,
+  /// so an address a scanner has already prefetched looks exactly like one
+  /// nobody is working on — while lastSyncedAt is still null, so the address
+  /// also still reads as due. Between those two blind spots a new wallet was
+  /// re-enqueued on every producer tick for the whole length of its scan.
+  ///
+  /// Like lastSyncedAt and lastTotalUsd, this is a fact about the ADDRESS kept
+  /// on each portfolio's row of it: a scan claims and clears every row for that
+  /// (chain, address) at once.
+  ///
+  /// A claim older than SCAN_CLAIM_TTL_MIN is stale and may be taken again — a
+  /// scanner can die, and a held scan (DeBank throttling) acks its message
+  /// without publishing anything, so a claim only a result could clear would
+  /// wedge that address forever.
+  scanQueuedAt DateTime?
   lastError    String?
   breakdown    Json?
   unpriced     Json?
