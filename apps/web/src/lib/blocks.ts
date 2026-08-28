@@ -35,6 +35,19 @@ function amountLine(amount?: number | null, priceUsd?: number | null): string {
 const join = (...parts: Array<string | null | undefined>): string =>
   parts.filter(Boolean).join(' · ');
 
+/**
+ * What a leg is worth reading first: what the position holds, then what it
+ * owes, then what it has accrued.
+ *
+ * Size alone got this wrong in both directions. A $53M borrow sorted above the
+ * $45M supplied against it and read as the position's headline, when it is the
+ * other side of that holding; and a few dollars of unclaimed rewards could land
+ * in the middle of the legs they came from. Within a role, size still decides.
+ */
+const ROLE_ORDER: Record<PositionTokenRole, number> = { supply: 0, borrow: 1, reward: 2 };
+
+const roleRank = (role: PositionTokenRole | null): number => (role ? ROLE_ORDER[role] : 0);
+
 /** Legs of the same token in the same role are one line, not several */
 function mergeRows(rows: BlockRow[]): BlockRow[] {
   const merged = new Map<string, BlockRow & { amount: number | null; priceUsd: number | null }>();
@@ -52,7 +65,7 @@ function mergeRows(rows: BlockRow[]): BlockRow[] {
   }
   return [...merged.values()]
     .map(({ amount: _a, priceUsd: _p, ...row }) => row)
-    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+    .sort((a, b) => roleRank(a.role) - roleRank(b.role) || Math.abs(b.value) - Math.abs(a.value));
 }
 
 /**
