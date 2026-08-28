@@ -125,12 +125,19 @@ function toHealthFactor(headroom: number | undefined): number | null {
 const shortMint = (mint: string): string => `${mint.slice(0, 4)}…${mint.slice(-4)}`;
 
 /**
- * What the debt on a lending position costs, weighted by how much of it is
+ * What the debt on a lending position actually costs, weighted by how much is
  * borrowed in each asset. `borrowedYields` runs parallel to `borrowedAssets`,
- * and the first entry of each is the borrow rate itself — negative, because to
- * the borrower it is a cost. We return it positive: "you pay this much".
- * Later entries are incentives paid back to the borrower, so they are ignored
- * here; netApy on the element already accounts for them.
+ * and each entry is a *list* of rates for that asset: the first is the borrow
+ * rate itself (negative — a cost to the borrower), and the rest are borrow
+ * incentives paid back to the borrower (positive) for that same asset.
+ *
+ * The cost is the NET of the two, which is what the protocol shows and what the
+ * borrower pays. Reading only the first entry reports the gross rate: on a real
+ * Kamino USDG loan that is 7.0% against a net of 4.4% (gross 7.04% minus three
+ * incentives of 0.80/1.13/0.67%), and that 2.6pp overstatement fired a
+ * "borrow APY above 7%" alert on a loan that costs 4.4%. A leg whose incentives
+ * cover its cost contributes nothing — there is nothing to pay and nothing to
+ * warn about.
  */
 function borrowApyOf(element: JupElement): number | null {
   const borrowed = element.data?.borrowedAssets || [];
@@ -139,9 +146,12 @@ function borrowApyOf(element: JupElement): number | null {
   let total = 0;
   for (let i = 0; i < borrowed.length; i++) {
     const usd = Math.abs(borrowed[i]?.value ?? 0);
-    const apy = yields[i]?.[0]?.apy;
-    if (!usd || typeof apy !== 'number') continue;
-    weighted += Math.abs(apy) * usd;
+    const legYields = yields[i];
+    if (!usd || !Array.isArray(legYields) || !legYields.length) continue;
+    const net = legYields.reduce((sum, y) => sum + (typeof y?.apy === 'number' ? y.apy : 0), 0);
+    // net < 0 is a cost (returned positive); net >= 0 means the incentives cover
+    // it, so this asset costs nothing
+    weighted += (net < 0 ? -net : 0) * usd;
     total += usd;
   }
   return total > 0 ? weighted / total : null;
