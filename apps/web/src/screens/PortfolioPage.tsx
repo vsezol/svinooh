@@ -32,12 +32,13 @@ import {
 import { fmtUsd, portfolioLabel, walletName } from '../lib/format';
 import {
   cachedHistory,
+  changeOver,
   EMPTY_HISTORY,
   loadHistory,
   prefetchHistory,
   type History,
 } from '../lib/history';
-import { PERIODS, WINDOW_MS } from '../lib/ranges';
+import { PERIODS } from '../lib/ranges';
 
 const FILTERS: Array<{ key: PositionFilter; label: string }> = [
   { key: 'all', label: 'ALL' },
@@ -203,23 +204,10 @@ export function PortfolioPage({ slug }: { slug: string }) {
   const blocksByWallet = useMemo(() => wallets.map((w) => buildBlocks(w.positions)), [wallets]);
   const shownTotal = useMemo(() => filteredTotal(blocksByWallet, filter), [blocksByWallet, filter]);
 
-  // The series reaches back several windows so the chart has somewhere to
-  // scroll to, but this line answers the button: it starts at the first reading
-  // inside the chosen window, not at the oldest one that came with it. Scrolling
-  // the chart does not move it — "+0.42% · 24H" means the last 24 hours wherever
-  // you have wandered off to.
-  const change = useMemo(() => {
-    if (!history || history.data.total.values.length < 2) return null;
-    const { values, times } = history.data.total;
-    const window = WINDOW_MS[history.period];
-    const opens = window === null ? -Infinity : times[times.length - 1] - window;
-    const at = times.findIndex((t) => t >= opens);
-    const first = values[at < 0 || at > values.length - 2 ? 0 : at];
-    const last = values[values.length - 1];
-    const chg = last - first;
-    const pct = first ? (chg / first) * 100 : 0;
-    return { chg, pct, up: chg >= 0 };
-  }, [history]);
+  const change = useMemo(
+    () => (history ? changeOver(history.data.total, history.period) : null),
+    [history],
+  );
 
   // Above the loading states, where the hooks all have to be: the strip only
   // needs which tab is open, which is state rather than anything fetched
