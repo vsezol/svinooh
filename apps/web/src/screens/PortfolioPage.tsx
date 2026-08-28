@@ -13,6 +13,7 @@ import { MetricCards } from '../components/MetricCards';
 import { GoPublicModal, VisibilityCard } from '../components/PortfolioVisibility';
 import { ScopeSelect } from '../components/ScopeSelect';
 import { ShareButton } from '../components/ShareButton';
+import { MobileTabs, usePager } from '../components/MobileTabs';
 import { SideNav, type Tab } from '../components/SideNav';
 import { SyncedAgo } from '../components/SyncedAgo';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -169,6 +170,14 @@ export function PortfolioPage({ slug }: { slug: string }) {
     const pct = first ? (chg / first) * 100 : 0;
     return { chg, pct, up: chg >= 0 };
   }, [history, period]);
+
+  // Above the loading states, where the hooks all have to be: the strip only
+  // needs which tab is open, which is state rather than anything fetched
+  const pager = usePager(
+    tab === 'notifications' ? 1 : 0,
+    (index) => setTab(index === 1 ? 'notifications' : 'portfolio'),
+    2,
+  );
 
   const addWallet = async () => {
     const address = input.trim();
@@ -405,11 +414,13 @@ export function PortfolioPage({ slug }: { slug: string }) {
         </div>
       </div>
 
+      {isOwner ? <MobileTabs tab={tab} onTab={setTab} /> : null}
+
       <div
-        className={isOwner ? 'shell dock-room' : 'shell'}
+        className="shell"
         style={{
           paddingTop: 'clamp(20px,4vw,36px)',
-          paddingBottom: isOwner ? undefined : 60,
+          paddingBottom: 60,
           display: 'flex',
           gap: 'clamp(18px,3vw,30px)',
           alignItems: 'flex-start',
@@ -419,11 +430,12 @@ export function PortfolioPage({ slug }: { slug: string }) {
           <SideNav tab={tab} onTab={setTab} collapsed={sideCollapsed} onCollapse={setSideCollapsed} />
         ) : null}
 
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {activeTab === 'notifications' ? (
-            <AlertSettings slug={slug} wallets={wallets} syncMinutes={syncMinutes} />
-          ) : (
-            <>
+        {/* On a phone both pages ride one strip the finger drags between them;
+            above the breakpoint the strip flattens and only the open one is
+            rendered — see .pager */}
+        <div className="pager-window" style={{ flex: 1, minWidth: 0 }} {...pager.handlers}>
+          <div className="pager" style={pager.style} data-moving={pager.moving}>
+            <div className="pane" data-active={activeTab === 'portfolio'}>
             {/* total */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -580,8 +592,14 @@ export function PortfolioPage({ slug }: { slug: string }) {
                 ))}
               </div>
             )}
-            </>
-          )}
+            </div>
+
+            {isOwner ? (
+              <div className="pane" data-active={activeTab === 'notifications'}>
+                <AlertSettings slug={slug} wallets={wallets} syncMinutes={syncMinutes} />
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 
