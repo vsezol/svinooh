@@ -70,7 +70,7 @@ export class ScanConsumerService implements OnApplicationBootstrap {
     }
   }
 
-  private publish(outcome: ScanOutcome): Promise<void> {
+  private publish(outcome: ScanOutcome): Promise<boolean> {
     return this.rabbit.publish(SCAN_RESULT_QUEUE, outcome);
   }
 }

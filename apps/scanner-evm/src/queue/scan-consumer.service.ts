@@ -91,7 +91,7 @@ export class ScanConsumerService implements OnApplicationBootstrap {
     await sleep(config.scanJobDelayMs); // hold the slot through the pause — that is the pacing
   }
 
-  private publish(outcome: ScanOutcome): Promise<void> {
+  private publish(outcome: ScanOutcome): Promise<boolean> {
     return this.rabbit.publish(SCAN_RESULT_QUEUE, outcome);
   }
 }
