@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import { ALERTS_QUEUE, RabbitService } from '@svinooh/common';
 import type { AlertEvent } from '@svinooh/shared';
 import { config } from './config';
-import { formatAlert } from './format';
+import { esc, formatAlert } from './format';
 import { getUpdates, send, type TgUpdate } from './telegram';
 
 /**
@@ -116,9 +116,12 @@ async function answer(update: TgUpdate, log: Log): Promise<void> {
     });
     if (!res.ok) throw new Error(`auth ${res.status}`);
     const { url } = (await res.json()) as { url: string };
+    // Messages go out as HTML, so the link is escaped on the way into the text
+    // even though today's tokens carry nothing that needs it — a query string
+    // grows an `&` the first time somebody adds a second parameter
     await send(
       message.chat.id,
-      `✅ Signed in.\n\n${url}\n\nThat link opens your portfolio and signs you in — on this phone, on your laptop, in any browser. Good for an hour; send /start for a new one.`,
+      `✅ Signed in.\n\n${esc(url)}\n\nThat link opens your portfolio and signs you in — on this phone, on your laptop, in any browser. Good for an hour; send /start for a new one.`,
       { inline_keyboard: [[{ text: 'Open my portfolio →', url }]] },
     );
   } catch (error) {

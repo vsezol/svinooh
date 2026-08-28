@@ -45,6 +45,10 @@ function only<T>(candidates: T[]): T | null {
  *  - `healthRate` and `borrowApy`, which are simply absent for most sources.
  *    An aggregator that did report them is left alone.
  *
+ * It also attaches `band` and `loan`, which change nothing about the position
+ * and are there to be read: they are what lets an alert say how far out of
+ * range a position went and which way, instead of only that it went.
+ *
  * A position is matched to a fact by its pair, or by the asset it borrowed —
  * neither is an identity. So a match is only used when exactly one fact can be
  * about this position: a wallet with two positions in the same pool gets the
@@ -62,7 +66,18 @@ export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPositio
       const pool = only(facts.pools.filter((p) => p.pair === pair));
       // A full-range position has no band to be outside of, and saying "in
       // range" of a pool that spans every price is a badge that means nothing
-      if (pool && !pool.isFullRange) patch.range = pool.inRange ? 'in' : 'out';
+      if (pool && !pool.isFullRange) {
+        patch.range = pool.inRange ? 'in' : 'out';
+        patch.band = {
+          pair: pool.pairLabel,
+          feePct: pool.feePct,
+          chainLabel: pool.chainLabel,
+          lower: pool.lowerPrice,
+          upper: pool.upperPrice,
+          current: pool.currentPrice,
+          priceLabel: pool.priceLabel,
+        };
+      }
     }
 
     const borrowed = (position.tokens ?? []).filter((t) => t.role === 'borrow');
@@ -72,6 +87,11 @@ export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPositio
       );
       const loan = only(loans);
       if (loan) {
+        // Named whatever the aggregator already knew about health and rate: the
+        // market and the asset are the same market and asset either way, and a
+        // message that can say "USDC · Main Market" should not go without
+        // because DeBank happened to report the health factor first
+        patch.loan = { market: loan.market, token: loan.token };
         if (position.healthRate == null) patch.healthRate = loan.healthFactor;
         // The protocols quote a percentage; a position stores the fraction
         if (position.borrowApy == null && loan.borrowRate !== null) {

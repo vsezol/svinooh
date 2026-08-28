@@ -248,6 +248,10 @@ export interface ScanPosition {
   borrowApy?: number | null;
   /** Concentrated liquidity only: is the price still inside the position's band */
   range?: PositionRange | null;
+  /** The band itself, when the protocol answered for it — see PositionBand */
+  band?: PositionBand | null;
+  /** Which loan this is, when a lending market answered for it */
+  loan?: PositionLoan | null;
   tokens?: ScanPositionToken[] | null;
 }
 
@@ -299,6 +303,37 @@ export interface UpdateWalletAlertsDto {
 }
 
 /**
+ * A concentrated position's band, as the protocol that owns it describes it.
+ *
+ * Nothing here changes what a position is worth or whether it is in range — it
+ * is what a message needs in order to be worth reading. "Out of range" tells
+ * somebody to go and look; "out of range at 2522.70, band 2248.50 — 2519.99"
+ * tells them how far out and which way, which is most of what they were going
+ * to look for.
+ */
+export interface PositionBand {
+  /** The pair as the protocol writes it, in its own order: "cbBTC/USDC" */
+  pair: string;
+  /** Fee tier in percent — 0.04 is 0.04%. null when the protocol did not say */
+  feePct: number | null;
+  /** The network the pool is on: "Solana", "Base" */
+  chainLabel: string;
+  lower: number;
+  upper: number;
+  current: number;
+  /** Which way round the three prices read: "USDC per cbBTC" */
+  priceLabel: string;
+}
+
+/** Which loan a lending alert is about, when the market answered for it */
+export interface PositionLoan {
+  /** The market's own name: "Main Market", "Aave V3 Base" */
+  market: string;
+  /** Upper-cased symbol of the borrowed asset */
+  token: string;
+}
+
+/**
  * What a protocol's own API knows about a position that an aggregator does not.
  *
  * A fact never becomes a position. Jupiter and DeBank decide what a wallet holds
@@ -312,6 +347,12 @@ export interface PoolFact {
   platform: 'orca' | 'meteora' | 'uniswap';
   /** The pair, upper-cased and ordered, e.g. "CBBTC|USDC" — how a fact finds its position */
   pair: string;
+  /** The same pair as it is written and ordered by the protocol: "cbBTC/USDC" */
+  pairLabel: string;
+  /** Fee tier in percent — 0.04 is 0.04%. null when the protocol did not say */
+  feePct: number | null;
+  /** The network the pool is on: "Solana", "Base" */
+  chainLabel: string;
   inRange: boolean;
   lowerPrice: number;
   upperPrice: number;
@@ -362,13 +403,19 @@ export interface DefiFacts {
  */
 export interface WalletPositionState {
   key: string;
-  /** What a message about this position should call it: "cbBTC/USDC", "Venus · Lending" */
+  /** The protocol, which is what a message groups by: "Meteora", "Aave" */
+  platform: string;
+  /** What this position is within that protocol: "cbBTC/USDC", "Lending" */
   label: string;
   /** null — not a position with a band, or nobody could say */
   inRange: boolean | null;
   healthFactor: number | null;
   /** Percent, as the thresholds are written: 6.2 is 6.2% */
   borrowApyPct: number | null;
+  /** Where the band is and where the price stands in it, or null */
+  band: PositionBand | null;
+  /** Which loan this is, or null */
+  loan: PositionLoan | null;
 }
 
 /**
@@ -409,12 +456,18 @@ export type AlertKind = 'range' | 'health' | 'borrow';
 export interface AlertItem {
   kind: AlertKind;
   direction: 'entered' | 'recovered';
-  /** What to call the position: "cbBTC/USDC", "Venus · Lending" */
+  /** The protocol the message groups this under: "Meteora", "Aave" */
+  platform: string;
+  /** What to call the position within it: "cbBTC/USDC", "Lending" */
   position: string;
   /** What the reading was: the health factor, or the rate in percent */
   value: number | null;
   /** The threshold it crossed, in the same units. null for a range, which has no number */
   threshold: number | null;
+  /** The band and where the price stands in it — a range alert with nothing to add says null */
+  band: PositionBand | null;
+  /** Which loan a health or borrow alert is about, when the market said */
+  loan: PositionLoan | null;
 }
 
 /**
