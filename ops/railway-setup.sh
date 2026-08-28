@@ -181,6 +181,22 @@ setvars bot-telegram \
   "WEB_URL=${PUBLIC_WEB_ORIGIN}" \
   "RABBITMQ_URL=${RABBIT_URL}"
 
+# admin — the operator's panel (Python/FastAPI). Reads and writes the Setting
+# table and nothing else; Prisma still owns the schema.
+#
+# It is NOT public. Give it a Railway domain only if you need it from outside,
+# and give it a real password when you do: it can change how hard the whole
+# system pushes and it sits on a database where a balance and the person holding
+# it are one join apart. ADMIN_PASSWORD_HASH comes from
+# `cd apps/admin && python -m app.hash` — set it by hand, it is not generated
+# here on purpose. config apps/admin/railway.json
+add_repo admin
+setvars admin \
+  "PORT=3000" \
+  "DATABASE_URL=${PG_URL}" \
+  "ADMIN_USER=admin" \
+  "ADMIN_SESSION_SECRET=$(openssl rand -hex 32)"
+
 # web — Next.js. PUBLIC (svinooh.com). Dockerfile apps/web/Dockerfile ; port 4173
 # NEXT_PUBLIC_API_URL is inlined into the browser bundle at BUILD time — a
 # change needs a rebuild, not just a restart.
@@ -203,6 +219,7 @@ The Railway CLI does not set these reliably; do them once in the dashboard
      scanner-evm  → apps/scanner-evm/railway.json
      monitor-alerts → apps/monitor-alerts/railway.json
      bot-telegram → apps/bot-telegram/railway.json
+     admin → apps/admin/railway.json
      web          → apps/web/railway.json          (or Dockerfile path apps/web/Dockerfile)
      prometheus   → ops/prometheus/railway.json
      grafana      → ops/grafana/railway.json

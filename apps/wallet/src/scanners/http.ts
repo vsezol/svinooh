@@ -1,5 +1,5 @@
 import { config } from '../config';
-import { sleep } from '@svinooh/common';
+import { sleep, setting } from '@svinooh/common';
 
 export class HttpError extends Error {
   constructor(
@@ -23,7 +23,7 @@ export async function fetchJson<T = unknown>(
   opts: { tries?: number; timeoutMs?: number } = {},
 ): Promise<T> {
   const tries = opts.tries ?? 3;
-  const timeoutMs = opts.timeoutMs ?? config.httpTimeoutMs;
+  const timeoutMs = opts.timeoutMs ?? setting('scan.httpTimeoutMs');
   let lastError: unknown;
 
   for (let attempt = 0; attempt < tries; attempt++) {

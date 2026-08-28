@@ -21,6 +21,7 @@ import { PrismaService } from '@svinooh/db';
 import { verifyTelegramLogin } from './telegram';
 import { TelegramLoginService } from './telegram-login.service';
 import { UserService } from './user.service';
+import { setting } from '@svinooh/common';
 
 /** How many times one sign-in link may be opened — see UserService.issueLoginLink */
 const LINK_MAX_USES = 20;
@@ -41,7 +42,7 @@ export class AuthService {
       // Telegram.Login.auth with a custom button
       botId: config.botToken ? config.botToken.split(':')[0] : null,
       devMode: config.devMode,
-      syncIntervalMin: config.syncIntervalMin,
+      syncIntervalMin: setting('sync.intervalMin'),
     };
   }
 
