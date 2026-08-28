@@ -25,7 +25,7 @@ interface OrcaResponse {
       position?: { liquidity?: string; tickLowerIndex: number; tickUpperIndex: number };
       meta: { lowerPrice: number; upperPrice: number; currentPrice: number; feeRate: number; isFullRange?: boolean };
     }>;
-    whirlpools?: Record<string, { tickCurrentIndex?: number } | undefined>;
+    whirlpools?: Record<string, { tickCurrentIndex?: number; feeRate?: number } | undefined>;
     tokens?: Array<{ address: string; metadata?: { symbol?: string } }>;
   };
 }
@@ -83,7 +83,8 @@ export async function orcaPools(address: string): Promise<PoolFact[]> {
   return positions
     .filter((p) => p.position?.liquidity && p.position.liquidity !== '0')
     .map((p) => {
-      const tick = whirlpools[p.whirlpoolAddress]?.tickCurrentIndex;
+      const pool = whirlpools[p.whirlpoolAddress];
+      const tick = pool?.tickCurrentIndex;
       const inRange =
         typeof tick === 'number' && p.position
           ? tick >= p.position.tickLowerIndex && tick < p.position.tickUpperIndex
@@ -92,6 +93,11 @@ export async function orcaPools(address: string): Promise<PoolFact[]> {
         id: `orca:${p.address}`,
         platform: 'orca' as const,
         pair: pairKey(sym(p.tokenA), sym(p.tokenB)),
+        pairLabel: `${sym(p.tokenA)}/${sym(p.tokenB)}`,
+        // The whirlpool's own field, in hundredths of a basis point the way the
+        // program stores it: 400 is the 0.04% tier
+        feePct: typeof pool?.feeRate === 'number' ? pool.feeRate / 10_000 : null,
+        chainLabel: 'Solana',
         inRange: p.meta.isFullRange ? true : inRange,
         lowerPrice: p.meta.lowerPrice,
         upperPrice: p.meta.upperPrice,

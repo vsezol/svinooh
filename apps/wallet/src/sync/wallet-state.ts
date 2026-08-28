@@ -23,11 +23,23 @@ export function positionKey(position: ScanPosition): string {
     .join(':');
 }
 
-/** What a message about this position should call it */
+/**
+ * What this position is *within* its protocol — the protocol itself is carried
+ * separately, because a message groups by it and would otherwise repeat it on
+ * every line.
+ *
+ * Best answer first. A protocol that answered for the position named the pair
+ * and the market itself, and that naming is the one that matches what somebody
+ * sees in the protocol's own app. Failing that, a pool of two supplied assets
+ * is still a pair and can be written as one. Failing that, the kind of position
+ * is all anybody said it was.
+ */
 function label(position: ScanPosition): string {
-  return position.name && position.name !== position.symbol
-    ? `${position.symbol} · ${position.name}`
-    : position.symbol;
+  if (position.band) return position.band.pair;
+  if (position.loan) return `${position.loan.token} · ${position.loan.market}`;
+  const supplied = (position.tokens ?? []).filter((t) => t.role === 'supply');
+  if (supplied.length === 2) return `${supplied[0].symbol}/${supplied[1].symbol}`;
+  return position.name || position.symbol;
 }
 
 /**
@@ -46,7 +58,16 @@ export function alertableStates(positions: ScanPosition[]): WalletPositionState[
     // Positions carry the rate as a fraction; thresholds are written in percent
     const borrowApyPct = position.borrowApy == null ? null : position.borrowApy * 100;
     if (inRange === null && healthFactor === null && borrowApyPct === null) continue;
-    states.push({ key: positionKey(position), label: label(position), inRange, healthFactor, borrowApyPct });
+    states.push({
+      key: positionKey(position),
+      platform: position.symbol,
+      label: label(position),
+      inRange,
+      healthFactor,
+      borrowApyPct,
+      band: position.band ?? null,
+      loan: position.loan ?? null,
+    });
   }
   return states;
 }
