@@ -1,11 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { CHIPS, statusFor, STATUS_SWITCH_MS, type AgentBlock, type ChatMessage } from '../../lib/agent';
+import { CHIPS, THINKING, type AgentBlock, type Answerer, type ChatMessage } from '../../lib/agent';
 import { AgentBlockView } from './AgentWidgets';
-
-/** What answers a question. Local today, a request to the agent service later. */
-export type Answerer = (question: string) => Promise<AgentBlock[]>;
 
 let counter = 0;
 const nextId = (): string => `m${++counter}`;
@@ -14,8 +11,8 @@ const nextId = (): string => `m${++counter}`;
  * The agent tab.
  *
  * A conversation about a portfolio, and nothing else: no history, no threads,
- * no settings. What it knows how to do is ask a question, say what it is doing
- * while it works, and render an answer made of the widgets next door.
+ * no settings. What it knows how to do is ask a question, show that it is
+ * working, and render an answer made of the widgets next door.
  *
  * `answer` is the whole seam. Everything above it — the composer, the openers,
  * the status line, the scroll — is finished and does not change when the
@@ -51,14 +48,16 @@ export function AgentChat({ answer }: { answer: Answerer }) {
     setMessages((m) => [...m, { id, role: 'you', text: question }]);
     setDraft('');
 
-    // The status has to be up on the keystroke that sent the question, so it is
-    // chosen from the question here rather than waited for from the answerer
-    const [first, second] = statusFor(question);
-    setStatus(first);
-    const later = setTimeout(() => setStatus(second), STATUS_SWITCH_MS);
+    // Up on the keystroke that sent the question, so the wait is never silent.
+    // What it SAYS stays neutral until the answerer tells us otherwise — only
+    // the thing doing the work can honestly describe it.
+    setStatus(THINKING);
 
     try {
-      const blocks = await answer(question);
+      const blocks = await answer(question, (text) => {
+        // A status from an abandoned question must not overwrite the live one
+        if (asking.current === id) setStatus(text);
+      });
       if (asking.current !== id) return;
       setMessages((m) => [...m, { id: nextId(), role: 'agent', blocks }]);
     } catch {
@@ -68,7 +67,6 @@ export function AgentChat({ answer }: { answer: Answerer }) {
         { id: nextId(), role: 'agent', blocks: [{ kind: 'text', text: 'That one did not go through. Ask again in a moment.' }] },
       ]);
     } finally {
-      clearTimeout(later);
       if (asking.current === id) {
         asking.current = null;
         setStatus(null);

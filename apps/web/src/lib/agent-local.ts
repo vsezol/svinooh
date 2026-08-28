@@ -1,6 +1,6 @@
 import type { HistoryRange, WalletDto } from '@svinooh/shared';
 import type { AgentBlock, BarItem, TableCell } from './agent';
-import { debtTotals, rewardsTotals } from './blocks';
+import { debtTotals, isPoolKind, isStablePrice, rewardsTotals } from './blocks';
 import { fmtUsd0 } from './format';
 import { EMPTY_SERIES, type Series } from './history';
 
@@ -26,9 +26,6 @@ export interface PortfolioContext {
   change: { label: string; up: boolean } | null;
 }
 
-const STABLE = /^(USDC|USDT|DAI|USDE|FDUSD|TUSD|USDS|PYUSD|LUSD|GHO|CRVUSD|SUSD|USDD)$/i;
-const POOL_KIND = /pool|liquidity|\blp\b/i;
-const LENDING_KIND = /lend|borrow/i;
 
 interface Position {
   wallet: string;
@@ -121,7 +118,9 @@ function overview(ctx: PortfolioContext): AgentBlock[] {
 }
 
 function pools(ctx: PortfolioContext): AgentBlock[] {
-  const lp = positionsOf(ctx.wallets).filter((p) => POOL_KIND.test(p.kind) || p.inRange !== null);
+  // A band is proof on its own — a concentrated position has one whatever its
+  // protocol calls the kind
+  const lp = positionsOf(ctx.wallets).filter((p) => isPoolKind(p.kind) || p.inRange !== null);
   if (!lp.length) return nothing('you have no liquidity positions open.');
 
   const total = lp.reduce((s, p) => s + p.valueUsd, 0);
@@ -195,21 +194,21 @@ function health(ctx: PortfolioContext): AgentBlock[] {
 
 function stables(ctx: PortfolioContext): AgentBlock[] {
   let stable = 0;
-  for (const wallet of ctx.wallets) {
-    for (const p of wallet.positions) {
-      if (p.category === 'token' && STABLE.test(p.symbol)) stable += p.valueUsd;
-      for (const t of p.tokens ?? []) if (t.role !== 'borrow' && STABLE.test(t.symbol)) stable += t.valueUsd;
-    }
-  }
-  const rest = Math.max(0, ctx.totalUsd - stable);
   // Stables sitting as a plain wallet holding are the idle ones; the same coin
   // supplied to a pool or a lending market is already working
   let idle = 0;
   for (const wallet of ctx.wallets) {
     for (const p of wallet.positions) {
-      if (p.category === 'token' && STABLE.test(p.symbol)) idle += p.valueUsd;
+      if (p.category === 'token' && isStablePrice(p.priceUsd)) {
+        stable += p.valueUsd;
+        idle += p.valueUsd;
+      }
+      for (const t of p.tokens ?? []) {
+        if (t.role !== 'borrow' && isStablePrice(t.priceUsd)) stable += t.valueUsd;
+      }
     }
   }
+  const rest = Math.max(0, ctx.totalUsd - stable);
 
   return [
     {

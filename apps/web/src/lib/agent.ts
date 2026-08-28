@@ -126,32 +126,27 @@ export const CHIPS = [
 /**
  * What to say while the answer is being worked out.
  *
- * Not "Thinking…". A portfolio agent that says nothing for two seconds has left
- * the reader wondering whether it understood the question; one that says
- * "Recalculating health factors" has already confirmed it did. Two phrases, so
- * the wait reads as progress rather than as one frozen label — the second lands
- * a beat later.
+ * One neutral line, and it claims nothing about what is happening. Anything
+ * more specific — "Recalculating health factors" — is the agent describing its
+ * own work, and only the thing doing the work can honestly say that. Guessing
+ * it from the question in the browser means the status is a lie whenever the
+ * guess is wrong, and it is a second place that has to know what questions
+ * exist.
  *
- * Matched on the question rather than sent by the answerer on purpose: the
- * status has to appear on the keystroke that sends, which is long before
- * anything has been asked of a server.
+ * The seam for the real one is `AgentStatus` on the answerer: when the service
+ * can report what it is doing, it reports it here and this constant stops being
+ * the only thing shown.
  */
-const STATUS: Array<{ about: RegExp; phrases: [string, string] }> = [
-  { about: /pool|lp|liquid|range/i, phrases: ['Scanning your liquidity positions', 'Comparing fee yields across pools'] },
-  { about: /health|hf|liquidat|risk/i, phrases: ['Pulling your lending positions', 'Recalculating health factors'] },
-  { about: /stable|usdc|usdt|exposure/i, phrases: ['Splitting assets by type', 'Measuring stablecoin exposure'] },
-  { about: /debt|borrow|loan|apy/i, phrases: ['Reading your open loans', 'Checking borrow rates'] },
-  { about: /chang|today|move|24h/i, phrases: ['Diffing the last 24 hours', 'Ranking the biggest movers'] },
-];
+export const THINKING = 'Working on it';
 
-const STATUS_FALLBACK: [string, string] = [
-  'Reading your portfolio structure',
-  'Checking positions across wallets',
-];
+/**
+ * How an answerer says what it is doing, if it can.
+ *
+ * Optional on purpose: an answerer that cannot report progress simply never
+ * calls it, and the chat shows `THINKING` for as long as it waits. Nothing in
+ * the chat has to know which kind it is talking to.
+ */
+export type AgentStatus = (text: string) => void;
 
-export function statusFor(question: string): [string, string] {
-  return STATUS.find((s) => s.about.test(question))?.phrases ?? STATUS_FALLBACK;
-}
-
-/** How long the first status holds before the second one takes over */
-export const STATUS_SWITCH_MS = 1100;
+/** What answers a question. Local today, a request to the agent service later. */
+export type Answerer = (question: string, onStatus?: AgentStatus) => Promise<AgentBlock[]>;
