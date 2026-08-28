@@ -8,7 +8,13 @@ import { decide, type Remembered, type Settings } from './decide';
  * the API answers with and the same list the settings page shows — see
  * `apps/api/src/portfolio/portfolio.service.ts` and `web/src/lib/alerts.ts`.
  */
-const DEFAULTS: Settings = { rangeAlerts: true, healthFactorBelow: 1.1, borrowApyAbove: 12 };
+const DEFAULTS: Settings = {
+  rangeAlerts: true,
+  healthFactorBelow: 1.1,
+  borrowApyAbove: 12,
+  tronReclaimAlerts: true,
+  tronDelegateAlerts: true,
+};
 
 /**
  * Turns "here is what this wallet looks like" into "here is what its owner
@@ -48,11 +54,15 @@ export class Collector {
           rangeAlerts: wallet.alerts.rangeAlerts,
           healthFactorBelow: wallet.alerts.healthFactorBelow,
           borrowApyAbove: wallet.alerts.borrowApyAbove,
+          tronReclaimAlerts: wallet.alerts.tronReclaimAlerts,
+          tronDelegateAlerts: wallet.alerts.tronDelegateAlerts,
         }
       : DEFAULTS;
 
     const previous = await this.remembered(event.walletId);
-    const { items, next } = decide(event.positions, settings, previous);
+    // `?? null` rather than trusted: during a deploy the queue still holds
+    // states published by a wallet service that predates the field
+    const { items, next } = decide(event.positions, settings, previous, event.tron ?? null);
 
     // Said before it is written down. If this throws, nothing is remembered and
     // the next scan decides the same thing again — an alert arriving twice is a
@@ -78,7 +88,13 @@ export class Collector {
     return new Map(
       rows.map((row) => [
         row.positionKey,
-        { inRange: row.inRange, healthBreached: row.healthBreached, borrowBreached: row.borrowBreached },
+        {
+          inRange: row.inRange,
+          healthBreached: row.healthBreached,
+          borrowBreached: row.borrowBreached,
+          reclaimArmed: row.reclaimArmed,
+          delegateArmed: row.delegateArmed,
+        },
       ]),
     );
   }

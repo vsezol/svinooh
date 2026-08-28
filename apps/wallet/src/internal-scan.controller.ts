@@ -40,6 +40,7 @@ export class InternalScanController {
       chain: wallet.chain as Chain,
       address: wallet.address,
       previousTotal: wallet.lastTotalUsd,
+      tronResourcesAt: wallet.tronResourcesAt?.toISOString() ?? null,
     };
     // Somebody is already scanning this address — the wallet gets that result,
     // which is the one it was going to wait for anyway

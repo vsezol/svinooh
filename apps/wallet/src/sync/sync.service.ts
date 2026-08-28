@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Wallet } from '@prisma/client';
-import type { Chain } from '@svinooh/shared';
+import type { Chain, TronResources } from '@svinooh/shared';
 import { config } from '../config';
 import { ScanHold } from '@svinooh/common';
 import { MetricsService, RabbitService, WALLET_STATE_QUEUE, type ScanJob } from '@svinooh/common';
@@ -73,6 +73,7 @@ export class SyncService {
         lastSyncedAt: true,
         lastTotalUsd: true,
         scanQueuedAt: true,
+        tronResourcesAt: true,
         portfolio: {
           select: { lastViewedAt: true, owner: { select: { portfolioId: true } } },
         },
@@ -91,6 +92,7 @@ export class SyncService {
         lastSyncedAt: number | null;
         previousTotal: number | null;
         queuedAt: number | null;
+        tronResourcesAt: Date | null;
       }
     >();
 
@@ -110,12 +112,21 @@ export class SyncService {
           lastSyncedAt: syncedAt,
           previousTotal: w.lastTotalUsd,
           queuedAt,
+          tronResourcesAt: w.tronResourcesAt,
         });
         continue;
       }
       existing.owned ||= owned;
       existing.active ||= active;
       existing.previousTotal ??= w.lastTotalUsd;
+      // Resources belong to the address, so the freshest read among its rows is
+      // the group's — anything else would re-read what we already have
+      if (
+        w.tronResourcesAt !== null &&
+        (existing.tronResourcesAt === null || w.tronResourcesAt > existing.tronResourcesAt)
+      ) {
+        existing.tronResourcesAt = w.tronResourcesAt;
+      }
       // A claim covers every row for the address, so any one of them saying it
       // is on its way is the answer for the group
       if (queuedAt !== null && (existing.queuedAt === null || queuedAt > existing.queuedAt)) {
@@ -152,6 +163,7 @@ export class SyncService {
       chain: g.chain as Chain,
       address: g.address,
       previousTotal: g.previousTotal,
+      tronResourcesAt: g.tronResourcesAt?.toISOString() ?? null,
     }));
   }
 
@@ -189,6 +201,16 @@ export class SyncService {
             lastError: null,
             breakdown: result.breakdown ?? {},
             unpriced: result.unpriced ?? [],
+            // Only when this scan actually read them. A scan that skipped the
+            // read (not due) or whose read failed leaves the stored snapshot
+            // alone — replacing it with a gap would blank the page and, worse,
+            // re-baseline the reclaim/delegate flags into silence.
+            ...(result.tron
+              ? {
+                  tronResources: result.tron as unknown as Prisma.InputJsonValue,
+                  tronResourcesAt: now,
+                }
+              : {}),
           },
         }),
       ]);
@@ -228,7 +250,14 @@ export class SyncService {
    */
   private async announce(wallet: Wallet, result: ScanResult): Promise<void> {
     const positions = alertableStates(result.positions);
-    if (!positions.length) return;
+    // Resources this scan read, or the ones already stored — the collector is
+    // judging the wallet as it stands, and a scan that did not re-read them has
+    // not made them untrue. Whichever we have; null if there has never been one.
+    const tron =
+      result.tron ?? ((wallet.tronResources as TronResources | null) || null);
+    // A wallet with neither a watchable position nor resources has nothing
+    // anybody could have asked to hear about
+    if (!positions.length && !tron) return;
     try {
       await this.rabbit.publish(WALLET_STATE_QUEUE, {
         walletId: wallet.id,
@@ -236,6 +265,7 @@ export class SyncService {
         address: wallet.address,
         chain: wallet.chain as Chain,
         positions,
+        tron,
         // The scanners drop what they could not reach before this point, so
         // nothing here can name it yet. Carrying it is what will let a reader
         // hold a position's previous state instead of calling it gone.

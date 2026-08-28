@@ -87,7 +87,23 @@ export interface WalletDto {
   positions: PositionDto[];
   /** Assets with no price found (not lost, just not valued) */
   unpriced?: string[];
+  /**
+   * TRON only: energy, bandwidth and what this wallet has delegated out. Public,
+   * like every other number here — it is a fact about an address that anyone can
+   * read off the chain, and it says nothing about who owns it.
+   */
+  tron?: TronResourcesDto | null;
   createdAt: string;
+}
+
+/** TronResources as the API answers it, plus what the page would otherwise re-derive */
+export interface TronResourcesDto extends TronResources {
+  /** When these numbers were read — they are refreshed on a slower clock than the balance */
+  readAt: string;
+  /** A delegation is unlocked and can be taken back right now */
+  reclaimableNow: boolean;
+  /** When the earliest still-locked delegation unlocks. ISO 8601, or null */
+  nextReclaimAt: string | null;
 }
 
 export interface PortfolioOwnerDto {
@@ -264,6 +280,73 @@ export interface ScanResult {
   breakdown?: Record<string, number>;
   /** Assets without a price: we log and surface them rather than silently swallowing them */
   unpriced?: string[];
+  /**
+   * TRON only, and only on the scans that refreshed it — reading it costs four
+   * or more sequential rate-limited calls, so it is refreshed on its own slower
+   * clock (TRON_RESOURCE_INTERVAL_MIN) rather than on every sync.
+   *
+   * `undefined` means this scan did not look; whatever is stored stays. That is
+   * different from a wallet that has no resources to report, which still
+   * answers with zeroes.
+   */
+  tron?: TronResources;
+}
+
+/**
+ * One delegation of a Tron resource to somebody else.
+ *
+ * The lock is `expireAt`, and **0 means there is no lock** — delegated without
+ * one, reclaimable at any moment. A missing lock and an expired lock are the
+ * same thing to everything that reads this, which is why both answer "now".
+ */
+export interface TronDelegation {
+  type: 'energy' | 'bandwidth';
+  /** ms since the epoch; 0 — no lock at all */
+  expireAt: number;
+}
+
+/**
+ * What a Tron wallet can spend and what it has lent out.
+ *
+ * Tron does not charge fees in TRX so much as in *resources*: energy runs
+ * contract calls, bandwidth pays for the bytes of a transaction, and both
+ * regenerate. Staked TRX can be delegated to another account, which is how most
+ * people use a second wallet — and that is the part worth watching, because a
+ * delegation locks and later unlocks, and the moment it unlocks is a thing its
+ * owner wants to act on.
+ *
+ * Free/total rather than used: what is left is the number anybody actually
+ * makes a decision on.
+ */
+export interface TronResources {
+  energyFree: number;
+  energyTotal: number;
+  bandwidthFree: number;
+  bandwidthTotal: number;
+  /** Delegated out, in resource units */
+  delegatedEnergy: number;
+  /** ...and what that is worth in staked TRX */
+  delegatedEnergyTrx: number;
+  delegatedBandwidth: number;
+  delegatedBandwidthTrx: number;
+  delegations: TronDelegation[];
+  hasDelegation: boolean;
+}
+
+/**
+ * What a Tron wallet's owner could do right now. Not measurements — actions.
+ *
+ * Deliberately booleans and not thresholds: there is no useful number to set a
+ * line at, only "the delegation came unlocked" and "there is something free to
+ * delegate". Both carry the bandwidth a transaction needs, because being told
+ * you can reclaim when you cannot pay for the reclaim is not being told
+ * anything.
+ */
+export interface TronFlags {
+  /** A delegation is unlocked AND there is bandwidth to send the reclaim */
+  reclaim: boolean;
+  /** Free energy AND bandwidth AND nothing currently delegated */
+  delegate: boolean;
 }
 
 /**
@@ -288,6 +371,10 @@ export interface WalletAlertsDto {
   healthFactorBelow: number | null;
   /** Told when the borrow rate climbs above this, in percent. null — not watched */
   borrowApyAbove: number | null;
+  /** TRON: a delegation came unlocked and there is bandwidth to take it back */
+  tronReclaimAlerts: boolean;
+  /** TRON: resources are free and nothing is delegated — they could be put to work */
+  tronDelegateAlerts: boolean;
 }
 
 export interface AlertSettingsDto {
@@ -300,6 +387,8 @@ export interface UpdateWalletAlertsDto {
   rangeAlerts?: boolean;
   healthFactorBelow?: number | null;
   borrowApyAbove?: number | null;
+  tronReclaimAlerts?: boolean;
+  tronDelegateAlerts?: boolean;
 }
 
 /**
@@ -438,12 +527,26 @@ export interface WalletStateEvent {
   positions: WalletPositionState[];
   /** Protocols that could not be reached on this scan, by platform */
   unreachable: string[];
+  /**
+   * TRON only: the wallet's resources as of this scan, or null when there are
+   * none to report yet. It rides along rather than being read back by the
+   * collector for the same reason the positions do — what a scan saw is the
+   * scan's to say, and re-reading it later would be judging a different moment.
+   */
+  tron?: TronResources | null;
   /** ISO 8601 */
   at: string;
 }
 
-/** Why somebody is being told about a position */
-export type AlertKind = 'range' | 'health' | 'borrow';
+/**
+ * Why somebody is being told about a wallet.
+ *
+ * `range`, `health` and `borrow` are about one position. `reclaim` and
+ * `delegate` are about the Tron wallet itself — it has no positions to speak
+ * of, it has resources — which is why an item carries no reading and no
+ * threshold for them.
+ */
+export type AlertKind = 'range' | 'health' | 'borrow' | 'reclaim' | 'delegate';
 
 /**
  * A single thing that changed and was worth saying.
@@ -472,6 +575,12 @@ export interface AlertItem {
   band: PositionBand | null;
   /** Which loan a health or borrow alert is about, when the market said */
   loan: PositionLoan | null;
+  /**
+   * The wallet's resources at the moment a `reclaim`/`delegate` alert fired.
+   * null on every other kind — and on those two it is the whole message, since
+   * what makes "you can reclaim now" worth reading is how much of what.
+   */
+  tron?: TronResources | null;
 }
 
 /**

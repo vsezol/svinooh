@@ -1,5 +1,22 @@
 import { fetchJson } from './http';
 import type { ScanPosition, ScanPositionToken, ScanResult } from '@svinooh/shared';
+import { config } from '../config';
+import { getTronResources } from './tron-resources';
+
+/**
+ * Whether this scan should pay for a resource read.
+ *
+ * Resources are four or more sequential rate-limited calls and move on the scale
+ * of a delegation lock, so they are refreshed on their own clock rather than on
+ * every balance sync. Never read — always. Read once and gone stale — again.
+ * Otherwise the stored snapshot stands.
+ */
+function resourcesDue(lastReadAt: string | null): boolean {
+  if (!lastReadAt) return true;
+  const at = Date.parse(lastReadAt);
+  if (Number.isNaN(at)) return true;
+  return Date.now() - at >= config.tronResourceIntervalMin * 60_000;
+}
 
 /**
  * TRON: TronGrid (the official public API) for balances, DefiLlama for prices.
@@ -11,7 +28,7 @@ import type { ScanPosition, ScanPositionToken, ScanResult } from '@svinooh/share
  * those are resources borrowed from OUTSIDE, someone else's TRX. Reconcile
  * against Tronscan ("Available + Staked").
  */
-export async function scanTron(address: string): Promise<ScanResult> {
+export async function scanTron(address: string, resourcesAt: string | null = null): Promise<ScanResult> {
   const { data } = await fetchJson<{ data?: Array<Record<string, any>> }>(
     `https://api.trongrid.io/v1/accounts/${address}`,
   );
@@ -105,11 +122,26 @@ export async function scanTron(address: string): Promise<ScanResult> {
   for (const asset of trc10) unpriced.push(`TRC10 #${asset.key}`);
 
   const totalUsd = positions.reduce((sum, p) => sum + p.valueUsd, 0);
+
+  // Energy, bandwidth and delegation locks — a different API and a different
+  // clock from the balances above. A failure here must not cost us the balance
+  // we already have: the result goes out without `tron`, which leaves whatever
+  // is stored in place rather than replacing it with a gap.
+  let tron: ScanResult['tron'];
+  if (resourcesDue(resourcesAt)) {
+    try {
+      tron = await getTronResources(address);
+    } catch {
+      // next scan tries again; until then the stored snapshot stands
+    }
+  }
+
   return {
     chain: 'TRON',
     address,
     totalUsd,
     positions,
     unpriced: unpriced.length ? unpriced : undefined,
+    tron,
   };
 }

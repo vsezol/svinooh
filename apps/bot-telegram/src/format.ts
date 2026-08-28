@@ -1,4 +1,4 @@
-import type { AlertEvent, AlertItem, PositionBand } from '@svinooh/shared';
+import type { AlertEvent, AlertItem, PositionBand, TronResources } from '@svinooh/shared';
 
 const CHAIN_NAME: Record<string, string> = {
   BTC: 'Bitcoin wallet',
@@ -66,6 +66,10 @@ function standing(band: PositionBand): string | null {
  * only distinction that matters at a glance is whether it needs you.
  */
 function mark(item: AlertItem): string {
+  // Tron's two are not trouble — they say something became possible, and a red
+  // dot on "you can put your resources to work" reads as a problem
+  if (item.kind === 'reclaim') return '🔓';
+  if (item.kind === 'delegate') return '🟢';
   return item.direction === 'recovered' ? '✅' : '🔴';
 }
 
@@ -106,7 +110,66 @@ function status(item: AlertItem): string {
       return `Health factor: ${against(value, threshold)}`;
     case 'borrow':
       return `Borrow APY: ${against(value, threshold, '%')}`;
+    case 'reclaim':
+      return 'Status: a delegation has unlocked — you can take it back';
+    case 'delegate':
+      return 'Status: resources are idle and nothing is delegated';
   }
+}
+
+/** "12,480" — resource counts are big and unitless, and only the magnitude reads */
+function count(n: number): string {
+  return Number.isFinite(n) ? Math.round(n).toLocaleString('en-US') : '?';
+}
+
+/** TRX, to the cent */
+function trx(n: number): string {
+  return Number.isFinite(n) ? (Math.round(n * 100) / 100).toLocaleString('en-US') : '?';
+}
+
+/**
+ * What the wallet has to spend and what it has lent out — the port of the
+ * monolith's `formatTronResources`.
+ *
+ * Free before total, because what is left is the number anybody acts on. The
+ * reclaim line is the reason most of these messages get read at all, so it says
+ * either a date and how far off it is, or that the wait is over.
+ */
+function tronLines(tron: TronResources, now: number): string[] {
+  const out = [
+    `⚡ Energy: ${count(tron.energyFree)} / ${count(tron.energyTotal)} free`,
+    `📶 Bandwidth: ${count(tron.bandwidthFree)} / ${count(tron.bandwidthTotal)} free`,
+  ];
+
+  if (!tron.hasDelegation) {
+    out.push('Delegated out: none');
+    return out;
+  }
+
+  const parts: string[] = [];
+  if (tron.delegatedEnergy > 0) {
+    parts.push(`${count(tron.delegatedEnergy)} energy (${trx(tron.delegatedEnergyTrx)} TRX)`);
+  }
+  if (tron.delegatedBandwidth > 0) {
+    parts.push(`${count(tron.delegatedBandwidth)} bandwidth (${trx(tron.delegatedBandwidthTrx)} TRX)`);
+  }
+  out.push(`Delegated out: ${parts.join(', ') || 'yes'}`);
+
+  // expireAt of 0 is a delegation made WITHOUT a lock, not one that expired in
+  // 1970 — both mean it can be taken back now
+  let nextAt: number | null = null;
+  let now_ = false;
+  for (const d of tron.delegations) {
+    if (!d.expireAt || d.expireAt <= now) now_ = true;
+    else if (nextAt === null || d.expireAt < nextAt) nextAt = d.expireAt;
+  }
+  if (now_) out.push('Reclaimable: now ✅');
+  else if (nextAt !== null) {
+    const days = Math.ceil((nextAt - now) / 86_400_000);
+    const date = new Date(nextAt).toISOString().slice(0, 10);
+    out.push(`Reclaimable: ${date} (in ${days} day${days === 1 ? '' : 's'})`);
+  }
+  return out;
 }
 
 /**
@@ -120,6 +183,9 @@ function lines(item: AlertItem): string[] {
     const { lower, upper, priceLabel } = item.band;
     out.push(`Range: ${price(lower)} — ${price(upper)} ${esc(priceLabel)}`);
   }
+  // For Tron the resources ARE the message: "you can reclaim" without saying
+  // how much of what is a notification that sends you somewhere else to find out
+  if (item.tron) out.push(...tronLines(item.tron, Date.now()));
   return out;
 }
 
