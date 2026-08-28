@@ -2,7 +2,7 @@
 
 import type { CSSProperties, ReactNode } from 'react';
 
-export type Tab = 'portfolio' | 'notifications';
+export type Tab = 'portfolio' | 'notifications' | 'agent';
 
 const ICON = {
   strokeWidth: 2,
@@ -63,7 +63,7 @@ interface Props {
 }
 
 /**
- * The owner's two places, and the one that isn't ready.
+ * The owner's three places.
  *
  * The rail beside the page on a desktop. A phone gets tabs across the top
  * instead — see MobileTabs — and the stylesheet is what picks between them, so
@@ -110,7 +110,12 @@ export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
           <BellIcon size={16} />
           {label('Notifications')}
         </div>
-        <div title="AI agent — soon" style={navItem(false, true, collapsed)}>
+        <div
+          className="nav-item"
+          onClick={() => onTab('agent')}
+          title="AI agent"
+          style={navItem(tab === 'agent', false, collapsed)}
+        >
           <SparkIcon size={16} />
           {label('AI agent')}
           {collapsed ? null : (
@@ -125,7 +130,7 @@ export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
                 padding: '2px 7px',
               }}
             >
-              SOON
+              BETA
             </span>
           )}
         </div>
