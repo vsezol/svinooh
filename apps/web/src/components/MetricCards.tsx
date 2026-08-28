@@ -1,7 +1,7 @@
 import type { HistoryRange } from '@svinooh/shared';
 import type { DebtTotals, RewardsTotals } from '../lib/blocks';
 import { fmtUsd } from '../lib/format';
-import type { Series } from '../lib/history';
+import { changeOver, type Series } from '../lib/history';
 import { AreaChart } from './AreaChart';
 
 /**
@@ -32,7 +32,7 @@ export function MetricCards({
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 12, marginTop: 20 }}>
       <Card label="CLAIMABLE" series={claimableSeries} period={period} tone="accent">
-        <Figure value={fmtUsd(rewards.total)} accent />
+        <Figure value={fmtUsd(rewards.total)} accent series={claimableSeries} period={period} />
         <Caption>
           {rewards.pools > 0 || rewards.other > 0
             ? [
@@ -46,7 +46,12 @@ export function MetricCards({
       </Card>
 
       <Card label="TOTAL DEBT" series={debtSeries} period={period} tone="muted">
-        <Figure value={debt.total > 0 ? fmtUsd(debt.total) : '—'} />
+        <Figure
+          value={debt.total > 0 ? fmtUsd(debt.total) : '—'}
+          series={debt.total > 0 ? debtSeries : undefined}
+          period={period}
+          owed
+        />
       </Card>
 
     </div>
@@ -98,19 +103,50 @@ function Card({
   );
 }
 
-function Figure({ value, accent }: { value: string; accent?: boolean }) {
+function Figure({
+  value,
+  accent,
+  owed,
+  series,
+  period,
+}: {
+  value: string;
+  accent?: boolean;
+  /**
+   * A debt reads the other way round: owing more is the bad direction, so the
+   * colours are swapped rather than calling a growing debt a gain.
+   */
+  owed?: boolean;
+  series?: Series;
+  period: HistoryRange;
+}) {
+  const change = series ? changeOver(series, period) : null;
+  const good = change ? (owed ? !change.up : change.up) : false;
+
   return (
-    <div
-      className="mono"
-      style={{
-        fontWeight: 700,
-        fontSize: 28,
-        letterSpacing: '-0.01em',
-        marginTop: 10,
-        color: accent ? 'var(--acc-text)' : 'var(--text)',
-      }}
-    >
-      {value}
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+      <div
+        className="mono"
+        style={{
+          fontWeight: 700,
+          fontSize: 28,
+          letterSpacing: '-0.01em',
+          color: accent ? 'var(--acc-text)' : 'var(--text)',
+        }}
+      >
+        {value}
+      </div>
+      {/* The same reading as the one beside the headline total, over the same
+          window the period buttons choose */}
+      {change ? (
+        <div
+          className="mono"
+          style={{ fontSize: 12, fontWeight: 600, color: good ? 'var(--up)' : 'var(--down)' }}
+        >
+          {(change.up ? '+' : '−') + fmtUsd(Math.abs(change.chg))} ({change.up ? '+' : '−'}
+          {Math.abs(change.pct).toFixed(2)}%)
+        </div>
+      ) : null}
     </div>
   );
 }
