@@ -684,35 +684,38 @@ body[data-theme='light'] .on-dark {
   display: flex;
 }
 
-/* Hung from the *dynamic* viewport rather than sat on the bottom of its
-   containing block.
+/* A tab bar, edge to edge, meeting the bottom of the screen — the shape every
+   other app on a phone uses, and the one shape with no gap to argue about. A
+   floating pill has to hold a margin off the bottom, and on iOS that margin
+   lands on top of the one Safari's own toolbar already keeps, which is the dead
+   band this used to sit above.
 
-   `bottom` on a fixed element measures from the layout viewport, and on iOS
-   that keeps the height the page had while Safari's toolbar was expanded. So
-   the moment the toolbar collapses into its little pill, the bottom the dock is
-   pinned to is no longer the bottom of anything visible, and the dock is
-   stranded a thumb's width up the screen with dead space under it.
-   100dvh is the viewport as it is right now, toolbar in or out, so the dock's
-   own bottom edge lands 4px above whatever the real bottom currently is —
-   the same gap Safari's own toolbar keeps from the edge of the screen.
-   translate(-50%,-100%) hangs it upwards from that line, so its height is not a
-   number anything here has to know. */
+   `top` is hung from the dynamic viewport as an opening guess and then measured
+   properly by useDockToVisibleBottom: `bottom` on a fixed element measures from
+   the layout viewport, which on iOS keeps the height the page had while
+   Safari's toolbar was expanded, and Safari does not keep dvh honest either
+   once that toolbar collapses. translate(0,-100%) hangs the bar upwards from
+   that line, so its height is not a number anything here has to know.
+
+   The glass is the point: at 72% the page slides under it and blurs, so the bar
+   reads as a layer over the page rather than a slab pasted on top of it. */
 .tab-dock {
   display: none;
-  left: 50%;
-  top: calc(100dvh - 12px);
+  position: fixed;
+  z-index: 60;
+  left: 0;
+  right: 0;
+  top: 100dvh;
   bottom: auto;
-  transform: translate(-50%, -100%);
-}
-
-/* Installed to the home screen there is no toolbar to sit beside, and the inset
-   is the home indicator the dock does have to clear. Both of these are only the
-   opening guess: useDockToVisibleBottom measures the real edge and writes `top`
-   itself, because Safari does not keep dvh honest once its toolbar collapses. */
-@media (display-mode: standalone) {
-  .tab-dock {
-    top: calc(100dvh - 12px - env(safe-area-inset-bottom));
-  }
+  transform: translateY(-100%);
+  background: color-mix(in srgb, var(--surf) 72%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border-top: 1px solid var(--line);
+  /* The glass runs to the very bottom of the screen and the home indicator is
+     held off from inside, the way a native tab bar does it — rather than the
+     whole bar floating above the indicator with a stripe of page under it. */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 @media (max-width: 719px) {
@@ -746,6 +749,6 @@ body[data-theme='light'] .on-dark {
 
 @media (max-width: 719px) {
   .dock-room {
-    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+    padding-bottom: calc(62px + env(safe-area-inset-bottom));
   }
 }
