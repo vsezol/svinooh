@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { HistoryDto, HistoryRange, PortfolioDto } from '@svinooh/shared';
+import type { HistoryRange, PortfolioDto } from '@svinooh/shared';
 import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AlertSettings } from '../components/AlertSettings';
 import { AreaChart } from '../components/AreaChart';
@@ -30,7 +30,13 @@ import {
   type PositionFilter,
 } from '../lib/blocks';
 import { fmtUsd, portfolioLabel, walletName } from '../lib/format';
-import { EMPTY_SERIES, seriesOf, type Series } from '../lib/history';
+import {
+  cachedHistory,
+  EMPTY_HISTORY,
+  loadHistory,
+  prefetchHistory,
+  type History,
+} from '../lib/history';
 import { PERIODS, WINDOW_MS } from '../lib/ranges';
 
 const FILTERS: Array<{ key: PositionFilter; label: string }> = [
@@ -86,37 +92,47 @@ function usePortfolio(slug: string, viewerId: string | null) {
  * History for the selected scope (whole portfolio / a specific wallet) and
  * period — three lines off the same readings, so they share a time axis and one
  * request.
+ *
+ * What comes back is the data **and the period it is the data for**, together.
+ * That pairing is the point: a period is a window width, so a chart handed the
+ * new width and the old readings redraws the previous period's points squeezed
+ * into the new window — visibly coarser or finer than the truth — and then
+ * redraws again a moment later when the real answer lands. Two jumps to change
+ * one thing. Keeping them together means the chart changes once, when there is
+ * something to change to, and the period buttons stay instant because they
+ * follow the press rather than the request.
+ *
+ * A period already in the cache is applied in the same commit as the press, so
+ * the usual case has no request in it at all — see prefetchHistory. Cached but
+ * a sync behind still goes up straight away and is replaced behind itself: the
+ * period does not change, so nothing jumps, and a chart three minutes short at
+ * the right-hand edge is not the thing worth making somebody wait for.
  */
 function useHistory(slug: string, scope: string, period: HistoryRange, refreshKey: string | null) {
-  const [points, setPoints] = useState<{ total: Series; claimable: Series; debt: Series } | null>(
-    null,
-  );
+  const [shown, setShown] = useState<{ period: HistoryRange; data: History } | null>(null);
 
   useEffect(() => {
+    // Nothing until the portfolio has landed. The chart cannot render before it
+    // does — the page is still a spinner — so a request now is one answer
+    // fetched twice: once against no sync at all, and again the moment there is
+    // one to key it to.
+    if (refreshKey === null) return;
     let cancelled = false;
-    void (async () => {
-      try {
-        const path =
-          scope === 'all'
-            ? `/portfolios/${slug}/history?range=${period}`
-            : `/portfolios/${slug}/wallets/${scope}/history?range=${period}`;
-        const h = await api<HistoryDto>(path);
-        if (cancelled) return;
-        setPoints({
-          total: seriesOf(h.points, (p) => p.usd),
-          claimable: seriesOf(h.points, (p) => p.claimableUsd),
-          debt: seriesOf(h.points, (p) => p.debtUsd),
-        });
-      } catch {
-        if (!cancelled) setPoints({ total: EMPTY_SERIES, claimable: EMPTY_SERIES, debt: EMPTY_SERIES });
-      }
-    })();
+    const ready = cachedHistory(slug, scope, period);
+    if (ready) setShown({ period, data: ready });
+    void loadHistory(slug, scope, period, refreshKey)
+      .then((data) => {
+        if (!cancelled) setShown({ period, data });
+      })
+      .catch(() => {
+        if (!cancelled) setShown({ period, data: EMPTY_HISTORY });
+      });
     return () => {
       cancelled = true;
     };
   }, [slug, scope, period, refreshKey]);
 
-  return points;
+  return shown;
 }
 
 export function PortfolioPage({ slug }: { slug: string }) {
@@ -141,6 +157,29 @@ export function PortfolioPage({ slug }: { slug: string }) {
   const [claiming, setClaiming] = useState(false);
 
   const history = useHistory(slug, scope, period, data?.updatedAt ?? null);
+  // The period the chart is currently drawn at, which is the period of the data
+  // it has — not necessarily the button that was last pressed
+  const drawn = history?.period ?? period;
+
+  // The other four periods, warmed one at a time whenever the page has nothing
+  // else in the air, so pressing a period button is a redraw and not a wait.
+  // Only for the scope on screen: five periods across seven wallets is
+  // thirty-five requests to save a click somebody may never make.
+  useEffect(() => {
+    const stamp = data?.updatedAt ?? null;
+    if (!stamp) return;
+    let cancelled = false;
+    void prefetchHistory(
+      slug,
+      scope,
+      PERIODS.map((p) => p.key),
+      stamp,
+      () => cancelled,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, scope, data?.updatedAt]);
 
   // the selected wallet was deleted — fall back to "all wallets"
   useEffect(() => {
@@ -170,9 +209,9 @@ export function PortfolioPage({ slug }: { slug: string }) {
   // the chart does not move it — "+0.42% · 24H" means the last 24 hours wherever
   // you have wandered off to.
   const change = useMemo(() => {
-    if (!history || history.total.values.length < 2) return null;
-    const { values, times } = history.total;
-    const window = WINDOW_MS[period];
+    if (!history || history.data.total.values.length < 2) return null;
+    const { values, times } = history.data.total;
+    const window = WINDOW_MS[history.period];
     const opens = window === null ? -Infinity : times[times.length - 1] - window;
     const at = times.findIndex((t) => t >= opens);
     const first = values[at < 0 || at > values.length - 2 ? 0 : at];
@@ -180,7 +219,7 @@ export function PortfolioPage({ slug }: { slug: string }) {
     const chg = last - first;
     const pct = first ? (chg / first) * 100 : 0;
     return { chg, pct, up: chg >= 0 };
-  }, [history, period]);
+  }, [history]);
 
   // Above the loading states, where the hooks all have to be: the strip only
   // needs which tab is open, which is state rather than anything fetched
@@ -299,7 +338,7 @@ export function PortfolioPage({ slug }: { slug: string }) {
   // An empty chart frame that explains history arrives later is the biggest
   // thing on a fresh portfolio and says nothing — it appears once there is a
   // line to draw.
-  const hasChart = wallets.some((w) => w.totalUsd !== null) && (history?.total.values.length ?? 0) >= 2;
+  const hasChart = wallets.some((w) => w.totalUsd !== null) && (history?.data.total.values.length ?? 0) >= 2;
 
   const scopeOptions = [
     { id: 'all', label: 'All wallets', valueUsd: data.totalUsd },
@@ -469,7 +508,7 @@ export function PortfolioPage({ slug }: { slug: string }) {
                           (change.up ? '+' : '') +
                           change.pct.toFixed(2) +
                           '%) · ' +
-                          period.toUpperCase()}
+                          drawn.toUpperCase()}
                       </div>
                     ) : null}
                   </div>
@@ -518,9 +557,9 @@ export function PortfolioPage({ slug }: { slug: string }) {
 
                 <div style={{ marginTop: 14 }}>
                   <AreaChart
-                    values={history?.total.values ?? []}
-                    times={history?.total.times ?? []}
-                    period={period}
+                    values={history?.data.total.values ?? []}
+                    times={history?.data.total.times ?? []}
+                    period={drawn}
                     height="clamp(160px,26vw,240px)"
                   />
                 </div>
@@ -530,9 +569,9 @@ export function PortfolioPage({ slug }: { slug: string }) {
             <MetricCards
               rewards={rewards}
               debt={debt}
-              claimableSeries={history?.claimable ?? EMPTY_SERIES}
-              debtSeries={history?.debt ?? EMPTY_SERIES}
-              period={period}
+              claimableSeries={history?.data.claimable ?? EMPTY_HISTORY.claimable}
+              debtSeries={history?.data.debt ?? EMPTY_HISTORY.debt}
+              period={drawn}
             />
 
             {/* add wallet */}
