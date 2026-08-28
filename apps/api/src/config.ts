@@ -42,5 +42,9 @@ export const config = {
   redisUrl: process.env.REDIS_URL || null,
   // TTL of the assembled portfolio cache in Redis (sec).
   cacheTtlSec: int(process.env.CACHE_TTL_SEC, 60),
+  // TTL used while a portfolio still has a wallet waiting for its first scan.
+  // It MUST track how fast the page polls a pending wallet (PortfolioPage's 3s),
+  // or the cache holds back the very result that polling is waiting for.
+  cachePendingTtlSec: int(process.env.CACHE_PENDING_TTL_SEC, 3),
   webOrigin: process.env.WEB_ORIGIN || '*',
 };

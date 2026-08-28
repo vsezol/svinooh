@@ -64,3 +64,25 @@ export function detectChain(raw: string): Chain | null {
   if (isSolAddress(address)) return 'SOL';
   return null;
 }
+
+/**
+ * The one spelling of an address we store.
+ *
+ * EVM addresses are hex, and EIP-55 uses the CASE of the letters as a checksum —
+ * `0xAbCd…` and `0xabcd…` are the same address, and the checksummed form is the
+ * one wallets and explorers give people to copy. Everything downstream keys on
+ * the exact string: the scan groups in listGroups, the rows a scan result is
+ * applied to, AddressSnapshot's history, `@@unique([portfolioId, address])`. Two
+ * spellings of one address is therefore two of everything — scanned twice on
+ * every cycle, history split in half, and the same wallet addable twice to one
+ * portfolio, where its balance is then counted twice in the total.
+ *
+ * Base58 chains are left as typed: there the case IS part of the address.
+ *
+ * Must be applied wherever an address is taken from a person, which is why it
+ * sits next to detectChain — the chain is what says how to normalise.
+ */
+export function normalizeAddress(chain: Chain, raw: string): string {
+  const address = raw.trim();
+  return chain === 'EVM' ? address.toLowerCase() : address;
+}

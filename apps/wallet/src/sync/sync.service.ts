@@ -72,6 +72,7 @@ export class SyncService {
         address: true,
         lastSyncedAt: true,
         lastTotalUsd: true,
+        scanQueuedAt: true,
         portfolio: {
           select: { lastViewedAt: true, owner: { select: { portfolioId: true } } },
         },
@@ -89,6 +90,7 @@ export class SyncService {
         active: boolean;
         lastSyncedAt: number | null;
         previousTotal: number | null;
+        queuedAt: number | null;
       }
     >();
 
@@ -97,6 +99,7 @@ export class SyncService {
       const owned = w.portfolio.owner !== null;
       const active = (w.portfolio.lastViewedAt?.getTime() ?? 0) >= activeSince;
       const syncedAt = w.lastSyncedAt?.getTime() ?? null;
+      const queuedAt = w.scanQueuedAt?.getTime() ?? null;
       const existing = groups.get(key);
       if (!existing) {
         groups.set(key, {
@@ -106,12 +109,18 @@ export class SyncService {
           active,
           lastSyncedAt: syncedAt,
           previousTotal: w.lastTotalUsd,
+          queuedAt,
         });
         continue;
       }
       existing.owned ||= owned;
       existing.active ||= active;
       existing.previousTotal ??= w.lastTotalUsd;
+      // A claim covers every row for the address, so any one of them saying it
+      // is on its way is the answer for the group
+      if (queuedAt !== null && (existing.queuedAt === null || queuedAt > existing.queuedAt)) {
+        existing.queuedAt = queuedAt;
+      }
       // The group is scanned as one, so the freshest sync among its wallets is
       // the group's — scanning again earlier would buy nothing
       if (syncedAt !== null && (existing.lastSyncedAt === null || syncedAt > existing.lastSyncedAt)) {
@@ -119,7 +128,13 @@ export class SyncService {
       }
     }
 
+    const claimedSince = now - config.scanClaimTtlMin * 60_000;
     const due = [...groups.values()]
+      // Already on its way. Without this the producer republished a brand-new
+      // address on every tick for the whole length of its scan — see
+      // Wallet.scanQueuedAt. A claim older than the TTL is not believed: a
+      // scanner can die, and a held scan never publishes a result to clear it.
+      .filter((g) => g.queuedAt === null || g.queuedAt < claimedSince)
       .map((g) => {
         const fast = g.owned || g.active;
         const intervalMs =
@@ -230,6 +245,80 @@ export class SyncService {
     } catch (error) {
       this.logger.warn(`could not announce ${wallet.address}: ${(error as Error).message}`);
     }
+  }
+
+  /**
+   * Take this address, or report that a scan is already on its way for it.
+   *
+   * One UPDATE, because two statements (look, then mark) is the race it exists
+   * to close: the producer's tick and a wallet somebody has just added arrive at
+   * the same moment by design, and the api's forced scan is at its most likely
+   * to collide precisely when the address is new. Postgres locks the rows for
+   * the duration, so a second caller re-reads the row it waited for, no longer
+   * matches the WHERE, and updates nothing — and `count` is how many rows were
+   * actually claimed, so zero means somebody else holds it.
+   *
+   * It claims every Wallet row for the address at once, because one scan serves
+   * all of them.
+   */
+  async claimForScan(chain: string, address: string): Promise<boolean> {
+    const staleBefore = new Date(Date.now() - config.scanClaimTtlMin * 60_000);
+    const { count } = await this.prisma.wallet.updateMany({
+      where: {
+        chain,
+        address,
+        OR: [{ scanQueuedAt: null }, { scanQueuedAt: { lt: staleBefore } }],
+      },
+      data: { scanQueuedAt: new Date() },
+    });
+    return count > 0;
+  }
+
+  /**
+   * A result came back — or never will, because the job was never sent.
+   *
+   * Called on every path out of applying a result, including the ones that write
+   * nothing: the claim says "a result is still on its way", and once one has
+   * arrived that is no longer true whatever it said. Not called when a scan is
+   * HELD (DeBank throttling), since nothing is published to trigger it — the
+   * claim simply ages out, and until it does that address is not rescanned,
+   * which is what a backoff should do anyway.
+   */
+  async releaseScan(chain: string, address: string): Promise<void> {
+    await this.prisma.wallet.updateMany({
+      where: { chain, address },
+      data: { scanQueuedAt: null },
+    });
+  }
+
+  /**
+   * Wallets still waiting for a first scan that nothing is going to deliver.
+   *
+   * `pending` means "on its way". It stops being true when a scan ends without
+   * a result — a held one publishes nothing, a dying scanner publishes nothing —
+   * and nothing then corrects the wallet, because the writer only ever hears
+   * about scans that came back. The page reads that as a spinner and polls it
+   * every three seconds, so the claim has to expire.
+   *
+   * Only wallets with no live claim: one that is still on its way is not stuck,
+   * it is waiting its turn. The row stays due (lastSyncedAt is untouched), so
+   * the next top-up picks it up again — this gives up on the claim, not on the
+   * wallet.
+   */
+  async failStuckPending(): Promise<number> {
+    const now = Date.now();
+    const claimedSince = new Date(now - config.scanClaimTtlMin * 60_000);
+    const waitingSince = new Date(now - config.scanStuckPendingMin * 60_000);
+    const { count } = await this.prisma.wallet.updateMany({
+      where: {
+        status: 'pending',
+        lastSyncedAt: null,
+        createdAt: { lt: waitingSince },
+        OR: [{ scanQueuedAt: null }, { scanQueuedAt: { lt: claimedSince } }],
+      },
+      data: { status: 'failed', lastError: 'No scan came back for this address — retrying' },
+    });
+    return count;
   }
 
   /** We deliberately leave the last successful cached value untouched — it's served with a stale flag */
