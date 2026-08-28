@@ -343,6 +343,7 @@ export function PortfolioPage({ slug }: { slug: string }) {
 
       {/* header */}
       <div
+        className="app-header"
         style={{
           position: 'sticky',
           top: 0,
