@@ -26,7 +26,12 @@ interface Props {
    * above it. The readout moves to the top right, out from under that text.
    */
   bare?: boolean;
-  /** The debt card draws in the muted grey — owing money is not a gain */
+  /**
+   * `muted` is what a debt is drawn in: a grey line rather than the accent
+   * green, a grey band when a span is measured, and the change across that span
+   * read the other way round — owing more is the losing direction, so a rising
+   * debt is red and a falling one green.
+   */
   tone?: 'accent' | 'muted';
 }
 
@@ -361,16 +366,22 @@ export function AreaChart({ values, times, period, height, bare = false, tone = 
         const from = values[selection.fromIndex];
         const to = values[selection.toIndex];
         const chg = to - from;
+        const up = chg >= 0;
         return {
           chg,
           pct: from ? (chg / from) * 100 : 0,
-          up: chg >= 0,
+          up,
+          // Which way is the good way. On a debt it is down: the sign in front
+          // of the number stays what it is, only the colour behind it flips.
+          good: tone === 'muted' ? !up : up,
           label: `${dateLabel(times[selection.fromIndex], period)} → ${dateLabel(times[selection.toIndex], period)}`,
         };
       })()
     : null;
 
   const hovered = hover && hover.index >= 0 && hover.index < values.length ? hover.index : null;
+  /** The band belongs to the line, so it is drawn in the line's own colour */
+  const SELECTION = tone === 'muted' ? 'var(--mut)' : 'var(--acc)';
 
   return (
     <div
@@ -390,7 +401,7 @@ export function AreaChart({ values, times, period, height, bare = false, tone = 
         onPointerCancel={onPointerUp}
       />
 
-      {/* the selected span */}
+      {/* the selected span — in the colour of the line it is measuring */}
       {band ? (
         <div
           style={{
@@ -399,9 +410,9 @@ export function AreaChart({ values, times, period, height, bare = false, tone = 
             bottom: 0,
             left: band.left,
             width: band.width,
-            background: 'color-mix(in srgb, var(--acc) 12%, transparent)',
-            borderLeft: '1px solid color-mix(in srgb, var(--acc) 55%, transparent)',
-            borderRight: '1px solid color-mix(in srgb, var(--acc) 55%, transparent)',
+            background: `color-mix(in srgb, ${SELECTION} 12%, transparent)`,
+            borderLeft: `1px solid color-mix(in srgb, ${SELECTION} 55%, transparent)`,
+            borderRight: `1px solid color-mix(in srgb, ${SELECTION} 55%, transparent)`,
             pointerEvents: 'none',
           }}
         />
@@ -427,7 +438,7 @@ export function AreaChart({ values, times, period, height, bare = false, tone = 
         >
           {range ? (
             <>
-              <span style={{ fontWeight: 600, color: range.up ? 'var(--up)' : 'var(--down)' }}>
+              <span style={{ fontWeight: 600, color: range.good ? 'var(--up)' : 'var(--down)' }}>
                 {(range.up ? '+' : '−') + fmtUsd(Math.abs(range.chg), 0)} ({range.up ? '+' : ''}
                 {range.pct.toFixed(2)}%)
               </span>
