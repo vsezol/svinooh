@@ -189,7 +189,12 @@ setvars bot-telegram \
 # system pushes and it sits on a database where a balance and the person holding
 # it are one join apart. ADMIN_PASSWORD_HASH comes from
 # `cd apps/admin && python -m app.hash` — set it by hand, it is not generated
-# here on purpose. config apps/admin/railway.json
+# here on purpose.
+#
+# No railway.json: Railway deprecated config-as-code, so this one is configured
+# on the service itself — Dockerfile apps/admin/Dockerfile, healthcheck /health,
+# and watch patterns apps/admin/** and libs/common/settings/** so it only
+# rebuilds when its own files or the registry change.
 add_repo admin
 setvars admin \
   "PORT=3000" \
@@ -219,7 +224,6 @@ The Railway CLI does not set these reliably; do them once in the dashboard
      scanner-evm  → apps/scanner-evm/railway.json
      monitor-alerts → apps/monitor-alerts/railway.json
      bot-telegram → apps/bot-telegram/railway.json
-     admin → apps/admin/railway.json
      web          → apps/web/railway.json          (or Dockerfile path apps/web/Dockerfile)
      prometheus   → ops/prometheus/railway.json
      grafana      → ops/grafana/railway.json

@@ -15,12 +15,24 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
-# Next to the app in the image; the repo path when running from a checkout
-CANDIDATES = [
-    Path(os.environ.get("SETTINGS_REGISTRY", "")),
-    Path(__file__).resolve().parent.parent / "registry.json",
-    Path(__file__).resolve().parents[3] / "libs" / "common" / "settings" / "registry.json",
-]
+def candidates() -> list[Path]:
+    """Where to look, nearest first: an explicit path, then the copy the image
+    puts beside the app, then the repo itself when running from a checkout.
+
+    Built when it is needed rather than at import. `parents[3]` is only a valid
+    index inside the repo — in the container the app sits three levels shallower
+    and computing it at import time took the whole process down before any
+    candidate had been tried.
+    """
+    here = Path(__file__).resolve()
+    found: list[Path] = []
+    explicit = os.environ.get("SETTINGS_REGISTRY")
+    if explicit:
+        found.append(Path(explicit))
+    found.append(here.parent.parent / "registry.json")
+    if len(here.parents) > 3:
+        found.append(here.parents[3] / "libs" / "common" / "settings" / "registry.json")
+    return found
 
 
 @dataclass(frozen=True)
@@ -72,12 +84,13 @@ class Registry:
 
 @lru_cache(maxsize=1)
 def registry() -> Registry:
-    for path in CANDIDATES:
-        if path and path.is_file():
+    looked = candidates()
+    for path in looked:
+        if path.is_file():
             raw = json.loads(path.read_text())
             break
     else:
-        raise RuntimeError(f"registry.json not found; looked in {[str(p) for p in CANDIDATES]}")
+        raise RuntimeError(f"registry.json not found; looked in {[str(p) for p in looked]}")
 
     return Registry(
         groups=tuple(raw["groups"]),
