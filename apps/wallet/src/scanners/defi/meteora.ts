@@ -27,6 +27,21 @@ interface MeteoraPool {
   tokenXMint?: string;
   tokenYMint?: string;
   baseFee?: number;
+  /** Current USD value of everything the wallet has in this pool — what the UI shows */
+  balances?: number | string;
+  unclaimedFees?: number | string;
+  outOfRange?: boolean;
+}
+
+/** One pool the wallet holds, as its own line — value and range straight from Meteora */
+export interface MeteoraPoolPosition {
+  poolAddress: string;
+  pairLabel: string;
+  tokenX: string;
+  tokenY: string;
+  valueUsd: number;
+  feesUsd: number;
+  inRange: boolean;
 }
 
 interface MeteoraPosition {
@@ -86,4 +101,33 @@ export async function meteoraPools(address: string): Promise<PoolFact[]> {
     }),
   );
   return perPool.flat();
+}
+
+/**
+ * The wallet's Meteora pools, one entry each, with the value and range Meteora
+ * itself reports (the same `balances` the DLMM UI shows).
+ *
+ * Jupiter aggregates every Meteora pool a wallet holds into a single element, so
+ * two pools arrive as one position. This is the per-pool truth the caller uses
+ * to break that one position back into the several it really is. A single hop —
+ * `/portfolio/open` already carries value, fees and out-of-range per pool, so no
+ * per-position round trip is needed here.
+ */
+export async function meteoraPositions(address: string): Promise<MeteoraPoolPosition[]> {
+  const pools = await paged<MeteoraPool>(`/portfolio/open?user=${address}`, 'pools');
+  return pools
+    .map((pool) => {
+      const tokenX = pool.tokenX || (pool.tokenXMint ?? '').slice(0, 4);
+      const tokenY = pool.tokenY || (pool.tokenYMint ?? '').slice(0, 4);
+      return {
+        poolAddress: pool.poolAddress,
+        pairLabel: `${tokenX}/${tokenY}`,
+        tokenX,
+        tokenY,
+        valueUsd: Number(pool.balances) || 0,
+        feesUsd: Number(pool.unclaimedFees) || 0,
+        inRange: !pool.outOfRange,
+      };
+    })
+    .filter((p) => p.valueUsd > 0.01);
 }

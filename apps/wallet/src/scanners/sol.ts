@@ -3,6 +3,7 @@ import { fetchJson } from './http';
 import { rangeFromLegs } from '@svinooh/common';
 import { enrich, needsLendingFacts, NO_FACTS } from '@svinooh/common';
 import { solanaLendingFacts, solanaPoolFacts } from './defi';
+import { meteoraPositions } from './defi/meteora';
 import type { ScanPosition, ScanPositionToken, ScanResult } from '@svinooh/shared';
 
 /**
@@ -190,13 +191,16 @@ export async function scanSol(address: string): Promise<ScanResult> {
   //    what Jupiter does not: whether a concentrated position is actually in its
   //    band, and what a loan's health and rate are. They run together because
   //    neither waits on the other, and the facts are only read at the end.
-  const [portfolio, poolFacts] = await Promise.all([
+  const [portfolio, poolFacts, meteoraByPool] = await Promise.all([
     fetchJson<{ fetcherResults?: Array<{ elements?: JupElement[] }> }>(
       `${JUP_PORTFOLIO_API}/${address}?unpriced=false`,
       { headers: { accept: 'application/json', 'x-api-key': JUP_API_KEY } },
       { timeoutMs: 45_000 },
     ),
     solanaPoolFacts(address),
+    // Per-pool Meteora truth, to undo Jupiter's aggregation below. Best-effort:
+    // if it fails we keep Jupiter's single (merged) position rather than none.
+    meteoraPositions(address).catch(() => []),
   ]);
 
   let defi = 0;
@@ -333,6 +337,40 @@ export async function scanSol(address: string): Promise<ScanResult> {
       });
     } else {
       unpriced.push(`GM pool ${pool.name}`);
+    }
+  }
+
+  // Jupiter aggregates every Meteora pool a wallet holds into ONE element, so
+  // two pools arrive as a single position. Meteora reports them per pool, so
+  // when there is more than one, split that position back into one per pool.
+  // Jupiter's total stays the authority — shared out by each pool's balance —
+  // so the portfolio total does not move. One pool changes nothing: Jupiter's
+  // position, with its exact legs, stands as-is.
+  if (meteoraByPool.length >= 2) {
+    const merged = positions.filter((p) => p.platform === 'meteora');
+    const mergedValue = merged.reduce((sum, p) => sum + p.valueUsd, 0);
+    const poolTotal = meteoraByPool.reduce((sum, p) => sum + p.valueUsd, 0) || 1;
+    const kept = positions.filter((p) => p.platform !== 'meteora');
+    positions.length = 0;
+    positions.push(...kept);
+    for (const pool of meteoraByPool) {
+      const valueUsd = mergedValue > 0 ? mergedValue * (pool.valueUsd / poolTotal) : pool.valueUsd;
+      positions.push({
+        symbol: 'Meteora',
+        name: 'Liquidity Pool',
+        note: pool.pairLabel,
+        valueUsd,
+        platform: 'meteora',
+        category: 'defi',
+        range: pool.inRange ? 'in' : 'out',
+        // The pair is what tells one pool from the other (and keys the alert);
+        // the per-leg split Jupiter had is gone once it merges them, so these
+        // halves are nominal — enrich re-attaches the real band from Meteora.
+        tokens: [
+          { symbol: pool.tokenX, amount: null, priceUsd: null, valueUsd: valueUsd / 2, role: 'supply' },
+          { symbol: pool.tokenY, amount: null, priceUsd: null, valueUsd: valueUsd / 2, role: 'supply' },
+        ],
+      });
     }
   }
 
