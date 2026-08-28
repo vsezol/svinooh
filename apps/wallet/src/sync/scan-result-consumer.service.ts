@@ -43,7 +43,20 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
     this.logger.log(`Consuming ${SCAN_RESULT_QUEUE} — the single writer of wallet values`);
   }
 
+  /**
+   * A result arrived, so whatever we do with it, this address is no longer on
+   * its way — the claim is released on every path out of here, including the
+   * ones that write nothing.
+   */
   async apply(outcome: ScanOutcome): Promise<void> {
+    try {
+      await this.store(outcome);
+    } finally {
+      await this.sync.releaseScan(outcome.chain, outcome.address);
+    }
+  }
+
+  private async store(outcome: ScanOutcome): Promise<void> {
     const key = `${outcome.chain}:${outcome.address}`;
     const wallets = await this.prisma.wallet.findMany({
       where: { chain: outcome.chain, address: outcome.address },
