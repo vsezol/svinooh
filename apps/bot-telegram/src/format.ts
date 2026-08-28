@@ -71,6 +71,16 @@ function title(item: AlertItem): string {
   return `${esc(item.position)}${fee} (${esc(item.band.chainLabel)})`;
 }
 
+/**
+ * How a threshold line qualifies itself: crossed just now, still where it was
+ * an hour ago, or back on the right side of the line.
+ */
+function against(direction: AlertItem['direction'], over: boolean): string {
+  if (direction === 'recovered') return over ? 'back under your' : 'back above your';
+  const side = over ? 'over your' : 'under your';
+  return direction === 'still' ? `still ${side}` : side;
+}
+
 /** What changed, and what the reading was — never one without the other */
 function status(item: AlertItem): string {
   const value = item.value ?? 0;
@@ -78,18 +88,14 @@ function status(item: AlertItem): string {
   switch (item.kind) {
     case 'range': {
       const at = item.band ? standing(item.band) : null;
-      const state = item.direction === 'entered' ? 'OUT OF RANGE' : 'IN RANGE';
-      const was = item.direction === 'entered' ? 'was in range' : 'was out of range';
+      const state = item.direction === 'recovered' ? 'IN RANGE' : 'OUT OF RANGE';
+      const was = item.direction === 'recovered' ? 'was out of range' : 'was in range';
       return `Status: ${state}${at ? ` ${at}` : ''} (${was})`;
     }
     case 'health':
-      return item.direction === 'entered'
-        ? `Status: HEALTH FACTOR ${num(value)}, under your ${num(threshold)}`
-        : `Status: HEALTH FACTOR ${num(value)}, back above your ${num(threshold)}`;
+      return `Status: HEALTH FACTOR ${num(value)}, ${against(item.direction, false)} ${num(threshold)}`;
     case 'borrow':
-      return item.direction === 'entered'
-        ? `Status: BORROW APY ${num(value)}%, over your ${num(threshold)}%`
-        : `Status: BORROW APY ${num(value)}%, back under your ${num(threshold)}%`;
+      return `Status: BORROW APY ${num(value)}%, ${against(item.direction, true)} ${num(threshold)}%`;
   }
 }
 
