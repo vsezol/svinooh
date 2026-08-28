@@ -25,23 +25,29 @@ const FRESH: Remembered = { inRange: null, healthBreached: false, borrowBreached
 /**
  * What changed since last time, and what is worth saying about it.
  *
- * Three rules, and they are not the same rule:
+ * A range and a threshold are not the same kind of thing, and they are not
+ * treated as one:
  *
- *  - **A range is announced on the crossing, and the first sighting is silent.**
- *    A position that is already out of range when we first look has been out of
- *    range for some unknown while; saying so is not news, and saying it once per
- *    scan until it comes back is worse. So the first look is remembered quietly
- *    and only the next change speaks.
+ *  - **A range is announced on the crossing, and only on the crossing.** It is
+ *    an event: the price left the band, or came back into it. Repeating it
+ *    would say nothing new — the position is out of range and earning nothing
+ *    until it is not, and its owner already knows because we said so. The first
+ *    sighting is silent for the same reason in reverse: a position that is
+ *    already out of range when we first look has been for an unknown while, and
+ *    that is not this scan's news.
  *
- *  - **A threshold that is already breached on the first sighting speaks at
- *    once.** This is the opposite of the range rule and deliberately so: a
- *    health factor under the line is a position approaching liquidation, and
- *    somebody who has just asked to be warned about that is owed the warning
- *    now, not after it gets worse.
+ *  - **A threshold is a condition, and it says so on every check until it
+ *    stops.** A health factor under the line is a position walking towards
+ *    liquidation and a borrow rate over it is money leaking every hour; both
+ *    persist until somebody repays, adds collateral, or decides the threshold
+ *    was wrong. So every scan that still finds one says so, carrying the
+ *    reading it found — a row of them is the position getting worse or better
+ *    in front of you. There is no clock and nothing to remember about when we
+ *    last spoke: what is true now is what gets sent.
  *
- *  - **Coming back is worth a message too.** Being told the danger has passed is
- *    half of why anybody turns an alert on, and it is the only thing that makes
- *    the silence in between mean something.
+ *  - **Coming back is worth a message too.** Being told the danger has passed
+ *    is half of why anybody turns an alert on, and it is the only thing that
+ *    makes the silence in between mean something.
  *
  * A threshold nobody set is nobody watching, so nothing is compared against it
  * — and turning an alert off does not just silence it, it forgets the state, so
@@ -78,7 +84,13 @@ export function decide(
       // Silent on the first sighting: an unknown length of time out of range is
       // not news, and it is not this scan's doing
       if (seen && before.inRange !== null && before.inRange !== position.inRange) {
-        items.push({ ...about, kind: 'range', direction: position.inRange ? 'recovered' : 'entered', value: null, threshold: null });
+        items.push({
+          ...about,
+          kind: 'range',
+          direction: position.inRange ? 'recovered' : 'entered',
+          value: null,
+          threshold: null,
+        });
       }
     }
 
@@ -86,9 +98,11 @@ export function decide(
     if (health !== null && position.healthFactor !== null) {
       const breached = position.healthFactor < health;
       now.healthBreached = breached;
-      // A first sighting remembers "not breached", so a position already under
-      // the line differs from it and speaks at once
-      if (breached !== before.healthBreached) {
+      // Under the line: said, every time, including the first sighting —
+      // somebody who has just asked to be warned about liquidation is owed the
+      // warning now. Not under it: said once, on the way back out. Which is why
+      // the previous state is remembered at all.
+      if (breached || before.healthBreached) {
         items.push({
           ...about,
           kind: 'health',
@@ -103,7 +117,7 @@ export function decide(
     if (borrow !== null && position.borrowApyPct !== null) {
       const breached = position.borrowApyPct > borrow;
       now.borrowBreached = breached;
-      if (breached !== before.borrowBreached) {
+      if (breached || before.borrowBreached) {
         items.push({
           ...about,
           kind: 'borrow',

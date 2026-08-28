@@ -71,6 +71,19 @@ function title(item: AlertItem): string {
   return `${esc(item.position)}${fee} (${esc(item.band.chainLabel)})`;
 }
 
+/**
+ * A reading, picked out, and which side of the line it fell on: `2.8 << 4` is a
+ * health factor under a threshold of 4, `13.9% >> 12%` a borrow rate over one.
+ *
+ * Which side it is on is the whole message, so it is a comparator and not a
+ * sentence — and it is read off the two numbers rather than off what the
+ * collector decided, so it cannot end up disagreeing with them.
+ */
+function against(value: number, threshold: number, unit = ''): string {
+  const sign = value >= threshold ? '&gt;&gt;' : '&lt;&lt;';
+  return `<b>${num(value)}${unit}</b> ${sign} ${num(threshold)}${unit}`;
+}
+
 /** What changed, and what the reading was — never one without the other */
 function status(item: AlertItem): string {
   const value = item.value ?? 0;
@@ -78,18 +91,14 @@ function status(item: AlertItem): string {
   switch (item.kind) {
     case 'range': {
       const at = item.band ? standing(item.band) : null;
-      const state = item.direction === 'entered' ? 'OUT OF RANGE' : 'IN RANGE';
-      const was = item.direction === 'entered' ? 'was in range' : 'was out of range';
+      const state = item.direction === 'recovered' ? 'IN RANGE' : 'OUT OF RANGE';
+      const was = item.direction === 'recovered' ? 'was out of range' : 'was in range';
       return `Status: ${state}${at ? ` ${at}` : ''} (${was})`;
     }
     case 'health':
-      return item.direction === 'entered'
-        ? `Status: HEALTH FACTOR ${num(value)}, under your ${num(threshold)}`
-        : `Status: HEALTH FACTOR ${num(value)}, back above your ${num(threshold)}`;
+      return `Health factor: ${against(value, threshold)}`;
     case 'borrow':
-      return item.direction === 'entered'
-        ? `Status: BORROW APY ${num(value)}%, over your ${num(threshold)}%`
-        : `Status: BORROW APY ${num(value)}%, back under your ${num(threshold)}%`;
+      return `Borrow APY: ${against(value, threshold, '%')}`;
   }
 }
 
