@@ -252,6 +252,16 @@ body[data-theme='light'] .on-dark {
   padding-right: calc(clamp(14px, 3.5vw, 28px) + env(safe-area-inset-right));
 }
 
+/* The strip of screen the page is handed but cannot use: the notch or the
+   Dynamic Island lives there, and installed to a home screen the page runs
+   right under it. How deep it goes is the device's to say — 59pt on an Island
+   phone, ~47 on a notch, 20 on a flat top — so the header takes the number
+   from the device rather than picking one. In a browser tab the inset reads 0,
+   because the browser's own chrome is already holding that space. */
+.app-header {
+  padding-top: env(safe-area-inset-top);
+}
+
 /* svin[oo]h logo */
 .logo {
   display: inline-flex;
@@ -690,7 +700,7 @@ body[data-theme='light'] .on-dark {
 .tab-dock {
   display: none;
   left: 50%;
-  top: calc(100dvh - 10px);
+  top: calc(100dvh - 12px);
   bottom: auto;
   transform: translate(-50%, -100%);
 }
@@ -701,7 +711,7 @@ body[data-theme='light'] .on-dark {
    itself, because Safari does not keep dvh honest once its toolbar collapses. */
 @media (display-mode: standalone) {
   .tab-dock {
-    top: calc(100dvh - 10px - env(safe-area-inset-bottom));
+    top: calc(100dvh - 12px - env(safe-area-inset-bottom));
   }
 }
 

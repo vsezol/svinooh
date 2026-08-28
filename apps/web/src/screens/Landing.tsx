@@ -133,7 +133,12 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* header */}
-      <div className="shell" style={{ height: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      {/* min-height, not height: the safe-area padding has to grow the row
+          rather than eat into it — see .app-header */}
+      <div
+        className="shell app-header"
+        style={{ minHeight: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+      >
         <Logo size={19} />
         <div style={{ display: 'flex', gap: 8 }}>
           <ThemeToggle />

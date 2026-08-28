@@ -5,11 +5,11 @@ import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 export type Tab = 'portfolio' | 'notifications';
 
 /**
- * The gap the dock keeps from the bottom of what is on screen — 10px wherever
+ * The gap the dock keeps from the bottom of what is on screen — 12px wherever
  * the page owns that edge: a desktop window, an Android browser, an installed
  * app resting on the home indicator.
  */
-const DOCK_GAP = 10;
+const DOCK_GAP = 12;
 
 /**
  * In a Safari tab on iOS it is nothing at all.
