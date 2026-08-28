@@ -149,7 +149,11 @@ function WalletCard({
   const blocks = buildBlocks(wallet.positions);
   const hasPools = blocks.some((b) => blockMatches(b, 'pools'));
   const hasLending = blocks.some((b) => blockMatches(b, 'lending'));
-  const armed = armedCount(alerts, hasPools, hasLending);
+  // Tron's two are about the wallet's resources, not about anything it holds, so
+  // the chain is what decides whether they apply — a Tron wallet with no
+  // positions at all still has energy, bandwidth and delegations to watch
+  const isTron = wallet.chain === 'TRON';
+  const armed = armedCount(alerts, hasPools, hasLending, isTron);
 
   return (
     <div style={{ border: '1px solid var(--line)', borderRadius: 16, background: 'var(--surf)', overflow: 'hidden' }}>
@@ -230,7 +234,38 @@ function WalletCard({
             </div>
           ) : null}
 
-          {!hasPools && !hasLending ? (
+          {isTron ? (
+            <div
+              style={{
+                padding: '14px 16px',
+                borderTop: hasPools || hasLending ? '1px solid var(--line)' : 'none',
+              }}
+            >
+              <div className="mono" style={EYEBROW}>
+                RESOURCES
+              </div>
+              <Row
+                title="Delegation unlocked"
+                note="When resources you delegated can be taken back"
+              >
+                <Toggle
+                  on={alerts.tronReclaimAlerts}
+                  onChange={(tronReclaimAlerts) => onChange({ tronReclaimAlerts })}
+                />
+              </Row>
+              <Row
+                title="Resources idle"
+                note="When energy and bandwidth are free and nothing is delegated"
+              >
+                <Toggle
+                  on={alerts.tronDelegateAlerts}
+                  onChange={(tronDelegateAlerts) => onChange({ tronDelegateAlerts })}
+                />
+              </Row>
+            </div>
+          ) : null}
+
+          {!hasPools && !hasLending && !isTron ? (
             <div style={{ padding: '14px 16px', fontSize: 12.5, color: 'var(--mut)' }}>
               No DeFi positions to monitor in this wallet yet.
             </div>

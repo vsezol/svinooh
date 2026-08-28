@@ -4,6 +4,7 @@ import type { PositionTokenRole, WalletDto } from '@svinooh/shared';
 import { blockMatches, buildBlocks, type PositionFilter } from '../lib/blocks';
 import { chainMeta, fmtUsd, shortAddress, walletName } from '../lib/format';
 import { WalletMenu } from './WalletMenu';
+import { TronResources } from './TronResources';
 
 /** How a leg of a DeFi position is labelled: accrued LP fees/rewards, and debt */
 const ROLE_LABEL: Record<PositionTokenRole, string> = {
@@ -52,7 +53,10 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
     () => buildBlocks(wallet.positions).filter((b) => blockMatches(b, filter)),
     [wallet.positions, filter],
   );
-  const expanded = !collapsed && !syncing && blocks.length > 0;
+  // Resources are not a position and not money, so they show only on the
+  // unfiltered view — a "pools" filter asked about pools
+  const tron = filter === 'all' ? (wallet.tron ?? null) : null;
+  const expanded = !collapsed && !syncing && (blocks.length > 0 || tron !== null);
   const share = total > 0 && wallet.totalUsd ? ((wallet.totalUsd / total) * 100).toFixed(1) + '% of total' : '';
 
   const copy = (e: MouseEvent) => {
@@ -191,6 +195,7 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
 
       {expanded ? (
         <div style={{ borderTop: '1px solid var(--line)', padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {tron ? <TronResources tron={tron} /> : null}
           {blocks.map((b, i) => (
             <div key={i} style={{ border: '1px solid var(--line)', borderRadius: 12, background: 'var(--surf2)', overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '10px 14px', flexWrap: 'wrap' }}>

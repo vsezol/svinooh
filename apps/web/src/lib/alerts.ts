@@ -14,6 +14,8 @@ export const ALERT_DEFAULTS: WalletAlerts = {
   rangeAlerts: true,
   healthFactorBelow: 1.1,
   borrowApyAbove: 12,
+  tronReclaimAlerts: true,
+  tronDelegateAlerts: true,
 };
 
 /**
@@ -82,11 +84,18 @@ export function useAlerts(slug: string, enabled: boolean) {
  * A threshold nobody filled in is not an alert, however much room the setting
  * takes up on screen.
  */
-export function armedCount(alerts: WalletAlerts, hasPools: boolean, hasLending: boolean): number {
+export function armedCount(
+  alerts: WalletAlerts,
+  hasPools: boolean,
+  hasLending: boolean,
+  isTron = false,
+): number {
   let n = 0;
   if (hasPools && alerts.rangeAlerts) n += 1;
   if (hasLending && alerts.healthFactorBelow !== null) n += 1;
   if (hasLending && alerts.borrowApyAbove !== null) n += 1;
+  if (isTron && alerts.tronReclaimAlerts) n += 1;
+  if (isTron && alerts.tronDelegateAlerts) n += 1;
   return n;
 }
 

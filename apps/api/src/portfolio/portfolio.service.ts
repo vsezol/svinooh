@@ -20,6 +20,8 @@ import type {
   PositionRange,
   PositionTokenDto,
   PublicPortfolioDto,
+  TronResources,
+  TronResourcesDto,
   UpdateWalletAlertsDto,
   WalletAlertsDto,
   WalletDto,
@@ -237,14 +239,36 @@ const ALERT_DEFAULTS = {
   rangeAlerts: true,
   healthFactorBelow: 1.1,
   borrowApyAbove: 12,
+  // On by default like range alerts, and for the same reason: somebody who adds
+  // a Tron wallet wants to hear that a delegation came free. Both are one-way —
+  // they say something became possible, never that it stopped being.
+  tronReclaimAlerts: true,
+  tronDelegateAlerts: true,
 } as const;
 
 /** A wallet with no row of its own is a wallet on the defaults */
 function toAlertsDto(
   walletId: string,
-  row: { rangeAlerts: boolean; healthFactorBelow: number | null; borrowApyAbove: number | null } | null,
+  row: {
+    rangeAlerts: boolean;
+    healthFactorBelow: number | null;
+    borrowApyAbove: number | null;
+    tronReclaimAlerts: boolean;
+    tronDelegateAlerts: boolean;
+  } | null,
 ): WalletAlertsDto {
-  return { walletId, ...(row ? { rangeAlerts: row.rangeAlerts, healthFactorBelow: row.healthFactorBelow, borrowApyAbove: row.borrowApyAbove } : ALERT_DEFAULTS) };
+  return {
+    walletId,
+    ...(row
+      ? {
+          rangeAlerts: row.rangeAlerts,
+          healthFactorBelow: row.healthFactorBelow,
+          borrowApyAbove: row.borrowApyAbove,
+          tronReclaimAlerts: row.tronReclaimAlerts,
+          tronDelegateAlerts: row.tronDelegateAlerts,
+        }
+      : ALERT_DEFAULTS),
+  };
 }
 
 /** A threshold nobody is watching, or a number that can actually be crossed */
@@ -581,6 +605,12 @@ export class PortfolioService {
         ? { healthFactorBelow: threshold(patch.healthFactorBelow) }
         : {}),
       ...('borrowApyAbove' in patch ? { borrowApyAbove: threshold(patch.borrowApyAbove) } : {}),
+      ...('tronReclaimAlerts' in patch
+        ? { tronReclaimAlerts: patch.tronReclaimAlerts === true }
+        : {}),
+      ...('tronDelegateAlerts' in patch
+        ? { tronDelegateAlerts: patch.tronDelegateAlerts === true }
+        : {}),
     };
     const saved = await this.prisma.walletAlerts.upsert({
       where: { walletId },
@@ -1012,9 +1042,44 @@ export class PortfolioService {
       breakdown: (wallet.breakdown as Record<string, number> | null) ?? null,
       positions,
       unpriced: (wallet.unpriced as string[] | null) ?? undefined,
+      tron: toTronDto(wallet.tronResources, wallet.tronResourcesAt),
       createdAt: wallet.createdAt.toISOString(),
     };
   }
+}
+
+/**
+ * A Tron wallet's resources, with the two things the page would otherwise have
+ * to work out for itself.
+ *
+ * `reclaimableNow` and `nextReclaimAt` are derived here rather than in the
+ * browser so that the page, the Telegram message and the alert all answer the
+ * same question the same way — the rule that `expireAt` of 0 means "no lock at
+ * all", not "expired in 1970", is exactly the kind of thing that drifts when it
+ * is written down twice.
+ *
+ * Public, like every other number on a portfolio: what an address holds and
+ * what it has delegated is on the chain for anyone to read, and says nothing
+ * about who owns it.
+ */
+function toTronDto(stored: unknown, readAt: Date | null): TronResourcesDto | null {
+  if (!stored || !readAt) return null;
+  const resources = stored as TronResources;
+  const now = Date.now();
+  let reclaimableNow = false;
+  let nextReclaimAt: number | null = null;
+  for (const delegation of resources.delegations ?? []) {
+    if (!delegation.expireAt || delegation.expireAt <= now) reclaimableNow = true;
+    else if (nextReclaimAt === null || delegation.expireAt < nextReclaimAt) {
+      nextReclaimAt = delegation.expireAt;
+    }
+  }
+  return {
+    ...resources,
+    readAt: readAt.toISOString(),
+    reclaimableNow,
+    nextReclaimAt: nextReclaimAt === null ? null : new Date(nextReclaimAt).toISOString(),
+  };
 }
 
 /** Wallets ordered by descending value; not-yet-scanned ones go to the end */

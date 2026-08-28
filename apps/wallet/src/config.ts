@@ -49,6 +49,15 @@ export const config = {
   // its turn in a long queue is not a failed one, and saying so would be worse
   // than the spinner it replaces.
   scanStuckPendingMin: int(process.env.SCAN_STUCK_PENDING_MIN, 15),
+  // How often a TRON wallet's energy/bandwidth/delegations are re-read. Far
+  // slower than the balance sync on purpose: one read is four or more
+  // SEQUENTIAL rate-limited TronGrid calls, and resources move on the scale of
+  // a delegation lock (days), not of a price. In between, the stored snapshot is
+  // carried forward untouched.
+  tronResourceIntervalMin: int(process.env.TRON_RESOURCE_INTERVAL_MIN, 60),
+  // Optional TronGrid API key. Keyless works — the monolith ran that way — but a
+  // key is what keeps us off the shared free-tier bucket as Tron wallets grow.
+  tronApiKey: process.env.TRON_PRO_API_KEY || null,
   httpTimeoutMs: int(process.env.HTTP_TIMEOUT_MS, 15_000),
   // Concurrency of the BTC/SOL/TRON HTTP scanners.
   httpConcurrency: int(process.env.SCAN_HTTP_CONCURRENCY, 4),

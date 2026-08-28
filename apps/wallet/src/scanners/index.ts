@@ -7,7 +7,16 @@ import type { ScanResult } from '@svinooh/shared';
 
 export type { ScanPosition, ScanResult } from '@svinooh/shared';
 
-export function scanAddress(chain: Chain, address: string): Promise<ScanResult> {
+/**
+ * `resourcesAt` is TRON's alone: it says when that address's resources were last
+ * read, so the scan can decide whether it owes the extra rate-limited calls this
+ * time. Every other chain ignores it.
+ */
+export function scanAddress(
+  chain: Chain,
+  address: string,
+  resourcesAt?: string | null,
+): Promise<ScanResult> {
   switch (chain) {
     case 'BTC':
       return scanBtc(address);
@@ -18,6 +27,6 @@ export function scanAddress(chain: Chain, address: string): Promise<ScanResult> 
     case 'SOL':
       return scanSol(address);
     case 'TRON':
-      return scanTron(address);
+      return scanTron(address, resourcesAt ?? null);
   }
 }

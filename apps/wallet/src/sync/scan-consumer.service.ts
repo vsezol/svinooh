@@ -52,7 +52,9 @@ export class ScanConsumerService implements OnApplicationBootstrap {
   async scanInProcess(job: ScanJob): Promise<ScanOutcome> {
     const chain = job.chain;
     try {
-      const result = await scanQueue.run(chain, () => scanAddress(chain, job.address));
+      const result = await scanQueue.run(chain, () =>
+        scanAddress(chain, job.address, job.tronResourcesAt),
+      );
       // Same rule as the EVM scanner applies: read again while we are here, and
       // let the writer decide which reading to believe
       const suspicious =
@@ -60,7 +62,11 @@ export class ScanConsumerService implements OnApplicationBootstrap {
         job.previousTotal > 10 &&
         result.totalUsd < job.previousTotal * 0.75;
       const recheck: ScanResult | null = suspicious
-        ? await scanQueue.run(chain, () => scanAddress(chain, job.address))
+        // A re-read is about the balance, and resources are not part of that
+        // question — passing "now" keeps it from paying for them twice
+        ? await scanQueue.run(chain, () =>
+            scanAddress(chain, job.address, new Date().toISOString()),
+          )
         : null;
       return { chain, address: job.address, ok: true, result, recheck };
     } catch (error) {

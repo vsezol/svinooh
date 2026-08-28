@@ -138,6 +138,16 @@ model Wallet {
   lastError    String?
   breakdown    Json?
   unpriced     Json?
+  /// TRON only: the wallet's energy, bandwidth and outgoing delegations, as the
+  /// last resource read found them (a TronResources). Kept as one JSON value
+  /// beside breakdown/unpriced rather than spread over ten columns, because
+  /// nothing queries by it — it is rendered and it is compared against itself.
+  tronResources   Json?
+  /// When that read happened. Resources cost four or more sequential
+  /// rate-limited TronGrid calls, so they are refreshed on their own slower
+  /// clock (TRON_RESOURCE_INTERVAL_MIN) instead of on every sync, and this is
+  /// what says whether the next scan owes one.
+  tronResourcesAt DateTime?
   createdAt    DateTime         @default(now())
   positions    Position[]
   snapshots    WalletSnapshot[]
@@ -162,6 +172,11 @@ model WalletAlertState {
   healthBreached Boolean  @default(false)
   /// Whether the borrow rate was over it
   borrowBreached Boolean  @default(false)
+  /// TRON actions, which are states rather than crossings: whether the wallet
+  /// could reclaim, and whether it could delegate, last time we looked. Only
+  /// the row under the synthetic TRON key uses these — see tronStateKey.
+  reclaimArmed   Boolean  @default(false)
+  delegateArmed  Boolean  @default(false)
   updatedAt      DateTime @updatedAt
 
   @@id([walletId, positionKey])
@@ -186,6 +201,10 @@ model WalletAlerts {
   healthFactorBelow Float?
   /// Told when the borrow rate climbs above this, in percent
   borrowApyAbove    Float?
+  /// TRON: a delegation came unlocked and there is bandwidth to take it back
+  tronReclaimAlerts Boolean  @default(true)
+  /// TRON: resources are free and nothing is delegated
+  tronDelegateAlerts Boolean @default(true)
   updatedAt         DateTime @updatedAt
 }
 

@@ -34,6 +34,17 @@ export interface ScanJob {
    * drop is not made there; see ScanOutcome.recheck.
    */
   previousTotal: number | null;
+  /**
+   * TRON only: when this address's resources were last read, as an ISO string,
+   * or null if never.
+   *
+   * It rides along for the same reason previousTotal does — the scanner has no
+   * database, and this is the one thing it cannot work out for itself. Reading
+   * resources costs four or more sequential rate-limited calls, so a scan only
+   * pays for them when the stored snapshot has gone stale; the rest of the time
+   * it leaves what is there alone.
+   */
+  tronResourcesAt?: string | null;
 }
 
 export type ScanOutcome =
