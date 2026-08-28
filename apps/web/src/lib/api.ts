@@ -47,28 +47,62 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * How many requests this page has in the air, and who is waiting for that to
+ * reach zero.
+ *
+ * Work nobody asked for waits here. A prefetch is by definition something no
+ * one is looking at, and one that races a request somebody IS looking at has
+ * made the page slower in order to save a click later.
+ */
+let inFlight = 0;
+let idleWaiters: Array<() => void> = [];
+
+function drained(): void {
+  inFlight--;
+  if (inFlight > 0) return;
+  const waiting = idleWaiters;
+  idleWaiters = [];
+  for (const wake of waiting) wake();
+}
+
+/** Resolves the moment nothing is being fetched — at once, if nothing is */
+export function whenNetworkIdle(): Promise<void> {
+  if (inFlight === 0) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    idleWaiters.push(resolve);
+  });
+}
+
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = { ...(init.headers as Record<string, string>) };
   if (init.body) headers['Content-Type'] = 'application/json';
   const token = tokenStore.get();
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  let res: Response;
+  inFlight++;
   try {
-    res = await fetch(`${API_URL}/api${path}`, { ...init, headers });
-  } catch {
-    throw new ApiError(0, 'Server unavailable');
-  }
-
-  if (!res.ok) {
-    let body: Partial<ApiErrorDto> & { message?: string | string[] } = {};
+    let res: Response;
     try {
-      body = await res.json();
+      res = await fetch(`${API_URL}/api${path}`, { ...init, headers });
     } catch {
-      // not JSON — keep the default message
+      throw new ApiError(0, 'Server unavailable');
     }
-    const message = Array.isArray(body.message) ? body.message.join(', ') : body.message;
-    throw new ApiError(res.status, message || `Error ${res.status}`, body.code);
+
+    if (!res.ok) {
+      let body: Partial<ApiErrorDto> & { message?: string | string[] } = {};
+      try {
+        body = await res.json();
+      } catch {
+        // not JSON — keep the default message
+      }
+      const message = Array.isArray(body.message) ? body.message.join(', ') : body.message;
+      throw new ApiError(res.status, message || `Error ${res.status}`, body.code);
+    }
+    return (await res.json()) as T;
+  } finally {
+    // Reading the body counts: a prefetch that starts while a large response is
+    // still streaming is competing for the same connection
+    drained();
   }
-  return res.json() as Promise<T>;
 }
