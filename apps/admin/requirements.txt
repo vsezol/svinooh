@@ -1,6 +1,6 @@
-fastapi==0.121.2
+fastapi==0.141.1
 uvicorn[standard]==0.41.0
-sqladmin==0.21.0
+sqladmin==0.31.0
 sqlalchemy==2.0.44
 psycopg[binary]==3.2.12
 itsdangerous==2.2.0
