@@ -145,6 +145,12 @@ model WalletAlertState {
   healthBreached Boolean  @default(false)
   /// Whether the borrow rate was over it
   borrowBreached Boolean  @default(false)
+  /// When the owner was last told about the health factor, so a breach that
+  /// stands can be raised again rather than mentioned once and forgotten.
+  /// Cleared when it recovers.
+  healthNotifiedAt DateTime?
+  /// The same clock for the borrow rate
+  borrowNotifiedAt DateTime?
   updatedAt      DateTime @updatedAt
 
   @@id([walletId, positionKey])
