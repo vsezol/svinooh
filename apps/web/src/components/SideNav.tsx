@@ -5,44 +5,19 @@ import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 export type Tab = 'portfolio' | 'notifications';
 
 /**
- * The gap the dock keeps from the bottom of what is on screen — 12px wherever
- * the page owns that edge: a desktop window, an Android browser, an installed
- * app resting on the home indicator.
- */
-const DOCK_GAP = 12;
-
-/**
- * In a Safari tab on iOS it is nothing at all.
- *
- * The page's area there stops where Safari's translucent toolbar begins:
- * anything drawn past that line comes out behind the glass, tinting it rather
- * than showing. Safari's own chrome is already the gap, and every point spent
- * on another one only widens a band the dock cannot cross anyway.
- */
-const DOCK_GAP_AT_SAFARI_TOOLBAR = 0;
-
-/** Chrome and Firefox on iOS are Safari underneath, with the same toolbar */
-function underSafariToolbar(): boolean {
-  const ua = navigator.userAgent;
-  // iPadOS calls itself a Macintosh; the touch points are what give it away
-  const ios = /iP(hone|ad|od)/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
-  return ios && !window.matchMedia('(display-mode: standalone)').matches;
-}
-
-/**
- * Keeps the dock on the bottom edge of what is actually visible.
+ * Keeps the bar's bottom edge on the bottom edge of what is actually visible.
  *
  * Neither CSS length can find that edge on iOS. `bottom` measures from the
  * layout viewport, which keeps the height the page had while Safari's toolbar
  * was expanded; `100dvh` is meant to be the viewport as it is now, but Safari
  * does not re-resolve it when the toolbar collapses under a scroll — measured
  * on an iPhone mid-scroll it still read 714 while 754 was on screen, which is
- * the 40px of dead air under the dock this exists to remove.
+ * 40px of dead air under the bar.
  *
  * visualViewport is the one thing that answers honestly, and it fires when the
- * toolbar moves. Installed to a home screen there is no toolbar and the bottom
- * of the screen is the home indicator instead, which the probe measures as a
- * safe-area inset — in a browser tab that inset is 0, so one line covers both.
+ * toolbar moves. There is no gap to keep: the bar meets that edge the way a
+ * tab bar does, and the home indicator is held off by its own padding rather
+ * than by floating the whole bar above it.
  */
 function useDockToVisibleBottom(): React.RefObject<HTMLDivElement | null> {
   const dock = useRef<HTMLDivElement>(null);
@@ -52,18 +27,11 @@ function useDockToVisibleBottom(): React.RefObject<HTMLDivElement | null> {
     const vv = window.visualViewport;
     if (!el || !vv) return;
 
-    const probe = document.createElement('div');
-    probe.style.cssText =
-      'position:fixed;bottom:0;left:0;width:0;visibility:hidden;pointer-events:none;height:env(safe-area-inset-bottom)';
-    document.body.appendChild(probe);
-
-    const gap = underSafariToolbar() ? DOCK_GAP_AT_SAFARI_TOOLBAR : DOCK_GAP;
-
     let queued = false;
     const place = () => {
       queued = false;
-      // The dock hangs upwards from this line — see .tab-dock's transform
-      el.style.top = `${vv.offsetTop + vv.height - gap - probe.offsetHeight}px`;
+      // The bar hangs upwards from this line — see .tab-dock's transform
+      el.style.top = `${vv.offsetTop + vv.height}px`;
     };
     const schedule = () => {
       if (queued) return;
@@ -83,16 +51,14 @@ function useDockToVisibleBottom(): React.RefObject<HTMLDivElement | null> {
       vv.removeEventListener('scroll', schedule);
       window.removeEventListener('scroll', schedule);
       window.removeEventListener('orientationchange', schedule);
-      probe.remove();
     };
   }, []);
 
   return dock;
 }
 
-/** The dock's pill slides between fixed slots, so both have to be one number */
-const DOCK_W = 72;
-const DOCK_H = 42;
+/** The three slots divide the width, so the sliding pill travels in percent */
+const DOCK_SLOTS = 3;
 
 const ICON = {
   strokeWidth: 2,
@@ -148,21 +114,31 @@ const navItem = (active: boolean, disabled: boolean, collapsed: boolean): CSSPro
 const dockItem = (active: boolean, disabled: boolean): CSSProperties => ({
   position: 'relative',
   zIndex: 1,
-  width: DOCK_W,
-  height: DOCK_H,
+  // Equal thirds of the width — a tab bar's slots are the width, divided
+  flex: 1,
+  minWidth: 0,
+  height: 50,
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
   justifyContent: 'center',
-  gap: 1,
+  gap: 3,
   cursor: disabled ? 'default' : 'pointer',
   userSelect: 'none',
-  color: active ? 'var(--acc-ink)' : 'var(--mut)',
+  color: active ? 'var(--acc-text)' : 'var(--mut)',
   opacity: disabled ? 0.45 : 1,
   transition: 'color 0.26s ease',
 });
 
-const DOCK_LABEL: CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '0.01em' };
+/** The icon sits in this, so the pill behind it has something to be the size of */
+const DOCK_ICON_BOX: CSSProperties = {
+  height: 26,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+};
+
+const DOCK_LABEL: CSSProperties = { fontSize: 10.5, fontWeight: 700, letterSpacing: '0.01em' };
 
 interface Props {
   tab: Tab;
@@ -270,52 +246,51 @@ export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
         </div>
       </div>
 
-      {/* phone dock */}
-      <div
-        ref={dock}
-        className="tab-dock"
-        // Where the bottom of the screen is gets measured, not declared — see
-        // useDockToVisibleBottom. The stylesheet's `top` is the guess it starts
-        // from, for the frame before the first measurement lands.
-        style={{
-          position: 'fixed',
-          zIndex: 60,
-          background: 'color-mix(in srgb, var(--surf) 86%, transparent)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          border: '1px solid var(--line2)',
-          borderRadius: 16,
-          padding: 3,
-          boxShadow: '0 14px 30px -16px rgba(0,0,0,0.6)',
-        }}
-      >
+      {/* phone tab bar — where the bottom of the screen is gets measured, not
+          declared: see useDockToVisibleBottom. The stylesheet holds the look
+          and the opening guess at `top`, for the frame before the first
+          measurement lands. */}
+      <div ref={dock} className="tab-dock">
         <div style={{ position: 'relative', display: 'flex' }}>
           {/* The pill is one element that moves, not a background that appears
-              under whichever tab is on — so the selection travels the distance */}
+              under whichever tab is on — so the selection travels the distance.
+              It rides a third-of-the-width carrier, which is how it can slide
+              between slots whose size only the browser knows. */}
           <div
+            aria-hidden="true"
             style={{
               position: 'absolute',
               top: 0,
               left: 0,
-              width: DOCK_W,
-              height: DOCK_H,
-              borderRadius: 13,
-              background: 'var(--acc)',
-              transform: `translateX(${tab === 'notifications' ? DOCK_W : 0}px)`,
+              width: `${100 / DOCK_SLOTS}%`,
+              height: 26,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transform: `translateX(${tab === 'notifications' ? 100 : 0}%)`,
               transition: 'transform 0.46s cubic-bezier(0.34,1.42,0.5,1)',
+              pointerEvents: 'none',
               zIndex: 0,
             }}
-          />
+          >
+            <div style={{ width: 54, height: 26, borderRadius: 13, background: 'var(--acc-soft)' }} />
+          </div>
           <div onClick={() => onTab('portfolio')} style={dockItem(tab === 'portfolio', false)}>
-            <ChartIcon size={19} />
+            <div style={DOCK_ICON_BOX}>
+              <ChartIcon size={20} />
+            </div>
             <span style={DOCK_LABEL}>Portfolio</span>
           </div>
           <div onClick={() => onTab('notifications')} style={dockItem(tab === 'notifications', false)}>
-            <BellIcon size={19} />
+            <div style={DOCK_ICON_BOX}>
+              <BellIcon size={20} />
+            </div>
             <span style={DOCK_LABEL}>Alerts</span>
           </div>
           <div title="AI agent — soon" style={dockItem(false, true)}>
-            <SparkIcon size={19} />
+            <div style={DOCK_ICON_BOX}>
+              <SparkIcon size={20} />
+            </div>
             <span style={DOCK_LABEL}>AI agent</span>
           </div>
         </div>
