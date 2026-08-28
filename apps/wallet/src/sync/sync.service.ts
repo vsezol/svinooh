@@ -176,17 +176,26 @@ export class SyncService {
             unpriced: result.unpriced ?? [],
           },
         }),
-        this.prisma.walletSnapshot.create({
-          data: {
-            walletId: wallet.id,
-            totalUsd: result.totalUsd,
-            ...accrued(result.positions),
-            breakdown: result.breakdown,
-          },
-        }),
       ]);
       await this.announce(wallet, result);
     }
+
+    // History is recorded ONCE per scan, against the address rather than each
+    // portfolio's copy of it: a wallet reused in another portfolio shares this
+    // history instead of starting over, and it outlives any single Wallet row —
+    // removing a wallet from a portfolio no longer erases the address's past.
+    // `group` is every Wallet row for this exact (chain, address), so this writes
+    // one row here, not one per portfolio that happens to hold it.
+    const { chain, address } = group[0];
+    await this.prisma.addressSnapshot.create({
+      data: {
+        chain,
+        address,
+        totalUsd: result.totalUsd,
+        ...accrued(result.positions),
+        breakdown: result.breakdown ?? undefined,
+      },
+    });
   }
 
   /**
