@@ -58,10 +58,15 @@ function standing(band: PositionBand): string | null {
   return at >= 1 ? `+${at.toFixed(2)}` : at.toFixed(2);
 }
 
-/** The mark in front of a line: what happened, before you have read what it was */
+/**
+ * The mark in front of a line: which of the two things this is, before you have
+ * read what it was. Everything wrong is one mark and everything fixed is the
+ * other — a siren for a health factor and a warning sign for a borrow rate made
+ * a message of four lines look like four different kinds of trouble, when the
+ * only distinction that matters at a glance is whether it needs you.
+ */
 function mark(item: AlertItem): string {
-  if (item.direction === 'recovered') return '✅';
-  return item.kind === 'health' ? '🚨' : item.kind === 'borrow' ? '⚠️' : '🔴';
+  return item.direction === 'recovered' ? '✅' : '🔴';
 }
 
 /** "cbBTC/USDC 0.04% (Solana)" where the protocol answered, the bare name where it did not */
@@ -81,7 +86,9 @@ function title(item: AlertItem): string {
  */
 function against(value: number, threshold: number, unit = ''): string {
   const sign = value >= threshold ? '&gt;&gt;' : '&lt;&lt;';
-  return `<b>${num(value)}${unit}</b> ${sign} ${num(threshold)}${unit}`;
+  // Whose line it is, said once and plainly: the number on the right is not the
+  // market's opinion, it is what this reader asked to be told about
+  return `<b>${num(value)}${unit}</b> ${sign} ${num(threshold)}${unit} (your settings)`;
 }
 
 /** What changed, and what the reading was — never one without the other */
