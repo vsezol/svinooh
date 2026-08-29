@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import type { Chain } from '@svinooh/shared';
-import { RabbitService, scanQueueName, type ScanJob, setting } from '@svinooh/common';
+import { queueDepth, RabbitService, scanQueueName, type ScanJob, setting } from '@svinooh/common';
 import { SyncService } from './sync.service';
 
 /**
@@ -74,15 +74,15 @@ export class ScanProducerService implements OnApplicationBootstrap {
   }
 
   private async topUp(): Promise<void> {
-    const target = setting('scan.queueDepth');
-    // Enough for every queue to reach its target if they all happen to be empty
-    const due = await this.sync.dueForScan(target * CHAINS.length);
+    const depth = new Map(CHAINS.map((chain) => [chain, queueDepth(chain)]));
+    // Enough for every queue to reach its own depth, if they all happen to be empty
+    const due = await this.sync.dueForScan([...depth.values()].reduce((a, b) => a + b, 0));
     if (!due.length) return;
 
     let dispatched = 0;
     for (const chain of CHAINS) {
       const queue = scanQueueName(chain);
-      const room = target - (await this.rabbit.messageCount([queue]));
+      const room = (depth.get(chain) ?? 1) - (await this.rabbit.messageCount([queue]));
       if (room <= 0) continue;
 
       // Urgent first: somebody pasted an address and is watching a spinner

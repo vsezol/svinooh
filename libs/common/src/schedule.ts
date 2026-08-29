@@ -81,3 +81,25 @@ export function leaseUntil(now: Date): Date {
 export function retryAt(now: Date): Date {
   return new Date(now.getTime() + setting('scan.retryMin') * 60_000);
 }
+
+/**
+ * How many jobs to keep in a chain's queue.
+ *
+ * Derived rather than configured, because the two numbers it sits between are
+ * not independent: a job must not wait in the queue longer than the lease
+ * holding its address, or the producer decides the scan was lost and dispatches
+ * it a second time. So the depth is however many worst-case jobs fit inside one
+ * lease — times the prefetch, since that many are in flight at once.
+ *
+ * This was a knob, briefly, with a flat default of 20. At an EVM timeout of
+ * 150s that is a fifty-minute drain against a ten-minute lease: everything past
+ * the third job would have been scanned twice. A number nobody can set wrong is
+ * better than a number with a warning next to it.
+ */
+export function queueDepth(chain: string): number {
+  const worstMs =
+    (chain === 'EVM' ? setting('scan.evmTimeoutMs') : setting('scan.httpTimeoutMs')) +
+    setting('scan.jobDelayMs');
+  const perSlot = Math.floor((setting('scan.leaseMin') * 60_000) / worstMs);
+  return Math.max(1, perSlot * setting('scan.prefetch'));
+}

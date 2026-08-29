@@ -142,7 +142,6 @@ const KEYS = [
   'sync.staleIntervalMin',
   'sync.staleAfterMin',
   'scan.reloadSec',
-  'scan.queueDepth',
   'scan.prefetch',
   'scan.jobDelayMs',
   'scan.httpConcurrency',

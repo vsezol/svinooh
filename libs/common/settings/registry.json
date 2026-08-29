@@ -87,22 +87,6 @@
       "live": true
     },
     {
-      "key": "scan.queueDepth",
-      "group": "limits",
-      "label": "Addresses queued per chain",
-      "about": "How many jobs each chain's queue is kept topped up to. Higher keeps scanners busy through a slow patch; lower means a change to the schedule takes effect sooner.",
-      "type": "int",
-      "unit": "jobs",
-      "default": 20,
-      "min": 1,
-      "max": 500,
-      "env": "SCAN_QUEUE_DEPTH",
-      "readBy": [
-        "wallet"
-      ],
-      "live": true
-    },
-    {
       "key": "scan.prefetch",
       "group": "queue",
       "label": "Addresses per scanner at once",
