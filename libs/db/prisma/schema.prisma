@@ -81,7 +81,7 @@ model Portfolio {
   // person, shown to strangers) or name a wallet, which defeats the point of
   // grouping several of them.
   name         String?
-  wallets      Wallet[]
+  wallets      PortfolioWallet[]
   snapshots    PortfolioSnapshot[]
   owner        PortfolioOwner?
   createdAt    DateTime            @default(now())
@@ -105,39 +105,42 @@ model PortfolioOwner {
   @@index([userId])
 }
 
+/// An address we scan, and everything the last scan found on it.
+///
+/// One row per (chain, address) for the whole system, not one per portfolio
+/// that happens to hold it. Which portfolios hold it is PortfolioWallet's
+/// business; what the address is worth is this table's, and it is the same
+/// answer whoever is asking.
+///
+/// It used to be both at once, and every reader paid for it: the producer
+/// grouped rows by (chain, address) and merged four fields by four different
+/// rules to decide when to scan, the writer looped over the group writing
+/// identical positions once per portfolio, and the claim was an updateMany
+/// across rows that were all the same address anyway.
 model Wallet {
-  id           String           @id @default(cuid())
-  portfolioId  String
-  portfolio    Portfolio        @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
-  address      String
-  chain        String // BTC | EVM | SOL | TRON
-  // User-defined wallet name (the owner sets it inline). null — show the default per network
-  label        String?
-  status       String           @default("pending") // pending | ok | failed
-  // Cache of the last SUCCESSFUL scan: not overwritten on error, so we can
-  // serve the stale value with an explicit stale flag instead of losing it
-  lastTotalUsd Float?
-  lastSyncedAt DateTime?
+  id              String            @id @default(cuid())
+  address         String
+  chain           String // BTC | EVM | SOL | TRON
+  status          String            @default("pending") // pending | ok | failed
+  /// Cache of the last SUCCESSFUL scan: not overwritten on error, so we can
+  /// serve the stale value with an explicit stale flag instead of losing it
+  lastTotalUsd    Float?
+  lastSyncedAt    DateTime?
   /// Set when this address was handed to a scan queue, cleared when a result
   /// comes back. It is the answer to "is a scan already on its way?", which the
   /// queue itself cannot give: RabbitMQ's messageCount reports READY messages,
   /// so an address a scanner has already prefetched looks exactly like one
   /// nobody is working on — while lastSyncedAt is still null, so the address
-  /// also still reads as due. Between those two blind spots a new wallet was
-  /// re-enqueued on every producer tick for the whole length of its scan.
-  ///
-  /// Like lastSyncedAt and lastTotalUsd, this is a fact about the ADDRESS kept
-  /// on each portfolio's row of it: a scan claims and clears every row for that
-  /// (chain, address) at once.
+  /// also still reads as due.
   ///
   /// A claim older than SCAN_CLAIM_TTL_MIN is stale and may be taken again — a
   /// scanner can die, and a held scan (DeBank throttling) acks its message
   /// without publishing anything, so a claim only a result could clear would
   /// wedge that address forever.
-  scanQueuedAt DateTime?
-  lastError    String?
-  breakdown    Json?
-  unpriced     Json?
+  scanQueuedAt    DateTime?
+  lastError       String?
+  breakdown       Json?
+  unpriced        Json?
   /// TRON only: the wallet's energy, bandwidth and outgoing delegations, as the
   /// last resource read found them (a TronResources). Kept as one JSON value
   /// beside breakdown/unpriced rather than spread over ten columns, because
@@ -148,12 +151,34 @@ model Wallet {
   /// clock (TRON_RESOURCE_INTERVAL_MIN) instead of on every sync, and this is
   /// what says whether the next scan owes one.
   tronResourcesAt DateTime?
-  createdAt    DateTime         @default(now())
-  positions    Position[]
-  snapshots    WalletSnapshot[]
-  alerts       WalletAlerts?
+  createdAt       DateTime          @default(now())
+  positions       Position[]
+  memberships     PortfolioWallet[]
 
-  @@unique([portfolioId, address])
+  @@unique([chain, address])
+}
+
+/// An address in a portfolio: the membership, and everything that belongs to
+/// the person holding it rather than to the address.
+///
+/// A label is the owner's own words for a wallet and two owners of the same
+/// address will not agree on it. Nor on what they want to be told about it —
+/// which is why the alert settings and the alert memory hang off this row and
+/// not off the address.
+model PortfolioWallet {
+  id          String             @id @default(cuid())
+  portfolioId String
+  portfolio   Portfolio          @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  walletId    String
+  wallet      Wallet             @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  /// User-defined name (the owner sets it inline). null — show the default per network
+  label       String?
+  createdAt   DateTime           @default(now())
+  alerts      WalletAlerts?
+  alertStates WalletAlertState[]
+
+  @@unique([portfolioId, walletId])
+  @@index([walletId])
 }
 
 /// What was last true of a position, so the next scan can tell what changed.
@@ -181,23 +206,24 @@ model Setting {
 }
 
 model WalletAlertState {
-  walletId       String
-  positionKey    String
+  portfolioWalletId String
+  portfolioWallet   PortfolioWallet @relation(fields: [portfolioWalletId], references: [id], onDelete: Cascade)
+  positionKey       String
   /// null — this position has no band, or nobody could say
-  inRange        Boolean?
+  inRange           Boolean?
   /// Whether the health factor was under the owner's threshold last time
-  healthBreached Boolean  @default(false)
+  healthBreached    Boolean         @default(false)
   /// Whether the borrow rate was over it
-  borrowBreached Boolean  @default(false)
+  borrowBreached    Boolean         @default(false)
   /// TRON actions, which are states rather than crossings: whether the wallet
   /// could reclaim, and whether it could delegate, last time we looked. Only
   /// the row under the synthetic TRON key uses these — see tronStateKey.
-  reclaimArmed   Boolean  @default(false)
-  delegateArmed  Boolean  @default(false)
-  updatedAt      DateTime @updatedAt
+  reclaimArmed      Boolean         @default(false)
+  delegateArmed     Boolean         @default(false)
+  updatedAt         DateTime        @updatedAt
 
-  @@id([walletId, positionKey])
-  @@index([walletId])
+  @@id([portfolioWalletId, positionKey])
+  @@index([portfolioWalletId])
 }
 
 /// What this wallet is watched for, and told about over Telegram.
@@ -210,19 +236,19 @@ model WalletAlertState {
 /// A threshold is null when nobody is watching it. That is a different thing
 /// from zero, which would be a threshold that can never be crossed.
 model WalletAlerts {
-  walletId          String   @id
-  wallet            Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  portfolioWalletId  String          @id
+  portfolioWallet    PortfolioWallet @relation(fields: [portfolioWalletId], references: [id], onDelete: Cascade)
   /// An LP position leaving its liquidity range, or coming back into it
-  rangeAlerts       Boolean  @default(true)
+  rangeAlerts        Boolean         @default(true)
   /// Told when the health factor falls below this
-  healthFactorBelow Float?
+  healthFactorBelow  Float?
   /// Told when the borrow rate climbs above this, in percent
-  borrowApyAbove    Float?
+  borrowApyAbove     Float?
   /// TRON: a delegation came unlocked and there is bandwidth to take it back
-  tronReclaimAlerts Boolean  @default(true)
+  tronReclaimAlerts  Boolean         @default(true)
   /// TRON: resources are free and nothing is delegated
-  tronDelegateAlerts Boolean @default(true)
-  updatedAt         DateTime @updatedAt
+  tronDelegateAlerts Boolean         @default(true)
+  updatedAt          DateTime        @updatedAt
 }
 
 model Position {
@@ -250,22 +276,6 @@ model Position {
   range      String?
   // The underlying legs — PositionTokenDto[]: what's supplied, accrued, borrowed
   tokens     Json?
-}
-
-model WalletSnapshot {
-  id        String   @id @default(cuid())
-  walletId  String
-  wallet    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  totalUsd  Float
-  // What could have been collected and what was owed at this reading. Nullable
-  // because every row written before they were recorded has neither, and zero
-  // would be a claim we cannot make about them.
-  claimableUsd Float?
-  debtUsd      Float?
-  breakdown Json?
-  createdAt DateTime @default(now())
-
-  @@index([walletId, createdAt])
 }
 
 model PortfolioSnapshot {
