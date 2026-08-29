@@ -123,10 +123,10 @@ export function ChainBadge({ network }: { network: string | null | undefined }) 
       aria-label={name}
       style={{
         position: 'absolute',
-        top: -7,
-        right: -4,
-        width: 16,
-        height: 16,
+        top: -5,
+        right: -3,
+        width: 12,
+        height: 12,
         borderRadius: '50%',
         background: `color-mix(in srgb, ${tint} 20%, var(--surf2))`,
         border: '1px solid var(--surf2)',
@@ -136,7 +136,7 @@ export function ChainBadge({ network }: { network: string | null | undefined }) 
         cursor: 'help',
       }}
     >
-      <Icon size={16} variant="branded" />
+      <Icon size={12} variant="branded" />
     </span>
   );
 }
@@ -155,6 +155,6 @@ export function badgedText(hasBadge: boolean): CSSProperties {
     // side of the column instead of sitting on the word
     justifySelf: 'start',
     minWidth: 0,
-    paddingRight: hasBadge ? 13 : 0,
+    paddingRight: hasBadge ? 10 : 0,
   };
 }
