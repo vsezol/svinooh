@@ -446,18 +446,29 @@ body[data-theme='light'] .on-dark {
   color: var(--acc-text);
 }
 
-/* positions table inside a wallet */
+/* The position table inside a wallet.
+
+   Four columns on a desktop — token, price, amount, value — and three on a
+   phone, where the price is the one that can go: it is the same number for
+   everybody, while the amount and the value belong to this wallet. Done in CSS
+   rather than off window.innerWidth, so the server and the browser render the
+   same markup and the switch happens at the width, not at a re-render.
+
+   No rule between rows. A line under every holding turned a wallet into a
+   grate — eight tokens meant eight rules, louder than the numbers they were
+   separating. The vertical rhythm is the padding's, and borders are kept for
+   where they separate different things: between a position's sections, and
+   between the blocks. */
 .pos-head,
 .pos-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 130px 150px 140px;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
-  border-top: 1px solid var(--line);
 }
 
 .pos-head {
-  padding: 9px 16px 7px;
+  padding: 2px 16px 4px;
   font-family: var(--mono);
   font-size: 9.5px;
   letter-spacing: 0.14em;
@@ -468,30 +479,13 @@ body[data-theme='light'] .on-dark {
   padding: 10px 16px;
 }
 
-.pos-cell {
-  text-align: right;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--mut);
-}
-
-.pos-sub-mobile {
-  display: none;
-}
-
 @media (max-width: 719px) {
   .pos-head,
   .pos-grid {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
   }
-  .pos-cell {
+  .pos-price {
     display: none;
-  }
-  .pos-sub-desktop {
-    display: none;
-  }
-  .pos-sub-mobile {
-    display: block;
   }
 }
 
@@ -849,27 +843,5 @@ body[data-theme='light'] .on-dark {
     /* the tabs across the top take their share of the screen too */
     height: calc(100dvh - 59px - 47px - env(safe-area-inset-top));
     padding-bottom: calc(18px + env(safe-area-inset-bottom));
-  }
-}
-
-/* The position table.
-
-   Four columns on a desktop — token, price, amount, value — and three on a
-   phone, where the price is the one that can go: it is the same number for
-   everybody, while the amount and the value are this wallet's own. Done in CSS
-   rather than off window.innerWidth so the server and the browser render the
-   same markup, and so the switch happens at the width, not at a re-render. */
-.pos-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px;
-}
-
-@media (max-width: 719px) {
-  .pos-grid {
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
-  }
-  .pos-price {
-    display: none;
   }
 }
