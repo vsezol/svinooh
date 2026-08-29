@@ -305,13 +305,17 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
                       {r.title}
                     </span>
                     <div style={{ flex: 1 }} />
-                    <span
-                      className="mono"
-                      style={{ fontSize: 11.5, fontWeight: 600, color: r.role ? roleColor(r.role) : undefined }}
-                    >
-                      {r.role === 'borrow' ? '\u2212' : ''}
-                      {fmtUsd(r.value)}
-                    </span>
+                    {/* A total over a single leg is that leg's own figure a
+                        second time; past one there is something to add up */}
+                    {(r.legCount ?? 0) > 1 ? (
+                      <span
+                        className="mono"
+                        style={{ fontSize: 11.5, fontWeight: 600, color: r.role ? roleColor(r.role) : undefined }}
+                      >
+                        {r.role === 'borrow' ? '\u2212' : ''}
+                        {fmtUsd(r.value)}
+                      </span>
+                    ) : null}
                   </div>
                 ) : (
                   // A leg. Indented under its group and without a rule above it,

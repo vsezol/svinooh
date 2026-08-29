@@ -9,6 +9,12 @@ export interface BlockRow {
   role: PositionTokenRole | null;
   /** A group's label line — what it counts is the indented legs below it */
   isGroupHead?: boolean;
+  /**
+   * On a group head: how many legs it covers. A total is only worth printing
+   * once there is more than one, since over a single leg it is that leg's own
+   * figure written twice.
+   */
+  legCount?: number;
   /** A leg sitting under a group head */
   indented?: boolean;
 }
@@ -159,6 +165,10 @@ function foldDuplicates(blocks: Block[]): Block[] {
  * What is owed is the group that is worth naming precisely, because a lending
  * position's rate belongs to the debt and not to the position — so it goes on
  * the header, where it reads as the price of that line rather than of the card.
+ *
+ * The header's total is a summary, and a summary of one thing is that thing —
+ * so a group with a single leg keeps its label and drops the figure, leaving
+ * the leg to state its own. Only past one leg is there anything to add up.
  */
 function groupAccruals(block: Block): BlockRow[] {
   const held = block.rows.filter((row) => row.role !== 'reward' && row.role !== 'borrow');
@@ -174,6 +184,7 @@ function groupAccruals(block: Block): BlockRow[] {
       value: legs.reduce((sum, leg) => sum + Math.abs(leg.value), 0),
       role: legs[0].role,
       isGroupHead: true,
+      legCount: legs.length,
     });
     for (const leg of legs) grouped.push({ ...leg, value: Math.abs(leg.value), indented: true });
   };
