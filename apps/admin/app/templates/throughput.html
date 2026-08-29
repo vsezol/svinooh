@@ -1,76 +1,42 @@
 {% extends "sqladmin/layout.html" %}
 {% block content %}
-<div class="col-12">
+<div class="col-12" style="max-width: 34rem">
   <div class="card">
     <div class="card-header"><h3 class="card-title">Throughput</h3></div>
     <div class="card-body">
 
-      <p class="text-secondary">
-        How hard the system pushes. A change is picked up by the running services within
-        {{ refresh_sec }} seconds — no redeploy — except where a row says otherwise.
-        A knob left at its default is not stored at all, so this page is a list of
-        decisions rather than a copy of the defaults.
-      </p>
-
-      {% if saved %}<div class="alert alert-success">Saved. In effect within {{ refresh_sec }}s.</div>{% endif %}
+      {% if saved %}<div class="alert alert-success">Saved. Live within {{ refresh_sec }}s.</div>{% endif %}
       {% for problem in problems %}<div class="alert alert-danger">{{ problem }}</div>{% endfor %}
 
-      <form method="post" class="mb-4">
-        <div class="mb-2"><strong>Presets</strong> <span class="text-secondary">— apply a whole posture at once</span></div>
-        <div class="btn-list">
-          {% for preset in presets %}
-            <button type="submit" name="preset" value="{{ preset.key }}" title="{{ preset.about }}"
-                    class="btn {% if active_preset == preset.key %}btn-primary{% else %}btn-outline-secondary{% endif %}">
-              {{ preset.label }}{% if active_preset == preset.key %} · current{% endif %}
-            </button>
-          {% endfor %}
-        </div>
-      </form>
-
       <form method="post">
-        {% for group in groups %}
-          <h4 class="mt-4">{{ group.label }}</h4>
-          <p class="text-secondary">{{ group.about }}</p>
-          <div class="table-responsive">
-            <table class="table table-vcenter">
-              <thead>
-                <tr>
-                  <th>Setting</th>
-                  <th style="width:11rem">Value</th>
-                  <th style="width:8rem">Default</th>
-                  <th>Read by</th>
-                </tr>
-              </thead>
-              <tbody>
-              {% for spec in specs_in[group.key] %}
-                <tr>
-                  <td>
-                    <div><strong>{{ spec.label }}</strong>
-                      {% if spec.key in stored %}<span class="badge bg-blue-lt ms-1">changed</span>{% endif %}
-                      {% if not spec.live %}<span class="badge bg-orange-lt ms-1">needs redeploy</span>{% endif %}
-                    </div>
-                    <div class="text-secondary small">{{ spec.about }}</div>
-                    {% if spec.note %}<div class="text-secondary small fst-italic">{{ spec.note }}</div>{% endif %}
-                    <div class="text-secondary small font-monospace">{{ spec.key }} · {{ spec.env }}</div>
-                  </td>
-                  <td>
-                    <div class="input-group">
-                      <input class="form-control" type="number" name="{{ spec.key }}"
-                             value="{{ values[spec.key] }}" min="{{ spec.minimum }}" max="{{ spec.maximum }}" required>
-                      {% if spec.unit %}<span class="input-group-text">{{ spec.unit }}</span>{% endif %}
-                    </div>
-                    <div class="text-secondary small">{{ spec.minimum }}–{{ spec.maximum }}</div>
-                  </td>
-                  <td class="text-secondary">{{ spec.default }}{% if spec.unit %} {{ spec.unit }}{% endif %}</td>
-                  <td class="text-secondary small">{{ spec.read_by | join(", ") }}</td>
-                </tr>
-              {% endfor %}
-              </tbody>
-            </table>
+        {% for spec in main %}
+          <div class="mb-3">
+            <label class="form-label">{{ spec.label }}</label>
+            <div class="input-group">
+              <input class="form-control" type="number" name="{{ spec.key }}"
+                     value="{{ values[spec.key] }}" min="{{ spec.minimum }}" max="{{ spec.maximum }}" required>
+              {% if spec.unit %}<span class="input-group-text">{{ spec.unit }}</span>{% endif %}
+            </div>
           </div>
         {% endfor %}
 
-        <div class="mt-3"><button type="submit" class="btn btn-primary">Save</button></div>
+        <details class="mb-3">
+          <summary class="text-secondary" style="cursor: pointer">Advanced</summary>
+          <div class="mt-3">
+            {% for spec in advanced %}
+              <div class="mb-3">
+                <label class="form-label">{{ spec.label }}</label>
+                <div class="input-group">
+                  <input class="form-control" type="number" name="{{ spec.key }}"
+                         value="{{ values[spec.key] }}" min="{{ spec.minimum }}" max="{{ spec.maximum }}" required>
+                  {% if spec.unit %}<span class="input-group-text">{{ spec.unit }}</span>{% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </details>
+
+        <button type="submit" class="btn btn-primary">Save</button>
       </form>
 
     </div>

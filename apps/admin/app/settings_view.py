@@ -1,9 +1,14 @@
-"""The throughput page: the whole registry as one form, and the presets over it.
+"""The throughput page: an input per knob, and nothing else.
 
-Nothing here is hand-written per knob. The fields, their bounds, their units and
-their help text all come out of the registry, so a knob added to that file turns
-up here with no code change — which is the only way a settings page stays true
-to what the services actually read.
+Nothing here is hand-written per knob. The fields, their bounds and their units
+come out of the registry, so a knob added to that file turns up here with no
+code change — which is the only way a settings page stays true to what the
+services actually read.
+
+The three that decide the pacing are the page; everything else is under
+Advanced. A page that gives equal weight to "how often do we rescan a portfolio
+somebody is watching" and "how many parallel requests per HTTP scan" is a page
+nobody reads.
 """
 
 from __future__ import annotations
@@ -15,7 +20,7 @@ from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
 from .db import Session, Setting
-from .registry import Preset, Spec, registry, validate
+from .registry import registry, validate
 
 
 def stored() -> dict[str, int]:
@@ -62,13 +67,6 @@ def write(values: dict[str, int], who: str) -> None:
         session.commit()
 
 
-def matching_preset(values: dict[str, int]) -> str | None:
-    for preset in registry().presets:
-        if all(values.get(k) == v for k, v in preset.values.items()):
-            return preset.key
-    return None
-
-
 class ThroughputView(BaseView):
     name = "Throughput"
     icon = "fa-solid fa-gauge-high"
@@ -81,18 +79,13 @@ class ThroughputView(BaseView):
 
         if request.method == "POST":
             form = await request.form()
-            preset_key = str(form.get("preset", ""))
-            if preset_key:
-                preset: Preset | None = next((p for p in reg.presets if p.key == preset_key), None)
-                proposed = effective() | (preset.values if preset else {})
-            else:
-                proposed = {}
-                for spec in reg.specs:
-                    raw = str(form.get(spec.key, "")).strip()
-                    try:
-                        proposed[spec.key] = int(raw)
-                    except ValueError:
-                        problems.append(f"{spec.label}: {raw or 'blank'} is not a whole number")
+            proposed = {}
+            for spec in reg.specs:
+                raw = str(form.get(spec.key, "")).strip()
+                try:
+                    proposed[spec.key] = int(raw)
+                except ValueError:
+                    problems.append(f"{spec.label}: {raw or 'blank'} is not a whole number")
             if not problems:
                 problems = validate(proposed)
             if not problems:
@@ -104,12 +97,10 @@ class ThroughputView(BaseView):
             request,
             "throughput.html",
             {
-                "groups": reg.groups,
-                "specs_in": {g["key"]: reg.in_group(g["key"]) for g in reg.groups},
+                # The pacing model, and the machinery behind it
+                "main": reg.in_group("sync"),
+                "advanced": [s for s in reg.specs if s.group != "sync"],
                 "values": values,
-                "stored": stored(),
-                "presets": reg.presets,
-                "active_preset": matching_preset(values),
                 "problems": problems,
                 "saved": saved,
                 "refresh_sec": 15,
