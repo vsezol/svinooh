@@ -23,13 +23,13 @@ from .db import Session, Setting
 from .registry import registry, validate
 
 
-def stored() -> dict[str, int]:
+def stored() -> dict[str, int | str]:
     """Only the keys somebody has actually changed."""
     with Session() as session:
-        return {row.key: int(row.value) for row in session.query(Setting).all()}
+        return {row.key: row.value for row in session.query(Setting).all()}
 
 
-def effective() -> dict[str, int]:
+def effective() -> dict[str, int | str]:
     """What the services are running on: a stored value, or the declared default.
 
     The environment sits between those two for the services themselves, and this
@@ -41,7 +41,7 @@ def effective() -> dict[str, int]:
     return {spec.key: current.get(spec.key, spec.default) for spec in registry().specs}
 
 
-def write(values: dict[str, int], who: str) -> None:
+def write(values: dict[str, int | str], who: str) -> None:
     """Store the ones that differ from the default, delete the ones that do not.
 
     A row means a decision. Writing every key on every save would turn the table
@@ -60,7 +60,7 @@ def write(values: dict[str, int], who: str) -> None:
                 continue
             if row is None:
                 session.add(Setting(key=spec.key, value=value, updatedBy=who, updatedAt=now))
-            elif int(row.value) != value:
+            elif row.value != value:
                 row.value = value
                 row.updatedBy = who
                 row.updatedAt = now
@@ -82,6 +82,9 @@ class ThroughputView(BaseView):
             proposed = {}
             for spec in reg.specs:
                 raw = str(form.get(spec.key, "")).strip()
+                if spec.is_choice:
+                    proposed[spec.key] = raw
+                    continue
                 try:
                     proposed[spec.key] = int(raw)
                 except ValueError:

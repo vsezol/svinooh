@@ -26,6 +26,11 @@ export const config = {
   // the slot for the whole pause, so the queue does not hand it another
   // address until the pause is over.
   scanJobDelayMs: int(process.env.SCAN_JOB_DELAY_MS, 1500),
+  // Zerion API key, for the `zerion` EVM source. A secret, so it lives here and
+  // not in the settings registry — that file is public and the admin panel
+  // shows every value in it.
+  zerionApiKey: process.env.ZERION_API_KEY ?? '',
+  zerionTimeoutMs: int(process.env.ZERION_TIMEOUT_MS, 20000),
   // A browser scan is slow by nature — page load, chains resolving one by one
   evmTimeoutMs: int(process.env.EVM_TIMEOUT_MS, 150_000),
   puppeteerExecutablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,

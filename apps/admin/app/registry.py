@@ -41,11 +41,18 @@ class Spec:
     group: str
     label: str
     about: str
+    #: "int" — a number between minimum and maximum; "enum" — one of options
+    type: str
     unit: str | None
-    default: int
-    minimum: int
-    maximum: int
+    default: int | str
+    minimum: int | None
+    maximum: int | None
+    options: tuple[str, ...]
     env: str
+
+    @property
+    def is_choice(self) -> bool:
+        return self.type == "enum"
     read_by: tuple[str, ...]
     live: bool
     note: str | None
@@ -91,10 +98,12 @@ def registry() -> Registry:
                 group=s["group"],
                 label=s["label"],
                 about=s["about"],
+                type=s.get("type", "int"),
                 unit=s.get("unit"),
                 default=s["default"],
-                minimum=s["min"],
-                maximum=s["max"],
+                minimum=s.get("min"),
+                maximum=s.get("max"),
+                options=tuple(s.get("options", ())),
                 env=s["env"],
                 read_by=tuple(s["readBy"]),
                 live=s.get("live", True),
@@ -133,6 +142,9 @@ def validate(values: dict[str, int]) -> list[str]:
         spec = reg.by_key(key)
         if spec is None:
             problems.append(f"{key}: not a setting")
+        elif spec.is_choice:
+            if value not in spec.options:
+                problems.append(f"{spec.label}: {value!r} is not one of {', '.join(spec.options)}")
         elif value < spec.minimum or value > spec.maximum:
             unit = f" {spec.unit}" if spec.unit else ""
             problems.append(f"{spec.label}: {value}{unit} is outside {spec.minimum}–{spec.maximum}{unit}")
@@ -142,7 +154,7 @@ def validate(values: dict[str, int]) -> list[str]:
 
     for rule in reg.rules:
         left_spec = reg.by_key(rule.left)
-        if left_spec is None:
+        if left_spec is None or left_spec.is_choice:
             continue
         left = values.get(rule.left, left_spec.default) * rule.left_scale
         right = 0

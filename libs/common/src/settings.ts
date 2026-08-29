@@ -21,11 +21,15 @@ export interface SettingSpec {
   group: string;
   label: string;
   about: string;
-  type: 'int';
+  /** `int` is a number with bounds; `enum` is a choice from `options` */
+  type: 'int' | 'enum';
   unit?: string;
-  default: number;
-  min: number;
-  max: number;
+  default: number | string;
+  /** int only */
+  min?: number;
+  max?: number;
+  /** enum only: every value this knob may take */
+  options?: string[];
   /** The variable that still overrides the default when no row exists */
   env: string;
   readBy: string[];
@@ -39,7 +43,6 @@ export interface SettingsRegistry {
   groups: Array<{ key: string; label: string; about: string }>;
   settings: SettingSpec[];
   rules: Array<{ id: string; about: string; left: string; leftScale: number; op: '>='; right: string[] }>;
-  presets: Array<{ key: string; label: string; about: string; values: Record<string, number> }>;
 }
 
 /**
@@ -72,16 +75,26 @@ export type SettingsReader = () => Promise<SettingRow[]>;
  */
 export const SETTINGS_REFRESH_MS = 15_000;
 
-let overrides = new Map<string, number>();
+let overrides = new Map<string, number | string>();
 let timer: NodeJS.Timeout | null = null;
 
-function clamp(spec: SettingSpec, raw: unknown): number | null {
+/**
+ * A stored row, if it is a value this knob may actually take.
+ *
+ * A row outside its declared bounds, or naming a choice that no longer exists,
+ * is a row written by something that did not check — it is refused rather than
+ * trusted, and the service carries on with what it had. That matters most for
+ * an enum: removing an option from the registry must not leave a service
+ * running on a value nothing in the code still handles.
+ */
+function accept(spec: SettingSpec, raw: unknown): number | string | null {
+  if (spec.type === 'enum') {
+    const value = String(raw);
+    return spec.options?.includes(value) ? value : null;
+  }
   const n = typeof raw === 'number' ? raw : Number(raw);
   if (!Number.isFinite(n)) return null;
-  // A row outside its own declared bounds is a row written by something that
-  // did not check; the value is refused rather than trusted, and the service
-  // carries on with what it had
-  return n < spec.min || n > spec.max ? null : Math.round(n);
+  return n < (spec.min ?? -Infinity) || n > (spec.max ?? Infinity) ? null : Math.round(n);
 }
 
 /**
@@ -96,11 +109,11 @@ export function startSettings(read: SettingsReader, onError?: (error: Error) => 
   const refresh = async () => {
     try {
       const rows = await read();
-      const next = new Map<string, number>();
+      const next = new Map<string, number | string>();
       for (const row of rows) {
         const spec = SPECS.get(row.key);
         if (!spec) continue; // a key nobody declares any more
-        const value = clamp(spec, row.value);
+        const value = accept(spec, row.value);
         if (value !== null) next.set(row.key, value);
       }
       overrides = next;
@@ -138,6 +151,7 @@ export function startSettings(read: SettingsReader, onError?: (error: Error) => 
  * service refuses to start instead of failing later under load.
  */
 const KEYS = [
+  'scan.evmSource',
   'sync.activeIntervalMin',
   'sync.staleIntervalMin',
   'sync.staleAfterMin',
@@ -154,6 +168,29 @@ const KEYS = [
 
 export type SettingKey = (typeof KEYS)[number];
 
+/**
+ * The knobs that are a choice, and what they may be.
+ *
+ * Written out rather than derived, for the same reason KEYS is: the registry is
+ * JSON. The check below covers the drift — an option the code handles that the
+ * registry no longer offers, or the reverse.
+ */
+export interface Choice {
+  'scan.evmSource': 'debank' | 'zerion';
+}
+export type ChoiceKey = keyof Choice;
+export type NumberKey = Exclude<SettingKey, ChoiceKey>;
+
+const CHOICES: Record<ChoiceKey, string[]> = { 'scan.evmSource': ['debank', 'zerion'] };
+for (const [key, handled] of Object.entries(CHOICES)) {
+  const declared = SPECS.get(key)?.options ?? [];
+  if ([...declared].sort().join() !== [...handled].sort().join()) {
+    throw new Error(
+      `settings/registry.json declares ${key} as [${declared}] but the code handles [${handled}]`,
+    );
+  }
+}
+
 const missing = KEYS.filter((key) => !SPECS.has(key));
 if (missing.length) {
   throw new Error(
@@ -161,13 +198,32 @@ if (missing.length) {
   );
 }
 
-export function setting(key: SettingKey): number {
+function current(key: string): number | string {
   const spec = SPECS.get(key);
   if (!spec) throw new Error(`No such setting: ${key}`);
   const override = overrides.get(key);
   if (override !== undefined) return override;
-  const fromEnv = clamp(spec, process.env[spec.env]);
-  return fromEnv ?? spec.default;
+  return accept(spec, process.env[spec.env]) ?? spec.default;
+}
+
+export function setting(key: NumberKey): number {
+  const value = current(key);
+  if (typeof value !== 'number') throw new Error(`${key} is a choice, not a number — use option()`);
+  return value;
+}
+
+/**
+ * A knob whose value is one of a fixed set rather than a number.
+ *
+ * Separate from setting() rather than a union return, so a caller gets a
+ * `'debank' | 'zerion'` it can switch on exhaustively instead of a string it
+ * has to guess about — which is the whole reason the choice lives in the
+ * registry and not in an environment variable somebody spells wrong once.
+ */
+export function option<K extends ChoiceKey>(key: K): Choice[K] {
+  const value = current(key);
+  if (typeof value !== 'string') throw new Error(`${key} is a number, not a choice — use setting()`);
+  return value as Choice[K];
 }
 
 /**
@@ -176,8 +232,8 @@ export function setting(key: SettingKey): number {
  * Walks the registry rather than KEYS, so a knob declared for the admin but not
  * read anywhere in this codebase still shows up in the snapshot.
  */
-export function settingsSnapshot(): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const spec of REGISTRY.settings) out[spec.key] = setting(spec.key as SettingKey);
+export function settingsSnapshot(): Record<string, number | string> {
+  const out: Record<string, number | string> = {};
+  for (const spec of REGISTRY.settings) out[spec.key] = current(spec.key);
   return out;
 }

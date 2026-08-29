@@ -191,6 +191,11 @@ setvars bot-telegram \
 # `cd apps/admin && python -m app.hash` — set it by hand, it is not generated
 # here on purpose.
 #
+# scanner-evm also takes ZERION_API_KEY when scan.evmSource is set to `zerion`
+# in the admin. It is a secret, so it lives in the service's variables rather
+# than in settings/registry.json — that file is public and the panel shows
+# every value in it.
+#
 # No railway.json: Railway deprecated config-as-code, so this one is configured
 # on the service itself — Dockerfile apps/admin/Dockerfile, healthcheck /health,
 # and watch patterns apps/admin/** and libs/common/settings/** so it only

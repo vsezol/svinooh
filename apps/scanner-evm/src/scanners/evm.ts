@@ -1,9 +1,10 @@
 import { Logger } from '@nestjs/common';
-import { ScanHold } from '@svinooh/common';
+import { option, ScanHold } from '@svinooh/common';
 import { scanEvmBrowser } from './evm-browser';
 import type { ScanResult } from '@svinooh/shared';
 import { enrich, NO_FACTS } from '@svinooh/common';
 import { evmFacts } from './defi';
+import { scanZerion } from './zerion';
 
 const logger = new Logger('EvmScanner');
 
@@ -81,9 +82,15 @@ async function scanDebank(address: string): Promise<ScanResult> {
  * and no Aave debt costs one call per network to find that out.
  */
 export async function scanEvm(address: string): Promise<ScanResult> {
+  // Read per scan, not once at boot: switching the source in the admin takes
+  // effect on the next wallet, not on the next deploy
+  const source = option('scan.evmSource');
   const [result, facts] = await Promise.all([
-    scanDebank(address),
+    source === 'zerion' ? scanZerion(address) : scanDebank(address),
     evmFacts(address).catch(() => NO_FACTS),
   ]);
+  // Whichever source answered, the protocols still get the last word on the two
+  // things neither reports: whether a concentrated position is inside its band,
+  // and what a loan costs
   return { ...result, positions: enrich(result.positions, facts) };
 }
