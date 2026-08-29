@@ -38,6 +38,7 @@ import {
   prefetchHistory,
   type History,
 } from '../lib/history';
+import { AGENT_ENABLED } from '../lib/agent';
 import { localAnswerer } from '../lib/agent-local';
 import { PERIODS, WINDOW_MS } from '../lib/ranges';
 
@@ -678,7 +679,10 @@ export function PortfolioPage({ slug }: { slug: string }) {
               </div>
             ) : null}
 
-            {isOwner ? (
+            {/* One pane per entry in TABS — a page in the strip that the strip
+                does not list is a page nothing can reach and one more thing to
+                keep in step. See AGENT_ENABLED. */}
+            {isOwner && AGENT_ENABLED ? (
               <div className="pane" data-active={activeTab === 'agent'}>
                 <AgentChat answer={answer} />
               </div>

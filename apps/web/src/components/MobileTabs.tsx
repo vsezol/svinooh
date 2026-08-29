@@ -171,7 +171,11 @@ export function usePager(index: number, onIndex: (index: number) => void, count:
     moving: drag.dragging || sliding,
     /** Goes on the strip itself */
     style: {
-      transform: `translateX(calc(${(index * -100) / count}% + ${drag.x}px))`,
+      // Whole screens, not a fraction of a track whose width depends on how
+      // many pages there are. A percentage in `transform` is read against this
+      // element's own width, and the track is exactly one screen wide, so
+      // -100% is one page across however many pages exist — see .pager.
+      transform: `translateX(calc(${index * -100}% + ${drag.x}px))`,
       // Nothing to animate while the finger is the one moving it
       transition: drag.dragging ? 'none' : 'transform 0.44s cubic-bezier(0.3,1.25,0.5,1)',
     } as CSSProperties,

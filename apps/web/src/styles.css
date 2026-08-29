@@ -711,18 +711,28 @@ body[data-theme='light'] .on-dark {
   touch-action: pan-y;
 }
 
-/* One track per page, and each page exactly one screen wide. Written as a
-   count rather than as 200%/50% so that adding a page is adding a page — see
-   TABS in MobileTabs. */
+/* One track, and each page exactly one screen wide — stated without ever
+   counting the pages.
+
+   It used to say how many there were (`--panes`), and the strip's width and
+   each page's width were both derived from that number. Which meant the count
+   was written down three times: here, in how many .pane elements got rendered,
+   and in what usePager divided by. Hiding one page moved the third and left
+   the other two, and the strip translated half a screen past where the page
+   actually was.
+
+   So: the track is one screen wide and every page is one screen wide, letting
+   them overflow it (.pager-window clips). A page is then always exactly 100%
+   of the track, whatever the page count, and the transform in usePager is
+   whole multiples of it. Adding or hiding a page is adding or hiding a page. */
 .pager {
-  --panes: 3;
   display: flex;
   align-items: flex-start;
-  width: calc(var(--panes) * 100%);
+  width: 100%;
 }
 
 .pane {
-  width: calc(100% / var(--panes));
+  width: 100%;
   flex-shrink: 0;
   min-width: 0;
 }
