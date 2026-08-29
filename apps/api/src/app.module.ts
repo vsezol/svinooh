@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { AiProxyModule } from './ai-proxy/ai-proxy.module';
 import { AuthProxyModule } from './auth-proxy/auth-proxy.module';
 import { CacheModule } from './cache/cache.module';
 import { config } from './config';
@@ -19,6 +20,7 @@ import { PrismaModule } from '@svinooh/db';
       signOptions: { expiresIn: '30d' },
     }),
     AuthProxyModule,
+    AiProxyModule,
     PortfolioModule,
   ],
   controllers: [HealthController],

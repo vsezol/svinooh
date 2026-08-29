@@ -32,6 +32,8 @@ export const config = {
   authServiceUrl: (process.env.AUTH_SERVICE_URL || 'http://localhost:3001').replace(/\/+$/, ''),
   // Internal URL of the wallet service — scan-on-add is delegated to it.
   walletServiceUrl: (process.env.WALLET_SERVICE_URL || 'http://localhost:3002').replace(/\/+$/, ''),
+  // Internal URL of the AI agent service — the gateway forwards /ai/* to it.
+  agentServiceUrl: (process.env.AGENT_SERVICE_URL || 'http://localhost:3005').replace(/\/+$/, ''),
   // How often the wallet service rescans a wallet that's in use. Used for the
   // "stale" flag (3× this) and reported to the frontend, so it MUST match the
   // wallet service's SYNC_INTERVAL_MIN — set it lower and every wallet reads as

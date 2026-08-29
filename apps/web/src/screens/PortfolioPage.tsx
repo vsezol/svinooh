@@ -39,7 +39,7 @@ import {
   type History,
 } from '../lib/history';
 import { AGENT_ENABLED } from '../lib/agent';
-import { localAnswerer } from '../lib/agent-local';
+import { serviceAnswerer } from '../lib/agent-service';
 import { PERIODS, WINDOW_MS } from '../lib/ranges';
 
 /** What the window moved by, in money and in percent: "+$432 (+0.51%)" */
@@ -252,17 +252,9 @@ export function PortfolioPage({ slug }: { slug: string }) {
    * quotes what the reader can see rather than what was true when the tab
    * opened.
    */
-  const answer = useMemo(
-    () =>
-      localAnswerer({
-        wallets: data?.wallets ?? [],
-        totalUsd: data?.totalUsd ?? 0,
-        history: history?.data.total ?? EMPTY_HISTORY.total,
-        period: history?.period ?? period,
-        change: change ? { label: changeLabel(change), up: change.up } : null,
-      }),
-    [data, history, period, change],
-  );
+  // Answered by the agent service now (a round trip through the gateway), not
+  // the browser stand-in (agent-local.ts). A stable function, nothing to memoize.
+  const answer = serviceAnswerer;
 
   const addWallet = async () => {
     const address = input.trim();

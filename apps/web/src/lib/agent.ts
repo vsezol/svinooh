@@ -4,15 +4,15 @@ import type { Series } from './history';
 /**
  * Whether the agent tab is reachable at all.
  *
- * The tab is built and it works; it is simply not switched on yet, because it
- * answers off the portfolio in the browser rather than off a service. Flipping
- * this to `true` is the whole release — both navigations read it, so neither
- * can end up offering a page the other hides.
+ * On now: the tab answers off the agent service (apps/agent, reached at
+ * /ai/chat through the gateway) rather than the browser stand-in. Both
+ * navigations read this one flag, so neither can end up offering a page the
+ * other hides.
  *
  * Deliberately not an env var: it is a decision about what is finished, and it
  * changes in a commit somebody can point at.
  */
-export const AGENT_ENABLED = false;
+export const AGENT_ENABLED = true;
 
 /**
  * What the agent is allowed to say back.

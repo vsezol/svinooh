@@ -55,6 +55,7 @@ BRANCH="main"
 : "${TELEGRAM_BOT_USERNAME:?export TELEGRAM_BOT_USERNAME}"
 : "${GRAFANA_ADMIN_PASSWORD:?export GRAFANA_ADMIN_PASSWORD}"
 : "${INTERNAL_SECRET:?export INTERNAL_SECRET}"
+: "${ANTHROPIC_API_KEY:?export ANTHROPIC_API_KEY}"   # the AI agent's key
 : "${PUBLIC_WEB_ORIGIN:=https://svinooh.com}"
 
 command -v railway >/dev/null || { echo "railway CLI not found"; exit 1; }
@@ -72,6 +73,7 @@ LOKI_URL='http://${{loki.RAILWAY_PRIVATE_DOMAIN}}:3100'
 # ~0.5 GB for traces nobody read. Logs (Loki) and metrics (Prometheus) stay.
 AUTH_URL='http://${{auth.RAILWAY_PRIVATE_DOMAIN}}:3000'
 WALLET_URL='http://${{wallet.RAILWAY_PRIVATE_DOMAIN}}:3000'
+AGENT_URL='http://${{agent.RAILWAY_PRIVATE_DOMAIN}}:3000'
 API_PUBLIC='https://${{api.RAILWAY_PUBLIC_DOMAIN}}'
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -113,7 +115,7 @@ setvars api \
   "NODE_ENV=production" "PORT=3000" \
   "DATABASE_URL=${PG_URL}" "REDIS_URL=${REDIS_URL}" \
   "JWT_SECRET=${JWT_SECRET}" \
-  "AUTH_SERVICE_URL=${AUTH_URL}" "WALLET_SERVICE_URL=${WALLET_URL}" \
+  "AUTH_SERVICE_URL=${AUTH_URL}" "WALLET_SERVICE_URL=${WALLET_URL}" "AGENT_SERVICE_URL=${AGENT_URL}" \
   "WEB_ORIGIN=${PUBLIC_WEB_ORIGIN}" \
   "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" "TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}" \
   "SYNC_INTERVAL_MIN=5" \
@@ -155,6 +157,16 @@ setvars scanner-evm \
   "CHROME_NO_SANDBOX=1" \
   "LOKI_URL=${LOKI_URL}" \
   "SERVICE_NAME=svinooh-scanner-evm"
+
+# agent — AI agent microservice (Python/FastAPI + LangChain). Internal only; the
+# api gateway forwards /ai/* here. Needs its own ANTHROPIC_API_KEY. Not a Node
+# service — builds from apps/agent/Dockerfile (config apps/agent/railway.json).
+add_repo agent
+setvars agent \
+  "PORT=3000" \
+  "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" \
+  "AGENT_MODEL=claude-opus-5" \
+  "SERVICE_NAME=svinooh-agent"
 
 # monitor-alerts — reads wallet.state, decides what each owner should be told,
 # publishes alerts.telegram. THE second service whose absence is felt silently:
