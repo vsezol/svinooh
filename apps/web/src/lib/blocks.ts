@@ -1,27 +1,55 @@
 import type { PositionDto, PositionRange, PositionTokenRole, WalletDto } from '@svinooh/shared';
-import { fmtAmount, fmtPrice } from './format';
 
+/**
+ * One line of a position's table.
+ *
+ * Price and amount are kept apart rather than pre-joined into "1.2 × $3,100",
+ * because they are columns now: a wallet is read down a column — biggest
+ * holding, cheapest token — and a sentence cannot be read down.
+ */
 export interface BlockRow {
+  /** The token, plus its own rate where a borrow leg reports one */
   title: string;
-  sub: string;
+  /** The network this holding sits on, when it is not already said above */
+  network: string | null;
+  priceUsd: number | null;
+  amount: number | null;
+  /** A magnitude — whether it is owed is the section's business */
   value: number;
   /** null for a plain wallet holding; set for the legs of a DeFi position */
   role: PositionTokenRole | null;
-  /** A group's label line — what it counts is the indented legs below it */
-  isGroupHead?: boolean;
-  /**
-   * On a group head: how many legs it covers. A total is only worth printing
-   * once there is more than one, since over a single leg it is that leg's own
-   * figure written twice.
-   */
-  legCount?: number;
-  /** A leg sitting under a group head */
-  indented?: boolean;
 }
 
-/** Positions grouped by protocol — as in the design (Wallet + a separate block for each DeFi position) */
+/**
+ * A run of rows under one heading: what the position holds, then what it has
+ * accrued, then what it owes.
+ *
+ * Splitting them is what lets each be read as itself — a fee is not a holding
+ * and a debt is not either, and before this they were the same list with badges
+ * stamped on to say so.
+ */
+export interface BlockSection {
+  /** null on the holdings, which need no heading: they are what the block is */
+  label: string | null;
+  /**
+   * What the section comes to, or null when it would say nothing — over a
+   * single row a total is that row's own figure written twice.
+   */
+  total: number | null;
+  /** Owed rather than held: drawn in the down colour, with a minus */
+  negative: boolean;
+  /** Column headings are printed once per block, on the first section */
+  columns: boolean;
+  /** What the first column is called: what a wallet holds, what a position supplied */
+  firstColumn: string;
+  rows: BlockRow[];
+}
+
+/** Positions grouped by protocol — Wallet, then a separate block per DeFi position */
 export interface Block {
   proto: string;
+  /** The network the position sits on, drawn beside its name */
+  network: string | null;
   typeLabel: string | null;
   meta: string | null;
   value: number;
@@ -29,23 +57,28 @@ export interface Block {
   apy: number | null;
   /** Health factor of a lending position */
   healthRate: number | null;
-  /** What the debt costs, as a fraction (0.06 = 6% APY) — shown on the group */
+  /** What the debt costs overall, where only a position-wide rate is known */
   borrowApy: number | null;
   /** Concentrated liquidity only: is the price still inside the range */
   range: PositionRange | null;
   /** How many identical positions were folded into this block (1 — just the one) */
   count: number;
-  rows: BlockRow[];
+  sections: BlockSection[];
 }
 
-/** "1,234 × $0.9865" — the line under a holding */
-function amountLine(amount?: number | null, priceUsd?: number | null): string {
-  if (amount == null || priceUsd == null) return '';
-  return `${fmtAmount(amount)} × ${fmtPrice(priceUsd)}`;
+/** Every row of a block, whichever section it sits in */
+export function blockRows(block: Block): BlockRow[] {
+  return block.sections.flatMap((section) => section.rows);
 }
 
 const join = (...parts: Array<string | null | undefined>): string =>
   parts.filter(Boolean).join(' · ');
+
+/**
+ * A block before it has been split into sections: the same thing, with its legs
+ * still in one list, which is the shape folding and merging need.
+ */
+type RawBlock = Omit<Block, 'sections'> & { rows: BlockRow[] };
 
 /**
  * What a leg is worth reading first: what the position holds, then what it
@@ -60,24 +93,31 @@ const ROLE_ORDER: Record<PositionTokenRole, number> = { supply: 0, borrow: 1, re
 
 const roleRank = (role: PositionTokenRole | null): number => (role ? ROLE_ORDER[role] : 0);
 
-/** Legs of the same token in the same role are one line, not several */
+/**
+ * Legs of the same token in the same role are one line, not several.
+ *
+ * The amounts add up, and so does the value. The price survives only if the two
+ * lines agreed on it — one token at two prices has no single price, and a
+ * column is a promise that every cell in it means the same thing.
+ */
 function mergeRows(rows: BlockRow[]): BlockRow[] {
-  const merged = new Map<string, BlockRow & { amount: number | null; priceUsd: number | null }>();
+  const merged = new Map<string, BlockRow>();
   for (const row of rows) {
     const key = `${row.role}|${row.title}`;
     const existing = merged.get(key);
-    if (existing) {
-      existing.value += row.value;
-      // Two lines for the same token: keep the sum, and only keep a "N × $price"
-      // line if it still describes what is shown
-      if (existing.sub !== row.sub) existing.sub = '';
-    } else {
-      merged.set(key, { ...row, amount: null, priceUsd: null });
+    if (!existing) {
+      merged.set(key, { ...row });
+      continue;
     }
+    existing.value += row.value;
+    existing.amount =
+      existing.amount == null || row.amount == null ? null : existing.amount + row.amount;
+    if (existing.priceUsd !== row.priceUsd) existing.priceUsd = null;
+    existing.network ??= row.network;
   }
-  return [...merged.values()]
-    .map(({ amount: _a, priceUsd: _p, ...row }) => row)
-    .sort((a, b) => roleRank(a.role) - roleRank(b.role) || Math.abs(b.value) - Math.abs(a.value));
+  return [...merged.values()].sort(
+    (a, b) => roleRank(a.role) - roleRank(b.role) || Math.abs(b.value) - Math.abs(a.value),
+  );
 }
 
 /**
@@ -89,7 +129,7 @@ function mergeRows(rows: BlockRow[]): BlockRow[] {
  * the same protocol, the same kind and the same note, and still be two entirely
  * different bets — the legs are where that shows.
  */
-function legSignature(block: Block): string {
+function legSignature(block: RawBlock): string {
   return block.rows
     .map((row) => `${row.role ?? ''}:${row.title}`)
     .sort()
@@ -112,8 +152,8 @@ function legSignature(block: Block): string {
  * two that differ only in size still fold, since summing them says the same
  * thing in one line.
  */
-function foldDuplicates(blocks: Block[]): Block[] {
-  const folded = new Map<string, Block & { weightedApy: number; weightedBorrowApy: number }>();
+function foldDuplicates(blocks: RawBlock[]): RawBlock[] {
+  const folded = new Map<string, RawBlock & { weightedApy: number; weightedBorrowApy: number }>();
   for (const block of blocks) {
     const key = `${block.proto}|${block.typeLabel}|${block.meta}|${legSignature(block)}`;
     const existing = folded.get(key);
@@ -148,56 +188,52 @@ function foldDuplicates(blocks: Block[]): Block[] {
 }
 
 /**
- * Say what a kind of leg IS once, then list the legs under it.
+ * Split a block's legs into the sections it is read as.
  *
  * Every accrued leg used to carry its own REWARDS badge and every borrowed one
  * its own DEBT badge, so a position earning four tokens said "REWARDS" four
- * times and a loan across three markets said "DEBT" three times. The badge is
- * the same claim repeated, and repeating it is what made a wallet with a few
- * real positions read as a wall. It is a property of the group, so it is now
- * written once, on a line that also carries what the group comes to — and the
- * legs sit indented beneath it, saying only what each one is.
+ * times and a loan across three markets said "DEBT" three times — the same
+ * claim stamped on every line it applied to, which is what made a wallet
+ * holding a few real positions read as a wall. It belongs to the run of rows,
+ * not to each of them, so it is a heading now.
  *
- * The label distinguishes what the money is: fees are what a liquidity position
- * accrues by being used, rewards are what a protocol pays you on top. Both
- * arrive as `reward` legs, so the position's own kind is what tells them apart.
+ * The label says what the money actually is: fees are what a liquidity position
+ * accrues by being used, rewards are what a protocol pays on top. Both arrive
+ * as `reward` legs, so the position's own kind is what tells them apart.
  *
- * What is owed is the group that is worth naming precisely, because a lending
- * position's rate belongs to the debt and not to the position — so it goes on
- * the header, where it reads as the price of that line rather than of the card.
- *
- * The header's total is a summary, and a summary of one thing is that thing —
- * so a group with a single leg keeps its label and drops the figure, leaving
- * the leg to state its own. Only past one leg is there anything to add up.
+ * A section's total is a summary, and a summary of one thing is that thing — so
+ * a single-row section keeps its heading and drops the figure, leaving the row
+ * to state its own.
  */
-function groupAccruals(block: Block): BlockRow[] {
+function toSections(block: RawBlock, isWallet: boolean): BlockSection[] {
   const held = block.rows.filter((row) => row.role !== 'reward' && row.role !== 'borrow');
-  const grouped: BlockRow[] = [...held];
+  const firstColumn = isWallet ? 'TOKEN' : 'SUPPLIED';
+  const sections: BlockSection[] = [
+    { label: null, total: null, negative: false, columns: true, firstColumn, rows: held },
+  ];
 
-  const group = (label: string, legs: BlockRow[]): void => {
-    if (!legs.length) return;
-    grouped.push({
-      title: label,
-      sub: '',
-      // Legs arrive signed differently depending on the source; what the group
+  const section = (label: string, rows: BlockRow[], negative: boolean): void => {
+    if (!rows.length) return;
+    sections.push({
+      label,
+      // Legs arrive signed differently depending on the source; what a section
       // comes to is a magnitude, and the minus is the renderer's business
-      value: legs.reduce((sum, leg) => sum + Math.abs(leg.value), 0),
-      role: legs[0].role,
-      isGroupHead: true,
-      legCount: legs.length,
+      total: rows.length > 1 ? rows.reduce((sum, row) => sum + Math.abs(row.value), 0) : null,
+      negative,
+      // Printed once per block, on the section above
+      columns: false,
+      firstColumn,
+      rows: rows.map((row) => ({ ...row, value: Math.abs(row.value) })),
     });
-    for (const leg of legs) grouped.push({ ...leg, value: Math.abs(leg.value), indented: true });
   };
 
-  group(
+  section(
     isPoolKind(block.typeLabel) ? 'FEES' : 'REWARDS',
     block.rows.filter((row) => row.role === 'reward'),
+    false,
   );
-  group(
-    block.borrowApy == null ? 'BORROWED' : `BORROWED · APY ${(block.borrowApy * 100).toFixed(1)}%`,
-    block.rows.filter((row) => row.role === 'borrow'),
-  );
-  return grouped;
+  section('BORROWED', block.rows.filter((row) => row.role === 'borrow'), true);
+  return sections;
 }
 
 /**
@@ -208,13 +244,17 @@ function groupAccruals(block: Block): BlockRow[] {
 export function buildBlocks(positions: PositionDto[]): Block[] {
   const walletRows: BlockRow[] = [];
   let walletValue = 0;
-  const blocks: Block[] = [];
+  const blocks: RawBlock[] = [];
 
   for (const p of positions) {
     if (p.category === 'token') {
       walletRows.push({
         title: p.symbol,
-        sub: join(p.note, amountLine(p.amount, p.priceUsd)) || p.name || '',
+        // A held token names its own network — the wallet's chain is the family
+        // (EVM), and one EVM wallet holds tokens on a dozen networks
+        network: p.network ?? null,
+        priceUsd: p.priceUsd ?? null,
+        amount: p.amount ?? null,
         value: p.valueUsd,
         role: null,
       });
@@ -225,28 +265,49 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
     // The position's own legs; a position with none (e.g. the Chrome fallback,
     // which only sees protocol totals) simply renders as a header
     const rows: BlockRow[] = (p.tokens ?? []).map((t) => ({
-      title: t.symbol,
-      sub: amountLine(t.amount, t.priceUsd),
+      // A borrow leg that knows its own rate says so here, where it is the
+      // price of THAT loan; a position-wide rate stays on the position
+      title: t.apy == null ? t.symbol : `${t.symbol} · ${(t.apy * 100).toFixed(1)}%`,
+      // Legs of a position sit on the position's network, which is already
+      // drawn beside its name — saying it again on every row is noise
+      network: null,
+      priceUsd: t.priceUsd ?? null,
+      amount: t.amount ?? null,
       value: t.valueUsd,
       role: t.role,
     }));
     // No legs, but the position itself is a priced holding (a GM pool, staked
-    // TRX). Its only "row" would repeat the header word for word, so the
-    // amount goes on the header line instead of below it.
-    const selfLine = rows.length ? '' : amountLine(p.amount, p.priceUsd);
+    // TRX). Its only row would repeat the header word for word, so it becomes
+    // that row instead of an empty table.
+    const selfRow: BlockRow[] = rows.length
+      ? []
+      : [
+          {
+            title: p.symbol,
+            network: null,
+            priceUsd: p.priceUsd ?? null,
+            amount: p.amount ?? null,
+            value: p.valueUsd,
+            role: 'supply' as const,
+          },
+        ];
 
     const kind = p.name || (p.category === 'staked' ? 'Staked' : 'DeFi');
     blocks.push({
       proto: p.symbol,
-      typeLabel: kind.toUpperCase(),
-      meta: join(p.note, selfLine) || null,
+      network: p.network ?? null,
+      // "LP" rather than "LIQUIDITY POOL": the label sits on one line with the
+      // protocol, the detail and the range, and the long form crowds out the
+      // things that differ between two positions of the same protocol
+      typeLabel: isPoolKind(kind) ? 'LP' : kind.toUpperCase(),
+      meta: join(p.note) || null,
       value: p.valueUsd,
       apy: p.apy ?? null,
       healthRate: p.healthRate ?? null,
       borrowApy: p.borrowApy ?? null,
       range: p.range ?? null,
       count: 1,
-      rows,
+      rows: rows.length ? rows : selfRow,
     });
   }
 
@@ -256,6 +317,8 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
     walletRows.sort((a, b) => b.value - a.value);
     out.push({
       proto: 'Wallet',
+      // Its tokens each name their own network; the block itself is on none
+      network: null,
       typeLabel: null,
       meta: null,
       value: walletValue,
@@ -267,9 +330,14 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
       rows: walletRows,
     });
   }
-  // Grouping is the last thing done to a block: folding and merging both read
-  // the legs, and a header line is not a leg
-  return byProtocolThenValue(out.map((block) => ({ ...block, rows: groupAccruals(block) })));
+  // Sectioning is the last thing done to a block: folding and merging both work
+  // on one flat list of legs, and a heading is not a leg
+  return byProtocolThenValue(
+    out.map(({ rows, ...block }) => ({
+      ...block,
+      sections: toSections({ ...block, rows }, block.proto === 'Wallet'),
+    })),
+  );
 }
 
 /**
@@ -411,7 +479,7 @@ function isLending(block: Block): boolean {
   return isLendingLike(
     block.typeLabel,
     block.proto,
-    block.rows.some((r) => r.role === 'borrow'),
+    blockRows(block).some((row) => row.role === 'borrow'),
   );
 }
 

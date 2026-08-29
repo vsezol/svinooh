@@ -98,12 +98,16 @@ function itemTokens(detail: Record<string, unknown> | undefined): ScanPositionTo
   return legs.sort((a, b) => order[a.role] - order[b.role] || Math.abs(b.valueUsd) - Math.abs(a.valueUsd));
 }
 
-/** Free-form extra line: chain, the protocol's description, perp side/leverage */
-function itemNote(item: PortfolioItem, projectChain: string | undefined): string | null {
+/**
+ * Free-form extra line: the protocol's description, perp side/leverage.
+ *
+ * The chain used to lead this line. It is a fact with a field of its own now
+ * (`network`), and repeating it here would put it on screen twice — the badge
+ * beside the protocol says it, and says it in a form you can point at.
+ */
+function itemNote(item: PortfolioItem): string | null {
   const detail = item.detail || {};
   const parts: string[] = [];
-  const chain = item.pool?.chain || projectChain;
-  if (chain) parts.push(chain);
   if (typeof detail.description === 'string' && detail.description) parts.push(detail.description);
   // Perpetuals: DeBank reports the direction and leverage separately from the legs
   if (typeof detail.side === 'string' && detail.side) {
@@ -124,7 +128,9 @@ export function itemPositions(project: DebankProject): ScanPosition[] {
     positions.push({
       symbol: project.name || project.id || 'DeFi',
       name: item.name || item.detail_types?.[0] || null,
-      note: itemNote(item, project.chain),
+      note: itemNote(item),
+      // The pool's own chain when DeBank gives one — a project spans networks
+      network: item.pool?.chain || project.chain || null,
       valueUsd: usd,
       platform: project.id || 'debank',
       category: STAKED_KINDS.test(item.name || '') ? 'staked' : 'defi',
@@ -145,7 +151,9 @@ export function tokenPosition(token: DebankToken): ScanPosition | null {
   if (usd < 0.01) return null;
   return {
     symbol: tokenSymbol(token),
-    note: token.chain ?? null,
+    // A held token names its own network; nothing else is worth a note here
+    note: null,
+    network: token.chain ?? null,
     amount,
     priceUsd: price,
     valueUsd: usd,

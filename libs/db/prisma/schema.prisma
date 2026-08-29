@@ -286,8 +286,12 @@ model Position {
   symbol     String
   // Position kind: "Lending", "Liquidity Pool", "Deposit"
   name       String?
-  // Extra detail: chain, pool/market name, the protocol's own description
+  // Extra detail: pool/market name, the protocol's own description
   note       String?
+  /// The network this position sits on, as the source names it: eth, arb, base,
+  /// op, sol, tron, btc. Distinct from Wallet.chain, which is the family — one
+  /// EVM wallet holds positions on a dozen networks and "EVM" cannot say which.
+  network    String?
   amount     Float?
   priceUsd   Float?
   valueUsd   Float

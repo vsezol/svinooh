@@ -469,7 +469,7 @@ async function scanEvmBrowserLocked(address: string, patient: boolean): Promise<
       positions = captured ?? [
         ...data.projects.map((p) => ({
           symbol: p.name,
-          note: p.chain,
+          network: p.chain,
           valueUsd: p.valueUsd,
           platform: 'debank',
           category: 'defi' as const,

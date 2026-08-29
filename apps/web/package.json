@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@svinooh/shared": "*",
+    "@web3icons/react": "^4.1.21",
     "lightweight-charts": "^5.2.1",
     "next": "^16.3.3",
     "react": "^19.1.0",
