@@ -1,5 +1,5 @@
 {
-  "$comment": "The tunables, declared once. Two stacks read this file — the Node services through libs/common/src/settings.ts and the Python admin through apps/admin/registry.py — so a knob is added here and appears in both, with the same bounds and the same default. It is data rather than code precisely because neither stack should own it.",
+  "$comment": "The tunables, declared once. Two stacks read this file \u2014 the Node services through libs/common/src/settings.ts and the Python admin through apps/admin/registry.py \u2014 so a knob is added here and appears in both, with the same bounds and the same default. It is data rather than code precisely because neither stack should own it.",
   "version": 1,
   "groups": [
     {
@@ -20,51 +20,51 @@
   ],
   "settings": [
     {
-      "key": "sync.intervalMin",
+      "key": "sync.activeIntervalMin",
       "group": "sync",
-      "label": "Rescan interval, wallets in use",
-      "about": "A wallet somebody has open, or that belongs to an account. The real pacing knob: the queue only takes addresses that are due, so this — not scan speed — is what sets the load.",
+      "label": "Rescan interval, portfolios in use",
+      "about": "A portfolio somebody has opened recently. The real pacing knob: the queue only takes addresses that are due, so this \u2014 not scan speed \u2014 is what sets the load.",
       "type": "int",
       "unit": "min",
       "default": 5,
       "min": 1,
       "max": 240,
-      "env": "SYNC_INTERVAL_MIN",
+      "env": "SYNC_ACTIVE_INTERVAL_MIN",
       "readBy": [
         "wallet",
         "api",
         "auth"
       ],
-      "note": "Read by three services. The api marks a wallet stale at 3× this and reports it to the browser, so this being one value in one place is the point.",
+      "note": "Read by three services. The api marks a wallet stale at 3\u00d7 this and reports it to the browser, so this being one value in one place is the point.",
       "live": true
     },
     {
-      "key": "sync.idleIntervalMin",
+      "key": "sync.staleIntervalMin",
       "group": "sync",
-      "label": "Rescan interval, idle wallets",
-      "about": "Wallets that only live in anonymous portfolios nobody has opened lately. Still refreshed, just not on anyone's behalf.",
+      "label": "Rescan interval, portfolios nobody opens",
+      "about": "A portfolio nobody has opened in a while. Anonymous or signed-in makes no difference.",
       "type": "int",
       "unit": "min",
       "default": 30,
       "min": 1,
       "max": 1440,
-      "env": "SYNC_IDLE_INTERVAL_MIN",
+      "env": "SYNC_STALE_INTERVAL_MIN",
       "readBy": [
         "wallet"
       ],
       "live": true
     },
     {
-      "key": "sync.activeWindowMin",
+      "key": "sync.staleAfterMin",
       "group": "sync",
-      "label": "How recently a portfolio counts as in use",
-      "about": "Long enough that a tab left open keeps its wallets on the fast tier.",
+      "label": "How long without a visit before a portfolio goes stale",
+      "about": "Visit recency is the only thing that decides the rescan rate, so this is how long somebody can be away before their portfolio slows down. It was 15 minutes while ownership kept owned portfolios fast regardless; without that, 15 minutes would put anybody who steps away from the tab on the slow interval.",
       "type": "int",
       "unit": "min",
-      "default": 15,
+      "default": 1440,
       "min": 1,
-      "max": 240,
-      "env": "SYNC_ACTIVE_WINDOW_MIN",
+      "max": 10080,
+      "env": "SYNC_STALE_AFTER_MIN",
       "readBy": [
         "wallet"
       ],
@@ -74,7 +74,7 @@
       "key": "scan.reloadSec",
       "group": "queue",
       "label": "Queue top-up interval",
-      "about": "How often the producer looks for addresses that have come due. Cheap — an address that is not due is simply not enqueued.",
+      "about": "How often the producer looks for addresses that have come due. Cheap \u2014 an address that is not due is simply not enqueued.",
       "type": "int",
       "unit": "sec",
       "default": 15,
@@ -135,32 +135,32 @@
       "live": true
     },
     {
-      "key": "scan.claimTtlMin",
+      "key": "scan.leaseMin",
       "group": "limits",
-      "label": "Scan claim lease",
+      "label": "How long a dispatched scan holds its address",
       "about": "How long an address is believed to be in flight before it counts as free again.",
       "type": "int",
       "unit": "min",
       "default": 10,
       "min": 1,
       "max": 120,
-      "env": "SCAN_CLAIM_TTL_MIN",
+      "env": "SCAN_LEASE_MIN",
       "readBy": [
         "wallet"
       ],
       "live": true
     },
     {
-      "key": "scan.stuckPendingMin",
+      "key": "scan.retryMin",
       "group": "limits",
-      "label": "When a first scan is called broken",
-      "about": "A wallet that has never been scanned, with no claim outstanding, waiting this long. Well past one lease on purpose — a wallet queued behind a hundred others is not a failed one.",
+      "label": "Wait before retrying a failed scan",
+      "about": "A source that is down should not be asked about the same address on every top-up \u2014 that is how somebody else's outage becomes our own rate limit.",
       "type": "int",
       "unit": "min",
-      "default": 15,
+      "default": 5,
       "min": 1,
-      "max": 240,
-      "env": "SCAN_STUCK_PENDING_MIN",
+      "max": 120,
+      "env": "SCAN_RETRY_MIN",
       "readBy": [
         "wallet"
       ],
@@ -186,7 +186,7 @@
       "key": "scan.evmTimeoutMs",
       "group": "limits",
       "label": "EVM browser scan timeout",
-      "about": "A browser scan is slow by nature — a page load with chains resolving one by one.",
+      "about": "A browser scan is slow by nature \u2014 a page load with chains resolving one by one.",
       "type": "int",
       "unit": "ms",
       "default": 150000,
@@ -218,7 +218,7 @@
   "rules": [
     {
       "id": "claim-outlasts-scan",
-      "about": "The lease has to outlast the slowest scan that can still come back — an EVM scan runs to its timeout and runs TWICE when it re-reads a suspicious drop, plus the pause after it. Under that and an address still being scanned gets re-enqueued, which is the whole thing the lease exists to stop.",
+      "about": "The lease has to outlast the slowest scan that can still come back \u2014 an EVM scan runs to its timeout and runs TWICE when it re-reads a suspicious drop, plus the pause after it. Under that and an address still being scanned gets re-enqueued, which is the whole thing the lease exists to stop.",
       "left": "scan.claimTtlMin",
       "leftScale": 60000,
       "op": ">=",

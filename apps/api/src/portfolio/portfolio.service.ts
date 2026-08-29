@@ -466,7 +466,7 @@ export class PortfolioService {
     });
     if (!portfolio) throw new NotFoundException('Portfolio not found');
 
-    const staleBefore = Date.now() - 3 * setting('sync.intervalMin') * 60_000;
+    const staleBefore = Date.now() - 3 * setting('sync.activeIntervalMin') * 60_000;
     const wallets = portfolio.wallets
       .map((held) => this.toWalletDto(held, staleBefore))
       .sort(walletOrder);
@@ -511,8 +511,33 @@ export class PortfolioService {
    * cadence.
    */
   private touchViewed(slug: string): void {
-    void this.prisma.portfolio
-      .update({ where: { slug }, data: { lastViewedAt: new Date() } })
+    void this.prisma
+      .$transaction(async (tx) => {
+        const portfolio = await tx.portfolio.update({
+          where: { slug },
+          data: { lastViewedAt: new Date() },
+          select: { id: true },
+        });
+        // Somebody is back, so their wallets go back on the fast interval NOW
+        // rather than after one more slow cycle. Without this, returning to a
+        // portfolio left alone for a day means watching a stale number for up
+        // to half an hour while the schedule catches up — and the whole point
+        // of pacing by visits is that a visit is what speeds it up.
+        //
+        // Only ever EARLIER: GREATEST/LEAST would be the SQL, and this is the
+        // Prisma spelling of it — an address already due sooner is left alone,
+        // and one in flight keeps its lease because that is later than now but
+        // the filter below only touches rows due further out than the fast
+        // interval.
+        const soon = new Date(Date.now() + setting('sync.activeIntervalMin') * 60_000);
+        await tx.wallet.updateMany({
+          where: {
+            memberships: { some: { portfolioId: portfolio.id } },
+            nextScanAt: { gt: soon },
+          },
+          data: { nextScanAt: soon },
+        });
+      })
       .catch(() => {});
   }
 

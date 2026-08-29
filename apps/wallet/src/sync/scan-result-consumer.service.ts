@@ -44,16 +44,15 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
   }
 
   /**
-   * A result arrived, so whatever we do with it, this address is no longer on
-   * its way — the claim is released on every path out of here, including the
-   * ones that write nothing.
+   * A result arrived.
+   *
+   * Nothing to release: the lease taken at dispatch is a due time like any
+   * other, and storing the result writes the real one over it. A path that
+   * writes nothing — a reading we chose not to believe — leaves the lease
+   * standing, which is the backoff that case wanted anyway.
    */
   async apply(outcome: ScanOutcome): Promise<void> {
-    try {
-      await this.store(outcome);
-    } finally {
-      await this.sync.releaseScan(outcome.chain, outcome.address);
-    }
+    await this.store(outcome);
   }
 
   private async store(outcome: ScanOutcome): Promise<void> {

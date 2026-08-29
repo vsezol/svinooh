@@ -126,7 +126,42 @@ export function startSettings(read: SettingsReader, onError?: (error: Error) => 
  * is what makes a change take effect without a restart, and it costs a map
  * lookup.
  */
-export function setting(key: string): number {
+/**
+ * Every key the code is allowed to ask for.
+ *
+ * The registry is JSON so both stacks can read it, which means TypeScript
+ * cannot derive this list from it — so it is written out here, and checked
+ * against the file at startup. That check is not ceremony: renaming a key in
+ * the JSON used to compile perfectly and then throw the first time a request
+ * touched it, in production, because `setting` took a plain string. Now the
+ * compiler catches the call sites and, if the two ever drift anyway, the
+ * service refuses to start instead of failing later under load.
+ */
+const KEYS = [
+  'sync.activeIntervalMin',
+  'sync.staleIntervalMin',
+  'sync.staleAfterMin',
+  'scan.reloadSec',
+  'scan.prefetch',
+  'scan.jobDelayMs',
+  'scan.httpConcurrency',
+  'scan.leaseMin',
+  'scan.retryMin',
+  'scan.httpTimeoutMs',
+  'scan.evmTimeoutMs',
+  'alerts.prefetch',
+] as const;
+
+export type SettingKey = (typeof KEYS)[number];
+
+const missing = KEYS.filter((key) => !SPECS.has(key));
+if (missing.length) {
+  throw new Error(
+    `settings/registry.json is missing ${missing.join(', ')} — the code asks for keys the registry does not declare`,
+  );
+}
+
+export function setting(key: SettingKey): number {
   const spec = SPECS.get(key);
   if (!spec) throw new Error(`No such setting: ${key}`);
   const override = overrides.get(key);
@@ -135,9 +170,14 @@ export function setting(key: string): number {
   return fromEnv ?? spec.default;
 }
 
-/** Only for reporting: what is set, versus what is merely defaulted */
+/**
+ * Only for reporting: what is set, versus what is merely defaulted.
+ *
+ * Walks the registry rather than KEYS, so a knob declared for the admin but not
+ * read anywhere in this codebase still shows up in the snapshot.
+ */
 export function settingsSnapshot(): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const spec of REGISTRY.settings) out[spec.key] = setting(spec.key);
+  for (const spec of REGISTRY.settings) out[spec.key] = setting(spec.key as SettingKey);
   return out;
 }

@@ -42,7 +42,7 @@ export class AuthProxyController {
   @Get('config')
   async getConfig(): Promise<Record<string, unknown>> {
     const cfg = (await forward('GET', '/auth/config')) as Record<string, unknown>;
-    return { ...cfg, syncIntervalMin: setting('sync.intervalMin') };
+    return { ...cfg, syncIntervalMin: setting('sync.activeIntervalMin') };
   }
 
   @Post('telegram')

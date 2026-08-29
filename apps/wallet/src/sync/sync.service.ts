@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { Wallet } from '@prisma/client';
 import type { Chain, TronResources } from '@svinooh/shared';
 import { config } from '../config';
-import { ScanHold, setting } from '@svinooh/common';
+import { leaseUntil, retryAt, schedule, ScanHold, setting } from '@svinooh/common';
 import { MetricsService, RabbitService, WALLET_STATE_QUEUE, type ScanJob } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import { alertableStates } from './wallet-state';
@@ -47,76 +47,84 @@ export class SyncService {
 
 
   /**
-   * The addresses that are DUE for a rescan, most urgent first.
+   * What is due, oldest first.
    *
-   * Each address has a due time, and one that isn't due is simply not enqueued.
-   * That is what paces us against the upstream sources — before it existed the
-   * producer refilled the queue the moment it drained and rescanned everything
-   * every ~1.8 minutes, which is roughly 4,800 DeBank page loads a day from one
-   * datacenter IP and is what got us throttled.
-   *
-   * Two tiers:
-   *   fast (SYNC_INTERVAL_MIN) — somebody opened a portfolio holding it recently
-   *   slow (SYNC_IDLE_INTERVAL_MIN) — nobody has looked in a while
-   *
-   * An address in several portfolios takes the fastest tier any of them asks
-   * for. `lastViewedAt` belongs to the api, which owns those rows — we only
-   * read it.
+   * One indexed column and no arithmetic: whoever last knew something about
+   * this address's timing already wrote the answer down. It used to load every
+   * wallet in the database with its portfolios attached and work out the same
+   * thing in JavaScript on every tick.
    */
-  async listGroups(): Promise<ScanJob[]> {
-    const now = Date.now();
-    const activeSince = new Date(now - setting('sync.activeWindowMin') * 60_000);
-    const claimedSince = new Date(now - setting('scan.claimTtlMin') * 60_000);
-
-    const wallets = await this.prisma.wallet.findMany({
-      where: {
-        // Already on its way. A claim older than the TTL is not believed: a
-        // scanner can die, and a held scan never publishes a result to clear it.
-        OR: [{ scanQueuedAt: null }, { scanQueuedAt: { lt: claimedSince } }],
-      },
+  async dueForScan(limit: number): Promise<ScanJob[]> {
+    const due = await this.prisma.wallet.findMany({
+      where: { nextScanAt: { lte: new Date() } },
+      orderBy: { nextScanAt: 'asc' },
+      take: limit,
       select: {
+        id: true,
         chain: true,
         address: true,
-        lastSyncedAt: true,
         lastTotalUsd: true,
+        lastSyncedAt: true,
         tronResourcesAt: true,
-        memberships: {
-          select: { portfolio: { select: { lastViewedAt: true } } },
-        },
       },
     });
 
-    const due = wallets
-      .map((w) => {
-        const fast = w.memberships.some(
-          (m) => (m.portfolio.lastViewedAt?.getTime() ?? 0) >= activeSince.getTime(),
-        );
-        const intervalMs =
-          (fast ? setting('sync.intervalMin') : setting('sync.idleIntervalMin')) * 60_000;
-        const lastSyncedAt = w.lastSyncedAt?.getTime() ?? null;
-        return {
-          ...w,
-          fast,
-          overdueBy: lastSyncedAt === null ? Infinity : now - lastSyncedAt - intervalMs,
-        };
-      })
-      .filter((w) => w.overdueBy >= 0)
-      // Actively-viewed addresses go first; within a tier, whatever has been
-      // waiting longest
-      .sort((a, b) => Number(b.fast) - Number(a.fast) || b.overdueBy - a.overdueBy);
-
-    // previousTotal travels with the job so the scanner can re-read a
-    // suspicious drop while it still has the page open
     return due.map((w) => ({
       chain: w.chain as Chain,
       address: w.address,
+      // previousTotal travels with the job so the scanner can re-read a
+      // suspicious drop while it still has the page open
       previousTotal: w.lastTotalUsd,
       tronResourcesAt: w.tronResourcesAt?.toISOString() ?? null,
+      // Somebody pasted this address and is watching a spinner
+      priority: w.lastSyncedAt === null ? 'urgent' : 'normal',
     }));
+  }
+
+  /**
+   * Hold these addresses for the length of a scan, so the next top-up does not
+   * dispatch them again while they are still in the queue.
+   *
+   * Taken before publishing rather than after: the api forces a scan the moment
+   * somebody adds a wallet, and that lands at exactly the same time as a tick.
+   * Postgres serialises the two UPDATEs, and `count` says how many rows this
+   * caller actually took.
+   */
+  async lease(addresses: Array<{ chain: string; address: string }>): Promise<void> {
+    if (!addresses.length) return;
+    const until = leaseUntil(new Date());
+    await this.prisma.wallet.updateMany({
+      where: { OR: addresses.map(({ chain, address }) => ({ chain, address })) },
+      data: { nextScanAt: until },
+    });
+  }
+
+  /** One address, taken only if nobody else holds it — the api's forced scan */
+  async takeIfFree(chain: string, address: string): Promise<boolean> {
+    const { count } = await this.prisma.wallet.updateMany({
+      where: { chain, address, nextScanAt: { lte: new Date() } },
+      data: { nextScanAt: leaseUntil(new Date()) },
+    });
+    return count > 0;
+  }
+
+  /**
+   * When this address is next worth scanning, from who has been looking at it.
+   * The one place that decides — see schedule().
+   */
+  private async nextScanFor(walletId: string, lastSyncedAt: Date | null): Promise<Date> {
+    const holders = await this.prisma.portfolioWallet.findMany({
+      where: { walletId },
+      select: { portfolio: { select: { lastViewedAt: true } } },
+    });
+    return schedule(holders.map((h) => h.portfolio), lastSyncedAt, new Date()).nextScanAt;
   }
 
   async applyResult(wallet: Wallet, result: ScanResult): Promise<void> {
     const now = new Date();
+    // Decided from who has been looking, before the write, so the interval and
+    // the reading land in the same transaction
+    const nextScanAt = await this.nextScanFor(wallet.id, now);
     await this.prisma.$transaction([
       this.prisma.position.deleteMany({ where: { walletId: wallet.id } }),
       this.prisma.position.createMany({
@@ -145,6 +153,7 @@ export class SyncService {
           status: 'ok',
           lastTotalUsd: result.totalUsd,
           lastSyncedAt: now,
+          nextScanAt,
           lastError: null,
           breakdown: result.breakdown ?? {},
           unpriced: result.unpriced ?? [],
@@ -216,84 +225,21 @@ export class SyncService {
   }
 
   /**
-   * Take this address, or report that a scan is already on its way for it.
+   * We deliberately leave the last successful cached value untouched — it is
+   * served with a stale flag.
    *
-   * One UPDATE, because two statements (look, then mark) is the race it exists
-   * to close: the producer's tick and a wallet somebody has just added arrive at
-   * the same moment by design, and the api's forced scan is at its most likely
-   * to collide precisely when the address is new. Postgres locks the rows for
-   * the duration, so a second caller re-reads the row it waited for, no longer
-   * matches the WHERE, and updates nothing — and `count` is how many rows were
-   * actually claimed, so zero means somebody else holds it.
-   *
-   * It claims every Wallet row for the address at once, because one scan serves
-   * all of them.
+   * The address backs off rather than coming due immediately: a source that is
+   * down would otherwise be asked about the same address on every top-up, which
+   * is how somebody else's outage becomes our own rate limit.
    */
-  async claimForScan(chain: string, address: string): Promise<boolean> {
-    const staleBefore = new Date(Date.now() - setting('scan.claimTtlMin') * 60_000);
-    const { count } = await this.prisma.wallet.updateMany({
-      where: {
-        chain,
-        address,
-        OR: [{ scanQueuedAt: null }, { scanQueuedAt: { lt: staleBefore } }],
-      },
-      data: { scanQueuedAt: new Date() },
-    });
-    return count > 0;
-  }
-
-  /**
-   * A result came back — or never will, because the job was never sent.
-   *
-   * Called on every path out of applying a result, including the ones that write
-   * nothing: the claim says "a result is still on its way", and once one has
-   * arrived that is no longer true whatever it said. Not called when a scan is
-   * HELD (DeBank throttling), since nothing is published to trigger it — the
-   * claim simply ages out, and until it does that address is not rescanned,
-   * which is what a backoff should do anyway.
-   */
-  async releaseScan(chain: string, address: string): Promise<void> {
-    await this.prisma.wallet.updateMany({
-      where: { chain, address },
-      data: { scanQueuedAt: null },
-    });
-  }
-
-  /**
-   * Wallets still waiting for a first scan that nothing is going to deliver.
-   *
-   * `pending` means "on its way". It stops being true when a scan ends without
-   * a result — a held one publishes nothing, a dying scanner publishes nothing —
-   * and nothing then corrects the wallet, because the writer only ever hears
-   * about scans that came back. The page reads that as a spinner and polls it
-   * every three seconds, so the claim has to expire.
-   *
-   * Only wallets with no live claim: one that is still on its way is not stuck,
-   * it is waiting its turn. The row stays due (lastSyncedAt is untouched), so
-   * the next top-up picks it up again — this gives up on the claim, not on the
-   * wallet.
-   */
-  async failStuckPending(): Promise<number> {
-    const now = Date.now();
-    const claimedSince = new Date(now - setting('scan.claimTtlMin') * 60_000);
-    const waitingSince = new Date(now - setting('scan.stuckPendingMin') * 60_000);
-    const { count } = await this.prisma.wallet.updateMany({
-      where: {
-        status: 'pending',
-        lastSyncedAt: null,
-        createdAt: { lt: waitingSince },
-        OR: [{ scanQueuedAt: null }, { scanQueuedAt: { lt: claimedSince } }],
-      },
-      data: { status: 'failed', lastError: 'No scan came back for this address — retrying' },
-    });
-    return count;
-  }
-
-  /** We deliberately leave the last successful cached value untouched — it's served with a stale flag */
   async markFailed(wallet: Wallet, message: string): Promise<void> {
     await this.prisma.wallet.update({
       where: { id: wallet.id },
-      data: { status: 'failed', lastError: message.slice(0, 500) },
+      data: {
+        status: 'failed',
+        lastError: message.slice(0, 500),
+        nextScanAt: retryAt(new Date()),
+      },
     });
   }
 

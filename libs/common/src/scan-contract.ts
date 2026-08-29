@@ -35,6 +35,11 @@ export interface ScanJob {
    */
   previousTotal: number | null;
   /**
+   * `urgent` is an address nobody has scanned yet: somebody pasted it a moment
+   * ago and is watching a spinner, so it goes to the front of its queue.
+   */
+  priority?: 'urgent' | 'normal';
+  /**
    * TRON only: when this address's resources were last read, as an ISO string,
    * or null if never.
    *
