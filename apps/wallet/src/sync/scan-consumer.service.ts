@@ -10,7 +10,6 @@ import {
   setting,
 } from '@svinooh/common';
 import type { Chain, ScanResult } from '@svinooh/shared';
-import { config } from '../config';
 import { scanAddress } from '../scanners';
 import { scanQueue } from './scan-queue';
 
@@ -45,12 +44,12 @@ export class ScanConsumerService implements OnApplicationBootstrap {
   }
 
   private async handle(job: ScanJob): Promise<void> {
-    await this.publish(await this.scanInProcess(job));
+    await this.publish(await this.run(job));
     await sleep(setting('scan.jobDelayMs')); // keep the slot busy through the pause — that is the pacing
   }
 
-  /** The scan itself, with no queue involved — also the local-development path */
-  async scanInProcess(job: ScanJob): Promise<ScanOutcome> {
+  /** The scan itself: what to read, and whether to read it twice */
+  private async run(job: ScanJob): Promise<ScanOutcome> {
     const chain = job.chain;
     try {
       const result = await scanQueue.run(chain, () =>

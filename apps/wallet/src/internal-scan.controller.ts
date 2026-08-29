@@ -2,8 +2,6 @@ import { Body, Controller, Post } from '@nestjs/common';
 import { RabbitService, scanQueueName, type ScanJob } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import type { Chain } from '@svinooh/shared';
-import { ScanConsumerService } from './sync/scan-consumer.service';
-import { ScanResultConsumerService } from './sync/scan-result-consumer.service';
 import { SyncService } from './sync/sync.service';
 
 /**
@@ -23,8 +21,6 @@ export class InternalScanController {
     private readonly prisma: PrismaService,
     private readonly rabbit: RabbitService,
     private readonly sync: SyncService,
-    private readonly scanner: ScanConsumerService,
-    private readonly writer: ScanResultConsumerService,
   ) {}
 
   @Post('scan')
@@ -45,22 +41,10 @@ export class InternalScanController {
     // Somebody is already scanning this address — the wallet gets that result,
     // which is the one it was going to wait for anyway
     if (!(await this.sync.claimForScan(job.chain, job.address))) return;
-    if (this.rabbit.enabled) {
-      // Nothing was queued, so nothing will release the claim — see the same
-      // handling in ScanProducerService.topUp
-      if (!(await this.rabbit.publish(scanQueueName(job.chain), job))) {
-        await this.sync.releaseScan(job.chain, job.address);
-      }
-      return;
-    }
-    // No broker (local development): do it here. EVM has nowhere to go without
-    // one, so it waits for a broker rather than pretending to have been scanned —
-    // and its claim goes back, or nothing would touch that address until the
-    // claim aged out.
-    if (job.chain === 'EVM') {
+    // Nothing was queued, so nothing will release the claim — see the same
+    // handling in ScanProducerService.topUp
+    if (!(await this.rabbit.publish(scanQueueName(job.chain), job))) {
       await this.sync.releaseScan(job.chain, job.address);
-      return;
     }
-    await this.writer.apply(await this.scanner.scanInProcess(job));
   }
 }

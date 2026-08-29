@@ -67,9 +67,14 @@ Open http://localhost:5173, sign in with **dev login** (Telegram doesn't work on
 localhost — the widget needs a domain bound to the bot), paste a wallet address
 and the rest takes care of itself.
 
-Neither RabbitMQ, Redis, Loki nor Tempo are needed locally: with their variables
-unset the wallet service scans in-process on a timer, the cache is in-memory and
-logs/traces go to stdout only.
+`docker compose up -d` gives you Postgres and RabbitMQ, which is everything the
+services genuinely need. Redis, Loki and Tempo stay optional: with their
+variables unset the cache is in-memory and logs/traces go to stdout only.
+
+The broker is not optional any more. It used to be, and the wallet service
+carried a second, broker-less copy of the whole scan pipeline to cope — one that
+skipped EVM, paced itself differently, and was the copy nobody ran in
+production.
 
 Checking the scanners against the control wallets (networks, totals, positions):
 
@@ -429,8 +434,8 @@ queue drained, so everything was rescanned every ~1.8 minutes no matter what
 `SYNC_INTERVAL_MIN` said — about 4,800 DeBank page loads a day from one
 datacenter IP, which is what got the EVM scans throttled into timeouts. After each successful scan a
 `WalletSnapshot` is written, and a `PortfolioSnapshot` after the portfolio is
-recomputed. Without `RABBITMQ_URL` the same work runs in-process on a timer,
-which is what local development uses.
+recomputed. There is one pipeline and it goes through the broker — locally too,
+which is why `docker compose` brings RabbitMQ up alongside Postgres.
 
 The api serves assembled portfolios from Redis (`CACHE_TTL_SEC`), so reads never
 wait on a scan. Charts: 24h uses raw points, 7d/30d/all use `date_bin` buckets on

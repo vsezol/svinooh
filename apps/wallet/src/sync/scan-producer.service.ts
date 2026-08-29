@@ -1,50 +1,49 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import type { Chain } from '@svinooh/shared';
-import { RabbitService, scanQueueName, sleep, type ScanJob, setting } from '@svinooh/common';
-import { config } from '../config';
-import { ScanConsumerService } from './scan-consumer.service';
-import { ScanResultConsumerService } from './scan-result-consumer.service';
+import { RabbitService, scanQueueName, type ScanJob, setting } from '@svinooh/common';
 import { SyncService } from './sync.service';
 
 /**
  * Tops the queue up with the addresses that are DUE for a rescan (SyncService
  * decides which, and in what order). It checks often, but an address that isn't
  * due yet is simply not enqueued — that is what paces us against the upstream
- * sources. Without RabbitMQ it runs the same pipeline in-process so dev works
- * without a broker.
+ * sources.
  *
  * Nothing is published without claiming that address first (Wallet.scanQueuedAt),
  * so a scan already on its way — from an earlier tick, or forced by the api the
  * instant somebody added the wallet — is never published a second time.
+ *
+ * There is one pipeline and this is it. There used to be a second, broker-less
+ * one right here, so that `npm run dev` worked without RabbitMQ; it skipped EVM,
+ * paced itself off how long each scan took rather than off a clock, and was the
+ * only copy nobody ran in production. Running the broker locally is cheaper than
+ * keeping a shadow implementation honest — see docker-compose.yml.
  */
 const CHAINS: Chain[] = ['EVM', 'SOL', 'TRON', 'BTC'];
 const ALL_QUEUES = CHAINS.map(scanQueueName);
 
 @Injectable()
-export class ScanProducerService implements OnApplicationBootstrap, OnModuleDestroy {
+export class ScanProducerService implements OnApplicationBootstrap {
   private readonly logger = new Logger(ScanProducerService.name);
   /**
    * @Interval fires on a timer and does not wait for the previous run, so a tick
    * that outlives its own period would otherwise overlap with the next one.
    */
   private ticking = false;
-  /** Only the broker-less loop below needs this; the scheduler stops itself */
-  private stopped = false;
 
   constructor(
     private readonly rabbit: RabbitService,
     private readonly sync: SyncService,
-    private readonly scanner: ScanConsumerService,
-    private readonly writer: ScanResultConsumerService,
   ) {}
 
   onApplicationBootstrap() {
     if (this.rabbit.enabled) {
       this.logger.log(`Producer: topping the queue up every ${setting('scan.reloadSec')}s`);
     } else {
-      void this.inProcessLoop();
-      this.logger.log(`Producer: RabbitMQ off — scanning in-process, pause ${setting('scan.jobDelayMs')}ms`);
+      this.logger.error(
+        'RABBITMQ_URL is not set — nothing will be scanned. Start the broker: docker compose up -d rabbitmq',
+      );
     }
   }
 
@@ -110,44 +109,5 @@ export class ScanProducerService implements OnApplicationBootstrap, OnModuleDest
   private async sweepStuckPending(): Promise<void> {
     const stuck = await this.sync.failStuckPending();
     if (stuck) this.logger.warn(`${stuck} wallet(s) gave up waiting for a first scan`);
-  }
-
-  /**
-   * Broker-less fallback, for local development: the same steps, wired straight
-   * to each other instead of through queues. EVM is skipped — it lives in
-   * another service now, and reaching it without a broker is not a thing this
-   * loop can do.
-   *
-   * A plain loop rather than a scheduled tick, because it paces itself off how
-   * long each scan actually takes rather than off a clock.
-   *
-   * It claims the same way the queued path does, because the api's forced scan
-   * lands here too when there is no broker, and the two would otherwise scan the
-   * same address at the same time.
-   */
-  private async inProcessLoop(): Promise<void> {
-    await sleep(8000); // let the rest of the app come up
-    while (!this.stopped) {
-      try {
-        await this.sweepStuckPending();
-        const jobs = (await this.sync.listGroups()).filter((j) => j.chain !== 'EVM');
-        let ran = 0;
-        for (const job of jobs) {
-          if (this.stopped) break;
-          if (!(await this.sync.claimForScan(job.chain, job.address))) continue;
-          ran++;
-          await this.writer.apply(await this.scanner.scanInProcess(job));
-          await sleep(setting('scan.jobDelayMs'));
-        }
-        if (!ran) await sleep(5000);
-      } catch (e) {
-        this.logger.warn(`in-process loop: ${e instanceof Error ? e.message : e}`);
-        await sleep(3000);
-      }
-    }
-  }
-
-  onModuleDestroy() {
-    this.stopped = true;
   }
 }
