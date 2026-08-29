@@ -60,15 +60,27 @@ function Meter({ name, free, total }: { name: string; free: number; total: numbe
   );
 }
 
-/** "in 12 days", or the plain fact that the wait is over */
+/** A fact on one line: the label keeps the left edge, the value keeps the right */
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+      <span className="mono" style={{ ...LABEL, whiteSpace: 'nowrap', flexShrink: 0 }}>
+        {label}
+      </span>
+      <span style={{ fontSize: 12.5, textAlign: 'right', minWidth: 0 }}>{children}</span>
+    </div>
+  );
+}
+
+/** What goes to the right of UNLOCKS: "Sep 5 · in 12 days", or that the wait is over */
 function reclaimLine(tron: TronResourcesDto): string {
-  if (tron.reclaimableNow) return 'Reclaimable now';
+  if (tron.reclaimableNow) return 'Now · reclaimable';
   if (!tron.nextReclaimAt) return 'Locked';
   const at = Date.parse(tron.nextReclaimAt);
   if (Number.isNaN(at)) return 'Locked';
   const days = Math.ceil((at - Date.now()) / 86_400_000);
   const date = new Date(at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  return days <= 0 ? `Unlocks ${date}` : `Unlocks ${date} · in ${days} day${days === 1 ? '' : 's'}`;
+  return days <= 0 ? date : `${date} · in ${days} day${days === 1 ? '' : 's'}`;
 }
 
 export function TronResources({ tron }: { tron: TronResourcesDto }) {
@@ -102,8 +114,9 @@ export function TronResources({ tron }: { tron: TronResourcesDto }) {
         <Meter name="BANDWIDTH" free={tron.bandwidthFree} total={bandwidthTotal} />
       </div>
 
-      {/* A wallet with nothing lent out gets no line saying so — the card is
-          about what is there */}
+      {/* A wallet with nothing lent out gets no lines saying so — the card is
+          about what is there. What it does have reads like the meters above:
+          the label on the left, the answer on the right, one fact per line. */}
       {tron.hasDelegation ? (
         <div
           style={{
@@ -111,27 +124,21 @@ export function TronResources({ tron }: { tron: TronResourcesDto }) {
             paddingTop: 10,
             borderTop: '1px solid var(--line)',
             display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'baseline',
-            columnGap: 12,
-            rowGap: 3,
-            fontSize: 12.5,
+            flexDirection: 'column',
+            gap: 6,
           }}
         >
-          <span className="mono" style={LABEL}>
-            DELEGATED OUT
-          </span>
-          <span>{delegated.length ? delegated.join(' · ') : 'Yes'}</span>
-          <span
-            style={{
-              marginLeft: 'auto',
-              color: tron.reclaimableNow ? 'var(--acc)' : 'var(--mut)',
-              fontWeight: tron.reclaimableNow ? 700 : 400,
-              fontSize: 12,
-            }}
-          >
-            {reclaimLine(tron)}
-          </span>
+          <Fact label="DELEGATED OUT">{delegated.length ? delegated.join(' · ') : 'Yes'}</Fact>
+          <Fact label="UNLOCKS">
+            <span
+              style={{
+                color: tron.reclaimableNow ? 'var(--acc)' : undefined,
+                fontWeight: tron.reclaimableNow ? 700 : 400,
+              }}
+            >
+              {reclaimLine(tron)}
+            </span>
+          </Fact>
         </div>
       ) : null}
     </div>
