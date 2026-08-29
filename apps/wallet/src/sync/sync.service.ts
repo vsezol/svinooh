@@ -155,6 +155,7 @@ export class SyncService {
           lastSyncedAt: now,
           nextScanAt,
           lastError: null,
+          lowReadings: 0,
           breakdown: result.breakdown ?? {},
           unpriced: result.unpriced ?? [],
           // Only when this scan actually read them. A scan that skipped the
@@ -222,6 +223,17 @@ export class SyncService {
     } catch (error) {
       this.logger.warn(`could not announce ${wallet.address}: ${(error as Error).message}`);
     }
+  }
+
+  /**
+   * A reading we chose not to believe: count it and change nothing else.
+   *
+   * The address keeps its value, its status and the lease it is under, which is
+   * the backoff this case wanted anyway — a source arguing with itself is not
+   * worth re-asking immediately.
+   */
+  async noteLowReading(walletId: string, lowReadings: number): Promise<void> {
+    await this.prisma.wallet.update({ where: { id: walletId }, data: { lowReadings } });
   }
 
   /**

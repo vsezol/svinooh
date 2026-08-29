@@ -1,8 +1,8 @@
 import Fastify from 'fastify';
-import { ALERTS_QUEUE, RabbitService } from '@svinooh/common';
-import type { AlertEvent } from '@svinooh/shared';
+import { ALERTS_QUEUE, NOTICES_QUEUE, RabbitService } from '@svinooh/common';
+import type { AlertEvent, SlowedNotice } from '@svinooh/shared';
 import { config } from './config';
-import { esc, formatAlert } from './format';
+import { esc, formatAlert, formatSlowedNotice } from './format';
 import { getUpdates, send, type TgUpdate } from './telegram';
 
 /**
@@ -36,7 +36,17 @@ async function main(): Promise<void> {
       },
       4,
     );
-    app.log.info(`listening on ${ALERTS_QUEUE}`);
+    // Same manual ack for the same reason: a notice is worth delivering late
+    // and not worth losing
+    rabbit.consume<SlowedNotice>(
+      NOTICES_QUEUE,
+      async (notice) => {
+        const { text, markup } = formatSlowedNotice(notice, config.webUrl);
+        await send(notice.telegramId, text, markup);
+      },
+      4,
+    );
+    app.log.info(`listening on ${ALERTS_QUEUE} and ${NOTICES_QUEUE}`);
   } else {
     app.log.warn('RABBITMQ_URL not set — alerts will not be delivered');
   }

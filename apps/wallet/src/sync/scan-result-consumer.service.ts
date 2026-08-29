@@ -24,8 +24,6 @@ import { SyncService } from './sync.service';
 @Injectable()
 export class ScanResultConsumerService implements OnApplicationBootstrap {
   private readonly logger = new Logger(ScanResultConsumerService.name);
-  /** Consecutive unconfirmed drops per address — the reason this consumer is single */
-  private readonly dropStreak = new Map<string, number>();
 
   constructor(
     private readonly rabbit: RabbitService,
@@ -36,9 +34,10 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
 
   onApplicationBootstrap() {
     if (!this.rabbit.enabled) return;
-    // Deliberately one at a time. Two wallets in the same portfolio landing at
-    // once would race on the portfolio snapshot, and the work here is a few
-    // updates — there is nothing to gain by parallelising it.
+    // Still one at a time, but for one reason now rather than two: two
+    // addresses in the same portfolio landing together would race on that
+    // portfolio's snapshot, which is a read-then-write. The other reason — a
+    // streak counter that only existed in this process's memory — is gone.
     this.rabbit.consume<ScanOutcome>(SCAN_RESULT_QUEUE, (o) => this.apply(o), 1);
     this.logger.log(`Consuming ${SCAN_RESULT_QUEUE} — the single writer of wallet values`);
   }
@@ -70,17 +69,19 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
       return;
     }
 
-    const believable = this.judge(key, outcome, wallet);
-    if (!believable) {
-      // Our own decision, not a broken source: leave the wallet exactly as it
-      // was — status, value and all — so the page keeps showing the last good
+    const verdict = this.judge(key, outcome, wallet);
+    if (!verdict.believe) {
+      // Our own decision, not a broken source: leave the wallet's value exactly
+      // as it was — status and all — so the page keeps showing the last good
       // number instead of "sync failed". It goes stale on its own if this
-      // persists, which is the honest signal.
+      // persists, which is the honest signal. Only the count of how many times
+      // we have now seen this is written down.
+      await this.sync.noteLowReading(wallet.id, verdict.lowReadings);
       this.metrics.scans.inc({ chain: outcome.chain, result: 'suppressed' });
       return;
     }
 
-    await this.sync.applyResult(wallet, believable);
+    await this.sync.applyResult(wallet, verdict.believe);
     this.metrics.scans.inc({ chain: outcome.chain, result: 'ok' });
     // One address, and every portfolio that happens to hold it — its total just
     // moved for all of them
@@ -89,38 +90,46 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
     }
   }
 
-  /** The reading worth storing, or null to keep what is already there */
-  private judge(key: string, outcome: Extract<ScanOutcome, { ok: true }>, wallet: Wallet): ScanResult | null {
+  /**
+   * What to store, and what to remember about having decided it.
+   *
+   * Pure: it is handed the count of consecutive low readings and gives back the
+   * new one, so the same reasoning holds whether this is the first process to
+   * see the address or the fifth after a redeploy. It used to keep that count
+   * in a Map of its own, which is why it could only ever run in one place.
+   */
+  private judge(
+    key: string,
+    outcome: Extract<ScanOutcome, { ok: true }>,
+    wallet: Wallet,
+  ): { believe: ScanResult | null; lowReadings: number } {
     const { result, recheck } = outcome;
     const previousTotal = wallet.lastTotalUsd;
 
     // nothing to compare against (first successful scan, or a nearly empty wallet)
     if (previousTotal === null || previousTotal <= 10) {
-      this.dropStreak.delete(key);
-      return result;
+      return { believe: result, lowReadings: 0 };
     }
 
     const floor = previousTotal * 0.75; // a fall of more than 25% in one cycle is suspicious
     if (result.totalUsd >= floor) {
-      this.dropStreak.delete(key); // normal, or up
-      return result;
+      return { believe: result, lowReadings: 0 }; // normal, or up
     }
     if (recheck && recheck.totalUsd >= floor) {
-      this.dropStreak.delete(key); // the first reading was a glitch, the second is normal
-      return recheck;
+      // the first reading was a glitch, the second is normal
+      return { believe: recheck, lowReadings: 0 };
     }
 
     // both readings are low: either a real withdrawal or a source that keeps failing
-    const streak = (this.dropStreak.get(key) ?? 0) + 1;
+    const streak = wallet.lowReadings + 1;
     if (streak >= config.dropConfirmCycles) {
-      this.dropStreak.delete(key);
       // conservative: of two low readings, keep the larger
-      return recheck && recheck.totalUsd > result.totalUsd ? recheck : result;
+      const believe = recheck && recheck.totalUsd > result.totalUsd ? recheck : result;
+      return { believe, lowReadings: 0 };
     }
-    this.dropStreak.set(key, streak);
     this.logger.warn(
       `Unconfirmed drop ${key}: $${previousTotal.toFixed(2)} → $${result.totalUsd.toFixed(2)} (${streak}/${config.dropConfirmCycles}), keeping last known`,
     );
-    return null;
+    return { believe: null, lowReadings: streak };
   }
 }

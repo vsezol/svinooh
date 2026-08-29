@@ -1,5 +1,5 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import { RabbitService, scanQueueName, type ScanJob } from '@svinooh/common';
+import { RabbitService, SCAN_MAX_PRIORITY, scanQueueName, type ScanJob } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import type { Chain } from '@svinooh/shared';
 import { SyncService } from './sync/sync.service';
@@ -43,6 +43,7 @@ export class InternalScanController {
     // Somebody is already scanning this address — the wallet gets that result,
     // which is the one it was going to wait for anyway
     if (!(await this.sync.takeIfFree(job.chain, job.address))) return;
-    await this.rabbit.publish(scanQueueName(job.chain), job);
+    // Somebody is watching a spinner right now: ahead of whatever is queued
+    await this.rabbit.publish(scanQueueName(job.chain), job, { priority: SCAN_MAX_PRIORITY });
   }
 }

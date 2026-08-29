@@ -6,10 +6,31 @@ import type { Chain, ScanResult } from '@svinooh/shared';
  * only lands on one of them doesn't compile.
  */
 
-/** One queue per chain: scan.evm, scan.sol, scan.tron, scan.btc */
+/**
+ * One queue per chain: scan.v2.evm, scan.v2.sol, scan.v2.tron, scan.v2.btc.
+ *
+ * The v2 is not a version of the message — it is a new queue, because these
+ * carry a priority now and a queue's x-max-priority cannot be changed after it
+ * is declared. Re-declaring the old name with the new argument is a
+ * PRECONDITION_FAILED, which closes the channel and takes the connection with
+ * it (see messageCount for how that goes).
+ *
+ * Whatever is left in the old queues is abandoned, and that costs nothing: an
+ * address whose job is never delivered simply comes due again when its lease
+ * runs out. The old queues can be deleted by hand once they are empty.
+ */
 export function scanQueueName(chain: Chain): string {
-  return `scan.${chain.toLowerCase()}`;
+  return `scan.v2.${chain.toLowerCase()}`;
 }
+
+/**
+ * Highest priority a scan queue accepts. Two levels is all this needs: an
+ * address nobody has ever scanned goes first, everything else is equal.
+ */
+export const SCAN_MAX_PRIORITY = 1;
+
+/** Queues declared with a priority, so every declare of them matches — see queueOptions */
+export const PRIORITY_QUEUE_PREFIX = 'scan.v2.';
 
 /**
  * One queue for every result, not one per chain.
@@ -78,3 +99,12 @@ export const WALLET_STATE_QUEUE = 'wallet.state';
 
 /** Where the collector puts what somebody should be told. Read by the bot. */
 export const ALERTS_QUEUE = 'alerts.telegram';
+
+/**
+ * Things to tell somebody that are not about a position crossing a line.
+ *
+ * A separate queue rather than a second shape on ALERTS_QUEUE, so a bot that
+ * predates it is never handed a message it cannot read: during a rollout these
+ * simply wait until the bot that understands them is up.
+ */
+export const NOTICES_QUEUE = 'notices.telegram';

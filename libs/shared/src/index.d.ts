@@ -594,6 +594,25 @@ export interface AlertItem {
  * slug belong to the person being written to, which is the only person who will
  * ever see this.
  */
+/**
+ * "Nobody has opened this in a while, so we have slowed down."
+ *
+ * Sent once per quiet spell, not once per check: see PortfolioOwner
+ * .slowedNoticeAt. Visiting the portfolio is what makes it sendable again, and
+ * also what restores the rate — which is the whole message.
+ */
+export interface SlowedNotice {
+  telegramId: string;
+  portfolioSlug: string;
+  /** The owner's own name for it, or null — the bot falls back to the slug */
+  portfolioName: string | null;
+  /** How long they were away before we slowed down, in minutes */
+  quietForMin: number;
+  /** What the interval was, and what it is now */
+  wasEveryMin: number;
+  nowEveryMin: number;
+}
+
 export interface AlertEvent {
   telegramId: string;
   portfolioSlug: string;

@@ -1,4 +1,10 @@
-import type { AlertEvent, AlertItem, PositionBand, TronResources } from '@svinooh/shared';
+import type {
+  AlertEvent,
+  AlertItem,
+  PositionBand,
+  SlowedNotice,
+  TronResources,
+} from '@svinooh/shared';
 
 const CHAIN_NAME: Record<string, string> = {
   BTC: 'Bitcoin wallet',
@@ -221,5 +227,39 @@ export function formatAlert(event: AlertEvent, webUrl: string): { text: string; 
 
   const text = [`<b>${esc(wallet)}</b>`, `<code>${esc(event.walletAddress)}</code>`, ...body].join('\n');
   const url = `${webUrl}/p/${event.portfolioSlug}`;
+  return { text, markup: { inline_keyboard: [[{ text: 'Open portfolio →', url }]] } };
+}
+
+/** "3 days" reads better than "4320 minutes" */
+function forHowLong(minutes: number): string {
+  if (minutes < 90) return `${Math.max(1, Math.round(minutes))} minutes`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 36) return `${hours} hour${hours === 1 ? '' : 's'}`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'}`;
+}
+
+/**
+ * Your portfolio has gone quiet, so we are checking it less often.
+ *
+ * No warning mark and no alarm: nothing is wrong, and the thing being described
+ * is a saving rather than a problem. What it does have to be is unambiguous
+ * about the way back, because the action that restores the rate is the same
+ * action that stops this message coming again.
+ */
+export function formatSlowedNotice(
+  notice: SlowedNotice,
+  webUrl: string,
+): { text: string; markup: unknown } {
+  const name = notice.portfolioName ?? notice.portfolioSlug;
+  const url = `${webUrl}/p/${notice.portfolioSlug}`;
+  const text = [
+    `<b>${esc(name)}</b> — checking less often`,
+    '',
+    `Nobody has opened this portfolio in ${forHowLong(notice.quietForMin)}, so its wallets ` +
+      `are now read every ${notice.nowEveryMin} minutes instead of every ${notice.wasEveryMin}.`,
+    '',
+    'Open it and the usual rate comes straight back.',
+  ].join('\n');
   return { text, markup: { inline_keyboard: [[{ text: 'Open portfolio →', url }]] } };
 }

@@ -1,5 +1,7 @@
 import { Inject, Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import * as amqp from 'amqplib';
+import type { Options } from 'amqplib';
+import { PRIORITY_QUEUE_PREFIX, SCAN_MAX_PRIORITY } from '../scan-contract';
 
 export const RABBIT_URL = Symbol('RABBIT_URL');
 
@@ -21,6 +23,26 @@ interface Consumer {
  * to running the same pipeline in-process, which is what makes local
  * development work without a broker.
  */
+/** What a caller can ask of a single publish */
+export interface PublishOptions {
+  /** 0 is ordinary; anything higher jumps the queue, up to its declared maximum */
+  priority?: number;
+}
+
+/**
+ * How a queue is declared — the one place that decides, because a queue's
+ * arguments are fixed at declaration and every later declare must match them
+ * exactly. A mismatch is a PRECONDITION_FAILED, which is a channel-level
+ * exception: it kills the shared channel and takes the connection into a
+ * reconnect loop. Publishing, counting and consuming all come through here so
+ * they cannot drift apart.
+ */
+function queueOptions(queue: string): Options.AssertQueue {
+  return queue.startsWith(PRIORITY_QUEUE_PREFIX)
+    ? { durable: true, arguments: { 'x-max-priority': SCAN_MAX_PRIORITY } }
+    : { durable: true };
+}
+
 @Injectable()
 export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(RabbitService.name);
@@ -96,12 +118,15 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
    * rather than leave an address marked as being worked on by a job that was
    * never sent. A disconnected client is `false`, not a silent success.
    */
-  async publish(queue: string, message: unknown): Promise<boolean> {
+  async publish(queue: string, message: unknown, options: PublishOptions = {}): Promise<boolean> {
     const channel = this.channel;
     if (!channel) return false;
     try {
-      await channel.assertQueue(queue, { durable: true });
-      channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)), { persistent: true });
+      await channel.assertQueue(queue, queueOptions(queue));
+      channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)), {
+        persistent: true,
+        ...(options.priority === undefined ? {} : { priority: options.priority }),
+      });
       return true;
     } catch (e) {
       this.logger.warn(`Publish to ${queue} failed: ${e instanceof Error ? e.message : e}`);
@@ -125,7 +150,7 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
         // the depth and, if the queue is missing, creates it durable — the same
         // declaration every producer and consumer here already makes — so a
         // missing consumer degrades to "jobs pile up" instead of "nothing runs".
-        const q = await channel.assertQueue(queue, { durable: true });
+        const q = await channel.assertQueue(queue, queueOptions(queue));
         total += q.messageCount;
       } catch {
         // a queue we still cannot assert contributes nothing, and must not
@@ -167,7 +192,7 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
         channel.on('close', () => {
           entry.attached = false;
         });
-        await channel.assertQueue(queue, { durable: true });
+        await channel.assertQueue(queue, queueOptions(queue));
         await channel.prefetch(entry.prefetch);
         await channel.consume(queue, (msg) => {
           if (msg) void this.handle(channel, entry.handler, msg);

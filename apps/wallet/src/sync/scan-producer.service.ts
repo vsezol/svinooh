@@ -1,7 +1,14 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import type { Chain } from '@svinooh/shared';
-import { queueDepth, RabbitService, scanQueueName, type ScanJob, setting } from '@svinooh/common';
+import {
+  queueDepth,
+  RabbitService,
+  SCAN_MAX_PRIORITY,
+  scanQueueName,
+  type ScanJob,
+  setting,
+} from '@svinooh/common';
 import { SyncService } from './sync.service';
 
 /**
@@ -96,7 +103,8 @@ export class ScanProducerService implements OnApplicationBootstrap {
       // scan cannot dispatch the same address twice
       await this.sync.lease(batch);
       for (const job of batch) {
-        if (!(await this.rabbit.publish(queue, job))) {
+        const priority = job.priority === 'urgent' ? SCAN_MAX_PRIORITY : 0;
+        if (!(await this.rabbit.publish(queue, job, { priority }))) {
           this.logger.warn('Broker would not take the job — stopping this top-up');
           return;
         }

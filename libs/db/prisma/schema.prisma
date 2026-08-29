@@ -102,6 +102,16 @@ model PortfolioOwner {
   isPublic    Boolean   @default(false)
   createdAt   DateTime  @default(now())
 
+  /// When we last told this owner their portfolio had gone quiet and its
+  /// wallets were being checked less often.
+  ///
+  /// Compared against lastViewedAt rather than cleared on a visit: a notice is
+  /// due when we have not sent one SINCE the last time they looked. That makes
+  /// coming back the thing that re-arms it, with no second write to get wrong,
+  /// and it is what stops a portfolio nobody ever opens from being announced
+  /// every fifteen minutes for the rest of its life.
+  slowedNoticeAt DateTime?
+
   @@index([userId])
 }
 
@@ -143,6 +153,18 @@ model Wallet {
   ///               portfolio does not wait out a slow interval to see it move
   nextScanAt      DateTime          @default(now())
   lastError       String?
+  /// How many scans in a row have come back suspiciously low without being
+  /// believed. A drop of more than a quarter has to survive a re-read and then
+  /// hold for several cycles before it is written, because sources return
+  /// partial data — TronGrid without staking, a page that rendered before its
+  /// chains resolved — and on a chart that looks like a cliff that heals itself
+  /// an hour later.
+  ///
+  /// Here rather than in the writer's memory, where it used to live. In memory
+  /// it pinned that consumer to one process forever, and every redeploy silently
+  /// reset the count for every address — so a real fall could be argued about
+  /// from scratch each time we shipped.
+  lowReadings     Int               @default(0)
   breakdown       Json?
   unpriced        Json?
   /// TRON only: the wallet's energy, bandwidth and outgoing delegations, as the
