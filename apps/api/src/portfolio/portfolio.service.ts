@@ -466,9 +466,19 @@ export class PortfolioService {
     });
     if (!portfolio) throw new NotFoundException('Portfolio not found');
 
-    const staleBefore = Date.now() - 3 * setting('sync.activeIntervalMin') * 60_000;
+    // Overdue against the wallet's OWN schedule, which is the only fair way to
+    // ask since the tiers diverged. This used to be a flat three times the
+    // ACTIVE interval — fifteen minutes — from when every owned wallet was on
+    // that interval. A wallet nobody has opened is now read every thirty
+    // minutes on purpose, so its normal age is anywhere from zero to thirty:
+    // measured against fifteen it was badged stale for half of every cycle,
+    // forever, for keeping exactly the schedule it was given.
+    //
+    // The grace is one lease, because being briefly past due is the normal
+    // state of a working queue — it means dispatched and waiting, not behind.
+    const overdueBefore = Date.now() - setting('scan.leaseMin') * 60_000;
     const wallets = portfolio.wallets
-      .map((held) => this.toWalletDto(held, staleBefore))
+      .map((held) => this.toWalletDto(held, overdueBefore))
       .sort(walletOrder);
 
     const updatedAt = wallets.reduce<string | null>(
@@ -1074,7 +1084,7 @@ export class PortfolioService {
    * the address rather than about the address, and the one thing that is not
    * (its history) is resolved through the membership on the way.
    */
-  private toWalletDto(held: HeldWallet, staleBefore: number): WalletDto {
+  private toWalletDto(held: HeldWallet, overdueBefore: number): WalletDto {
     const wallet = held.wallet;
     const positions = [...wallet.positions]
       .sort((a, b) => b.valueUsd - a.valueUsd)
@@ -1106,7 +1116,7 @@ export class PortfolioService {
       status: wallet.status as WalletSyncStatus,
       stale:
         wallet.status !== 'pending' &&
-        (wallet.lastSyncedAt === null || wallet.lastSyncedAt.getTime() < staleBefore),
+        (wallet.lastSyncedAt === null || wallet.nextScanAt.getTime() < overdueBefore),
       lastSyncedAt: wallet.lastSyncedAt?.toISOString() ?? null,
       lastError: wallet.lastError,
       breakdown: (wallet.breakdown as Record<string, number> | null) ?? null,
