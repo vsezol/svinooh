@@ -845,3 +845,35 @@ body[data-theme='light'] .on-dark {
     padding-bottom: calc(18px + env(safe-area-inset-bottom));
   }
 }
+
+/* The network marker's tooltip.
+
+   `title` was the canvas's answer and it is the wrong one here: the browser
+   waits about a second before drawing it, styles it like an operating system,
+   and shows nothing at all to a finger. This appears at once, in the app's own
+   type, and it is the marker's own box that positions it. */
+.chain-tip::after {
+  content: attr(data-chain);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--line2);
+  background: var(--surf);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: 5;
+}
+
+.chain-tip:hover::after {
+  opacity: 1;
+}

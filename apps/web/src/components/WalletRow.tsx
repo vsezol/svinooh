@@ -226,7 +226,14 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
         <div style={{ borderTop: '1px solid var(--line)', padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {tron ? <TronResources tron={tron} /> : null}
           {blocks.map((b, i) => (
-            <div key={i} style={{ border: '1px solid var(--line)', borderRadius: 12, background: 'var(--surf2)', overflow: 'hidden' }}>
+            <div
+              key={i}
+              // No overflow clip: the network marker's tooltip has to be able to
+              // leave the card. Nothing inside paints to the edge — the section
+              // rules stop at the padding box — so the rounded corners hold
+              // without one.
+              style={{ border: '1px solid var(--line)', borderRadius: 12, background: 'var(--surf2)' }}
+            >
               {/* One line, allowed to wrap among itself: name, what kind of
                   position it is, its detail, and whether it is in range — then
                   the money, held against the right edge. The pieces are all

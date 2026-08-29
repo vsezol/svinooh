@@ -105,9 +105,9 @@ export function networkName(slug: string | null | undefined): string | null {
  * belongs TO the text rather than standing beside it as a peer. The ring in the
  * card's own colour is what keeps it legible where it overlaps.
  *
- * `title` rather than a built tooltip: the name is a footnote for the one person
- * who does not recognise the mark, and a hover card would be a component, a
- * portal and a mobile question for a word.
+ * The name comes on hover from `.chain-tip`, not from `title`: the native one
+ * waits a second, is styled by the operating system, and shows a finger
+ * nothing at all.
  *
  * An unknown slug renders nothing at all. A grey dot with a question mark would
  * be noise on precisely the networks we have not taught it yet.
@@ -118,7 +118,8 @@ export function ChainBadge({ network }: { network: string | null | undefined }) 
   const { Icon, name, tint } = chain;
   return (
     <span
-      title={name}
+      className="chain-tip"
+      data-chain={name}
       aria-label={name}
       style={{
         position: 'absolute',
@@ -133,10 +134,9 @@ export function ChainBadge({ network }: { network: string | null | undefined }) 
         alignItems: 'center',
         justifyContent: 'center',
         cursor: 'help',
-        overflow: 'hidden',
       }}
     >
-      <Icon size={9} variant="branded" />
+      <Icon size={12} variant="branded" />
     </span>
   );
 }
