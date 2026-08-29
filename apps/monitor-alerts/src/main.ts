@@ -3,7 +3,17 @@ import { PrismaClient } from '@prisma/client';
 import { RabbitService, WALLET_STATE_QUEUE } from '@svinooh/common';
 import type { WalletStateEvent } from '@svinooh/shared';
 import { Collector } from './collector';
+import { Slowdown } from './slowdown';
 import { config } from './config';
+
+/**
+ * How often to look for portfolios that have gone quiet.
+ *
+ * Not urgent — the thing being announced has already been true for a day — and
+ * the sweep is one indexed query, so a quarter of an hour is generous either
+ * way.
+ */
+const SLOWDOWN_SWEEP_MS = 15 * 60_000;
 
 /**
  * The alert collector.
@@ -21,6 +31,7 @@ async function main(): Promise<void> {
   const prisma = new PrismaClient();
   const rabbit = new RabbitService(config.rabbitUrl || null);
   const collector = new Collector(prisma, rabbit);
+  const slowdown = new Slowdown(prisma, rabbit);
 
   await rabbit.onApplicationBootstrap();
   if (rabbit.enabled) {
@@ -30,6 +41,16 @@ async function main(): Promise<void> {
       config.prefetch,
     );
     app.log.info(`listening on ${WALLET_STATE_QUEUE}`);
+
+    const sweep = async () => {
+      try {
+        const sent = await slowdown.sweep();
+        if (sent) app.log.info(`told ${sent} owner(s) their portfolio had gone quiet`);
+      } catch (e) {
+        app.log.warn(`slowdown sweep failed: ${e instanceof Error ? e.message : e}`);
+      }
+    };
+    setInterval(() => void sweep(), SLOWDOWN_SWEEP_MS).unref();
   } else {
     // Nothing to do without a broker, and saying so beats looking healthy and
     // idle while somebody wonders why no alert ever arrives

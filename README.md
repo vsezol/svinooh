@@ -434,7 +434,12 @@ queue drained, so everything was rescanned every ~1.8 minutes no matter what
 `SYNC_INTERVAL_MIN` said — about 4,800 DeBank page loads a day from one
 datacenter IP, which is what got the EVM scans throttled into timeouts. After each successful scan a
 `WalletSnapshot` is written, and a `PortfolioSnapshot` after the portfolio is
-recomputed. There is one pipeline and it goes through the broker — locally too,
+recomputed. The scan queues are `scan.v2.<chain>`: the v2 is not a message
+version but a new queue, because a queue's `x-max-priority` is fixed when it is
+declared and re-declaring the old name with it would fail the channel. Whatever
+is left in the old `scan.<chain>` queues is abandoned harmlessly — an address
+whose job is never delivered comes due again when its lease expires — and they
+can be deleted once empty. There is one pipeline and it goes through the broker — locally too,
 which is why `docker compose` brings RabbitMQ up alongside Postgres.
 
 The api serves assembled portfolios from Redis (`CACHE_TTL_SEC`), so reads never
