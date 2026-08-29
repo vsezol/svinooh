@@ -3,7 +3,7 @@ import type { KeyboardEvent, MouseEvent } from 'react';
 import type { PositionTokenRole, WalletDto } from '@svinooh/shared';
 import { blockMatches, buildBlocks, type BlockSection, type PositionFilter } from '../lib/blocks';
 import { chainMeta, fmtAmount, fmtPrice, fmtUsd, shortAddress, walletName } from '../lib/format';
-import { ChainBadge } from './ChainBadge';
+import { badgedText, ChainBadge } from './ChainBadge';
 import { WalletMenu } from './WalletMenu';
 import { TronResources } from './TronResources';
 
@@ -233,9 +233,9 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
                   short now that the chain is a mark and the pair is in the
                   table below, so a second line would be a line of air. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', flexWrap: 'wrap' }}>
-                <ChainBadge network={b.network} size={18} />
-                <span style={{ fontWeight: 800, fontSize: 13, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {b.proto}
+                <span style={badgedText(!!b.network)}>
+                  <span style={{ fontWeight: 800, fontSize: 13, whiteSpace: 'nowrap' }}>{b.proto}</span>
+                  <ChainBadge network={b.network} />
                 </span>
                 {b.count > 1 ? (
                   <span className="mono" title={`${b.count} positions folded together`} style={{ fontSize: 9.5, color: 'var(--mut)' }}>
@@ -363,23 +363,18 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
                       // between sections, and between blocks.
                       style={{ alignItems: 'center', padding: '10px 16px' }}
                     >
-                      <span
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          minWidth: 0,
-                          fontWeight: 700,
-                          fontSize: 13.5,
-                          color: sectionColor(s) ?? 'var(--text)',
-                        }}
-                      >
-                        <ChainBadge network={r.network} size={18} />
+                      <span style={badgedText(!!r.network)}>
                         <span
-                          style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                          style={{
+                            fontWeight: 700,
+                            fontSize: 13.5,
+                            color: sectionColor(s) ?? 'var(--text)',
+                            whiteSpace: 'nowrap',
+                          }}
                         >
                           {r.title}
                         </span>
+                        <ChainBadge network={r.network} />
                       </span>
                       <span className="mono pos-price" style={cellStyle}>
                         {r.priceUsd == null ? '—' : fmtPrice(r.priceUsd)}

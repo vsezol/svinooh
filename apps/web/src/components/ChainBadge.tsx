@@ -21,7 +21,7 @@ import {
   NetworkUnichain,
   NetworkZksync,
 } from '@web3icons/react';
-import type { ComponentType } from 'react';
+import type { ComponentType, CSSProperties } from 'react';
 
 /**
  * Base, drawn here rather than taken from the set.
@@ -59,33 +59,35 @@ function NetworkBase({ size = 18 }: { size?: number }) {
  */
 interface Network {
   name: string;
+  /** The brand's own colour, for the disc the mark sits on */
+  tint: string;
   Icon: ComponentType<{ size?: number; variant?: 'mono' | 'branded' | 'background' }>;
 }
 
 const NETWORKS: Record<string, Network> = {
-  eth: { name: 'Ethereum', Icon: NetworkEthereum },
-  arb: { name: 'Arbitrum', Icon: NetworkArbitrumOne },
-  base: { name: 'Base', Icon: NetworkBase },
-  op: { name: 'OP Mainnet', Icon: NetworkOptimism },
-  matic: { name: 'Polygon', Icon: NetworkPolygon },
-  pol: { name: 'Polygon', Icon: NetworkPolygon },
-  bsc: { name: 'BNB Chain', Icon: NetworkBinanceSmartChain },
-  avax: { name: 'Avalanche', Icon: NetworkAvalanche },
-  xdai: { name: 'Gnosis', Icon: NetworkGnosis },
-  scrl: { name: 'Scroll', Icon: NetworkScroll },
-  linea: { name: 'Linea', Icon: NetworkLinea },
-  era: { name: 'zkSync Era', Icon: NetworkZksync },
-  blast: { name: 'Blast', Icon: NetworkBlast },
-  mnt: { name: 'Mantle', Icon: NetworkMantle },
-  celo: { name: 'Celo', Icon: NetworkCelo },
-  ftm: { name: 'Fantom', Icon: NetworkFantom },
-  sonic: { name: 'Sonic', Icon: NetworkSonic },
-  bera: { name: 'Berachain', Icon: NetworkBerachain },
-  hyper: { name: 'Hyperliquid', Icon: NetworkHyperEvm },
-  uni: { name: 'Unichain', Icon: NetworkUnichain },
-  sol: { name: 'Solana', Icon: NetworkSolana },
-  tron: { name: 'Tron', Icon: NetworkTron },
-  btc: { name: 'Bitcoin', Icon: NetworkBitcoin },
+  eth: { name: 'Ethereum', tint: '#627EEA', Icon: NetworkEthereum },
+  arb: { name: 'Arbitrum', tint: '#12AAFF', Icon: NetworkArbitrumOne },
+  base: { name: 'Base', tint: '#0052FF', Icon: NetworkBase },
+  op: { name: 'OP Mainnet', tint: '#FF0420', Icon: NetworkOptimism },
+  matic: { name: 'Polygon', tint: '#8247E5', Icon: NetworkPolygon },
+  pol: { name: 'Polygon', tint: '#8247E5', Icon: NetworkPolygon },
+  bsc: { name: 'BNB Chain', tint: '#F0B90B', Icon: NetworkBinanceSmartChain },
+  avax: { name: 'Avalanche', tint: '#E84142', Icon: NetworkAvalanche },
+  xdai: { name: 'Gnosis', tint: '#3E6957', Icon: NetworkGnosis },
+  scrl: { name: 'Scroll', tint: '#FFEEDA', Icon: NetworkScroll },
+  linea: { name: 'Linea', tint: '#61DFFF', Icon: NetworkLinea },
+  era: { name: 'zkSync Era', tint: '#8C8DFC', Icon: NetworkZksync },
+  blast: { name: 'Blast', tint: '#FCFC03', Icon: NetworkBlast },
+  mnt: { name: 'Mantle', tint: '#65B3AE', Icon: NetworkMantle },
+  celo: { name: 'Celo', tint: '#FCFF52', Icon: NetworkCelo },
+  ftm: { name: 'Fantom', tint: '#1969FF', Icon: NetworkFantom },
+  sonic: { name: 'Sonic', tint: '#FE9A4C', Icon: NetworkSonic },
+  bera: { name: 'Berachain', tint: '#814625', Icon: NetworkBerachain },
+  hyper: { name: 'Hyperliquid', tint: '#97FCE4', Icon: NetworkHyperEvm },
+  uni: { name: 'Unichain', tint: '#FF007A', Icon: NetworkUnichain },
+  sol: { name: 'Solana', tint: '#14F195', Icon: NetworkSolana },
+  tron: { name: 'Tron', tint: '#EB0029', Icon: NetworkTron },
+  btc: { name: 'Bitcoin', tint: '#F7931A', Icon: NetworkBitcoin },
 };
 
 /** What this slug is called, for anywhere that needs the word rather than the mark */
@@ -94,42 +96,65 @@ export function networkName(slug: string | null | undefined): string | null {
 }
 
 /**
- * The mark beside a protocol or a holding.
+ * The network, as a mark set on the text like an exponent.
  *
- * `branded`, drawn on nothing.
- *
- * The other two variants were tried and both are worse here. `background` is
- * the uniform one — a full-bleed tile in the brand colour, which clipped round
- * would have made every network the same chip — but the set draws Base's glyph
- * in it as a plain white square, and a logo we render wrongly is the exact
- * thing hand-drawn approximations were replaced to avoid. `mono` flattens each
- * mark to one colour, and colour is most of what tells Base from Arbitrum at
- * this size.
- *
- * So: each network as its owner draws it. Ethereum's bare diamond next to
- * Base's rounded square is not a set, and that is the honest cost — every mark
- * in the set carries its own padding inside the viewBox, so at least they share
- * a footprint and a column of them still lines up.
+ * It used to sit inline, ahead of the name, at the size of a token logo — and
+ * at that size next to a ticker it reads as the token's own logo, which is the
+ * one thing it must never be mistaken for. So it is small, it is tucked into
+ * the top-right corner of the word, and it overlaps it slightly: a mark that
+ * belongs TO the text rather than standing beside it as a peer. The ring in the
+ * card's own colour is what keeps it legible where it overlaps.
  *
  * `title` rather than a built tooltip: the name is a footnote for the one person
  * who does not recognise the mark, and a hover card would be a component, a
  * portal and a mobile question for a word.
  *
- * An unknown slug renders nothing at all. A grey disc with a question mark
- * would be a row of noise on precisely the networks we have not taught it yet,
- * and the row already says everything it needs to without one.
+ * An unknown slug renders nothing at all. A grey dot with a question mark would
+ * be noise on precisely the networks we have not taught it yet.
  */
-export function ChainBadge({ network, size = 18 }: { network: string | null | undefined; size?: number }) {
+export function ChainBadge({ network }: { network: string | null | undefined }) {
   const chain = network ? NETWORKS[network.toLowerCase()] : undefined;
   if (!chain) return null;
-  const { Icon, name } = chain;
+  const { Icon, name, tint } = chain;
   return (
     <span
       title={name}
       aria-label={name}
-      style={{ display: 'inline-flex', flexShrink: 0, cursor: 'help', lineHeight: 0 }}
+      style={{
+        position: 'absolute',
+        top: -5,
+        right: -3,
+        width: 12,
+        height: 12,
+        borderRadius: '50%',
+        background: `color-mix(in srgb, ${tint} 20%, var(--surf2))`,
+        border: '1px solid var(--surf2)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'help',
+        overflow: 'hidden',
+      }}
     >
-      <Icon size={size} variant="branded" />
+      <Icon size={9} variant="branded" />
     </span>
   );
+}
+
+/**
+ * What a badged word sits in: relative, so the mark can be placed on its
+ * corner, with room on the right so the mark does not collide with whatever
+ * follows.
+ */
+export function badgedText(hasBadge: boolean): CSSProperties {
+  return {
+    position: 'relative',
+    display: 'inline-block',
+    // A grid item stretches to its column by default, and the mark is placed
+    // against this box's right edge — left alone it would fly off to the far
+    // side of the column instead of sitting on the word
+    justifySelf: 'start',
+    minWidth: 0,
+    paddingRight: hasBadge ? 10 : 0,
+  };
 }
