@@ -69,16 +69,41 @@ function mergeRows(rows: BlockRow[]): BlockRow[] {
 }
 
 /**
- * Fold positions that are the same thing repeated. Kamino opens a separate
- * farming position per reserve, so a wallet can show a column of identical
- * one-line "Kamino FARMING" cards; those belong in one block. Positions that
- * differ in any visible way — a different Uniswap V3 position id, a different
- * market — keep their own block, because they really are different.
+ * What a block is made of, by what its legs ARE rather than how much of them
+ * there is: the symbols and the roles, in a fixed order.
+ *
+ * This is what tells two positions in the same protocol apart when nothing in
+ * the header does. A GMX V2 position on ETH/USDC and one on BTC/USDC can carry
+ * the same protocol, the same kind and the same note, and still be two entirely
+ * different bets — the legs are where that shows.
+ */
+function legSignature(block: Block): string {
+  return block.rows
+    .map((row) => `${row.role ?? ''}:${row.title}`)
+    .sort()
+    .join(',');
+}
+
+/**
+ * Fold positions that are the same thing repeated — and only those.
+ *
+ * Kamino opens a separate farming position per reserve, so a wallet can show a
+ * column of identical one-line "Kamino FARMING" cards; those belong in one
+ * block, and folding them loses nothing, because there was nothing to tell them
+ * apart in the first place.
+ *
+ * The legs are part of that judgement now. Folding used to key on the header
+ * alone, so three GMX V2 positions with the same note collapsed into one card
+ * reading "GMX V2 ×3" whose rows were the SUM of three different markets — a
+ * card that answered "how much" and destroyed "in what". A position whose legs
+ * differ from its neighbour's is a different position and keeps its own block;
+ * two that differ only in size still fold, since summing them says the same
+ * thing in one line.
  */
 function foldDuplicates(blocks: Block[]): Block[] {
   const folded = new Map<string, Block & { weightedApy: number }>();
   for (const block of blocks) {
-    const key = `${block.proto}|${block.typeLabel}|${block.meta}`;
+    const key = `${block.proto}|${block.typeLabel}|${block.meta}|${legSignature(block)}`;
     const existing = folded.get(key);
     if (!existing) {
       folded.set(key, { ...block, weightedApy: (block.apy ?? 0) * block.value });
@@ -168,8 +193,34 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
       rows: walletRows,
     });
   }
-  out.sort((a, b) => b.value - a.value);
-  return out;
+  return byProtocolThenValue(out);
+}
+
+/**
+ * The order the list is read in: a protocol's positions together, and the
+ * protocols themselves biggest first.
+ *
+ * Sorting on value alone scattered them — three Uniswap V3 pools with a lending
+ * position between each pair — so seeing what one protocol actually holds meant
+ * collecting its cards from down the whole column. Grouping puts them side by
+ * side, and it is the GROUP's total that decides where the group sits, so the
+ * biggest thing in the wallet still comes first.
+ *
+ * The name is the tiebreak rather than a nicety: two protocols that happen to
+ * hold the same amount would otherwise be free to interleave, which is the one
+ * thing this is here to prevent.
+ */
+function byProtocolThenValue(blocks: Block[]): Block[] {
+  const protocolTotal = new Map<string, number>();
+  for (const block of blocks) {
+    protocolTotal.set(block.proto, (protocolTotal.get(block.proto) ?? 0) + block.value);
+  }
+  return [...blocks].sort(
+    (a, b) =>
+      (protocolTotal.get(b.proto) ?? 0) - (protocolTotal.get(a.proto) ?? 0) ||
+      a.proto.localeCompare(b.proto) ||
+      b.value - a.value,
+  );
 }
 
 /** Unclaimed rewards across a portfolio, split into pool fees and everything else */
