@@ -6,13 +6,7 @@ import { chainMeta, fmtUsd, shortAddress, walletName } from '../lib/format';
 import { WalletMenu } from './WalletMenu';
 import { TronResources } from './TronResources';
 
-/** How a leg of a DeFi position is labelled: accrued LP fees/rewards, and debt */
-const ROLE_LABEL: Record<PositionTokenRole, string> = {
-  supply: 'SUPPLIED',
-  reward: 'REWARDS',
-  borrow: 'DEBT',
-};
-
+/** What accrued is worth reading as a gain, what is owed as a cost */
 const roleColor = (role: PositionTokenRole): string =>
   role === 'reward' ? 'var(--up)' : role === 'borrow' ? 'var(--down)' : 'var(--mut)';
 
@@ -293,62 +287,90 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
                 // One line that never breaks: the money keeps the right edge
                 // whole, and it is the words that give — a long token name
                 // ellipsizes, then the amount-times-price detail does
-                <div key={ri} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 14px', borderTop: '1px solid var(--line)' }}>
-                  <span
+                r.isGroupHead ? (
+                  // The label once, with what the group comes to. Muted like a
+                  // column heading — it names the lines below it rather than
+                  // competing with them; only the figure takes the group's colour.
+                  <div
+                    key={ri}
                     style={{
-                      fontWeight: 700,
-                      fontSize: 13,
-                      minWidth: 0,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
+                      display: 'flex',
+                      alignItems: 'baseline',
+                      gap: 10,
+                      padding: '9px 14px 5px',
+                      borderTop: '1px solid var(--line)',
                     }}
                   >
-                    {r.title}
-                  </span>
-                  {r.role && r.role !== 'supply' ? (
+                    <span className="mono" style={{ fontSize: 10, letterSpacing: '0.14em', color: 'var(--mut)' }}>
+                      {r.title}
+                    </span>
+                    <div style={{ flex: 1 }} />
+                    {/* A total over a single leg is that leg's own figure a
+                        second time; past one there is something to add up */}
+                    {(r.legCount ?? 0) > 1 ? (
+                      <span
+                        className="mono"
+                        style={{ fontSize: 11.5, fontWeight: 600, color: r.role ? roleColor(r.role) : undefined }}
+                      >
+                        {r.role === 'borrow' ? '\u2212' : ''}
+                        {fmtUsd(r.value)}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : (
+                  // A leg. Indented under its group and without a rule above it,
+                  // so the group reads as one thing; a plain holding keeps both.
+                  <div
+                    key={ri}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'baseline',
+                      gap: 10,
+                      padding: r.indented ? '6px 14px 6px 26px' : '9px 14px',
+                      borderTop: r.indented ? 'none' : '1px solid var(--line)',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        fontSize: 13,
+                        minWidth: 0,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {r.title}
+                    </span>
                     <span
                       className="mono"
                       style={{
-                        fontSize: 9,
-                        letterSpacing: '0.1em',
-                        color: roleColor(r.role),
-                        border: `1px solid ${roleColor(r.role)}`,
-                        borderRadius: 5,
-                        padding: '1px 5px',
-                        flexShrink: 0,
+                        flex: 1,
+                        minWidth: 0,
+                        fontSize: 11,
+                        color: 'var(--mut)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
                       }}
                     >
-                      {ROLE_LABEL[r.role]}
+                      {r.sub}
                     </span>
-                  ) : null}
-                  <span
-                    className="mono"
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      fontSize: 11,
-                      color: 'var(--mut)',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {r.sub}
-                  </span>
-                  <span
-                    className="mono"
-                    style={{
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      whiteSpace: 'nowrap',
-                      flexShrink: 0,
-                      color: r.role && r.role !== 'supply' ? roleColor(r.role) : undefined,
-                    }}
-                  >
-                    {fmtUsd(r.value)}
-                  </span>
-                </div>
+                    <span
+                      className="mono"
+                      style={{
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                        color: r.role && r.role !== 'supply' ? roleColor(r.role) : undefined,
+                      }}
+                    >
+                      {r.role === 'borrow' ? '\u2212' : ''}
+                      {fmtUsd(r.value)}
+                    </span>
+                  </div>
+                )
               ))}
             </div>
           ))}
