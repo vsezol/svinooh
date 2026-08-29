@@ -42,7 +42,7 @@ export class AuthService {
       // Telegram.Login.auth with a custom button
       botId: config.botToken ? config.botToken.split(':')[0] : null,
       devMode: config.devMode,
-      syncIntervalMin: setting('sync.intervalMin'),
+      syncIntervalMin: setting('sync.activeIntervalMin'),
     };
   }
 

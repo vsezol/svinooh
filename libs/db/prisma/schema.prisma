@@ -126,18 +126,22 @@ model Wallet {
   /// serve the stale value with an explicit stale flag instead of losing it
   lastTotalUsd    Float?
   lastSyncedAt    DateTime?
-  /// Set when this address was handed to a scan queue, cleared when a result
-  /// comes back. It is the answer to "is a scan already on its way?", which the
-  /// queue itself cannot give: RabbitMQ's messageCount reports READY messages,
-  /// so an address a scanner has already prefetched looks exactly like one
-  /// nobody is working on — while lastSyncedAt is still null, so the address
-  /// also still reads as due.
+  /// When this address is next worth scanning. The only answer to "should I
+  /// scan this now?", and the only thing the producer looks at.
   ///
-  /// A claim older than SCAN_CLAIM_TTL_MIN is stale and may be taken again — a
-  /// scanner can die, and a held scan (DeBank throttling) acks its message
-  /// without publishing anything, so a claim only a result could clear would
-  /// wedge that address forever.
-  scanQueuedAt    DateTime?
+  /// It used to take five: lastSyncedAt to say when we last managed it,
+  /// scanQueuedAt with a TTL to say a scan was already on its way, status
+  /// 'pending' plus a sweep to notice one that never came back, and a
+  /// queue-depth gate to stop the producer republishing everything. They
+  /// overlapped, and the gaps between them were where addresses got stuck.
+  ///
+  /// Everything that knows something about the timing writes it here instead:
+  ///   dispatch  → now + SCAN_LEASE_MIN   (so it is not queued twice)
+  ///   result    → now + the interval schedule() picked
+  ///   failure   → now + SCAN_RETRY_MIN   (so a broken source is not hammered)
+  ///   a visit   → pulled EARLIER, never later, so somebody coming back to a
+  ///               portfolio does not wait out a slow interval to see it move
+  nextScanAt      DateTime          @default(now())
   lastError       String?
   breakdown       Json?
   unpriced        Json?
@@ -156,6 +160,7 @@ model Wallet {
   memberships     PortfolioWallet[]
 
   @@unique([chain, address])
+  @@index([nextScanAt])
 }
 
 /// An address in a portfolio: the membership, and everything that belongs to

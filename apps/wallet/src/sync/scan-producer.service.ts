@@ -48,21 +48,23 @@ export class ScanProducerService implements OnApplicationBootstrap {
   }
 
   /**
-   * One pass: notice what has fallen off the conveyor, then refill.
+   * One pass: dispatch what is due, per queue.
    *
-   * The sweep runs first and outside topUp's queue-depth check — a wallet whose
-   * scan never came back has to be given up on whether or not the queue is busy
-   * right now, and that check is exactly what would keep skipping it.
+   * Per queue, because the old rule was "top up nothing while ANY queue holds
+   * anything" — so one wedged EVM job stopped BTC, SOL and TRON from being
+   * refilled at all, and the whole system's cadence was set by its slowest
+   * chain. Each queue is now filled to its own target and nobody waits on
+   * anybody.
    *
-   * The first tick lands one interval in, which doubles as the wait the broker
-   * and the consumers need to come up.
+   * There is no sweep any more. An address whose scan never came back is not a
+   * special case to be noticed and repaired — its lease simply runs out and it
+   * comes due again, which is what a lease is for.
    */
   @Interval('scan-top-up', setting('scan.reloadSec') * 1000)
   async tick(): Promise<void> {
     if (this.ticking || !this.rabbit.enabled) return;
     this.ticking = true;
     try {
-      await this.sweepStuckPending();
       await this.topUp();
     } catch (e) {
       this.logger.warn(`tick failed: ${e instanceof Error ? e.message : e}`);
@@ -71,43 +73,36 @@ export class ScanProducerService implements OnApplicationBootstrap {
     }
   }
 
-  /** Queue is empty → enqueue whatever is due now and nobody else has claimed */
   private async topUp(): Promise<void> {
-    if ((await this.rabbit.messageCount(ALL_QUEUES)) > 0) return; // still working through it
-    const due = await this.sync.listGroups();
-    let enqueued = 0;
-    for (const job of due) {
-      // listGroups already skips what is on its way, but it read a moment ago
-      // and the api can force a scan at any point in between — the claim is the
-      // guard, the filter only saves us from asking about addresses it can
-      // already tell are busy.
-      if (!(await this.sync.claimForScan(job.chain, job.address))) continue;
-      if (!(await this.rabbit.publish(scanQueueName(job.chain), job))) {
-        // The broker is unreachable, so nothing was queued and nothing is going
-        // to release this. Hand it back rather than leave the address looking
-        // busy for a whole claim — the rest of this batch is going the same way,
-        // so stop here and let the next tick try again against a live channel.
-        await this.sync.releaseScan(job.chain, job.address);
-        this.logger.warn('Broker would not take the job — stopping this top-up');
-        break;
-      }
-      enqueued++;
-    }
-    if (enqueued) this.logger.log(`Enqueued ${enqueued} of ${due.length} due addresses`);
-  }
+    const target = setting('scan.queueDepth');
+    // Enough for every queue to reach its target if they all happen to be empty
+    const due = await this.sync.dueForScan(target * CHAINS.length);
+    if (!due.length) return;
 
-  /**
-   * Wallets that have been waiting for a first scan that is never coming.
-   *
-   * A scan can end without a result: a held one (DeBank throttling) is acked and
-   * publishes nothing, and a scanner can die mid-page. The address is picked up
-   * again once its claim ages out, but the wallet keeps `pending` in the
-   * meantime — and `pending` is what the page renders as a spinner and polls
-   * every three seconds, so left alone it spins against a portfolio that will
-   * never change on its own.
-   */
-  private async sweepStuckPending(): Promise<void> {
-    const stuck = await this.sync.failStuckPending();
-    if (stuck) this.logger.warn(`${stuck} wallet(s) gave up waiting for a first scan`);
+    let dispatched = 0;
+    for (const chain of CHAINS) {
+      const queue = scanQueueName(chain);
+      const room = target - (await this.rabbit.messageCount([queue]));
+      if (room <= 0) continue;
+
+      // Urgent first: somebody pasted an address and is watching a spinner
+      const batch = due
+        .filter((job) => job.chain === chain)
+        .sort((a, b) => Number(b.priority === 'urgent') - Number(a.priority === 'urgent'))
+        .slice(0, room);
+      if (!batch.length) continue;
+
+      // Held before publishing, so a tick landing on top of the api's forced
+      // scan cannot dispatch the same address twice
+      await this.sync.lease(batch);
+      for (const job of batch) {
+        if (!(await this.rabbit.publish(queue, job))) {
+          this.logger.warn('Broker would not take the job — stopping this top-up');
+          return;
+        }
+        dispatched++;
+      }
+    }
+    if (dispatched) this.logger.log(`Dispatched ${dispatched} of ${due.length} due addresses`);
   }
 }

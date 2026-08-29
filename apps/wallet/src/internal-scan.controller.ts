@@ -40,11 +40,9 @@ export class InternalScanController {
     };
     // Somebody is already scanning this address — the wallet gets that result,
     // which is the one it was going to wait for anyway
-    if (!(await this.sync.claimForScan(job.chain, job.address))) return;
-    // Nothing was queued, so nothing will release the claim — see the same
-    // handling in ScanProducerService.topUp
-    if (!(await this.rabbit.publish(scanQueueName(job.chain), job))) {
-      await this.sync.releaseScan(job.chain, job.address);
-    }
+    // Somebody is already scanning this address — the wallet gets that result,
+    // which is the one it was going to wait for anyway
+    if (!(await this.sync.takeIfFree(job.chain, job.address))) return;
+    await this.rabbit.publish(scanQueueName(job.chain), job);
   }
 }
