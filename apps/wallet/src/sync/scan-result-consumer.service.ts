@@ -58,20 +58,20 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
 
   private async store(outcome: ScanOutcome): Promise<void> {
     const key = `${outcome.chain}:${outcome.address}`;
-    const wallets = await this.prisma.wallet.findMany({
-      where: { chain: outcome.chain, address: outcome.address },
+    const wallet = await this.prisma.wallet.findUnique({
+      where: { chain_address: { chain: outcome.chain, address: outcome.address } },
     });
-    if (!wallets.length) return; // removed while the scan was in flight
+    if (!wallet) return; // removed while the scan was in flight
 
     if (!outcome.ok) {
       this.metrics.scans.inc({ chain: outcome.chain, result: 'failed' });
       this.metrics.errors.inc({ type: 'scan' });
       this.logger.warn(`Scan ${key} failed: ${outcome.error}`);
-      await this.sync.markFailed(wallets, outcome.error);
+      await this.sync.markFailed(wallet, outcome.error);
       return;
     }
 
-    const believable = this.judge(key, outcome, wallets);
+    const believable = this.judge(key, outcome, wallet);
     if (!believable) {
       // Our own decision, not a broken source: leave the wallet exactly as it
       // was — status, value and all — so the page keeps showing the last good
@@ -81,17 +81,19 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
       return;
     }
 
-    await this.sync.applyResult(wallets, believable);
+    await this.sync.applyResult(wallet, believable);
     this.metrics.scans.inc({ chain: outcome.chain, result: 'ok' });
-    for (const portfolioId of new Set(wallets.map((w) => w.portfolioId))) {
+    // One address, and every portfolio that happens to hold it — its total just
+    // moved for all of them
+    for (const portfolioId of await this.sync.portfoliosHolding(wallet.id)) {
       await this.sync.snapshotPortfolio(portfolioId);
     }
   }
 
   /** The reading worth storing, or null to keep what is already there */
-  private judge(key: string, outcome: Extract<ScanOutcome, { ok: true }>, wallets: Wallet[]): ScanResult | null {
+  private judge(key: string, outcome: Extract<ScanOutcome, { ok: true }>, wallet: Wallet): ScanResult | null {
     const { result, recheck } = outcome;
-    const previousTotal = wallets.map((w) => w.lastTotalUsd).find((v) => v !== null) ?? null;
+    const previousTotal = wallet.lastTotalUsd;
 
     // nothing to compare against (first successful scan, or a nearly empty wallet)
     if (previousTotal === null || previousTotal <= 10) {

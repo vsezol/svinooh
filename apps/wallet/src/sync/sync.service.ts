@@ -49,200 +49,140 @@ export class SyncService {
   /**
    * The addresses that are DUE for a rescan, most urgent first.
    *
-   * Previously this returned everything and the producer refilled the queue the
-   * moment it drained, so wallets were rescanned every ~1.8 minutes regardless
-   * of SYNC_INTERVAL_MIN — roughly 4,800 DeBank page loads a day from one
-   * datacenter IP, which is what got us throttled. Now each address has a due
-   * time, and one that isn't due is simply not enqueued.
+   * Each address has a due time, and one that isn't due is simply not enqueued.
+   * That is what paces us against the upstream sources — before it existed the
+   * producer refilled the queue the moment it drained and rescanned everything
+   * every ~1.8 minutes, which is roughly 4,800 DeBank page loads a day from one
+   * datacenter IP and is what got us throttled.
    *
    * Two tiers:
-   *   fast (SYNC_INTERVAL_MIN) — the address is in somebody's own portfolio, or
-   *                              in one that was opened recently
-   *   slow (SYNC_IDLE_INTERVAL_MIN) — it only exists in anonymous portfolios
-   *                                   nobody has looked at lately
+   *   fast (SYNC_INTERVAL_MIN) — somebody opened a portfolio holding it recently
+   *   slow (SYNC_IDLE_INTERVAL_MIN) — nobody has looked in a while
    *
    * An address in several portfolios takes the fastest tier any of them asks
-   * for. Ownership and lastViewedAt belong to the api, which owns those rows —
-   * we only read them.
+   * for. `lastViewedAt` belongs to the api, which owns those rows — we only
+   * read it.
    */
   async listGroups(): Promise<ScanJob[]> {
+    const now = Date.now();
+    const activeSince = new Date(now - setting('sync.activeWindowMin') * 60_000);
+    const claimedSince = new Date(now - setting('scan.claimTtlMin') * 60_000);
+
     const wallets = await this.prisma.wallet.findMany({
+      where: {
+        // Already on its way. A claim older than the TTL is not believed: a
+        // scanner can die, and a held scan never publishes a result to clear it.
+        OR: [{ scanQueuedAt: null }, { scanQueuedAt: { lt: claimedSince } }],
+      },
       select: {
         chain: true,
         address: true,
         lastSyncedAt: true,
         lastTotalUsd: true,
-        scanQueuedAt: true,
         tronResourcesAt: true,
-        portfolio: {
-          select: { lastViewedAt: true, owner: { select: { portfolioId: true } } },
+        memberships: {
+          select: { portfolio: { select: { lastViewedAt: true } } },
         },
       },
     });
 
-    const now = Date.now();
-    const activeSince = now - setting('sync.activeWindowMin') * 60_000;
-    const groups = new Map<
-      string,
-      {
-        chain: string;
-        address: string;
-        owned: boolean;
-        active: boolean;
-        lastSyncedAt: number | null;
-        previousTotal: number | null;
-        queuedAt: number | null;
-        tronResourcesAt: Date | null;
-      }
-    >();
-
-    for (const w of wallets) {
-      const key = `${w.chain}:${w.address}`;
-      const owned = w.portfolio.owner !== null;
-      const active = (w.portfolio.lastViewedAt?.getTime() ?? 0) >= activeSince;
-      const syncedAt = w.lastSyncedAt?.getTime() ?? null;
-      const queuedAt = w.scanQueuedAt?.getTime() ?? null;
-      const existing = groups.get(key);
-      if (!existing) {
-        groups.set(key, {
-          chain: w.chain,
-          address: w.address,
-          owned,
-          active,
-          lastSyncedAt: syncedAt,
-          previousTotal: w.lastTotalUsd,
-          queuedAt,
-          tronResourcesAt: w.tronResourcesAt,
-        });
-        continue;
-      }
-      existing.owned ||= owned;
-      existing.active ||= active;
-      existing.previousTotal ??= w.lastTotalUsd;
-      // Resources belong to the address, so the freshest read among its rows is
-      // the group's — anything else would re-read what we already have
-      if (
-        w.tronResourcesAt !== null &&
-        (existing.tronResourcesAt === null || w.tronResourcesAt > existing.tronResourcesAt)
-      ) {
-        existing.tronResourcesAt = w.tronResourcesAt;
-      }
-      // A claim covers every row for the address, so any one of them saying it
-      // is on its way is the answer for the group
-      if (queuedAt !== null && (existing.queuedAt === null || queuedAt > existing.queuedAt)) {
-        existing.queuedAt = queuedAt;
-      }
-      // The group is scanned as one, so the freshest sync among its wallets is
-      // the group's — scanning again earlier would buy nothing
-      if (syncedAt !== null && (existing.lastSyncedAt === null || syncedAt > existing.lastSyncedAt)) {
-        existing.lastSyncedAt = syncedAt;
-      }
-    }
-
-    const claimedSince = now - setting('scan.claimTtlMin') * 60_000;
-    const due = [...groups.values()]
-      // Already on its way. Without this the producer republished a brand-new
-      // address on every tick for the whole length of its scan — see
-      // Wallet.scanQueuedAt. A claim older than the TTL is not believed: a
-      // scanner can die, and a held scan never publishes a result to clear it.
-      .filter((g) => g.queuedAt === null || g.queuedAt < claimedSince)
-      .map((g) => {
-        const fast = g.owned || g.active;
+    const due = wallets
+      .map((w) => {
+        const fast = w.memberships.some(
+          (m) => (m.portfolio.lastViewedAt?.getTime() ?? 0) >= activeSince.getTime(),
+        );
         const intervalMs =
           (fast ? setting('sync.intervalMin') : setting('sync.idleIntervalMin')) * 60_000;
-        return { ...g, fast, overdueBy: g.lastSyncedAt === null ? Infinity : now - g.lastSyncedAt - intervalMs };
+        const lastSyncedAt = w.lastSyncedAt?.getTime() ?? null;
+        return {
+          ...w,
+          fast,
+          overdueBy: lastSyncedAt === null ? Infinity : now - lastSyncedAt - intervalMs,
+        };
       })
-      .filter((g) => g.overdueBy >= 0)
-      // Owned and actively-viewed wallets go first; within a tier, whatever has
-      // been waiting longest
+      .filter((w) => w.overdueBy >= 0)
+      // Actively-viewed addresses go first; within a tier, whatever has been
+      // waiting longest
       .sort((a, b) => Number(b.fast) - Number(a.fast) || b.overdueBy - a.overdueBy);
 
     // previousTotal travels with the job so the scanner can re-read a
     // suspicious drop while it still has the page open
-    return due.map((g) => ({
-      chain: g.chain as Chain,
-      address: g.address,
-      previousTotal: g.previousTotal,
-      tronResourcesAt: g.tronResourcesAt?.toISOString() ?? null,
+    return due.map((w) => ({
+      chain: w.chain as Chain,
+      address: w.address,
+      previousTotal: w.lastTotalUsd,
+      tronResourcesAt: w.tronResourcesAt?.toISOString() ?? null,
     }));
   }
 
-  async applyResult(group: Wallet[], result: ScanResult): Promise<void> {
+  async applyResult(wallet: Wallet, result: ScanResult): Promise<void> {
     const now = new Date();
-    for (const wallet of group) {
-      await this.prisma.$transaction([
-        this.prisma.position.deleteMany({ where: { walletId: wallet.id } }),
-        this.prisma.position.createMany({
-          data: result.positions.map((p) => ({
-            walletId: wallet.id,
-            symbol: p.symbol.slice(0, 120),
-            name: p.name?.slice(0, 200) ?? null,
-            note: p.note?.slice(0, 300) ?? null,
-            amount: p.amount ?? null,
-            priceUsd: p.priceUsd ?? null,
-            valueUsd: p.valueUsd,
-            platform: p.platform ?? null,
-            category: p.category,
-            apy: p.apy ?? null,
-            healthRate: p.healthRate ?? null,
-            borrowApy: p.borrowApy ?? null,
-            range: p.range ?? null,
-            // Prisma types JSON columns structurally; our leg array has to be
-            // handed over as an opaque JSON value
-            tokens: p.tokens?.length ? (p.tokens as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
-          })),
-        }),
-        this.prisma.wallet.update({
-          where: { id: wallet.id },
-          data: {
-            status: 'ok',
-            lastTotalUsd: result.totalUsd,
-            lastSyncedAt: now,
-            lastError: null,
-            breakdown: result.breakdown ?? {},
-            unpriced: result.unpriced ?? [],
-            // Only when this scan actually read them. A scan that skipped the
-            // read (not due) or whose read failed leaves the stored snapshot
-            // alone — replacing it with a gap would blank the page and, worse,
-            // re-baseline the reclaim/delegate flags into silence.
-            ...(result.tron
-              ? {
-                  tronResources: result.tron as unknown as Prisma.InputJsonValue,
-                  tronResourcesAt: now,
-                }
-              : {}),
-          },
-        }),
-      ]);
-      await this.announce(wallet, result);
-    }
-
-    // History is recorded ONCE per scan, against the address rather than each
-    // portfolio's copy of it: a wallet reused in another portfolio shares this
-    // history instead of starting over, and it outlives any single Wallet row —
-    // removing a wallet from a portfolio no longer erases the address's past.
-    // `group` is every Wallet row for this exact (chain, address), so this writes
-    // one row here, not one per portfolio that happens to hold it.
-    const { chain, address } = group[0];
-    await this.prisma.addressSnapshot.create({
-      data: {
-        chain,
-        address,
-        totalUsd: result.totalUsd,
-        ...accrued(result.positions),
-        breakdown: result.breakdown ?? undefined,
-      },
-    });
+    await this.prisma.$transaction([
+      this.prisma.position.deleteMany({ where: { walletId: wallet.id } }),
+      this.prisma.position.createMany({
+        data: result.positions.map((p) => ({
+          walletId: wallet.id,
+          symbol: p.symbol.slice(0, 120),
+          name: p.name?.slice(0, 200) ?? null,
+          note: p.note?.slice(0, 300) ?? null,
+          amount: p.amount ?? null,
+          priceUsd: p.priceUsd ?? null,
+          valueUsd: p.valueUsd,
+          platform: p.platform ?? null,
+          category: p.category,
+          apy: p.apy ?? null,
+          healthRate: p.healthRate ?? null,
+          borrowApy: p.borrowApy ?? null,
+          range: p.range ?? null,
+          // Prisma types JSON columns structurally; our leg array has to be
+          // handed over as an opaque JSON value
+          tokens: p.tokens?.length ? (p.tokens as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+        })),
+      }),
+      this.prisma.wallet.update({
+        where: { id: wallet.id },
+        data: {
+          status: 'ok',
+          lastTotalUsd: result.totalUsd,
+          lastSyncedAt: now,
+          lastError: null,
+          breakdown: result.breakdown ?? {},
+          unpriced: result.unpriced ?? [],
+          // Only when this scan actually read them. A scan that skipped the
+          // read (not due) or whose read failed leaves the stored snapshot
+          // alone — replacing it with a gap would blank the page and, worse,
+          // re-baseline the reclaim/delegate flags into silence.
+          ...(result.tron
+            ? {
+                tronResources: result.tron as unknown as Prisma.InputJsonValue,
+                tronResourcesAt: now,
+              }
+            : {}),
+        },
+      }),
+      this.prisma.addressSnapshot.create({
+        data: {
+          chain: wallet.chain,
+          address: wallet.address,
+          totalUsd: result.totalUsd,
+          ...accrued(result.positions),
+          breakdown: result.breakdown ?? undefined,
+        },
+      }),
+    ]);
+    await this.announce(wallet, result);
   }
 
   /**
-   * Says what the wallet looks like now, for whoever decides who should hear
+   * Says what the address looks like now, for whoever decides who should hear
    * about it.
    *
    * Published after the positions are written, not before: a reader that came
    * to look would otherwise find the previous scan's rows and answer about the
-   * wrong state. It carries no owner and no settings — who watches this wallet
-   * is the reader's business, and a scan should not have to know.
+   * wrong state. It carries no owner and no settings — who watches this address
+   * and what they asked for is the reader's business, and a scan should not
+   * have to know. One message per address, however many portfolios hold it; the
+   * collector is what fans it out to their separate thresholds.
    *
    * A failure to publish is logged and swallowed. The scan succeeded and its
    * result is stored; losing the announcement costs one cycle of alerts, and
@@ -253,15 +193,13 @@ export class SyncService {
     // Resources this scan read, or the ones already stored — the collector is
     // judging the wallet as it stands, and a scan that did not re-read them has
     // not made them untrue. Whichever we have; null if there has never been one.
-    const tron =
-      result.tron ?? ((wallet.tronResources as TronResources | null) || null);
-    // A wallet with neither a watchable position nor resources has nothing
+    const tron = result.tron ?? ((wallet.tronResources as TronResources | null) || null);
+    // An address with neither a watchable position nor resources has nothing
     // anybody could have asked to hear about
     if (!positions.length && !tron) return;
     try {
       await this.rabbit.publish(WALLET_STATE_QUEUE, {
         walletId: wallet.id,
-        portfolioId: wallet.portfolioId,
         address: wallet.address,
         chain: wallet.chain as Chain,
         positions,
@@ -352,23 +290,35 @@ export class SyncService {
   }
 
   /** We deliberately leave the last successful cached value untouched — it's served with a stale flag */
-  async markFailed(group: Wallet[], message: string): Promise<void> {
-    await this.prisma.wallet.updateMany({
-      where: { id: { in: group.map((w) => w.id) } },
+  async markFailed(wallet: Wallet, message: string): Promise<void> {
+    await this.prisma.wallet.update({
+      where: { id: wallet.id },
       data: { status: 'failed', lastError: message.slice(0, 500) },
     });
   }
 
+  /** Which portfolios hold this address, so their totals can be re-recorded */
+  async portfoliosHolding(walletId: string): Promise<string[]> {
+    const rows = await this.prisma.portfolioWallet.findMany({
+      where: { walletId },
+      select: { portfolioId: true },
+    });
+    return [...new Set(rows.map((r) => r.portfolioId))];
+  }
+
   async snapshotPortfolio(portfolioId: string): Promise<void> {
-    const wallets = await this.prisma.wallet.findMany({ where: { portfolioId } });
-    if (!wallets.length) {
+    const held = await this.prisma.portfolioWallet.findMany({
+      where: { portfolioId },
+      select: { wallet: { select: { lastTotalUsd: true } } },
+    });
+    if (!held.length) {
       // the last wallet was removed — record a zero so the chart reflects it
       await this.prisma.portfolioSnapshot.create({ data: { portfolioId, totalUsd: 0 } });
       return;
     }
-    const known = wallets.filter((w) => w.lastTotalUsd !== null);
+    const known = held.filter((h) => h.wallet.lastTotalUsd !== null);
     if (!known.length) return; // nothing has been scanned yet
-    const totalUsd = known.reduce((sum, w) => sum + (w.lastTotalUsd ?? 0), 0);
+    const totalUsd = known.reduce((sum, h) => sum + (h.wallet.lastTotalUsd ?? 0), 0);
     await this.prisma.portfolioSnapshot.create({ data: { portfolioId, totalUsd } });
   }
 }

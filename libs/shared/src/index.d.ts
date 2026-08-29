@@ -520,8 +520,8 @@ export interface WalletPositionState {
  * will announce that every position of a briefly unreachable protocol has gone.
  */
 export interface WalletStateEvent {
+  /** The ADDRESS's row, not a portfolio's hold on it — one message serves them all */
   walletId: string;
-  portfolioId: string;
   address: string;
   chain: Chain;
   positions: WalletPositionState[];

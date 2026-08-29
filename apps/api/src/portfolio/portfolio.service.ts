@@ -34,7 +34,11 @@ import { detectChain, normalizeAddress } from '../scanners/detect';
 import { CacheService } from '../cache/cache.service';
 import { setting } from '@svinooh/common';
 
-type WalletWithPositions = Wallet & { positions: Position[] };
+/**
+ * A wallet as a portfolio holds it: the address and its readings, plus the
+ * label that belongs to this portfolio's copy of it and nobody else's.
+ */
+type HeldWallet = { id: string; label: string | null; wallet: Wallet & { positions: Position[] } };
 type PortfolioWithOwner = Portfolio & { owner: PortfolioOwner | null };
 
 /**
@@ -345,21 +349,22 @@ export class PortfolioService {
   async listPublic(limit: number, query: string): Promise<PublicPortfolioDto[]> {
     const portfolios = await this.prisma.portfolio.findMany({
       where: { OR: [{ owner: null }, { owner: { isPublic: true } }] },
-      include: { owner: { select: { portfolioId: true } }, wallets: true },
+      include: { owner: { select: { portfolioId: true } }, wallets: { include: { wallet: true } } },
     });
 
     const q = query.trim().toLowerCase().replace(/^@/, '');
     return portfolios
       .map((portfolio) => {
-        const known = portfolio.wallets.filter((w) => w.lastTotalUsd !== null);
+        const held = portfolio.wallets.map((m) => m.wallet);
+        const known = held.filter((w) => w.lastTotalUsd !== null);
         return {
           slug: portfolio.slug,
           name: portfolio.name,
           totalUsd: round2(known.reduce((sum, w) => sum + (w.lastTotalUsd ?? 0), 0)),
-          walletCount: portfolio.wallets.length,
-          chains: [...new Set(portfolio.wallets.map((w) => w.chain as Chain))],
+          walletCount: held.length,
+          chains: [...new Set(held.map((w) => w.chain as Chain))],
           anonymous: portfolio.owner === null,
-          addresses: portfolio.wallets.map((w) => w.address.toLowerCase()),
+          addresses: held.map((w) => w.address.toLowerCase()),
         };
       })
       .filter((p) => p.walletCount > 0)
@@ -392,22 +397,27 @@ export class PortfolioService {
 
     // An existing anonymous portfolio for exactly this one wallet, nothing else
     const existing = await this.prisma.portfolio.findFirst({
-      where: { owner: null, wallets: { some: { address }, every: { address } } },
+      where: {
+        owner: null,
+        wallets: { some: { wallet: { address } }, every: { wallet: { address } } },
+      },
       orderBy: { createdAt: 'asc' },
     });
     if (existing) return { slug: existing.slug };
 
+    const wallet = await this.upsertAddress(chain, address);
     const portfolio = await this.prisma.portfolio.create({
       data: {
         // No name: a portfolio is identified by its slug. Naming it after the
         // wallet it currently holds would be wrong the moment a second wallet
         // joins — the whole point of a portfolio is that it aggregates.
         slug: randomSlug(),
-        wallets: { create: { address, chain } },
+        wallets: { create: { walletId: wallet.id } },
       },
-      include: { wallets: true },
     });
-    this.requestScan(portfolio.wallets[0].id);
+    // Only if nobody has scanned this address before — an address already known
+    // to another portfolio arrives with its value and needs no queue jump
+    if (wallet.lastSyncedAt === null) this.requestScan(wallet.id);
     return { slug: portfolio.slug };
   }
 
@@ -451,14 +461,14 @@ export class PortfolioService {
       where: { slug },
       include: {
         owner: { include: { user: true } },
-        wallets: { include: { positions: true } },
+        wallets: { include: { wallet: { include: { positions: true } } } },
       },
     });
     if (!portfolio) throw new NotFoundException('Portfolio not found');
 
     const staleBefore = Date.now() - 3 * setting('sync.intervalMin') * 60_000;
     const wallets = portfolio.wallets
-      .map((wallet) => this.toWalletDto(wallet, staleBefore))
+      .map((held) => this.toWalletDto(held, staleBefore))
       .sort(walletOrder);
 
     const updatedAt = wallets.reduce<string | null>(
@@ -574,12 +584,12 @@ export class PortfolioService {
    */
   async alerts(slug: string, userId: string): Promise<AlertSettingsDto> {
     const portfolio = await this.requireOwned(slug, userId);
-    const wallets = await this.prisma.wallet.findMany({
-      where: { portfolioId: portfolio.id, status: { not: 'pending' } },
+    const held = await this.prisma.portfolioWallet.findMany({
+      where: { portfolioId: portfolio.id, wallet: { status: { not: 'pending' } } },
       select: { id: true, alerts: true },
       orderBy: { createdAt: 'asc' },
     });
-    return { wallets: wallets.map((w) => toAlertsDto(w.id, w.alerts)) };
+    return { wallets: held.map((h) => toAlertsDto(h.id, h.alerts)) };
   }
 
   /**
@@ -594,11 +604,11 @@ export class PortfolioService {
     patch: UpdateWalletAlertsDto,
   ): Promise<WalletAlertsDto> {
     const portfolio = await this.requireOwned(slug, userId);
-    const wallet = await this.prisma.wallet.findFirst({
+    const held = await this.prisma.portfolioWallet.findFirst({
       where: { id: walletId, portfolioId: portfolio.id },
       select: { id: true },
     });
-    if (!wallet) throw new NotFoundException('Wallet not found');
+    if (!held) throw new NotFoundException('Wallet not found');
 
     const data = {
       ...('rangeAlerts' in patch ? { rangeAlerts: patch.rangeAlerts === true } : {}),
@@ -614,11 +624,11 @@ export class PortfolioService {
         : {}),
     };
     const saved = await this.prisma.walletAlerts.upsert({
-      where: { walletId },
-      // The row is the wallet's settings, so creating one has to start from the
+      where: { portfolioWalletId: walletId },
+      // The row is this holder's settings, so creating one has to start from the
       // same defaults the client was shown, not from whatever the patch happened
       // to mention
-      create: { walletId, ...ALERT_DEFAULTS, ...data },
+      create: { portfolioWalletId: walletId, ...ALERT_DEFAULTS, ...data },
       update: data,
     });
     return toAlertsDto(walletId, saved);
@@ -654,7 +664,7 @@ export class PortfolioService {
     // A portfolio nobody owns is also a portfolio nobody is responsible for, so
     // it doesn't get to grow without limit — every wallet is rescanned forever.
     if (!portfolio.owner) {
-      const count = await this.prisma.wallet.count({ where: { portfolioId: portfolio.id } });
+      const count = await this.prisma.portfolioWallet.count({ where: { portfolioId: portfolio.id } });
       if (count >= ANONYMOUS_WALLET_LIMIT) {
         throw new BadRequestException({
           statusCode: 400,
@@ -664,8 +674,9 @@ export class PortfolioService {
       }
     }
 
-    const existing = await this.prisma.wallet.findUnique({
-      where: { portfolioId_address: { portfolioId: portfolio.id, address } },
+    const wallet = await this.upsertAddress(chain, address);
+    const existing = await this.prisma.portfolioWallet.findUnique({
+      where: { portfolioId_walletId: { portfolioId: portfolio.id, walletId: wallet.id } },
     });
     if (existing) {
       throw new ConflictException({
@@ -675,12 +686,15 @@ export class PortfolioService {
       });
     }
 
-    const wallet = await this.prisma.wallet.create({
-      data: { portfolioId: portfolio.id, address, chain },
+    const held = await this.prisma.portfolioWallet.create({
+      data: { portfolioId: portfolio.id, walletId: wallet.id },
+      include: { wallet: { include: { positions: true } } },
     });
-    this.requestScan(wallet.id);
+    // An address somebody else already tracks arrives with its readings and its
+    // positions; only one nobody has scanned yet needs to jump the queue
+    if (wallet.lastSyncedAt === null) this.requestScan(wallet.id);
     await this.cache.del(cacheKey(slug));
-    return this.toWalletDto({ ...wallet, positions: [] }, 0);
+    return this.toWalletDto(held, 0);
   }
 
   async renameWallet(
@@ -690,24 +704,27 @@ export class PortfolioService {
     labelRaw: string,
   ): Promise<{ label: string | null }> {
     const portfolio = await this.requireOwned(slug, userId);
-    const wallet = await this.prisma.wallet.findFirst({
+    const held = await this.prisma.portfolioWallet.findFirst({
       where: { id: walletId, portfolioId: portfolio.id },
     });
-    if (!wallet) throw new NotFoundException('Wallet not found');
+    if (!held) throw new NotFoundException('Wallet not found');
     // An empty name resets to the default (null)
     const label = String(labelRaw || '').trim().slice(0, 40) || null;
-    await this.prisma.wallet.update({ where: { id: wallet.id }, data: { label } });
+    await this.prisma.portfolioWallet.update({ where: { id: held.id }, data: { label } });
     await this.cache.del(cacheKey(slug));
     return { label };
   }
 
   async removeWallet(slug: string, userId: string, walletId: string): Promise<{ ok: true }> {
     const portfolio = await this.requireOwned(slug, userId);
-    const wallet = await this.prisma.wallet.findFirst({
+    const held = await this.prisma.portfolioWallet.findFirst({
       where: { id: walletId, portfolioId: portfolio.id },
     });
-    if (!wallet) throw new NotFoundException('Wallet not found');
-    await this.prisma.wallet.delete({ where: { id: wallet.id } });
+    if (!held) throw new NotFoundException('Wallet not found');
+    // Only this portfolio's hold on the address. The address itself, and its
+    // history, stay — somebody else may be tracking it, and if nobody is it
+    // simply stops being due for a scan.
+    await this.prisma.portfolioWallet.delete({ where: { id: held.id } });
     await this.cache.del(cacheKey(slug));
     return { ok: true };
   }
@@ -715,10 +732,13 @@ export class PortfolioService {
   async history(slug: string, range: HistoryRange): Promise<HistoryDto> {
     const portfolio = await this.prisma.portfolio.findUnique({
       where: { slug },
-      include: { wallets: { select: { chain: true, address: true } } },
+      include: { wallets: { select: { wallet: { select: { chain: true, address: true } } } } },
     });
     if (!portfolio) throw new NotFoundException('Portfolio not found');
-    const points = await this.reconstructPortfolioSeries(portfolio.wallets, range);
+    const points = await this.reconstructPortfolioSeries(
+      portfolio.wallets.map((m) => m.wallet),
+      range,
+    );
     return { range, points };
   }
 
@@ -892,15 +912,32 @@ export class PortfolioService {
   }
 
   async walletHistory(slug: string, walletId: string, range: HistoryRange): Promise<HistoryDto> {
-    const wallet = await this.prisma.wallet.findFirst({
+    const held = await this.prisma.portfolioWallet.findFirst({
       where: { id: walletId, portfolio: { slug } },
-      select: { chain: true, address: true },
+      select: { wallet: { select: { chain: true, address: true } } },
     });
-    if (!wallet) throw new NotFoundException('Wallet not found');
+    if (!held) throw new NotFoundException('Wallet not found');
     // By (chain, address): a wallet's own history shows the address's full past,
     // including the stretch recorded while it lived in another portfolio.
-    const points = await this.addressSeries(wallet.chain, wallet.address, range);
+    const points = await this.addressSeries(held.wallet.chain, held.wallet.address, range);
     return { range, points };
+  }
+
+  /**
+   * The row for this address, created if this is the first portfolio to ask for
+   * it.
+   *
+   * An address is scanned once for everybody, so adding one somebody else
+   * already tracks costs nothing and arrives with its readings already in
+   * place. `upsert` rather than find-then-create because two people can add the
+   * same address in the same instant, and the unique index is the arbiter.
+   */
+  private async upsertAddress(chain: Chain, address: string): Promise<Wallet> {
+    return this.prisma.wallet.upsert({
+      where: { chain_address: { chain, address } },
+      create: { chain, address },
+      update: {},
+    });
   }
 
   /** Owner-only: renaming, removing, publishing */
@@ -1006,7 +1043,14 @@ export class PortfolioService {
     return toPoints(downsample(grid, cap));
   }
 
-  private toWalletDto(wallet: WalletWithPositions, staleBefore: number): WalletDto {
+  /**
+   * `id` is the MEMBERSHIP's id, not the address's. Everything the browser does
+   * with it — rename, remove, set alerts — is about this portfolio's hold on
+   * the address rather than about the address, and the one thing that is not
+   * (its history) is resolved through the membership on the way.
+   */
+  private toWalletDto(held: HeldWallet, staleBefore: number): WalletDto {
+    const wallet = held.wallet;
     const positions = [...wallet.positions]
       .sort((a, b) => b.valueUsd - a.valueUsd)
       .map((p) => ({
@@ -1029,10 +1073,10 @@ export class PortfolioService {
       }));
 
     return {
-      id: wallet.id,
+      id: held.id,
       address: wallet.address,
       chain: wallet.chain as Chain,
-      label: wallet.label,
+      label: held.label,
       totalUsd: wallet.lastTotalUsd === null ? null : round2(wallet.lastTotalUsd),
       status: wallet.status as WalletSyncStatus,
       stale:
