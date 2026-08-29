@@ -1,6 +1,15 @@
-# Local development: Postgres only. The services and web run via `npm run dev`.
-# RabbitMQ, Redis, Loki and Tempo are optional — without their variables the
-# services fall back to in-process scanning, an in-memory cache and stdout logs.
+# Local development. `docker compose up -d` gives you the two things the
+# services genuinely cannot fake: a database and a broker.
+#
+# The broker used to be optional, and the wallet service carried a second,
+# broker-less implementation of the whole scan pipeline to cope. Two pipelines
+# meant two behaviours — the fallback skipped EVM entirely and paced itself
+# differently — and only one of them was the one that runs in production. It is
+# cheaper to run the broker locally than to keep a shadow copy of the system
+# honest.
+#
+# Redis, Loki and Tempo stay optional: without their variables the services use
+# an in-memory cache and log to stdout, which is the same code path either way.
 services:
   db:
     image: postgres:16-alpine
@@ -14,5 +23,23 @@ services:
     volumes:
       - dbdata:/var/lib/postgresql/data
 
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: svinooh
+      RABBITMQ_DEFAULT_PASS: svinooh
+    ports:
+      - "5672:5672"   # RABBITMQ_URL=amqp://svinooh:svinooh@localhost:5672
+      - "15672:15672" # the management UI, for looking at what is queued
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - mqdata:/var/lib/rabbitmq
+
 volumes:
   dbdata:
+  mqdata:
