@@ -217,74 +217,23 @@
   ],
   "rules": [
     {
-      "id": "claim-outlasts-scan",
-      "about": "The lease has to outlast the slowest scan that can still come back \u2014 an EVM scan runs to its timeout and runs TWICE when it re-reads a suspicious drop, plus the pause after it. Under that and an address still being scanned gets re-enqueued, which is the whole thing the lease exists to stop.",
-      "left": "scan.claimTtlMin",
+      "id": "lease-outlasts-scan",
+      "about": "The scan lease must outlast the slowest scan it covers, or an address is dispatched a second time while the first is still running.",
+      "left": "scan.leaseMin",
       "leftScale": 60000,
-      "op": ">=",
       "right": [
-        "scan.evmTimeoutMs",
         "scan.evmTimeoutMs",
         "scan.jobDelayMs"
       ]
     },
     {
-      "id": "stuck-outlasts-claim",
-      "about": "Calling a wallet broken before its lease has even expired would say a wallet still being scanned had failed.",
-      "left": "scan.stuckPendingMin",
+      "id": "stale-not-faster-than-active",
+      "about": "The interval for portfolios nobody opens cannot be shorter than the one for portfolios in use \u2014 that would scan the forgotten ones more often than the watched ones.",
+      "left": "sync.staleIntervalMin",
       "leftScale": 1,
-      "op": ">=",
       "right": [
-        "scan.claimTtlMin"
+        "sync.activeIntervalMin"
       ]
-    },
-    {
-      "id": "idle-not-faster-than-active",
-      "about": "The slow tier being faster than the fast tier means the tiers are the wrong way round.",
-      "left": "sync.idleIntervalMin",
-      "leftScale": 1,
-      "op": ">=",
-      "right": [
-        "sync.intervalMin"
-      ]
-    }
-  ],
-  "presets": [
-    {
-      "key": "conservative",
-      "label": "Conservative",
-      "about": "For when the upstreams are rate-limiting us. Half the request rate, wallets refreshed a third as often.",
-      "values": {
-        "sync.intervalMin": 15,
-        "sync.idleIntervalMin": 60,
-        "scan.prefetch": 1,
-        "scan.jobDelayMs": 3000,
-        "scan.httpConcurrency": 2
-      }
-    },
-    {
-      "key": "normal",
-      "label": "Normal",
-      "about": "What the services shipped with.",
-      "values": {
-        "sync.intervalMin": 5,
-        "sync.idleIntervalMin": 30,
-        "scan.prefetch": 1,
-        "scan.jobDelayMs": 1500,
-        "scan.httpConcurrency": 4
-      }
-    },
-    {
-      "key": "aggressive",
-      "label": "Aggressive",
-      "about": "Fresher data, more requests. Watch the 429 rate in Grafana after applying it.",
-      "values": {
-        "sync.intervalMin": 2,
-        "sync.idleIntervalMin": 15,
-        "scan.prefetch": 2,
-        "scan.jobDelayMs": 500,
-        "scan.httpConcurrency": 8
-      }
     }
   ]
 }

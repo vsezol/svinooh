@@ -61,19 +61,10 @@ class Rule:
 
 
 @dataclass(frozen=True)
-class Preset:
-    key: str
-    label: str
-    about: str
-    values: dict[str, int]
-
-
-@dataclass(frozen=True)
 class Registry:
     groups: tuple[dict, ...]
     specs: tuple[Spec, ...]
     rules: tuple[Rule, ...]
-    presets: tuple[Preset, ...]
 
     def by_key(self, key: str) -> Spec | None:
         return next((s for s in self.specs if s.key == key), None)
@@ -92,7 +83,7 @@ def registry() -> Registry:
     else:
         raise RuntimeError(f"registry.json not found; looked in {[str(p) for p in looked]}")
 
-    return Registry(
+    reg = Registry(
         groups=tuple(raw["groups"]),
         specs=tuple(
             Spec(
@@ -115,10 +106,16 @@ def registry() -> Registry:
             Rule(id=r["id"], about=r["about"], left=r["left"], left_scale=r["leftScale"], right=tuple(r["right"]))
             for r in raw["rules"]
         ),
-        presets=tuple(
-            Preset(key=p["key"], label=p["label"], about=p["about"], values=p["values"]) for p in raw["presets"]
-        ),
     )
+    # A rule naming a knob nobody declares does nothing, quietly — which is how
+    # all three of them stopped working the day their keys were renamed and
+    # nobody noticed. It refuses to load now.
+    declared = {spec.key for spec in reg.specs}
+    for rule in reg.rules:
+        missing = [k for k in (rule.left, *rule.right) if k not in declared]
+        if missing:
+            raise RuntimeError(f"rule {rule.id!r} names settings that do not exist: {', '.join(missing)}")
+    return reg
 
 
 def validate(values: dict[str, int]) -> list[str]:
