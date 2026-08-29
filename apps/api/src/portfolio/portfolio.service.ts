@@ -1083,6 +1083,7 @@ export class PortfolioService {
         symbol: p.symbol,
         name: p.name,
         note: p.note,
+        network: p.network,
         amount: p.amount,
         priceUsd: p.priceUsd,
         valueUsd: round2(p.valueUsd),

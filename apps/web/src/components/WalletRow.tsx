@@ -1,10 +1,31 @@
 import { useMemo, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import type { PositionTokenRole, WalletDto } from '@svinooh/shared';
-import { blockMatches, buildBlocks, type PositionFilter } from '../lib/blocks';
-import { chainMeta, fmtUsd, shortAddress, walletName } from '../lib/format';
+import { blockMatches, buildBlocks, type BlockSection, type PositionFilter } from '../lib/blocks';
+import { chainMeta, fmtAmount, fmtPrice, fmtUsd, shortAddress, walletName } from '../lib/format';
+import { ChainBadge } from './ChainBadge';
 import { WalletMenu } from './WalletMenu';
 import { TronResources } from './TronResources';
+
+/**
+ * What a section is drawn in: accrued reads as a gain, owed as a cost, and what
+ * is simply held takes no colour at all — most of the table is holdings, and
+ * colouring all of it would leave nothing for the colour to mean.
+ */
+const sectionColor = (section: BlockSection): string | undefined =>
+  section.label === null ? undefined : section.negative ? 'var(--down)' : 'var(--up)';
+
+/** The numeric columns: mono, right-aligned, and never wrapping */
+const cellStyle = {
+  fontSize: 13,
+  fontWeight: 500,
+  textAlign: 'right' as const,
+  color: 'var(--mut)',
+  whiteSpace: 'nowrap' as const,
+  overflow: 'hidden' as const,
+  textOverflow: 'ellipsis' as const,
+  minWidth: 0,
+};
 
 /** What accrued is worth reading as a gain, what is owed as a cost */
 const roleColor = (role: PositionTokenRole): string =>
@@ -211,7 +232,11 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
                   line — the money never leaves the right edge — and everything
                   descriptive sits underneath, free to wrap among itself. */}
               <div style={{ padding: '10px 14px' }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {/* Said once, here, for the whole position — its legs are all
+                      on this network, so a badge per row would be the same fact
+                      three times */}
+                  <ChainBadge network={b.network} size={18} />
                   <span
                     style={{
                       fontWeight: 800,
@@ -283,94 +308,106 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
                   </div>
                 ) : null}
               </div>
-              {b.rows.map((r, ri) => (
-                // One line that never breaks: the money keeps the right edge
-                // whole, and it is the words that give — a long token name
-                // ellipsizes, then the amount-times-price detail does
-                r.isGroupHead ? (
-                  // The label once, with what the group comes to. Muted like a
-                  // column heading — it names the lines below it rather than
-                  // competing with them; only the figure takes the group's colour.
-                  <div
-                    key={ri}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      gap: 10,
-                      padding: '9px 14px 5px',
-                      borderTop: '1px solid var(--line)',
-                    }}
-                  >
-                    <span className="mono" style={{ fontSize: 10, letterSpacing: '0.14em', color: 'var(--mut)' }}>
-                      {r.title}
-                    </span>
-                    <div style={{ flex: 1 }} />
-                    {/* A total over a single leg is that leg's own figure a
-                        second time; past one there is something to add up */}
-                    {(r.legCount ?? 0) > 1 ? (
+              {b.sections.map((s, si) => (
+                <div
+                  key={si}
+                  style={
+                    si === 0
+                      ? { padding: '12px 0 4px' }
+                      : { padding: '14px 0 4px', borderTop: '1px solid var(--line)' }
+                  }
+                >
+                  {s.label ? (
+                    // The heading names the run of rows below it. Its total is
+                    // dropped over a single row, where it would be that row's
+                    // own figure a second time.
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'baseline',
+                        justifyContent: 'space-between',
+                        gap: 10,
+                        padding: '0 16px 8px',
+                      }}
+                    >
                       <span
                         className="mono"
-                        style={{ fontSize: 11.5, fontWeight: 600, color: r.role ? roleColor(r.role) : undefined }}
+                        style={{ fontSize: 10.5, letterSpacing: '0.14em', color: sectionColor(s) }}
                       >
-                        {r.role === 'borrow' ? '\u2212' : ''}
+                        {s.label}
+                      </span>
+                      {s.total !== null ? (
+                        <span
+                          className="mono"
+                          style={{ fontSize: 12.5, fontWeight: 600, color: sectionColor(s) }}
+                        >
+                          {s.negative ? '−' : ''}
+                          {fmtUsd(s.total)}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {s.columns ? (
+                    // Printed once per block: the sections below are the same
+                    // four columns, and a heading repeated is a heading ignored
+                    <div className="pos-grid" style={{ padding: '2px 16px 4px' }}>
+                      {[s.firstColumn, 'PRICE', 'AMOUNT', 'USD VALUE'].map((label, ci) => (
+                        <span
+                          key={label}
+                          className={`mono${ci === 1 ? ' pos-price' : ''}`}
+                          style={{
+                            fontSize: 9.5,
+                            letterSpacing: '0.14em',
+                            color: 'var(--mut)',
+                            textAlign: ci ? 'right' : 'left',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {s.rows.map((r, ri) => (
+                    <div
+                      key={ri}
+                      className="pos-grid"
+                      style={{ alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--line)' }}
+                    >
+                      <span
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          minWidth: 0,
+                          fontWeight: 700,
+                          fontSize: 13.5,
+                          color: sectionColor(s) ?? 'var(--text)',
+                        }}
+                      >
+                        <ChainBadge network={r.network} size={18} />
+                        <span
+                          style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                        >
+                          {r.title}
+                        </span>
+                      </span>
+                      <span className="mono pos-price" style={cellStyle}>
+                        {r.priceUsd == null ? '—' : fmtPrice(r.priceUsd)}
+                      </span>
+                      <span className="mono" style={cellStyle}>
+                        {r.amount == null ? '—' : fmtAmount(r.amount)}
+                      </span>
+                      <span
+                        className="mono"
+                        style={{ ...cellStyle, color: sectionColor(s) ?? 'var(--text)' }}
+                      >
+                        {s.negative ? '−' : ''}
                         {fmtUsd(r.value)}
                       </span>
-                    ) : null}
-                  </div>
-                ) : (
-                  // A leg. Indented under its group and without a rule above it,
-                  // so the group reads as one thing; a plain holding keeps both.
-                  <div
-                    key={ri}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      gap: 10,
-                      padding: r.indented ? '6px 14px 6px 26px' : '9px 14px',
-                      borderTop: r.indented ? 'none' : '1px solid var(--line)',
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontWeight: 700,
-                        fontSize: 13,
-                        minWidth: 0,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
-                      {r.title}
-                    </span>
-                    <span
-                      className="mono"
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        fontSize: 11,
-                        color: 'var(--mut)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
-                      {r.sub}
-                    </span>
-                    <span
-                      className="mono"
-                      style={{
-                        fontSize: 12.5,
-                        fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                        color: r.role && r.role !== 'supply' ? roleColor(r.role) : undefined,
-                      }}
-                    >
-                      {r.role === 'borrow' ? '\u2212' : ''}
-                      {fmtUsd(r.value)}
-                    </span>
-                  </div>
-                )
+                    </div>
+                  ))}
+                </div>
               ))}
             </div>
           ))}

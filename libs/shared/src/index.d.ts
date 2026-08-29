@@ -30,6 +30,18 @@ export interface PositionTokenDto {
   /** Signed: borrow legs come through negative */
   valueUsd: number;
   role: PositionTokenRole;
+  /**
+   * The network this sits on, as the source names it: `eth`, `arb`, `base`,
+   * `op`, `sol`, `tron`, `btc`.
+   *
+   * Distinct from `Chain`, which is the family a wallet belongs to. One EVM
+   * wallet holds positions on a dozen networks, and "EVM" cannot say which —
+   * the scanners have always known, and used to fold it into the free text of
+   * `note`, where it could only be read by a human.
+   */
+  network?: string | null;
+  /** A borrow leg's own rate, as a fraction, where the source reports one */
+  apy?: number | null;
 }
 
 export interface PositionDto {
@@ -38,8 +50,19 @@ export interface PositionDto {
   symbol: string;
   /** Position kind: "Lending", "Liquidity Pool", "Deposit", "Staked" */
   name?: string | null;
-  /** Extra detail: chain, pool/market name, the protocol's own description */
+  /** Extra detail: pool/market name, the protocol's own description */
   note?: string | null;
+  /**
+   * The network this sits on, as the source names it: `eth`, `arb`, `base`,
+   * `op`, `sol`, `tron`, `btc`.
+   *
+   * Distinct from `Chain`, which is the family a wallet belongs to. One EVM
+   * wallet holds positions on a dozen networks, and "EVM" cannot say which —
+   * the scanners have always known, and used to fold it into the free text of
+   * `note`, where it could only be read by a human.
+   */
+  network?: string | null;
+
   amount?: number | null;
   priceUsd?: number | null;
   valueUsd: number;
@@ -242,6 +265,22 @@ export interface ScanPositionToken {
   /** Signed: borrow legs are negative */
   valueUsd: number;
   role: PositionTokenRole;
+  /**
+   * The network this sits on, as the source names it: `eth`, `arb`, `base`,
+   * `op`, `sol`, `tron`, `btc`.
+   *
+   * Distinct from `Chain`, which is the family a wallet belongs to. One EVM
+   * wallet holds positions on a dozen networks, and "EVM" cannot say which —
+   * the scanners have always known, and used to fold it into the free text of
+   * `note`, where it could only be read by a human.
+   */
+  network?: string | null;
+  /**
+   * What this leg's rate is, as a fraction. Only borrow legs carry one, and
+   * only where the source reports per-leg rates — a position-wide figure
+   * belongs on the position, not stamped onto every leg of it.
+   */
+  apy?: number | null;
 }
 
 export interface ScanPosition {
@@ -249,8 +288,19 @@ export interface ScanPosition {
   symbol: string;
   /** Position kind: "Lending", "Liquidity Pool", "Deposit" */
   name?: string | null;
-  /** Extra detail: chain, pool/market name, the protocol's own description */
+  /** Extra detail: pool/market name, the protocol's own description */
   note?: string | null;
+  /**
+   * The network this sits on, as the source names it: `eth`, `arb`, `base`,
+   * `op`, `sol`, `tron`, `btc`.
+   *
+   * Distinct from `Chain`, which is the family a wallet belongs to. One EVM
+   * wallet holds positions on a dozen networks, and "EVM" cannot say which —
+   * the scanners have always known, and used to fold it into the free text of
+   * `note`, where it could only be read by a human.
+   */
+  network?: string | null;
+
   amount?: number | null;
   priceUsd?: number | null;
   valueUsd: number;

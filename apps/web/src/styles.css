@@ -851,3 +851,25 @@ body[data-theme='light'] .on-dark {
     padding-bottom: calc(18px + env(safe-area-inset-bottom));
   }
 }
+
+/* The position table.
+
+   Four columns on a desktop — token, price, amount, value — and three on a
+   phone, where the price is the one that can go: it is the same number for
+   everybody, while the amount and the value are this wallet's own. Done in CSS
+   rather than off window.innerWidth so the server and the browser render the
+   same markup, and so the switch happens at the width, not at a re-render. */
+.pos-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 719px) {
+  .pos-grid {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .pos-price {
+    display: none;
+  }
+}
