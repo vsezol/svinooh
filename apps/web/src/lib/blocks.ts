@@ -296,7 +296,10 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
     blocks.push({
       proto: p.symbol,
       network: p.network ?? null,
-      typeLabel: kind.toUpperCase(),
+      // "LP" rather than "LIQUIDITY POOL": the label sits on one line with the
+      // protocol, the detail and the range, and the long form crowds out the
+      // things that differ between two positions of the same protocol
+      typeLabel: isPoolKind(kind) ? 'LP' : kind.toUpperCase(),
       meta: join(p.note) || null,
       value: p.valueUsd,
       apy: p.apy ?? null,

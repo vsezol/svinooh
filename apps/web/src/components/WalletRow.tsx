@@ -227,86 +227,71 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
           {tron ? <TronResources tron={tron} /> : null}
           {blocks.map((b, i) => (
             <div key={i} style={{ border: '1px solid var(--line)', borderRadius: 12, background: 'var(--surf2)', overflow: 'hidden' }}>
-              {/* Two lines with fixed jobs, instead of one line that wraps
-                  wherever it runs out: the name and the money hold the first
-                  line — the money never leaves the right edge — and everything
-                  descriptive sits underneath, free to wrap among itself. */}
-              <div style={{ padding: '10px 14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {/* Said once, here, for the whole position — its legs are all
-                      on this network, so a badge per row would be the same fact
-                      three times */}
-                  <ChainBadge network={b.network} size={18} />
+              {/* One line, allowed to wrap among itself: name, what kind of
+                  position it is, its detail, and whether it is in range — then
+                  the money, held against the right edge. The pieces are all
+                  short now that the chain is a mark and the pair is in the
+                  table below, so a second line would be a line of air. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', flexWrap: 'wrap' }}>
+                <ChainBadge network={b.network} size={18} />
+                <span style={{ fontWeight: 800, fontSize: 13, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {b.proto}
+                </span>
+                {b.count > 1 ? (
+                  <span className="mono" title={`${b.count} positions folded together`} style={{ fontSize: 9.5, color: 'var(--mut)' }}>
+                    ×{b.count}
+                  </span>
+                ) : null}
+                {b.typeLabel ? (
+                  <span className="mono" style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--mut)' }}>
+                    {b.typeLabel}
+                  </span>
+                ) : null}
+                {b.meta ? (
+                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--mut)', letterSpacing: '0.04em' }}>
+                    {b.meta}
+                  </span>
+                ) : null}
+                {b.apy != null ? (
+                  <span className="mono" style={{ fontSize: 10.5, color: b.apy >= 0 ? 'var(--up)' : 'var(--down)', letterSpacing: '0.04em' }}>
+                    {fmtApy(b.apy)}
+                  </span>
+                ) : null}
+                {b.healthRate != null ? (
                   <span
+                    className="mono"
+                    title="Health factor — below 1 the position is liquidated"
+                    style={{ fontSize: 10.5, color: b.healthRate < 1.5 ? 'var(--down)' : 'var(--mut)', letterSpacing: '0.04em' }}
+                  >
+                    HF {b.healthRate.toFixed(2)}
+                  </span>
+                ) : null}
+                {b.range ? (
+                  // Plain coloured text, not a bordered pill: it sits among
+                  // other small mono notes and a box around one of them makes
+                  // it a button that cannot be pressed
+                  <span
+                    className="mono"
+                    title={
+                      b.range === 'in'
+                        ? 'The price is inside the position range — it is earning fees'
+                        : 'The price has left the position range — it sits in one token and earns nothing'
+                    }
                     style={{
-                      fontWeight: 800,
-                      fontSize: 13,
-                      minWidth: 0,
+                      fontSize: 10,
+                      letterSpacing: '0.12em',
                       whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
+                      fontWeight: 600,
+                      color: b.range === 'in' ? 'var(--up)' : 'var(--down)',
                     }}
                   >
-                    {b.proto}
+                    {b.range === 'in' ? 'IN RANGE' : 'OUT OF RANGE'}
                   </span>
-                  {b.count > 1 ? (
-                    <span className="mono" title={`${b.count} positions folded together`} style={{ fontSize: 9.5, color: 'var(--mut)', flexShrink: 0 }}>
-                      ×{b.count}
-                    </span>
-                  ) : null}
-                  {b.typeLabel ? (
-                    <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.12em', color: 'var(--mut)', flexShrink: 0 }}>
-                      {b.typeLabel}
-                    </span>
-                  ) : null}
-                  <div style={{ flex: 1 }} />
-                  <span className="mono" style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                    {fmtUsd(b.value)}
-                  </span>
-                </div>
-                {b.range || b.meta || b.apy != null || b.healthRate != null ? (
-                  <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 10, rowGap: 3, marginTop: 5 }}>
-                    {b.range ? (
-                      <span
-                        className="mono"
-                        title={
-                          b.range === 'in'
-                            ? 'The price is inside the position range — it is earning fees'
-                            : 'The price has left the position range — it sits in one token and earns nothing'
-                        }
-                        style={{
-                          fontSize: 9,
-                          letterSpacing: '0.1em',
-                          color: b.range === 'in' ? 'var(--up)' : 'var(--down)',
-                          border: `1px solid ${b.range === 'in' ? 'var(--up)' : 'var(--down)'}`,
-                          borderRadius: 5,
-                          padding: '1px 5px',
-                        }}
-                      >
-                        {b.range === 'in' ? 'IN RANGE' : 'OUT OF RANGE'}
-                      </span>
-                    ) : null}
-                    {b.meta ? (
-                      <span className="mono" style={{ fontSize: 10, color: 'var(--mut)', letterSpacing: '0.04em' }}>
-                        {b.meta}
-                      </span>
-                    ) : null}
-                    {b.apy != null ? (
-                      <span className="mono" style={{ fontSize: 10, color: b.apy >= 0 ? 'var(--up)' : 'var(--down)', letterSpacing: '0.04em' }}>
-                        {fmtApy(b.apy)}
-                      </span>
-                    ) : null}
-                    {b.healthRate != null ? (
-                      <span
-                        className="mono"
-                        title="Health factor — below 1 the position is liquidated"
-                        style={{ fontSize: 10, color: b.healthRate < 1.5 ? 'var(--down)' : 'var(--mut)', letterSpacing: '0.04em' }}
-                      >
-                        HF {b.healthRate.toFixed(2)}
-                      </span>
-                    ) : null}
-                  </div>
                 ) : null}
+                <div style={{ flex: 1 }} />
+                <span className="mono" style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  {fmtUsd(b.value)}
+                </span>
               </div>
               {b.sections.map((s, si) => (
                 <div
@@ -372,7 +357,11 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
                     <div
                       key={ri}
                       className="pos-grid"
-                      style={{ alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--line)' }}
+                      // No rule between rows: the padding carries the rhythm, and
+                      // a line under every holding turned a wallet into a grate.
+                      // Borders survive where they separate different things —
+                      // between sections, and between blocks.
+                      style={{ alignItems: 'center', padding: '10px 16px' }}
                     >
                       <span
                         style={{
