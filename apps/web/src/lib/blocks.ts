@@ -206,19 +206,28 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
  * side, and it is the GROUP's total that decides where the group sits, so the
  * biggest thing in the wallet still comes first.
  *
- * The name is the tiebreak rather than a nicety: two protocols that happen to
- * hold the same amount would otherwise be free to interleave, which is the one
- * thing this is here to prevent.
+ * Two protocols holding the same amount are separated by whichever has the
+ * bigger single position, which is what ranking them on the value-sorted list
+ * amounts to. That tiebreak is load-bearing, not a nicety — without one, equal
+ * groups are free to interleave, which is the one thing this is here to
+ * prevent — and it is value all the way down, where sorting them by name would
+ * have decided it on something nobody is looking at.
  */
 function byProtocolThenValue(blocks: Block[]): Block[] {
+  const byValue = [...blocks].sort((a, b) => b.value - a.value);
+
   const protocolTotal = new Map<string, number>();
-  for (const block of blocks) {
+  /** Where a protocol's biggest position landed — its rank among protocols */
+  const protocolRank = new Map<string, number>();
+  byValue.forEach((block, index) => {
     protocolTotal.set(block.proto, (protocolTotal.get(block.proto) ?? 0) + block.value);
-  }
-  return [...blocks].sort(
+    if (!protocolRank.has(block.proto)) protocolRank.set(block.proto, index);
+  });
+
+  return byValue.sort(
     (a, b) =>
       (protocolTotal.get(b.proto) ?? 0) - (protocolTotal.get(a.proto) ?? 0) ||
-      a.proto.localeCompare(b.proto) ||
+      (protocolRank.get(a.proto) ?? 0) - (protocolRank.get(b.proto) ?? 0) ||
       b.value - a.value,
   );
 }
