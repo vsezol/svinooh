@@ -7,6 +7,10 @@ export interface BlockRow {
   value: number;
   /** null for a plain wallet holding; set for the legs of a DeFi position */
   role: PositionTokenRole | null;
+  /** A group's label line — what it counts is the indented legs below it */
+  isGroupHead?: boolean;
+  /** A leg sitting under a group head */
+  indented?: boolean;
 }
 
 /** Positions grouped by protocol — as in the design (Wallet + a separate block for each DeFi position) */
@@ -19,6 +23,8 @@ export interface Block {
   apy: number | null;
   /** Health factor of a lending position */
   healthRate: number | null;
+  /** What the debt costs, as a fraction (0.06 = 6% APY) — shown on the group */
+  borrowApy: number | null;
   /** Concentrated liquidity only: is the price still inside the range */
   range: PositionRange | null;
   /** How many identical positions were folded into this block (1 — just the one) */
@@ -101,18 +107,23 @@ function legSignature(block: Block): string {
  * thing in one line.
  */
 function foldDuplicates(blocks: Block[]): Block[] {
-  const folded = new Map<string, Block & { weightedApy: number }>();
+  const folded = new Map<string, Block & { weightedApy: number; weightedBorrowApy: number }>();
   for (const block of blocks) {
     const key = `${block.proto}|${block.typeLabel}|${block.meta}|${legSignature(block)}`;
     const existing = folded.get(key);
     if (!existing) {
-      folded.set(key, { ...block, weightedApy: (block.apy ?? 0) * block.value });
+      folded.set(key, {
+        ...block,
+        weightedApy: (block.apy ?? 0) * block.value,
+        weightedBorrowApy: (block.borrowApy ?? 0) * block.value,
+      });
       continue;
     }
     existing.count += block.count;
     existing.value += block.value;
     existing.rows = existing.rows.concat(block.rows);
     existing.weightedApy += (block.apy ?? 0) * block.value;
+    existing.weightedBorrowApy += (block.borrowApy ?? 0) * block.value;
     // The worst health factor is the one worth showing; a range badge only
     // survives while every folded position agrees with it
     if (block.healthRate != null) {
@@ -121,11 +132,61 @@ function foldDuplicates(blocks: Block[]): Block[] {
     }
     if (existing.range !== block.range) existing.range = null;
   }
-  return [...folded.values()].map(({ weightedApy, ...block }) => ({
+  return [...folded.values()].map(({ weightedApy, weightedBorrowApy, ...block }) => ({
     ...block,
     apy: block.value > 0 && weightedApy !== 0 ? weightedApy / block.value : block.apy,
+    borrowApy:
+      block.value > 0 && weightedBorrowApy !== 0 ? weightedBorrowApy / block.value : block.borrowApy,
     rows: mergeRows(block.rows),
   }));
+}
+
+/**
+ * Say what a kind of leg IS once, then list the legs under it.
+ *
+ * Every accrued leg used to carry its own REWARDS badge and every borrowed one
+ * its own DEBT badge, so a position earning four tokens said "REWARDS" four
+ * times and a loan across three markets said "DEBT" three times. The badge is
+ * the same claim repeated, and repeating it is what made a wallet with a few
+ * real positions read as a wall. It is a property of the group, so it is now
+ * written once, on a line that also carries what the group comes to — and the
+ * legs sit indented beneath it, saying only what each one is.
+ *
+ * The label distinguishes what the money is: fees are what a liquidity position
+ * accrues by being used, rewards are what a protocol pays you on top. Both
+ * arrive as `reward` legs, so the position's own kind is what tells them apart.
+ *
+ * What is owed is the group that is worth naming precisely, because a lending
+ * position's rate belongs to the debt and not to the position — so it goes on
+ * the header, where it reads as the price of that line rather than of the card.
+ */
+function groupAccruals(block: Block): BlockRow[] {
+  const held = block.rows.filter((row) => row.role !== 'reward' && row.role !== 'borrow');
+  const grouped: BlockRow[] = [...held];
+
+  const group = (label: string, legs: BlockRow[]): void => {
+    if (!legs.length) return;
+    grouped.push({
+      title: label,
+      sub: '',
+      // Legs arrive signed differently depending on the source; what the group
+      // comes to is a magnitude, and the minus is the renderer's business
+      value: legs.reduce((sum, leg) => sum + Math.abs(leg.value), 0),
+      role: legs[0].role,
+      isGroupHead: true,
+    });
+    for (const leg of legs) grouped.push({ ...leg, value: Math.abs(leg.value), indented: true });
+  };
+
+  group(
+    isPoolKind(block.typeLabel) ? 'FEES' : 'REWARDS',
+    block.rows.filter((row) => row.role === 'reward'),
+  );
+  group(
+    block.borrowApy == null ? 'BORROWED' : `BORROWED · APY ${(block.borrowApy * 100).toFixed(1)}%`,
+    block.rows.filter((row) => row.role === 'borrow'),
+  );
+  return grouped;
 }
 
 /**
@@ -171,6 +232,7 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
       value: p.valueUsd,
       apy: p.apy ?? null,
       healthRate: p.healthRate ?? null,
+      borrowApy: p.borrowApy ?? null,
       range: p.range ?? null,
       count: 1,
       rows,
@@ -188,12 +250,15 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
       value: walletValue,
       apy: null,
       healthRate: null,
+      borrowApy: null,
       range: null,
       count: 1,
       rows: walletRows,
     });
   }
-  return byProtocolThenValue(out);
+  // Grouping is the last thing done to a block: folding and merging both read
+  // the legs, and a header line is not a leg
+  return byProtocolThenValue(out.map((block) => ({ ...block, rows: groupAccruals(block) })));
 }
 
 /**
