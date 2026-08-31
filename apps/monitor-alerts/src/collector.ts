@@ -17,6 +17,20 @@ const DEFAULTS: Settings = {
 };
 
 /**
+ * Postgres refuses NUL in text outright (22021), and the alert states are
+ * written in one transaction per wallet — so a single key carrying one, from a
+ * scam token's padded bytes32 symbol, vetoes the state of every position
+ * beside it, every scan. The producer cleans its keys too, but this consumer
+ * outlives any one producer version and takes events from all of them; what it
+ * is about to write is its own to guarantee.
+ */
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u001f\u007f]/g;
+
+/** Escaped for a log line: the whole point is to SEE the invisible byte */
+const escaped = (s: string): string => JSON.stringify(s);
+
+/**
  * Turns "here is what this wallet looks like" into "here is what its owner
  * asked to be told".
  *
@@ -41,6 +55,20 @@ export class Collector {
    * judged separately against their own settings and their own state.
    */
   async handle(event: WalletStateEvent): Promise<void> {
+    // The keys are about to become database rows, so they are cleaned at this
+    // door whatever the producer did — and a cleaning that changed anything is
+    // said out loud with the bytes made visible, because it means some producer
+    // is still emitting them and the log is what will name it.
+    const positions = event.positions.map((position) => {
+      const key = position.key.replace(CONTROL, '');
+      if (key !== position.key) {
+        console.warn(
+          `control bytes in position key from ${event.chain} ${event.address}: ${escaped(position.key)}`,
+        );
+      }
+      return key === position.key ? position : { ...position, key };
+    });
+
     const memberships = await this.prisma.portfolioWallet.findMany({
       where: { walletId: event.walletId },
       select: {
@@ -73,7 +101,7 @@ export class Collector {
       const previous = await this.remembered(membership.id);
       // `?? null` rather than trusted: during a deploy the queue still holds
       // states published by a wallet service that predates the field
-      const { items, next } = decide(event.positions, settings, previous, event.tron ?? null);
+      const { items, next } = decide(positions, settings, previous, event.tron ?? null);
 
       // Said before it is written down. If this throws, nothing is remembered
       // and the next scan decides the same thing again — an alert arriving
