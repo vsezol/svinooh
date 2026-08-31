@@ -1,6 +1,17 @@
 import type { ScanPosition, WalletPositionState } from '@svinooh/shared';
 
 /**
+ * Scam tokens arrive with whatever bytes their deployer chose, and a bytes32
+ * symbol decoded off-chain keeps its NUL padding. Postgres text columns refuse
+ * NUL outright (22021), and the key is written in one transaction per wallet —
+ * so one such token was vetoing the alert state of every position beside it,
+ * every scan, forever. Control characters say nothing about which position
+ * this is, so the key is the same key without them.
+ */
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u001f\u007f]/g;
+
+/**
  * A key that recognises this position on the next scan.
  *
  * `Position.id` cannot do it: every scan deletes the wallet's positions and
@@ -19,7 +30,7 @@ export function positionKey(position: ScanPosition): string {
     .sort()
     .join('+');
   return [position.platform ?? '?', position.symbol, position.name ?? '', legs]
-    .map((part) => part.trim())
+    .map((part) => part.replace(CONTROL, '').trim())
     .join(':');
 }
 
