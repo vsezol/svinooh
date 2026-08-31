@@ -466,6 +466,13 @@ async function scanEvmBrowserLocked(address: string, patient: boolean): Promise<
       // split by kind, with their supply/reward/borrow legs. The scraped DOM is
       // the fallback: correct values, but protocol totals only.
       const captured = positionsFromCapture((await page.evaluate(READ_CAPTURE_SCRIPT)) as Capture | null);
+      if (!captured) {
+        // Worth saying out loud. The scraped DOM has the right totals and no
+        // legs at all, so a wallet quietly loses every accrued fee and every
+        // amount — which on the page is indistinguishable from a protocol
+        // having stopped paying. Silence here is what makes that a mystery.
+        logger.warn(`${address}: no DeBank capture — falling back to protocol totals, positions will have no legs`);
+      }
       positions = captured ?? [
         ...data.projects.map((p) => ({
           symbol: p.name,

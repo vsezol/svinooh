@@ -3,7 +3,7 @@ import { fetchJson } from './http';
 import { rangeFromLegs } from '@svinooh/common';
 import { enrich, needsLendingFacts, NO_FACTS } from '@svinooh/common';
 import { solanaLendingFacts, solanaPoolFacts } from './defi';
-import { meteoraPositions } from './defi/meteora';
+import { meteoraPositions, type MeteoraPoolPosition } from './defi/meteora';
 import type { ScanPosition, ScanPositionToken, ScanResult } from '@svinooh/shared';
 
 /**
@@ -340,39 +340,11 @@ export async function scanSol(address: string): Promise<ScanResult> {
     }
   }
 
-  // Jupiter aggregates every Meteora pool a wallet holds into ONE element, so
-  // two pools arrive as a single position. Meteora reports them per pool, so
-  // when there is more than one, split that position back into one per pool.
-  // Jupiter's total stays the authority — shared out by each pool's balance —
-  // so the portfolio total does not move. One pool changes nothing: Jupiter's
-  // position, with its exact legs, stands as-is.
-  if (meteoraByPool.length >= 2) {
-    const merged = positions.filter((p) => p.platform === 'meteora');
-    const mergedValue = merged.reduce((sum, p) => sum + p.valueUsd, 0);
-    const poolTotal = meteoraByPool.reduce((sum, p) => sum + p.valueUsd, 0) || 1;
-    const kept = positions.filter((p) => p.platform !== 'meteora');
-    positions.length = 0;
-    positions.push(...kept);
-    for (const pool of meteoraByPool) {
-      const valueUsd = mergedValue > 0 ? mergedValue * (pool.valueUsd / poolTotal) : pool.valueUsd;
-      positions.push({
-        symbol: 'Meteora',
-        name: 'Liquidity Pool',
-        note: pool.pairLabel,
-        valueUsd,
-        platform: 'meteora',
-        category: 'defi',
-        range: pool.inRange ? 'in' : 'out',
-        // The pair is what tells one pool from the other (and keys the alert);
-        // the per-leg split Jupiter had is gone once it merges them, so these
-        // halves are nominal — enrich re-attaches the real band from Meteora.
-        tokens: [
-          { symbol: pool.tokenX, amount: null, priceUsd: null, valueUsd: valueUsd / 2, role: 'supply' },
-          { symbol: pool.tokenY, amount: null, priceUsd: null, valueUsd: valueUsd / 2, role: 'supply' },
-        ],
-      });
-    }
-  }
+  // Jupiter names every Meteora pool "DLMM" and, on some wallets, used to merge
+  // them all into one element — see reconcileMeteora
+  const meteoraFixed = reconcileMeteora(positions, meteoraByPool);
+  positions.length = 0;
+  positions.push(...meteoraFixed);
 
   // Kamino is only worth its 38 markets when Jupiter described a loan without
   // saying how healthy it is or what it costs, which is not the usual case
@@ -391,4 +363,147 @@ export async function scanSol(address: string): Promise<ScanResult> {
     breakdown: { defi, gmtrade },
     unpriced: unpriced.length ? unpriced : undefined,
   };
+}
+
+/**
+ * Line Jupiter's Meteora positions up with what Meteora itself reports.
+ *
+ * Jupiter USUALLY answers per pool already — asked about a wallet holding two
+ * DLMM positions it returns two elements, each with its own legs, its own
+ * amounts and its own reward legs for the unclaimed fees. Where that is what
+ * came back, there is nothing to split: the positions are kept exactly as they
+ * are and only labelled, because Jupiter names every Meteora pool "DLMM" and
+ * cannot say which pair it is.
+ *
+ * It was not always so, and the aggregated shape is what this was first written
+ * for. Splitting unconditionally is what broke the fees: two good positions were
+ * thrown away and rebuilt as nominal halves with no reward legs at all, which
+ * read as Meteora having stopped paying. So the split now runs only when Jupiter
+ * really did return fewer positions than there are pools.
+ *
+ * Pools are matched to positions by value. It is the one number both sources
+ * agree on to within a fraction of a percent, where the symbols do not always
+ * agree at all (cbBTC against CBBTC) and neither side reports the pool address
+ * in the other's terms.
+ */
+export function reconcileMeteora(
+  positions: ScanPosition[],
+  meteoraByPool: MeteoraPoolPosition[],
+): ScanPosition[] {
+  if (!meteoraByPool.length) return positions;
+  const mine = positions.filter((p) => p.platform === 'meteora');
+  if (!mine.length) return positions;
+
+  return mine.length >= meteoraByPool.length
+    ? labelMeteora(positions, mine, meteoraByPool)
+    : splitMeteoraByPool(positions, mine, meteoraByPool);
+}
+
+/** The pool whose value is nearest this position's, taken out of the running */
+function claimNearest(
+  valueUsd: number,
+  pools: MeteoraPoolPosition[],
+): MeteoraPoolPosition | undefined {
+  let best = -1;
+  for (let i = 0; i < pools.length; i++) {
+    if (best < 0 || Math.abs(pools[i].valueUsd - valueUsd) < Math.abs(pools[best].valueUsd - valueUsd)) {
+      best = i;
+    }
+  }
+  return best < 0 ? undefined : pools.splice(best, 1)[0];
+}
+
+/**
+ * Jupiter already answered per pool: keep every leg it gave — the amounts and
+ * the accrued fees are real and ours are not — and take from Meteora only what
+ * Jupiter does not have, which is which pair this is and whether it is in range.
+ */
+function labelMeteora(
+  positions: ScanPosition[],
+  mine: ScanPosition[],
+  meteoraByPool: MeteoraPoolPosition[],
+): ScanPosition[] {
+  const unclaimed = [...meteoraByPool];
+  const labelled = new Map<ScanPosition, ScanPosition>();
+  // Biggest first, so the clearest match is made while every pool is still free
+  for (const position of [...mine].sort((a, b) => b.valueUsd - a.valueUsd)) {
+    const pool = claimNearest(position.valueUsd, unclaimed);
+    if (!pool) continue;
+    labelled.set(position, {
+      ...position,
+      note: pool.pairLabel,
+      range: pool.inRange ? 'in' : 'out',
+    });
+  }
+  return positions.map((p) => labelled.get(p) ?? p);
+}
+
+/**
+ * Jupiter returned fewer positions than the wallet has pools, so it merged
+ * them. Share its figures out across the pools — its total stays the authority,
+ * divided by each pool's balance, so the portfolio total does not move.
+ *
+ * The reward legs come with it. They are what Jupiter knows and Meteora does
+ * not: the tokens the fees accrued in. Which pool they belong to is Meteora's
+ * to say, so they are apportioned by its per-pool fee split. Where Jupiter
+ * named no reward legs at all, Meteora's own figure stands in, labelled with
+ * the pair — taken out of the principal rather than added on top, so a stand-in
+ * can never inflate what somebody is told they hold.
+ */
+function splitMeteoraByPool(
+  positions: ScanPosition[],
+  merged: ScanPosition[],
+  meteoraByPool: MeteoraPoolPosition[],
+): ScanPosition[] {
+  const mergedValue = merged.reduce((sum, p) => sum + p.valueUsd, 0);
+  const mergedRewards = merged.flatMap((p) => (p.tokens ?? []).filter((t) => t.role === 'reward'));
+  const poolTotal = meteoraByPool.reduce((sum, p) => sum + p.valueUsd, 0) || 1;
+  const feeTotal = meteoraByPool.reduce((sum, p) => sum + p.feesUsd, 0);
+
+  const out = positions.filter((p) => p.platform !== 'meteora');
+  for (const pool of meteoraByPool) {
+    const valueShare = pool.valueUsd / poolTotal;
+    const valueUsd = mergedValue > 0 ? mergedValue * valueShare : pool.valueUsd;
+    const rewardShare = feeTotal > 0 ? pool.feesUsd / feeTotal : valueShare;
+    const rewards = mergedRewards.length
+      ? mergedRewards
+          .map((t) => ({
+            ...t,
+            amount: t.amount == null ? null : t.amount * rewardShare,
+            valueUsd: t.valueUsd * rewardShare,
+          }))
+          .filter((t) => t.valueUsd > 0.005)
+      : pool.feesUsd > 0.005
+        ? [
+            {
+              symbol: pool.pairLabel,
+              amount: null,
+              priceUsd: null,
+              valueUsd: pool.feesUsd,
+              role: 'reward' as const,
+            },
+          ]
+        : [];
+    // The legs of a position add up to the position, here as everywhere else:
+    // what is accrued is part of what it is worth, not something on top of it
+    const accrued = rewards.reduce((sum, t) => sum + t.valueUsd, 0);
+    const principal = Math.max(valueUsd - accrued, 0);
+    out.push({
+      symbol: 'Meteora',
+      name: 'Liquidity Pool',
+      note: pool.pairLabel,
+      valueUsd,
+      platform: 'meteora',
+      category: 'defi',
+      range: pool.inRange ? 'in' : 'out',
+      // Jupiter's own per-leg split is gone once it merges them, so these halves
+      // are nominal — enrich re-attaches the real band from Meteora.
+      tokens: [
+        { symbol: pool.tokenX, amount: null, priceUsd: null, valueUsd: principal / 2, role: 'supply' as const },
+        { symbol: pool.tokenY, amount: null, priceUsd: null, valueUsd: principal / 2, role: 'supply' as const },
+        ...rewards,
+      ],
+    });
+  }
+  return out;
 }
