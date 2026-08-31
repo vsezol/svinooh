@@ -24,10 +24,17 @@ export interface Remembered {
  * `WalletAlertState` is keyed by position, and a Tron wallet's resources are not
  * a position — but they are exactly the same kind of thing to remember: what was
  * true last time, so a change can be told from a state that simply persists. A
- * reserved key rather than a second table, and one that cannot collide with a
- * real position key (those are built from a platform and a symbol).
+ * reserved key rather than a second table.
+ *
+ * It cannot collide with a real position key STRUCTURALLY: positionKey() joins
+ * four parts with ':', so every real key carries at least three colons, and
+ * this one carries none. The first attempt made it un-collidable with a leading
+ * NUL escape instead - which Postgres text refuses outright (22021), so the row
+ * was never written, and because the states go in one transaction per wallet,
+ * every Tron-holding wallet lost ALL of its alert state, every scan, forever.
+ * Nothing to migrate: the old key never survived long enough to exist.
  */
-export const TRON_STATE_KEY = '\u0000tron:resources';
+export const TRON_STATE_KEY = 'tron-resources';
 
 export interface Decision {
   items: AlertItem[];
