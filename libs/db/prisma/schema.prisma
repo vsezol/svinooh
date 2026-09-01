@@ -305,6 +305,11 @@ model Position {
   borrowApy  Float?
   // Concentrated liquidity only: "in" | "out" of the position's price range
   range      String?
+  /// The band that `range` is a verdict on — a PositionBand: lower, upper and
+  /// current price, the pair and which way round the prices read. One JSON
+  /// value rather than five columns, because nothing queries by it: it is drawn
+  /// and it is compared against itself.
+  band       Json?
   // The underlying legs — PositionTokenDto[]: what's supplied, accrued, borrowed
   tokens     Json?
 }

@@ -84,6 +84,13 @@ export interface PositionDto {
    * unknown.
    */
   range?: PositionRange | null;
+  /**
+   * The band itself, where the protocol answered for it — see PositionBand.
+   * `range` says whether the price is inside it; this says WHERE inside, which
+   * is the difference between comfortable and one bad hour from earning
+   * nothing.
+   */
+  band?: PositionBand | null;
   /** Underlying legs: what's supplied, what's accrued, what's borrowed */
   tokens?: PositionTokenDto[] | null;
 }

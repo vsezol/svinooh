@@ -1,4 +1,4 @@
-import type { PositionDto, PositionRange, PositionTokenRole, WalletDto } from '@svinooh/shared';
+import type { PositionBand, PositionDto, PositionRange, PositionTokenRole, WalletDto } from '@svinooh/shared';
 
 /**
  * One line of a position's table.
@@ -61,6 +61,8 @@ export interface Block {
   borrowApy: number | null;
   /** Concentrated liquidity only: is the price still inside the range */
   range: PositionRange | null;
+  /** Where inside that range the price is — drawn as a bar under the header */
+  band: PositionBand | null;
   /** How many identical positions were folded into this block (1 — just the one) */
   count: number;
   sections: BlockSection[];
@@ -177,6 +179,9 @@ function foldDuplicates(blocks: RawBlock[]): RawBlock[] {
         existing.healthRate == null ? block.healthRate : Math.min(existing.healthRate, block.healthRate);
     }
     if (existing.range !== block.range) existing.range = null;
+    // Two positions folded together are one card, and one card cannot show two
+    // bands — the one it kept would be a claim about the other as well
+    if (existing.band && block.band && existing.band.lower !== block.band.lower) existing.band = null;
   }
   return [...folded.values()].map(({ weightedApy, weightedBorrowApy, ...block }) => ({
     ...block,
@@ -306,6 +311,7 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
       healthRate: p.healthRate ?? null,
       borrowApy: p.borrowApy ?? null,
       range: p.range ?? null,
+      band: p.band ?? null,
       count: 1,
       rows: rows.length ? rows : selfRow,
     });
@@ -326,6 +332,7 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
       healthRate: null,
       borrowApy: null,
       range: null,
+      band: null,
       count: 1,
       rows: walletRows,
     });

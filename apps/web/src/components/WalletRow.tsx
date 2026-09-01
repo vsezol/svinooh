@@ -4,6 +4,7 @@ import type { PositionTokenRole, WalletDto } from '@svinooh/shared';
 import { blockMatches, buildBlocks, type BlockSection, type PositionFilter } from '../lib/blocks';
 import { chainMeta, fmtAmount, fmtPrice, fmtUsd, shortAddress, walletName } from '../lib/format';
 import { badgedText, ChainBadge } from './ChainBadge';
+import { RangeBar } from './RangeBar';
 import { WalletMenu } from './WalletMenu';
 import { TronResources } from './TronResources';
 
@@ -300,6 +301,9 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
                   {fmtUsd(b.value)}
                 </span>
               </div>
+              {/* Where the price sits between the bounds — the part "IN RANGE"
+                  cannot say. Only where the protocol answered for the band. */}
+              {b.band ? <RangeBar band={b.band} inRange={b.range !== 'out'} /> : null}
               {b.sections.map((s, si) => (
                 <div
                   key={si}
