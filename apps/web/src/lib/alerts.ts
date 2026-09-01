@@ -99,8 +99,17 @@ export function armedCount(
   return n;
 }
 
-/** What the box holds → what the contract carries. Blank means nobody is watching. */
+/**
+ * What the box holds → what the contract carries. Blank means nobody is watching.
+ *
+ * Rounded to hundredths, because that is the precision these thresholds are
+ * argued about in: a borrow rate sits at 8.05% and a health factor at 2.35, and
+ * the difference between 8.05 and 8.1 is a real one to somebody deciding when
+ * to be woken up. Further than that is noise — a threshold of 8.125% is not a
+ * decision anybody made, it is a typo nobody would notice.
+ */
 export function parseThreshold(raw: string): number | null {
   const value = Number(raw);
-  return raw.trim() === '' || !Number.isFinite(value) || value <= 0 ? null : value;
+  if (raw.trim() === '' || !Number.isFinite(value) || value <= 0) return null;
+  return Math.round(value * 100) / 100;
 }

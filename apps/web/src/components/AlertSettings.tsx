@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { WalletDto } from '@svinooh/shared';
 import { blockMatches, buildBlocks } from '../lib/blocks';
@@ -95,10 +95,22 @@ function Threshold({
   // over a draft nobody is holding
   useEffect(() => setDraft(asText), [asText]);
 
-  const commit = () => {
-    const parsed = parseThreshold(draft);
+  /**
+   * The last value actually sent. Enter commits and then blurs, and the blur
+   * commits again before the parent's state has come back round — without this
+   * every value confirmed with Enter was saved twice.
+   */
+  const sent = useRef(value);
+  useEffect(() => {
+    sent.current = value;
+  }, [value]);
+
+  const commit = (raw: string = draft) => {
+    const parsed = parseThreshold(raw);
     setDraft(parsed === null ? '' : String(parsed));
-    if (parsed !== value) onCommit(parsed);
+    if (parsed === sent.current) return;
+    sent.current = parsed;
+    onCommit(parsed);
   };
 
   return (
@@ -106,10 +118,25 @@ function Threshold({
       <input
         className="mono field-flat"
         value={draft}
-        onChange={(e) => setDraft(e.target.value.replace(/[^0-9.]/g, ''))}
-        onBlur={commit}
+        // Digits and ONE point: "8.0.5" is not a number, and Number() turns it
+        // into NaN, which cleared the field on somebody who was only mistyping
+        onChange={(e) => setDraft(e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))}
+        onBlur={() => commit()}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur();
+          // Enter saves, and does so ITSELF. It used to only call blur() and
+          // leave the saving to the blur handler — which meant a value typed and
+          // confirmed with Enter could sit on screen, looking committed, having
+          // never been sent anywhere.
+          if (e.key === 'Enter') {
+            commit(e.currentTarget.value);
+            e.currentTarget.blur();
+          }
+          // Escape puts back what was there, rather than committing a half-typed
+          // number nobody meant
+          if (e.key === 'Escape') {
+            setDraft(asText);
+            e.currentTarget.blur();
+          }
         }}
         inputMode="decimal"
         spellCheck={false}
