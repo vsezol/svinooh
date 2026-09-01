@@ -145,6 +145,12 @@ const shortMint = (mint: string): string => `${mint.slice(0, 4)}…${mint.slice(
  * The supply side needs no such correction: there the sign is already positive,
  * so Jupiter's apy is the number everyone else quotes.
  */
+function borrowCostOf(rate: JupYield | undefined): number | null {
+  if (typeof rate?.apr === 'number') return Math.expm1(Math.abs(rate.apr));
+  if (typeof rate?.apy === 'number') return Math.abs(rate.apy);
+  return null;
+}
+
 function borrowApyOf(element: JupElement): number | null {
   const borrowed = element.data?.borrowedAssets || [];
   const yields = element.data?.borrowedYields || [];
@@ -152,15 +158,7 @@ function borrowApyOf(element: JupElement): number | null {
   let total = 0;
   for (let i = 0; i < borrowed.length; i++) {
     const usd = Math.abs(borrowed[i]?.value ?? 0);
-    const rate = yields[i]?.[0];
-    // apr is the one worth compounding; apy is a fallback for a source that
-    // only reports the one, and is at least the right order of magnitude
-    const cost =
-      typeof rate?.apr === 'number'
-        ? Math.expm1(Math.abs(rate.apr))
-        : typeof rate?.apy === 'number'
-          ? Math.abs(rate.apy)
-          : null;
+    const cost = borrowCostOf(yields[i]?.[0]);
     if (!usd || cost === null) continue;
     weighted += cost * usd;
     total += usd;
@@ -280,7 +278,9 @@ export async function scanSol(address: string): Promise<ScanResult> {
   const elementTokens = (element: JupElement): ScanPositionToken[] => {
     const legs: ScanPositionToken[] = [];
     for (const { key, role } of ASSET_BUCKETS) {
-      for (const asset of element.data?.[key] || []) {
+      const bucket = element.data?.[key] || [];
+      for (let i = 0; i < bucket.length; i++) {
+        const asset = bucket[i];
         const d = asset?.data;
         if (!d?.address) continue;
         const usd = typeof asset.value === 'number' ? asset.value : 0;
@@ -291,6 +291,13 @@ export async function scanSol(address: string): Promise<ScanResult> {
           priceUsd: typeof d.price === 'number' ? d.price : null,
           valueUsd: role === 'borrow' ? -usd : usd,
           role,
+          // What THIS debt costs. `borrowedYields` runs parallel to
+          // `borrowedAssets`, so a wallet borrowing two assets at two rates
+          // says so on each line instead of averaging them into one figure
+          // that is true of neither.
+          ...(role === 'borrow'
+            ? { apy: borrowCostOf(element.data?.borrowedYields?.[i]?.[0]) ?? undefined }
+            : {}),
         });
       }
     }
