@@ -128,10 +128,22 @@ const shortMint = (mint: string): string => `${mint.slice(0, 4)}…${mint.slice(
 /**
  * What the debt on a lending position costs, weighted by how much of it is
  * borrowed in each asset. `borrowedYields` runs parallel to `borrowedAssets`,
- * and the first entry of each is the borrow rate itself — negative, because to
- * the borrower it is a cost. We return it positive: "you pay this much".
- * Later entries are incentives paid back to the borrower, so they are ignored
- * here; netApy on the element already accounts for them.
+ * and the first entry of each is the borrow rate itself. Later entries are
+ * incentives paid back to the borrower, so they are ignored here; netApy on the
+ * element already accounts for them.
+ *
+ * Compounded off `apr`, not read off `apy`, and that is the whole point.
+ * Jupiter derives apy as `e^apr - 1` and applies it to the borrow rate with its
+ * sign still negative — so where apr is -7.80%, apy comes back as -7.51%, and
+ * taking the magnitude of that UNDERSTATES the cost. Compounding shrinks a
+ * negative number and grows a positive one; what a borrower owes grows.
+ *
+ * The same market reads 8.11% here, on Kamino's own page, and in every other
+ * tracker: e^0.0780 - 1. At 7.51% an alert set at 8% never fires on a loan that
+ * has been over 8% all day — which is exactly how this was found.
+ *
+ * The supply side needs no such correction: there the sign is already positive,
+ * so Jupiter's apy is the number everyone else quotes.
  */
 function borrowApyOf(element: JupElement): number | null {
   const borrowed = element.data?.borrowedAssets || [];
@@ -140,9 +152,17 @@ function borrowApyOf(element: JupElement): number | null {
   let total = 0;
   for (let i = 0; i < borrowed.length; i++) {
     const usd = Math.abs(borrowed[i]?.value ?? 0);
-    const apy = yields[i]?.[0]?.apy;
-    if (!usd || typeof apy !== 'number') continue;
-    weighted += Math.abs(apy) * usd;
+    const rate = yields[i]?.[0];
+    // apr is the one worth compounding; apy is a fallback for a source that
+    // only reports the one, and is at least the right order of magnitude
+    const cost =
+      typeof rate?.apr === 'number'
+        ? Math.expm1(Math.abs(rate.apr))
+        : typeof rate?.apy === 'number'
+          ? Math.abs(rate.apy)
+          : null;
+    if (!usd || cost === null) continue;
+    weighted += cost * usd;
     total += usd;
   }
   return total > 0 ? weighted / total : null;
