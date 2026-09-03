@@ -14,7 +14,7 @@ export interface SettingGroup {
  */
 const NAMED = [
   { key: 'source', label: 'Where balances come from' },
-  { key: 'sync', label: 'How often wallets are read' },
+  { key: 'sync', label: 'How often wallet data is refreshed' },
 ];
 
 export function groupSettings(specs: SettingDto[]): SettingGroup[] {

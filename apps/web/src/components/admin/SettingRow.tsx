@@ -3,6 +3,29 @@
 import type { SettingDto } from '@svinooh/shared';
 import { ChoiceField, InfoMark, NumberField } from './fields';
 
+/**
+ * The same number said the way a person would say it, or null when the raw
+ * figure is already the readable one.
+ *
+ * The registry keeps minutes and milliseconds because that is what the services
+ * read, and 1440 is not a number anybody parses as a day at a glance. Only
+ * whole multiples get a hint: "1.5 s" helps, "0.4166 h" does not.
+ */
+function plainer(raw: string, unit?: string): string | null {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (unit === 'min') {
+    if (n % 1440 === 0) return `${n / 1440} d`;
+    if (n % 60 === 0) return `${n / 60} h`;
+    return null;
+  }
+  if (unit === 'ms' && n >= 1000) {
+    const seconds = n / 1000;
+    return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)} s`;
+  }
+  return null;
+}
+
 export interface SettingRowProps {
   spec: SettingDto;
   value: string;
@@ -41,7 +64,12 @@ export function SettingRow({ spec, value, onChange }: SettingRowProps) {
       {spec.kind === 'choice' ? (
         <ChoiceField value={value} options={spec.options ?? []} onChange={onChange} />
       ) : (
-        <NumberField value={value} min={spec.min} max={spec.max} onChange={onChange} />
+        <>
+          <span className="mono" style={{ fontSize: 11, color: 'var(--mut)' }}>
+            {plainer(value, spec.unit)}
+          </span>
+          <NumberField value={value} min={spec.min} max={spec.max} onChange={onChange} />
+        </>
       )}
     </div>
   );
