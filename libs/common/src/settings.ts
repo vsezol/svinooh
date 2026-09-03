@@ -191,6 +191,16 @@ for (const [key, handled] of Object.entries(CHOICES)) {
   }
 }
 
+// A rule naming a knob nobody declares does nothing, quietly — which is how
+// all of them stopped working once when their keys were renamed. It refuses to
+// load instead.
+for (const rule of REGISTRY.rules) {
+  const unknown = [rule.left, ...rule.right].filter((key) => !SPECS.has(key));
+  if (unknown.length) {
+    throw new Error(`rule "${rule.id}" names settings that do not exist: ${unknown.join(', ')}`);
+  }
+}
+
 const missing = KEYS.filter((key) => !SPECS.has(key));
 if (missing.length) {
   throw new Error(
@@ -236,4 +246,86 @@ export function settingsSnapshot(): Record<string, number | string> {
   const out: Record<string, number | string> = {};
   for (const spec of REGISTRY.settings) out[spec.key] = current(spec.key);
   return out;
+}
+
+/**
+ * What every knob is worth, given the rows somebody has actually stored.
+ *
+ * The resolution order the services use — a stored row, then the environment,
+ * then the declared default — applied to rows handed in rather than to the
+ * polling cache, so the owner of the table sees its own writes immediately.
+ */
+export function effectiveSettings(rows: SettingRow[]): Record<string, number | string> {
+  const stored = new Map(rows.map((row) => [row.key, row.value]));
+  const out: Record<string, number | string> = {};
+  for (const spec of REGISTRY.settings) {
+    const fromRow = stored.has(spec.key) ? accept(spec, stored.get(spec.key)) : null;
+    out[spec.key] = fromRow ?? accept(spec, process.env[spec.env]) ?? spec.default;
+  }
+  return out;
+}
+
+/**
+ * Every reason a proposed set of values cannot be saved, or an empty list.
+ *
+ * Two kinds of check, and the second is the one an environment variable could
+ * never do: a knob against its own bounds, and knobs against each other. A
+ * lease that expires before the scan it is leasing has finished is a valid
+ * integer and a broken system.
+ *
+ * Ported from the Python admin this replaced, unchanged in behaviour — a rule
+ * whose left side is a choice is skipped, because there is nothing to weigh.
+ */
+export function validateSettings(
+  values: Record<string, number | string>,
+  /**
+   * What every knob is worth right now, from whoever owns the table.
+   *
+   * Passed in rather than read from the polling cache: the caller has just
+   * written to that table and the cache is up to fifteen seconds behind, so
+   * reading it here would weigh a rule against values that are already stale —
+   * and, worse, show somebody their own change had not taken.
+   */
+  effective: Record<string, number | string>,
+): string[] {
+  const problems: string[] = [];
+
+  for (const [key, value] of Object.entries(values)) {
+    const spec = SPECS.get(key);
+    if (!spec) {
+      problems.push(`${key}: not a setting`);
+      continue;
+    }
+    if (spec.type === 'enum') {
+      if (!spec.options?.includes(String(value))) {
+        problems.push(`${spec.label}: "${value}" is not one of ${spec.options?.join(', ')}`);
+      }
+      continue;
+    }
+    const n = Number(value);
+    if (!Number.isFinite(n)) {
+      problems.push(`${spec.label}: "${value}" is not a number`);
+    } else if (n < (spec.min ?? -Infinity) || n > (spec.max ?? Infinity)) {
+      const unit = spec.unit ? ` ${spec.unit}` : '';
+      problems.push(`${spec.label}: ${n}${unit} is outside ${spec.min}–${spec.max}${unit}`);
+    }
+  }
+  if (problems.length) return problems;
+
+  // Whatever is not being changed keeps the value it has, so a rule weighs the
+  // system as it would actually be rather than as the form was filled in
+  const proposed = (key: string): number => {
+    const raw = values[key] ?? effective[key];
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  for (const rule of REGISTRY.rules) {
+    const left = SPECS.get(rule.left);
+    if (!left || left.type === 'enum') continue;
+    const lhs = proposed(rule.left) * rule.leftScale;
+    const rhs = rule.right.reduce((sum, key) => sum + (SPECS.has(key) ? proposed(key) : 0), 0);
+    if (lhs < rhs) problems.push(rule.about);
+  }
+  return problems;
 }

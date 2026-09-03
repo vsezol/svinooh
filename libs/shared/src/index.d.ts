@@ -221,6 +221,43 @@ export interface MeDto {
   username?: string | null;
   photoUrl?: string | null;
   portfolioSlug: string;
+  /**
+   * Whether this person may see the admin tab.
+   *
+   * The flag decides what the browser RENDERS, and nothing more — every admin
+   * route checks the database again for itself. A client that lies about this
+   * gets a tab full of controls whose every request comes back 404.
+   */
+  isAdmin: boolean;
+}
+
+/** One tunable, as the admin panel shows it */
+export interface SettingDto {
+  key: string;
+  label: string;
+  about: string;
+  group: string;
+  /** `int` — a number between min and max; `enum` — one of `options` */
+  type: 'int' | 'enum';
+  unit?: string | null;
+  value: number | string;
+  default: number | string;
+  min?: number | null;
+  max?: number | null;
+  options?: string[] | null;
+  /** False — whoever reads this knob picks the change up on its next deploy */
+  live: boolean;
+  /** Which services read it, for when a change seems to do nothing */
+  readBy: string[];
+}
+
+export interface SettingsDto {
+  settings: SettingDto[];
+}
+
+/** What to change. Keys left out are left alone. */
+export interface UpdateSettingsDto {
+  values: Record<string, number | string>;
 }
 
 export interface AuthResponseDto {

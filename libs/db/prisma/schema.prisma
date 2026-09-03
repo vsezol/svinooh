@@ -19,6 +19,9 @@ model User {
   lastName   String?
   username   String?
   photoUrl   String?
+  /// May read and change the system's tunables. Set in the database and nowhere
+  /// else: there is no way to grant it from the product, which is the point.
+  isAdmin    Boolean          @default(false)
   createdAt  DateTime         @default(now())
   owned      PortfolioOwner[]
   loginLinks LoginLink[]

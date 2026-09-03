@@ -160,6 +160,9 @@ export class AuthService {
       username: user.username,
       photoUrl: user.photoUrl,
       portfolioSlug,
+      // Decides whether the browser draws the tab, and nothing else — every
+      // admin route asks the database again for itself
+      isAdmin: user.isAdmin,
     };
   }
 }

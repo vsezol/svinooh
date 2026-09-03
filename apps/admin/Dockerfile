@@ -1,31 +1,39 @@
 # Build context is the monorepo ROOT (Railway: dockerfilePath is set in
 # apps/admin/railway.json, leave Root Directory as "/").
 
-FROM python:3.13-slim
-ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
-
+FROM node:22-slim AS build
 WORKDIR /app
 
-COPY apps/admin/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY package.json package-lock.json nx.json tsconfig.base.json ./
+COPY apps/admin/package.json apps/admin/
+COPY libs/shared/package.json libs/shared/
+COPY libs/db/package.json libs/db/
+COPY libs/common/package.json libs/common/
+RUN npm ci -w apps/admin -w @svinooh/db -w @svinooh/common --no-audit --no-fund
 
-COPY apps/admin/app app
-# The tunables, from the same file the Node services read. Copied rather than
-# duplicated: a knob declared once has to reach both stacks as the same bytes,
-# or the admin ends up offering a bound the services do not enforce.
-COPY libs/common/settings/registry.json ./registry.json
+COPY libs/shared libs/shared
+COPY libs/db libs/db
+COPY libs/common libs/common
+COPY apps/admin apps/admin
+# Build shared libs (db: prisma generate + tsc; common: tsc), then the service
+RUN npm run -w @svinooh/db build \
+  && npm run -w @svinooh/common build \
+  && npm run -w apps/admin build
+
+FROM node:22-slim
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=build /app/node_modules node_modules
+COPY --from=build /app/package.json ./
+COPY --from=build /app/libs libs
+COPY --from=build /app/apps/admin/package.json apps/admin/
+COPY --from=build /app/apps/admin/dist apps/admin/dist
 
 EXPOSE 3000
-# --forwarded-allow-ips is what makes the panel render.
-#
-# Railway terminates TLS at its edge and forwards plain HTTP to the container,
-# so uvicorn sees an http:// request and builds every absolute URL — including
-# the stylesheet links SQLAdmin generates — with that scheme. A page served over
-# https then asks for http:// assets, the browser refuses them, and the panel
-# arrives as a column of blue links.
-#
-# X-Forwarded-Proto carries the truth, but uvicorn only believes it from
-# 127.0.0.1 by default, and Railway's proxy is not localhost. "*" is the right
-# answer here rather than a lax one: the container has no route to it except
-# through that proxy.
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-3000} --proxy-headers --forwarded-allow-ips='*'"]
+# `-r @svinooh/common/dist/tracing` starts OpenTelemetry BEFORE the app: the
+# instrumentation patches modules as they are required, so anything already
+# loaded would never be traced. With OTEL_EXPORTER_OTLP_ENDPOINT unset it is a
+# no-op.
+CMD ["node", "-r", "@svinooh/common/dist/tracing", "apps/admin/dist/main.js"]
+
+# build trigger

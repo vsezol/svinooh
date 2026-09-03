@@ -30,6 +30,13 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-me',
   // Internal URL of the auth service — the gateway forwards /auth/* to it.
   authServiceUrl: (process.env.AUTH_SERVICE_URL || 'http://localhost:3001').replace(/\/+$/, ''),
+  adminServiceUrl: (process.env.ADMIN_SERVICE_URL || 'http://localhost:3005').replace(/\/+$/, ''),
+  /**
+   * Shared with the admin service, and the reason a request that did not come
+   * through this gateway gets nowhere. Unset, the admin routes answer NotFound
+   * — the same as they do for everybody who is not an admin.
+   */
+  internalSecret: process.env.INTERNAL_SECRET ?? '',
   // Internal URL of the wallet service — scan-on-add is delegated to it.
   walletServiceUrl: (process.env.WALLET_SERVICE_URL || 'http://localhost:3002').replace(/\/+$/, ''),
   // How often the wallet service rescans a wallet that's in use. Used for the
