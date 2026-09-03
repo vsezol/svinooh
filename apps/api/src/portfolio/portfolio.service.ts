@@ -16,6 +16,7 @@ import type {
   PortfolioDto,
   PortfolioOwnerDto,
   PortfolioVisibility,
+  PositionBand,
   PositionCategory,
   PositionRange,
   PositionTokenDto,
@@ -1103,6 +1104,7 @@ export class PortfolioService {
         healthRate: p.healthRate,
         borrowApy: p.borrowApy,
         range: (p.range as PositionRange | null) ?? null,
+        band: (p.band as PositionBand | null) ?? null,
         // Written by the wallet service as PositionTokenDto[]; Prisma types it as
         // opaque JSON, so this is the one place the shape is asserted
         tokens: (p.tokens as PositionTokenDto[] | null) ?? null,

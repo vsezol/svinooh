@@ -143,6 +143,8 @@ export class SyncService {
           healthRate: p.healthRate ?? null,
           borrowApy: p.borrowApy ?? null,
           range: p.range ?? null,
+          // Prisma types JSON structurally; the band is handed over opaque
+          band: p.band ? (p.band as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
           // Prisma types JSON columns structurally; our leg array has to be
           // handed over as an opaque JSON value
           tokens: p.tokens?.length ? (p.tokens as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
