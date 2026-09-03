@@ -12,14 +12,18 @@ import type { Tab } from './SideNav';
  * many pages the pager has — so leaving it out is the whole of hiding it here,
  * and there is no way for the phone to reach a page the rail does not offer.
  */
-export const TABS: Array<{ key: Tab; label: string }> = [
+export const tabsFor = (isAdmin: boolean): Array<{ key: Tab; label: string }> => [
   { key: 'portfolio', label: 'Portfolio' },
   { key: 'notifications', label: 'Alerts' },
   ...(AGENT_ENABLED ? ([{ key: 'agent', label: 'AI agent' }] as const) : []),
+  // Admin comes last and only for an admin, so everybody else's strip is
+  // exactly what it was and there is no page for a phone to swipe to
+  ...(isAdmin ? ([{ key: 'admin', label: 'Admin' }] as const) : []),
 ];
 
 /** Where a tab sits on the strip. The rail and the pager both count from here. */
-export const tabIndex = (tab: Tab): number => Math.max(0, TABS.findIndex((t) => t.key === tab));
+export const tabIndex = (tab: Tab, isAdmin: boolean): number =>
+  Math.max(0, tabsFor(isAdmin).findIndex((t) => t.key === tab));
 
 /** How far a finger has to carry the page before letting go turns it over */
 const SWIPE_COMMIT = 70;
@@ -58,13 +62,22 @@ const tabStyle = (active: boolean): CSSProperties => ({
  * server rendering one of them blind and the browser correcting it, which is a
  * flash of the wrong navigation on every load.
  */
-export function MobileTabs({ tab, onTab }: { tab: Tab; onTab: (tab: Tab) => void }) {
-  const index = tabIndex(tab);
+export function MobileTabs({
+  tab,
+  onTab,
+  isAdmin,
+}: {
+  tab: Tab;
+  onTab: (tab: Tab) => void;
+  isAdmin: boolean;
+}) {
+  const tabs = tabsFor(isAdmin);
+  const index = tabIndex(tab, isAdmin);
 
   return (
     <div className="top-tabs">
       <div className="shell" style={{ position: 'relative', display: 'flex' }}>
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <div key={t.key} onClick={() => onTab(t.key)} style={tabStyle(t.key === tab)}>
             {t.label}
           </div>
@@ -77,7 +90,7 @@ export function MobileTabs({ tab, onTab }: { tab: Tab; onTab: (tab: Tab) => void
             position: 'absolute',
             bottom: 0,
             left: 0,
-            width: `${100 / TABS.length}%`,
+            width: `${100 / tabs.length}%`,
             height: 3,
             borderRadius: '3px 3px 0 0',
             background: 'var(--acc)',

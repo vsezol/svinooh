@@ -510,6 +510,7 @@ body[data-theme='light'] .on-dark {
   flex-shrink: 0;
 }
 .infotip:hover,
+.infotip:focus,
 .infotip:focus-visible {
   color: var(--text);
   border-color: var(--mut);
@@ -541,6 +542,7 @@ body[data-theme='light'] .on-dark {
   pointer-events: none;
 }
 .infotip:hover .infotip-pop,
+.infotip:focus .infotip-pop,
 .infotip:focus-visible .infotip-pop {
   opacity: 1;
   visibility: visible;
@@ -553,9 +555,29 @@ body[data-theme='light'] .on-dark {
     transform: translateX(-30%) translateY(-4px);
   }
   .infotip:hover .infotip-pop,
+  .infotip:focus .infotip-pop,
   .infotip:focus-visible .infotip-pop {
     transform: translateX(-30%) translateY(0);
   }
+}
+
+/* A mark that sits mid-line in a settings row, where centring the popover on
+   the mark runs it off a narrow screen. The row is the anchor instead — the
+   popover spans it and cannot be clipped at any width. Must come after the
+   media query above, which it overrides. */
+.infotip-row {
+  position: static;
+}
+.infotip-row .infotip-pop {
+  left: 0;
+  right: 0;
+  width: auto;
+  transform: translateY(-4px);
+}
+.infotip-row:hover .infotip-pop,
+.infotip-row:focus .infotip-pop,
+.infotip-row:focus-visible .infotip-pop {
+  transform: translateY(0);
 }
 
 /* hide on mobile */

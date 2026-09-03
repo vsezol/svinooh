@@ -3,7 +3,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { AGENT_ENABLED } from '../lib/agent';
 
-export type Tab = 'portfolio' | 'notifications' | 'agent';
+export type Tab = 'portfolio' | 'notifications' | 'agent' | 'admin';
 
 const ICON = {
   strokeWidth: 2,
@@ -56,11 +56,24 @@ const navItem = (active: boolean, disabled: boolean, collapsed: boolean): CSSPro
   opacity: disabled ? 0.55 : 1,
 });
 
+function SlidersIcon({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...ICON} style={{ flexShrink: 0 }}>
+      <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" />
+      <circle cx="16" cy="6" r="2" />
+      <circle cx="10" cy="12" r="2" />
+      <circle cx="18" cy="18" r="2" />
+    </svg>
+  );
+}
+
 interface Props {
   tab: Tab;
   onTab: (tab: Tab) => void;
   collapsed: boolean;
   onCollapse: (collapsed: boolean) => void;
+  /** Only an admin is shown the admin rail entry — see MeDto.isAdmin */
+  isAdmin: boolean;
 }
 
 /**
@@ -75,7 +88,7 @@ interface Props {
  * pointed at — and a rail listing somebody else's settings alongside it is a
  * door with nothing behind it.
  */
-export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
+export function SideNav({ tab, onTab, collapsed, onCollapse, isAdmin }: Props) {
   const label = (text: string): ReactNode =>
     collapsed ? null : <span style={{ whiteSpace: 'nowrap' }}>{text}</span>;
 
@@ -136,6 +149,17 @@ export function SideNav({ tab, onTab, collapsed, onCollapse }: Props) {
             </span>
           )}
         </div>
+        {isAdmin ? (
+          <div
+            className="nav-item"
+            onClick={() => onTab('admin')}
+            title="Admin"
+            style={navItem(tab === 'admin', false, collapsed)}
+          >
+            <SlidersIcon size={16} />
+            {label('Admin')}
+          </div>
+        ) : null}
         <div
           className="nav-collapse"
           onClick={() => onCollapse(!collapsed)}

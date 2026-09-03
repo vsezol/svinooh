@@ -39,7 +39,7 @@
 #   TELEGRAM_BOT_TOKEN       shared by api + auth
 #   TELEGRAM_BOT_USERNAME    the bot's @handle (public, but set explicitly)
 #   GRAFANA_ADMIN_PASSWORD   grafana admin login
-#   INTERNAL_SECRET          shared by auth + bot-telegram (must be identical).
+#   INTERNAL_SECRET          shared by auth, bot-telegram, api + admin (identical).
 #                            It guards the one route that mints a signed-in link
 #                            for any Telegram id — auth refuses everything when
 #                            it is unset, so this is not optional.
@@ -71,6 +71,7 @@ LOKI_URL='http://${{loki.RAILWAY_PRIVATE_DOMAIN}}:3100'
 # Tracing (Tempo + OTEL_EXPORTER_OTLP_ENDPOINT) was removed — it idled at
 # ~0.5 GB for traces nobody read. Logs (Loki) and metrics (Prometheus) stay.
 AUTH_URL='http://${{auth.RAILWAY_PRIVATE_DOMAIN}}:3000'
+ADMIN_URL='http://${{admin.RAILWAY_PRIVATE_DOMAIN}}:3000'
 WALLET_URL='http://${{wallet.RAILWAY_PRIVATE_DOMAIN}}:3000'
 API_PUBLIC='https://${{api.RAILWAY_PUBLIC_DOMAIN}}'
 
@@ -114,6 +115,7 @@ setvars api \
   "DATABASE_URL=${PG_URL}" "REDIS_URL=${REDIS_URL}" \
   "JWT_SECRET=${JWT_SECRET}" \
   "AUTH_SERVICE_URL=${AUTH_URL}" "WALLET_SERVICE_URL=${WALLET_URL}" \
+  "ADMIN_SERVICE_URL=${ADMIN_URL}" "INTERNAL_SECRET=${INTERNAL_SECRET}" \
   "WEB_ORIGIN=${PUBLIC_WEB_ORIGIN}" \
   "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" "TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}" \
   "SYNC_INTERVAL_MIN=5" \
@@ -181,26 +183,30 @@ setvars bot-telegram \
   "WEB_URL=${PUBLIC_WEB_ORIGIN}" \
   "RABBITMQ_URL=${RABBIT_URL}"
 
-# admin — the operator's panel (Python/FastAPI). Reads and writes the Setting
-# table and nothing else; Prisma still owns the schema.
+# admin — the tunables, behind the Admin tab in the product.
 #
-# It is NOT public. Give it a Railway domain only if you need it from outside,
-# and give it a real password when you do: it can change how hard the whole
-# system pushes and it sits on a database where a balance and the person holding
-# it are one join apart. ADMIN_PASSWORD_HASH comes from
-# `cd apps/admin && python -m app.hash` — set it by hand, it is not generated
-# here on purpose.
+# NOT public, and it must stay that way: no Railway domain, no ingress. Every
+# route sits under /internal and refuses anything without INTERNAL_SECRET, so
+# the api is the only way in — and the api has already verified the caller's
+# token and looked their isAdmin flag up in the database. Two locks checking two
+# different things.
 #
-# No railway.json: Railway deprecated config-as-code, so this one is configured
-# on the service itself — Dockerfile apps/admin/Dockerfile, healthcheck /health,
-# and watch patterns apps/admin/** and libs/common/settings/** so it only
-# rebuilds when its own files or the registry change.
+# Who is an admin is a column on User, set in the database and nowhere else.
+# Nothing in the product grants it, so there is no flow to get wrong.
+#
+# scanner-evm also takes ZERION_API_KEY when scan.evmSource is set to `zerion`
+# in the panel. It is a secret, so it lives in that service's variables rather
+# than in the registry — that file is public and the panel shows every value in
+# it.
+#
+# If you give this service a watch pattern, it has to cover
+# libs/common/src/settings/** as well as apps/admin/**: the registry is where
+# the knobs are declared, and a knob added there is a knob this service serves.
 add_repo admin
 setvars admin \
   "PORT=3000" \
   "DATABASE_URL=${PG_URL}" \
-  "ADMIN_USER=admin" \
-  "ADMIN_SESSION_SECRET=$(openssl rand -hex 32)"
+  "INTERNAL_SECRET=${INTERNAL_SECRET}"
 
 # web — Next.js. PUBLIC (svinooh.com). Dockerfile apps/web/Dockerfile ; port 4173
 # NEXT_PUBLIC_API_URL is inlined into the browser bundle at BUILD time — a

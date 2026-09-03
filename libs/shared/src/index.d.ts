@@ -228,7 +228,55 @@ export interface MeDto {
   username?: string | null;
   photoUrl?: string | null;
   portfolioSlug: string;
+  /**
+   * Whether this person may see the admin tab.
+   *
+   * The flag decides what the browser RENDERS, and nothing more — every admin
+   * route checks the database again for itself. A client that lies about this
+   * gets a tab full of controls whose every request comes back 404.
+   */
+  isAdmin: boolean;
 }
+
+/**
+ * One tunable, as the admin panel shows it.
+ *
+ * Mirrors SettingView in @svinooh/common — the browser cannot import from a
+ * service library, so the shape is restated here and the compiler checks the
+ * two agree at the point the service returns one.
+ */
+export interface SettingDto {
+  key: string;
+  group: string;
+  label: string;
+  about: string;
+  /** `number` — between min and max; `choice` — one of `options` */
+  kind: 'number' | 'choice';
+  value: number | string;
+  default: number | string;
+  unit?: string;
+  min?: number;
+  max?: number;
+  options?: string[];
+  /** False — whoever reads this knob picks the change up on its next deploy */
+  live: boolean;
+  note?: string;
+  /** Which services read it, for when a change seems to do nothing */
+  readBy: string[];
+}
+
+export interface SettingsDto {
+  settings: SettingDto[];
+}
+
+/**
+ * What to change: the body IS the patch, keys left out are left alone.
+ *
+ * No envelope. A `{ values: … }` wrapper bought nothing and cost a layer of
+ * unwrapping that was, briefly, forgotten — every key then read as "not a
+ * setting" because the parser was looking at the envelope.
+ */
+export type UpdateSettingsDto = Record<string, number | string>;
 
 export interface AuthResponseDto {
   token: string;

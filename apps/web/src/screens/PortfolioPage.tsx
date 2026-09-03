@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import type { HistoryRange, PortfolioDto } from '@svinooh/shared';
 import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AlertSettings } from '../components/AlertSettings';
@@ -13,7 +14,7 @@ import { MetricCards } from '../components/MetricCards';
 import { GoPublicModal, VisibilityCard } from '../components/PortfolioVisibility';
 import { ScopeSelect } from '../components/ScopeSelect';
 import { ShareButton } from '../components/ShareButton';
-import { MobileTabs, TABS, tabIndex, usePager } from '../components/MobileTabs';
+import { MobileTabs, tabsFor, tabIndex, usePager } from '../components/MobileTabs';
 import { AgentChat } from '../components/agent/AgentChat';
 import { SideNav, type Tab } from '../components/SideNav';
 import { SyncedAgo } from '../components/SyncedAgo';
@@ -41,6 +42,24 @@ import {
 import { AGENT_ENABLED } from '../lib/agent';
 import { localAnswerer } from '../lib/agent-local';
 import { PERIODS, WINDOW_MS } from '../lib/ranges';
+
+/**
+ * The admin panel, fetched only when an admin opens its tab.
+ *
+ * `ssr: false` and a dynamic import keep it out of the bundle everybody else
+ * downloads — it is a separate chunk that is never requested unless the tab is
+ * rendered. That is about weight, not secrecy: the chunk is fetchable by anyone
+ * who learns its URL, and what protects the system is that every route behind
+ * it checks the database and answers NotFound to a non-admin.
+ */
+const AdminPanel = dynamic(() => import('../components/admin/AdminPanel'), {
+  ssr: false,
+  loading: () => (
+    <div style={{ padding: '40px 0', textAlign: 'center' }}>
+      <span className="spin" style={{ width: 20, height: 20 }} />
+    </div>
+  ),
+});
 
 /** What the window moved by, in money and in percent: "+$432 (+0.51%)" */
 interface Change {
@@ -241,7 +260,12 @@ export function PortfolioPage({ slug }: { slug: string }) {
 
   // Above the loading states, where the hooks all have to be: the strip only
   // needs which tab is open, which is state rather than anything fetched
-  const pager = usePager(tabIndex(tab), (index) => setTab(TABS[index].key), TABS.length);
+  // `me` is not loaded yet on the first render, so the strip starts without the
+  // admin page and gains it a moment later — which is the same thing that
+  // happens to the whole owner view, and for the same reason
+  const isAdmin = me?.isAdmin === true;
+  const tabs = tabsFor(isAdmin);
+  const pager = usePager(tabIndex(tab, isAdmin), (index) => setTab(tabs[index].key), tabs.length);
 
   /**
    * What the agent is allowed to look at: the portfolio already on screen.
@@ -499,7 +523,7 @@ export function PortfolioPage({ slug }: { slug: string }) {
         </div>
       </div>
 
-      {isOwner ? <MobileTabs tab={tab} onTab={setTab} /> : null}
+      {isOwner ? <MobileTabs tab={tab} onTab={setTab} isAdmin={isAdmin} /> : null}
 
       <div
         className="shell"
@@ -512,7 +536,13 @@ export function PortfolioPage({ slug }: { slug: string }) {
         }}
       >
         {isOwner ? (
-          <SideNav tab={tab} onTab={setTab} collapsed={sideCollapsed} onCollapse={setSideCollapsed} />
+          <SideNav
+            tab={tab}
+            onTab={setTab}
+            collapsed={sideCollapsed}
+            onCollapse={setSideCollapsed}
+            isAdmin={isAdmin}
+          />
         ) : null}
 
         {/* On a phone both pages ride one strip the finger drags between them;
@@ -679,12 +709,18 @@ export function PortfolioPage({ slug }: { slug: string }) {
               </div>
             ) : null}
 
-            {/* One pane per entry in TABS — a page in the strip that the strip
-                does not list is a page nothing can reach and one more thing to
-                keep in step. See AGENT_ENABLED. */}
+            {/* One pane per entry in tabsFor() — a page in the strip that the
+                strip does not list is a page nothing can reach and one more
+                thing to keep in step. See AGENT_ENABLED and isAdmin. */}
             {isOwner && AGENT_ENABLED ? (
               <div className="pane" data-active={activeTab === 'agent'}>
                 <AgentChat answer={answer} />
+              </div>
+            ) : null}
+
+            {isOwner && isAdmin ? (
+              <div className="pane" data-active={activeTab === 'admin'}>
+                {activeTab === 'admin' ? <AdminPanel /> : null}
               </div>
             ) : null}
           </div>
