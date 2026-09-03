@@ -196,12 +196,12 @@ setvars bot-telegram \
 #
 # scanner-evm also takes ZERION_API_KEY when scan.evmSource is set to `zerion`
 # in the panel. It is a secret, so it lives in that service's variables rather
-# than in settings/registry.json — that file is public and the panel shows
-# every value in it.
+# than in the registry — that file is public and the panel shows every value in
+# it.
 #
 # If you give this service a watch pattern, it has to cover
-# libs/common/settings/** as well as apps/admin/**: the registry is where the
-# knobs are declared, and a knob added there is a knob this service serves.
+# libs/common/src/settings/** as well as apps/admin/**: the registry is where
+# the knobs are declared, and a knob added there is a knob this service serves.
 add_repo admin
 setvars admin \
   "PORT=3000" \

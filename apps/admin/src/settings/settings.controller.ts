@@ -1,6 +1,5 @@
 import { Body, Controller, Get, Headers, Put, UseGuards } from '@nestjs/common';
 import type { SettingsDto } from '@svinooh/shared';
-import type { UpdateSettingsDto } from '@svinooh/shared';
 import { InternalGuard } from '../internal.guard';
 import { SettingsService } from './settings.service';
 
@@ -21,10 +20,12 @@ export class SettingsController {
 
   @Put()
   update(
-    @Body() body: UpdateSettingsDto,
+    // The body is the patch itself, unknown until the service has checked it
+    // against the registry — which is what decides what a valid body is
+    @Body() patch: unknown,
     // The api puts the admin's own id here, so a row records who changed it
     @Headers('x-admin-user') who?: string,
   ): Promise<SettingsDto> {
-    return this.settings.update(body, who || 'admin');
+    return this.settings.update(patch, who || 'admin');
   }
 }

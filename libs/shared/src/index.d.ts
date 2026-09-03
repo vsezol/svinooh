@@ -231,22 +231,29 @@ export interface MeDto {
   isAdmin: boolean;
 }
 
-/** One tunable, as the admin panel shows it */
+/**
+ * One tunable, as the admin panel shows it.
+ *
+ * Mirrors SettingView in @svinooh/common — the browser cannot import from a
+ * service library, so the shape is restated here and the compiler checks the
+ * two agree at the point the service returns one.
+ */
 export interface SettingDto {
   key: string;
+  group: string;
   label: string;
   about: string;
-  group: string;
-  /** `int` — a number between min and max; `enum` — one of `options` */
-  type: 'int' | 'enum';
-  unit?: string | null;
+  /** `number` — between min and max; `choice` — one of `options` */
+  kind: 'number' | 'choice';
   value: number | string;
   default: number | string;
-  min?: number | null;
-  max?: number | null;
-  options?: string[] | null;
+  unit?: string;
+  min?: number;
+  max?: number;
+  options?: string[];
   /** False — whoever reads this knob picks the change up on its next deploy */
   live: boolean;
+  note?: string;
   /** Which services read it, for when a change seems to do nothing */
   readBy: string[];
 }
@@ -255,10 +262,14 @@ export interface SettingsDto {
   settings: SettingDto[];
 }
 
-/** What to change. Keys left out are left alone. */
-export interface UpdateSettingsDto {
-  values: Record<string, number | string>;
-}
+/**
+ * What to change: the body IS the patch, keys left out are left alone.
+ *
+ * No envelope. A `{ values: … }` wrapper bought nothing and cost a layer of
+ * unwrapping that was, briefly, forgotten — every key then read as "not a
+ * setting" because the parser was looking at the envelope.
+ */
+export type UpdateSettingsDto = Record<string, number | string>;
 
 export interface AuthResponseDto {
   token: string;
