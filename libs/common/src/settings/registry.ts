@@ -64,9 +64,9 @@ export const REGISTRY = {
   'sync.activeIntervalMin': {
     kind: 'number',
     group: 'sync',
-    label: 'Portfolios in use',
+    label: 'Popular wallet',
     about:
-      'The real pacing knob: the queue only takes addresses that are due, so this — not scan speed — sets the load.',
+      'One somebody still opens: at least one portfolio holding it has been visited recently, however many portfolios hold it. The real pacing knob — the queue only takes addresses that are due, so this, not scan speed, sets the load.',
     unit: 'min',
     default: 5,
     min: 1,
@@ -79,8 +79,9 @@ export const REGISTRY = {
   'sync.staleIntervalMin': {
     kind: 'number',
     group: 'sync',
-    label: 'Portfolios nobody opens',
-    about: 'Anonymous or signed-in makes no difference — only whether somebody has opened it.',
+    label: 'Stale wallet',
+    about:
+      'One nobody opens any more: every portfolio holding it has gone quiet. Anonymous or signed-in makes no difference — only whether somebody visited.',
     unit: 'min',
     default: 30,
     min: 1,
@@ -92,8 +93,9 @@ export const REGISTRY = {
   'sync.staleAfterMin': {
     kind: 'number',
     group: 'sync',
-    label: 'Goes stale after',
-    about: 'How long somebody can be away before their portfolio drops to the slow interval.',
+    label: 'Wallet goes stale after',
+    about:
+      'How long a wallet stays popular after the last visit to any portfolio holding it. This is the line the two intervals above are on either side of.',
     unit: 'min',
     default: 1440,
     min: 1,

@@ -23,6 +23,13 @@ export interface Schedule {
  * data exactly as much as a signed-in one, and a signed-in portfolio nobody has
  * opened in a month earns it exactly as little.
  *
+ * The unit being scheduled is the ADDRESS, not the portfolio. An address can
+ * sit in any number of portfolios, and `holders` is every one of them: one
+ * visitor anywhere makes it active for all of them. A popular address in five
+ * portfolios where only one gets opened is a popular address, and it is scanned
+ * at the fast interval — asking whose visit it was would cost a query to
+ * decide nothing.
+ *
  * That used to be three conditions with an ownership join behind them, and the
  * ownership half was doing no work anybody could describe: it kept scanning at
  * full rate for accounts that had stopped visiting, which is the case that
