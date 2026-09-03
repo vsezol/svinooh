@@ -15,14 +15,15 @@ import { api, ApiError } from '../../lib/api';
  * every route behind these controls checks the database, and answers NotFound
  * to anybody who is not an admin.
  *
- * Three knobs decide the pacing and the rest is machinery, so the pacing is the
- * page and the machinery is behind a fold. Same shape the alert settings use:
- * a title, a line of explanation, and a card per group.
+ * A row is a name and a control. Everything a person needs only when they stop
+ * on a particular knob — what it costs, what it is measured against, why it
+ * sits where it does — is behind the mark beside the name, because a wall of
+ * explanation next to thirteen inputs is a wall nobody reads.
  */
 
 const FIELD: CSSProperties = {
-  width: 104,
-  height: 36,
+  width: 92,
+  height: 34,
   textAlign: 'right',
   background: 'var(--surf2)',
   border: '1px solid var(--line2)',
@@ -33,7 +34,9 @@ const FIELD: CSSProperties = {
   outline: 'none',
 };
 
-const SELECT: CSSProperties = { ...FIELD, width: 132, textAlign: 'left', cursor: 'pointer' };
+const SELECT: CSSProperties = { ...FIELD, width: 124, textAlign: 'left', cursor: 'pointer' };
+
+const EYEBROW: CSSProperties = { fontSize: 10, letterSpacing: '0.16em', color: 'var(--mut)' };
 
 /**
  * The groups worth naming, in the order they are worth reading. Anything the
@@ -46,20 +49,45 @@ const GROUPS: Array<{ key: string; label: string }> = [
   { key: 'sync', label: 'How often wallets are read' },
 ];
 
-function Row({ spec, value, onChange }: { spec: SettingDto; value: number | string; onChange: (v: string) => void }) {
+/**
+ * The site's own info mark: a hover, and focusable so a keyboard can reach it.
+ * `.infotip` and its popover are in styles.css, next to the one the profit
+ * figure uses.
+ */
+function Info({ children, row = false }: { children: React.ReactNode; row?: boolean }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 14 }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 13.5 }}>
-          {spec.label}
-          {spec.unit ? <span style={{ color: 'var(--mut)', fontWeight: 500 }}> · {spec.unit}</span> : null}
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--mut)', marginTop: 3, lineHeight: 1.5 }}>{spec.about}</div>
-        {spec.live ? null : (
-          <div className="mono" style={{ fontSize: 10, letterSpacing: '0.08em', color: 'var(--down)', marginTop: 4 }}>
-            NEEDS A REDEPLOY
-          </div>
-        )}
+    <span className={row ? 'infotip infotip-row' : 'infotip'} tabIndex={0} role="note">
+      i<span className="infotip-pop">{children}</span>
+    </span>
+  );
+}
+
+function Row({
+  spec,
+  value,
+  onChange,
+}: {
+  spec: SettingDto;
+  value: number | string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    // The row is the popover's anchor, so it spans the card instead of running
+    // off the side of a phone — see .infotip-row
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, position: 'relative' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
+        <span style={{ fontWeight: 600, fontSize: 13.5 }}>{spec.label}</span>
+        {spec.unit ? (
+          <span className="mono" style={{ fontSize: 11, color: 'var(--mut)' }}>
+            {spec.unit}
+          </span>
+        ) : null}
+        <Info row>
+          {spec.about}
+          {spec.live ? null : (
+            <div style={{ marginTop: 6, color: 'var(--down)' }}>Takes effect on the next deploy.</div>
+          )}
+        </Info>
       </div>
       {spec.type === 'enum' ? (
         <select style={SELECT} value={String(value)} onChange={(e) => onChange(e.target.value)}>
@@ -156,14 +184,15 @@ export function AdminPanel() {
 
   return (
     <div>
-      <div className="mono" style={{ fontSize: 10.5, letterSpacing: '0.16em', color: 'var(--mut)' }}>
+      <div className="mono" style={{ ...EYEBROW, fontSize: 10.5 }}>
         ADMIN
       </div>
-      <div style={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em', marginTop: 6 }}>Throughput</div>
-      <div style={{ fontSize: 13, color: 'var(--mut)', marginTop: 6, lineHeight: 1.6, maxWidth: 480 }}>
-        How hard the system pushes. A change reaches the running services within fifteen seconds — no
-        redeploy — and a knob left at its default is not stored at all, so this is a list of decisions
-        rather than a copy of the defaults.
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 6 }}>
+        <span style={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em' }}>Throughput</span>
+        <Info>
+          How hard the system pushes. A change is live within fifteen seconds, and a knob left at
+          its default is not stored at all.
+        </Info>
       </div>
 
       {specs === null ? (
@@ -188,25 +217,11 @@ export function AdminPanel() {
               {problem}
             </div>
           ))}
-          {saved && !dirty ? (
-            <div
-              className="card"
-              style={{
-                marginTop: 14,
-                padding: '12px 14px',
-                borderLeft: '2px solid var(--acc)',
-                fontSize: 13,
-                color: 'var(--mut)',
-              }}
-            >
-              Saved. Live within fifteen seconds.
-            </div>
-          ) : null}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 18 }}>
             {groups.map((group) => (
-              <div key={group.key} className="card" style={{ padding: '16px 18px 20px' }}>
-                <div className="mono" style={{ fontSize: 10, letterSpacing: '0.16em', color: 'var(--mut)' }}>
+              <div key={group.key} className="card" style={{ padding: '15px 18px 18px' }}>
+                <div className="mono" style={EYEBROW}>
                   {group.label.toUpperCase()}
                 </div>
                 {group.specs.map((spec) => (
@@ -221,7 +236,7 @@ export function AdminPanel() {
             ))}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
             <button
               className="btn-acc"
               style={{ height: 40, fontSize: 13, padding: '0 20px' }}
@@ -230,11 +245,10 @@ export function AdminPanel() {
             >
               {busy ? <span className="spin" style={{ width: 14, height: 14, borderTopColor: 'var(--acc-ink)' }} /> : 'Save'}
             </button>
-            {dirty ? (
-              <span className="mono" style={{ fontSize: 11, color: 'var(--mut)' }}>
-                {Object.keys(changed).length} changed
-              </span>
-            ) : null}
+            {/* One line, where the eye already is after pressing the button */}
+            <span className="mono" style={{ fontSize: 11, color: 'var(--mut)' }}>
+              {dirty ? `${Object.keys(changed).length} changed` : saved ? 'Saved' : ''}
+            </span>
           </div>
         </>
       )}
