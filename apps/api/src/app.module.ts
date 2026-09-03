@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { AdminProxyModule } from './admin-proxy/admin-proxy.module';
+import { AiProxyModule } from './ai-proxy/ai-proxy.module';
 import { AuthProxyModule } from './auth-proxy/auth-proxy.module';
 import { BillingModule } from './billing/billing.module';
 import { CacheModule } from './cache/cache.module';
@@ -24,6 +25,7 @@ import { PrismaModule } from '@svinooh/db';
       signOptions: { expiresIn: '30d' },
     }),
     AuthProxyModule,
+    AiProxyModule,
     PortfolioModule,
     BillingModule,
     AdminProxyModule,
