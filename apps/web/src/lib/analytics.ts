@@ -26,6 +26,14 @@ interface ProductEvents {
   portfolio_deleted: { source: 'page' };
   /** Somebody opened a portfolio they do not own and stayed on it */
   shared_link_opened: { visibility: string };
+  /** A free-plan limit was hit and the dialog opened — the top of the funnel */
+  paywall_shown: { feature: string };
+  /** The dialog's button pressed — on the way to /pro */
+  paywall_cta: { feature: string };
+  /** The /pro page opened, however they got there */
+  pro_opened: Record<string, never>;
+  /** The buy button pressed and a checkout requested from the gateway */
+  checkout_opened: { firstMonth: boolean };
 }
 
 /**

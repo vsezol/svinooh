@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { PaywallProvider } from '../src/components/Paywall';
 import { ServiceWorker } from '../src/components/ServiceWorker';
 import { TelegramResume } from '../src/components/TelegramResume';
 import { AuthProvider } from '../src/lib/auth';
@@ -11,9 +12,11 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <ServiceWorker />
-        <TelegramResume />
-        {children}
+        <PaywallProvider>
+          <ServiceWorker />
+          <TelegramResume />
+          {children}
+        </PaywallProvider>
       </AuthProvider>
     </ThemeProvider>
   );

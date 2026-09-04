@@ -28,7 +28,10 @@ export async function loadLandingData(get: <T>(path: string) => Promise<T>): Pro
 
   const [demo, history] = await Promise.all([
     get<PortfolioDto>(`/portfolios/${top}`).catch(() => null),
-    get<HistoryDto>(`/portfolios/${top}/history?range=30d`)
+    // 7d, not 30d: the prerender is a signed-out viewer, and the free plan's
+    // history reach ends at a week — a wider range would answer 402 the day
+    // the paywall is enforced, and the landing must not depend on a plan
+    get<HistoryDto>(`/portfolios/${top}/history?range=7d`)
       .then((h) => ({
         values: h.points.map((p) => p.usd),
         times: h.points.map((p) => new Date(p.t).getTime()),

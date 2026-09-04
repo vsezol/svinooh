@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { portfolioLabel } from '../lib/format';
 import { MenuItem, Select, Spinner } from '../ui';
+import { usePaywall } from './Paywall';
 
 /**
  * Which of the account's portfolios this page is — and the door to another.
@@ -24,6 +25,7 @@ export function PortfolioSwitcher({
 }) {
   const router = useRouter();
   const { refreshMe } = useAuth();
+  const { showPaywall } = usePaywall();
   const [creating, setCreating] = useState(false);
 
   const createPortfolio = async () => {
@@ -36,8 +38,10 @@ export function PortfolioSwitcher({
       // page it navigates to asks who owns it
       await refreshMe();
       router.push(`/p/${slug}`);
-    } catch {
-      // Pressing again retries
+    } catch (err) {
+      // The second portfolio is the free plan's edge — the dialog explains it;
+      // anything else, pressing again retries
+      showPaywall(err);
     } finally {
       setCreating(false);
     }

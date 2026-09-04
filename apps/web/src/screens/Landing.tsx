@@ -161,6 +161,9 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
       >
         <Logo size={19} />
         <div style={{ display: 'flex', gap: 8 }}>
+          <Button size="sm" variant="quiet" onClick={() => router.push('/pro')}>
+            Pro
+          </Button>
           <ThemeToggle />
           <Button size="sm" onClick={primary}>
             {primaryLabel}
