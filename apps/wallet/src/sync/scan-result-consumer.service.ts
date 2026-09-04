@@ -61,8 +61,13 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
     });
     if (!wallet) return; // removed while the scan was in flight
 
+    // Read before applyResult writes lastSyncedAt, or a first scan would
+    // stop looking like one by the time it is counted
+    const tier = await this.sync.tierOf(wallet);
+
     if (!outcome.ok) {
       this.metrics.scans.inc({ chain: outcome.chain, result: 'failed' });
+      this.metrics.scanChecks.inc({ tier, result: 'failed' });
       this.metrics.errors.inc({ type: 'scan' });
       this.logger.warn(`Scan ${key} failed: ${outcome.error}`);
       await this.sync.markFailed(wallet, outcome.error);
@@ -78,11 +83,13 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
       // we have now seen this is written down.
       await this.sync.noteLowReading(wallet.id, verdict.lowReadings);
       this.metrics.scans.inc({ chain: outcome.chain, result: 'suppressed' });
+      this.metrics.scanChecks.inc({ tier, result: 'suppressed' });
       return;
     }
 
     await this.sync.applyResult(wallet, verdict.believe);
     this.metrics.scans.inc({ chain: outcome.chain, result: 'ok' });
+    this.metrics.scanChecks.inc({ tier, result: 'ok' });
     // One address, and every portfolio that happens to hold it — its total just
     // moved for all of them
     for (const portfolioId of await this.sync.portfoliosHolding(wallet.id)) {
