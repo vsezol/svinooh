@@ -25,8 +25,28 @@ const ASSET_HOST = 'eu-assets.i.posthog.com';
  * the bug this file exists for, content-length and accept-encoding describe
  * this hop's encoding rather than the next one's, and connection management
  * belongs to each connection alone.
+ *
+ * The cf-* family are Cloudflare's own stamps from the svinooh.com hop.
+ * Forwarded onward, cf-connecting-ip makes PostHog's Cloudflare answer 403
+ * for the whole request — measured, one header at a time — and the rest of
+ * the family travels with it, so none of them get through. The visitor's IP
+ * still arrives via X-Forwarded-For, which is the one PostHog reads.
  */
-const DROP = new Set(['host', 'connection', 'content-length', 'accept-encoding', 'transfer-encoding']);
+const DROP = new Set([
+  'host',
+  'connection',
+  'content-length',
+  'accept-encoding',
+  'transfer-encoding',
+  'cf-connecting-ip',
+  'cf-ray',
+  'cf-visitor',
+  'cf-ipcountry',
+  'cf-ew-via',
+  'cf-worker',
+  'cdn-loop',
+  'true-client-ip',
+]);
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
