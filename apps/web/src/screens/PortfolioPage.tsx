@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import type { HistoryRange, PortfolioDto } from '@svinooh/shared';
+import type { HistoryRange, PortfolioDto, WalletDto } from '@svinooh/shared';
 import { Button, Card, Eyebrow, Input, Segmented, Spinner, TagButton } from '../ui';
 import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AlertSettings } from '../components/AlertSettings';
@@ -22,6 +22,7 @@ import { SideNav, type Tab } from '../components/SideNav';
 import { SyncedAgo } from '../components/SyncedAgo';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { WalletRow, type WalletActions } from '../components/WalletRow';
+import { track } from '../lib/analytics';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { pendingClaim } from '../lib/claim';
@@ -176,7 +177,7 @@ function useHistory(slug: string, scope: string, period: HistoryRange, refreshKe
 
 export function PortfolioPage({ slug }: { slug: string }) {
   const router = useRouter();
-  const { me, config, logout } = useAuth();
+  const { me, config, loading: authLoading, logout } = useAuth();
   const { data, error, reload } = usePortfolio(slug, me?.id ?? null);
 
   const [tab, setTab] = useState<Tab>('portfolio');
@@ -224,6 +225,24 @@ export function PortfolioPage({ slug }: { slug: string }) {
   useEffect(() => {
     if (scope !== 'all' && data && !data.wallets.some((w) => w.id === scope)) setScope('all');
   }, [data, scope]);
+
+  /**
+   * A share link doing its job: somebody who does not own this portfolio is
+   * looking at it. Counted once per page, and only three seconds in — an owner
+   * arriving through the bot's button loads the page as a guest and is signed
+   * in moments later, and this pause is what keeps them out of the count.
+   */
+  const sharedSeen = useRef(false);
+  const visibility = data?.visibility ?? null;
+  const isGuest = data ? !data.isOwner : false;
+  useEffect(() => {
+    if (authLoading || me || !visibility || !isGuest || sharedSeen.current) return;
+    const timer = setTimeout(() => {
+      sharedSeen.current = true;
+      track('shared_link_opened', { visibility });
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [authLoading, me, visibility, isGuest]);
 
   const wallets = data?.wallets ?? [];
   /**
@@ -296,7 +315,11 @@ export function PortfolioPage({ slug }: { slug: string }) {
     setAdding(true);
     setAddErr(null);
     try {
-      await api(`/portfolios/${slug}/wallets`, { method: 'POST', body: JSON.stringify({ address }) });
+      const added = await api<WalletDto>(`/portfolios/${slug}/wallets`, {
+        method: 'POST',
+        body: JSON.stringify({ address }),
+      });
+      track('wallet_added', { chain: added.chain });
       setInput('');
       await reload();
     } catch (err) {
@@ -342,6 +365,7 @@ export function PortfolioPage({ slug }: { slug: string }) {
     setClaiming(true);
     try {
       await api(`/portfolios/${slug}/claim`, { method: 'POST' });
+      track('portfolio_claimed', { source: 'page' });
       setConfirmClaim(false);
       await reload();
     } catch (err) {
@@ -482,9 +506,10 @@ export function PortfolioPage({ slug }: { slug: string }) {
             {isOwner && me ? <PortfolioSwitcher portfolios={me.portfolios} currentSlug={slug} /> : null}
             <ThemeToggle />
             {isOwner && me ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 4 }}>
+              /* ph-mask / ph-no-capture: who this is never reaches session replay */
+              <div className="ph-mask" style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 4 }}>
                 {me.photoUrl ? (
-                  <img src={me.photoUrl} alt="" style={{ width: 30, height: 30, borderRadius: '50%' }} />
+                  <img src={me.photoUrl} alt="" className="ph-no-capture" style={{ width: 30, height: 30, borderRadius: '50%' }} />
                 ) : (
                   <div
                     style={{
@@ -563,14 +588,15 @@ export function PortfolioPage({ slug }: { slug: string }) {
                     {selectedWallet ? 'WALLET BALANCE' : 'TOTAL BALANCE'} · {walletCount}{' '}
                     {walletCount === 1 ? 'WALLET' : 'WALLETS'}
                   </Eyebrow>
+                  {/* ph-mask: session replay stores asterisks where the money was */}
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginTop: 6 }}>
                     <AnimatedUsd
-                      className="mono"
+                      className="mono ph-mask"
                       value={headlineTotal}
                       style={{ fontWeight: 'var(--fw-medium)', fontSize: 'clamp(var(--fs-hero),6vw,44px)', letterSpacing: '-0.02em', lineHeight: 1 }}
                     />
                     {change ? (
-                      <div className="mono" style={{ fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-medium)', color: change.up ? 'var(--up)' : 'var(--down)' }}>
+                      <div className="mono ph-mask" style={{ fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-medium)', color: change.up ? 'var(--up)' : 'var(--down)' }}>
                         {`${changeLabel(change)} · ${drawn.toUpperCase()}`}
                       </div>
                     ) : null}
@@ -680,7 +706,7 @@ export function PortfolioPage({ slug }: { slug: string }) {
             {/* which positions to show, and what they add up to */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 26, marginBottom: 12 }}>
               <Segmented label="Which positions to show" items={FILTERS} value={filter} onChange={setFilter} tone="accent" />
-              <div className="mono" style={{ fontSize: 'var(--fs-tag)', fontWeight: 'var(--fw-normal)', color: 'var(--mut)' }}>
+              <div className="mono ph-mask" style={{ fontSize: 'var(--fs-tag)', fontWeight: 'var(--fw-normal)', color: 'var(--mut)' }}>
                 {filter === 'all' ? `${walletCount} ${walletCount === 1 ? 'wallet' : 'wallets'}` : 'Shown'} · {fmtUsd(shownTotal)}
               </div>
             </div>

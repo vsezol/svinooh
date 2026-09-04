@@ -31,7 +31,8 @@ export function ScopeSelect({
   const current = options.find((o) => o.id === value) ?? options[0];
 
   return (
-    <div ref={box} style={{ position: 'relative', minWidth: 0 }}>
+    // ph-mask: wallet names and their values — session replay stores asterisks
+    <div ref={box} className="ph-mask" style={{ position: 'relative', minWidth: 0 }}>
       <button
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"

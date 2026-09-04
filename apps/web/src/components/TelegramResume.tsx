@@ -45,7 +45,7 @@ export function TelegramResume() {
     if (key) {
       started.current = true;
       void api<AuthResponseDto>('/auth/link', { method: 'POST', body: JSON.stringify({ token: key }) })
-        .then((res) => applyAuth(res))
+        .then((res) => applyAuth(res, 'telegram'))
         .then((authed) => {
           // The link already points at the portfolio; only send them there if
           // it doesn't
@@ -77,7 +77,7 @@ export function TelegramResume() {
     started.current = true;
     return pollTelegramLogin(token, {
       onResult: (res) => {
-        void applyAuth(res).then((authed) => router.push(`/p/${authed.portfolioSlug}`));
+        void applyAuth(res, 'telegram').then((authed) => router.push(`/p/${authed.portfolioSlug}`));
       },
       onError: () => pendingTgToken.clear(),
     });

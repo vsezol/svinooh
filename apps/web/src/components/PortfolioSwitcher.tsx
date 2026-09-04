@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { OwnedPortfolioDto } from '@svinooh/shared';
+import { track } from '../lib/analytics';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { portfolioLabel } from '../lib/format';
@@ -37,6 +38,7 @@ export function PortfolioSwitcher({
     setCreating(true);
     try {
       const { slug } = await api<{ slug: string }>('/portfolios', { method: 'POST' });
+      track('portfolio_created', { source: 'switcher' });
       // The list the switcher reads has to know about the newcomer before the
       // page it navigates to asks who owns it
       await refreshMe();
@@ -50,7 +52,9 @@ export function PortfolioSwitcher({
   };
 
   return (
-    <div ref={box} style={{ position: 'relative', minWidth: 0 }}>
+    // ph-mask: portfolio names are the owner's own words about their money —
+    // session replay stores asterisks instead (see instrumentation-client.ts)
+    <div ref={box} className="ph-mask" style={{ position: 'relative', minWidth: 0 }}>
       <button
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"

@@ -11,6 +11,7 @@ import { SearchDropdown } from '../components/SearchDropdown';
 import { Button, Card, Eyebrow, Input } from '../ui';
 import { Sparkline } from '../components/Sparkline';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { track } from '../lib/analytics';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { fmtUsd0, portfolioLabel } from '../lib/format';
@@ -94,6 +95,7 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
         method: 'POST',
         body: JSON.stringify({ address: search.trim() }),
       });
+      track('portfolio_created', { source: 'landing' });
       setOpen(false);
       router.push(`/p/${slug}`);
     } catch (err) {
