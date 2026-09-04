@@ -3,14 +3,16 @@
 import { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { OwnedPortfolioDto } from '@svinooh/shared';
+import { api } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { portfolioLabel } from '../lib/format';
-import { MenuItem, Panel, useDismiss } from '../ui';
+import { MenuItem, Panel, Spinner, useDismiss } from '../ui';
 
 /**
- * Which of the account's portfolios this page is. In the header, and only
- * there, because it answers a header-sized question — "where am I, and where
- * else could I be" — and only once there IS anywhere else: one portfolio
- * renders nothing, which is every account that never claimed a second one.
+ * Which of the account's portfolios this page is — and the door to another.
+ * In the header because it answers a header-sized question: "where am I,
+ * where else could I be, and how do I get one more". Shown to every owner,
+ * one portfolio or many, since the new-portfolio button lives in it.
  */
 export function PortfolioSwitcher({
   portfolios,
@@ -20,14 +22,32 @@ export function PortfolioSwitcher({
   currentSlug: string;
 }) {
   const router = useRouter();
+  const { refreshMe } = useAuth();
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
 
   useDismiss({ open, onClose: close, refs: [box] });
 
-  if (portfolios.length < 2) return null;
   const current = portfolios.find((p) => p.slug === currentSlug);
+
+  const createPortfolio = async () => {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const { slug } = await api<{ slug: string }>('/portfolios', { method: 'POST' });
+      // The list the switcher reads has to know about the newcomer before the
+      // page it navigates to asks who owns it
+      await refreshMe();
+      close();
+      router.push(`/p/${slug}`);
+    } catch {
+      // The menu stays open; pressing again retries
+    } finally {
+      setCreating(false);
+    }
+  };
 
   return (
     <div ref={box} style={{ position: 'relative', minWidth: 0 }}>
@@ -106,6 +126,17 @@ export function PortfolioSwitcher({
               </span>
             </MenuItem>
           ))}
+          <div style={{ borderTop: '1px solid var(--line)', margin: '4px 0' }} />
+          <MenuItem onClick={() => void createPortfolio()} disabled={creating}>
+            {creating ? (
+              <Spinner size={13} />
+            ) : (
+              <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            )}
+            <span style={{ marginLeft: 7 }}>New portfolio</span>
+          </MenuItem>
         </Panel>
       ) : null}
     </div>

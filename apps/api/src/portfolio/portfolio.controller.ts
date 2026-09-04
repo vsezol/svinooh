@@ -34,6 +34,13 @@ export class PortfolioController {
     return this.portfolios.findOrCreateAnonymous(body?.address ?? '');
   }
 
+  /** One more portfolio for the signed-in account — the switcher's "new" button */
+  @Post()
+  @UseGuards(RequiredAuthGuard)
+  create(@CurrentUserId() userId: string) {
+    return this.portfolios.createOwned(userId);
+  }
+
   @Get(':slug')
   @UseGuards(OptionalAuthGuard)
   get(@Param('slug') slug: string, @CurrentUserId() userId: string | null) {

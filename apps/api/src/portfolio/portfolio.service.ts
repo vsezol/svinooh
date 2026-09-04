@@ -564,6 +564,19 @@ export class PortfolioService {
    * to nobody, but a portfolio that belongs to someone is private until they say
    * otherwise — that rule doesn't bend just because of how this one started.
    */
+  /**
+   * One more portfolio for an account that already has some. The same shape
+   * first sign-in creates: private, unnamed, identified by its slug — a name
+   * would be shown to strangers the moment it goes public, so it stays the
+   * owner's to write.
+   */
+  async createOwned(userId: string): Promise<{ slug: string }> {
+    const portfolio = await this.prisma.portfolio.create({
+      data: { slug: randomSlug(), owner: { create: { userId } } },
+    });
+    return { slug: portfolio.slug };
+  }
+
   async claim(slug: string, userId: string): Promise<{ slug: string }> {
     const portfolio = await this.load(slug);
     if (portfolio.owner) {

@@ -12,6 +12,8 @@ interface AuthState {
   loginDev: (name: string) => Promise<MeDto>;
   /** Apply a ready-made auth response (e.g. from bot polling) */
   applyAuth: (res: AuthResponseDto) => Promise<MeDto>;
+  /** Re-ask the server who we are — after something changed what we own */
+  refreshMe: () => Promise<void>;
   logout: () => void;
 }
 
@@ -22,6 +24,7 @@ const AuthContext = createContext<AuthState>({
   loginTelegram: async () => ({}) as MeDto,
   loginDev: async () => ({}) as MeDto,
   applyAuth: async () => ({}) as MeDto,
+  refreshMe: async () => {},
   logout: () => {},
 });
 
@@ -72,13 +75,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [finish],
   );
 
+  const refreshMe = useCallback(async () => {
+    if (!tokenStore.get()) return;
+    try {
+      setMe(await api<MeDto>('/auth/me'));
+    } catch {
+      // an expired session is discovered by the next real request, not here
+    }
+  }, []);
+
   const logout = useCallback(() => {
     tokenStore.clear();
     setMe(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ me, config, loading, loginTelegram, loginDev, applyAuth: finish, logout }}>
+    <AuthContext.Provider value={{ me, config, loading, loginTelegram, loginDev, applyAuth: finish, refreshMe, logout }}>
       {children}
     </AuthContext.Provider>
   );
