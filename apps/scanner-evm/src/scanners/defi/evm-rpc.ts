@@ -71,7 +71,14 @@ function rpcsFor(key: NetworkKey): readonly string[] {
 export async function withRpc<T>(key: NetworkKey, read: (provider: JsonRpcProvider) => Promise<T>): Promise<T> {
   let lastError: unknown;
   for (const url of rpcsFor(key)) {
-    const provider = new JsonRpcProvider(url, undefined, { staticNetwork: true });
+    // batchMaxCount: ethers batches up to 100 calls per request by default, and
+    // mainnet.base.org refuses more than 10 — so every Base read failed on it
+    // and fell through to the next node. Not a broken node: a batch it will not
+    // take. Capping restores Base to two working nodes instead of one.
+    const provider = new JsonRpcProvider(url, undefined, {
+      staticNetwork: true,
+      batchMaxCount: 10,
+    });
     try {
       return await withTimeout(read(provider), url);
     } catch (error) {
