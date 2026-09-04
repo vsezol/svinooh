@@ -10,6 +10,7 @@ import { AlertSettings } from '../components/AlertSettings';
 import { AreaChart } from '../components/AreaChart';
 import { AuthModal } from '../components/AuthModal';
 import { ClaimModal } from '../components/ClaimModal';
+import { DeletePortfolio } from '../components/DeletePortfolio';
 import { Logo } from '../components/Logo';
 import { MetricCards } from '../components/MetricCards';
 import { GoPublicModal, VisibilityCard } from '../components/PortfolioVisibility';
@@ -788,6 +789,13 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
                 ))}
               </div>
             )}
+
+            {/* The way out, after everything else. Owners only — an anonymous
+                portfolio belongs to nobody, so nobody gets to end it — and only
+                when another portfolio is there to land on afterwards. */}
+            {isOwner && me && me.portfolios.length > 1 ? (
+              <DeletePortfolio slug={slug} portfolios={me.portfolios} />
+            ) : null}
             </div>
 
             {isOwner ? (

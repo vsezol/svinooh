@@ -22,8 +22,8 @@ interface ProductEvents {
   wallet_added: { chain: string };
   /** An ownerless portfolio taken over by an account */
   portfolio_claimed: { source: 'page' | 'signin' };
-  /** An owned portfolio deleted by its owner */
-  portfolio_deleted: { source: 'switcher' };
+  /** An owned portfolio deleted by its owner — the red line at the page's end */
+  portfolio_deleted: { source: 'page' };
   /** Somebody opened a portfolio they do not own and stayed on it */
   shared_link_opened: { visibility: string };
 }
