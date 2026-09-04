@@ -44,6 +44,38 @@ export const config = {
   // wallet service's SYNC_INTERVAL_MIN — set it lower and every wallet reads as
   // stale the moment it is scanned on time.
   syncIntervalMin: int(process.env.SYNC_INTERVAL_MIN, 5),
+  // The broker, for telling the bot a payment landed. Empty — the thank-you
+  // message is simply never sent; the payment itself works without it.
+  rabbitUrl: process.env.RABBITMQ_URL ?? '',
+  // Public URL of the site: where a checkout returns to, and what the buttons
+  // under billing messages open. One name across services — the bot reads the
+  // same variable.
+  webUrl: (process.env.WEB_URL || 'https://svinooh.com').replace(/\/+$/, ''),
+  /**
+   * Public URL of THIS api, for the webhook the payment gateway calls back.
+   * Empty — no callback is requested with the invoice: fine locally, where the
+   * sandbox dashboard can be pointed at a tunnel instead.
+   */
+  publicApiUrl: (process.env.PUBLIC_API_URL || '').replace(/\/+$/, ''),
+  /**
+   * Which gateway checkout opens invoices on: 'cryptomus' (default) or
+   * 'nowpayments'. Both webhook routes stay mounted regardless, so switching
+   * never strands an invoice opened on the other side. With neither
+   * configured, checkout answers 503 and everything else still works.
+   */
+  billingProvider: process.env.BILLING_PROVIDER === 'nowpayments' ? 'nowpayments' : 'cryptomus',
+  cryptomusMerchantId: process.env.CRYPTOMUS_MERCHANT_ID || '',
+  cryptomusApiKey: process.env.CRYPTOMUS_API_KEY || '',
+  cryptomusApiUrl: (process.env.CRYPTOMUS_API_URL || 'https://api.cryptomus.com/v1').replace(
+    /\/+$/,
+    '',
+  ),
+  nowpaymentsApiKey: process.env.NOWPAYMENTS_API_KEY || '',
+  nowpaymentsIpnSecret: process.env.NOWPAYMENTS_IPN_SECRET || '',
+  nowpaymentsApiUrl: (process.env.NOWPAYMENTS_API_URL || 'https://api.nowpayments.io/v1').replace(
+    /\/+$/,
+    '',
+  ),
   // Redis for the assembled-portfolio cache. Empty — an in-memory cache, so
   // local development doesn't need Redis running.
   redisUrl: process.env.REDIS_URL || null,

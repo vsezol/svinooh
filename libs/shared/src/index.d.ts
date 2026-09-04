@@ -342,8 +342,99 @@ export interface TelegramAuthPayload {
 export interface ApiErrorDto {
   statusCode: number;
   message: string;
-  /** Machine-readable code: UNSUPPORTED_NETWORK, WALLET_EXISTS, ... */
+  /** Machine-readable code: UNSUPPORTED_NETWORK, WALLET_EXISTS, PRO_REQUIRED, ... */
   code?: string;
+  /** PRO_REQUIRED only: which limit was hit — what the paywall dialog is about */
+  feature?: ProFeature;
+  /** PRO_REQUIRED only: the same offer GET /api/billing/offer answers, so the
+   *  dialog can be drawn from the error alone without a second request */
+  offer?: ProOfferDto;
+}
+
+/* ───────── billing: Svinooh.Pro, its offer and its paywalls ───────── */
+
+/** What a free-plan limit is a limit on. The `feature` of every 402. */
+export type ProFeature = 'portfolios' | 'wallets' | 'history' | 'alerts' | 'ai';
+
+/**
+ * The free plan's numbers, as the marketing page states them. Served rather
+ * than hardcoded in the browser: they are operator tunables, and the page
+ * quoting yesterday's limit is how a paywall gets called a lie.
+ */
+export interface ProLimitsDto {
+  /** Alert messages a free account is ever delivered — the trial */
+  freeAlerts: number;
+  freePortfolios: number;
+  freeWalletsPerPortfolio: number;
+  freeHistoryDays: number;
+  freeAiPerDay: number;
+}
+
+/**
+ * The pitch, with the arithmetic done on the server: the discount percents are
+ * derived from the two prices so the page can never advertise a number the
+ * checkout would contradict.
+ *
+ *   GET /api/billing/offer — public, this alone
+ */
+export interface ProOfferDto {
+  /** What a month costs today */
+  priceUsd: number;
+  /** The crossed-out anchor it is discounted from */
+  wasPriceUsd: number;
+  /** Off wasPriceUsd, rounded: 5 instead of 10 → 50 */
+  discountPct: number;
+  /** What the first month ever costs — the welcome offer */
+  firstMonthUsd: number;
+  firstMonthDiscountPct: number;
+  limits: ProLimitsDto;
+}
+
+/** One of the signed-in user's payments, as the account screen lists them */
+export interface ProPaymentDto {
+  id: string;
+  /** created | waiting | confirming | paid | underpaid | failed | expired | refunded */
+  status: string;
+  priceUsd: number;
+  months: number;
+  /** Where to finish paying, while the invoice is still open */
+  invoiceUrl: string | null;
+  createdAt: string;
+  paidAt: string | null;
+}
+
+/**
+ * The signed-in user's standing.
+ *
+ *   GET /api/billing/me — owner only, like everything that names a person
+ *
+ * `pro` decides what the browser renders and nothing more: every gated route
+ * checks the database again for itself, exactly as isAdmin does.
+ */
+export interface BillingMeDto {
+  pro: boolean;
+  /** When Pro ends, or null on the free plan */
+  paidUntil: string | null;
+  /** Whether the first-month price still applies to this account */
+  firstMonthEligible: boolean;
+  offer: ProOfferDto;
+  usage: {
+    portfolios: number;
+    /** Alert messages delivered, ever — against offer.limits.freeAlerts */
+    alertsSent: number;
+    aiUsedToday: number;
+  };
+  payments: ProPaymentDto[];
+}
+
+/**
+ * Where to send the payer.
+ *
+ *   POST /api/billing/checkout — the answer is the gateway's hosted page,
+ *   priced at the first-month offer when this account still qualifies
+ */
+export interface CheckoutDto {
+  url: string;
 }
 
 /* ───────── scanning: the contract between the wallet service and the scanners ───────── */
@@ -761,4 +852,35 @@ export interface AlertEvent {
   walletAddress: string;
   chain: Chain;
   items: AlertItem[];
+}
+
+/**
+ * Everything money ever says to a person, addressed to them. Published by the
+ * api (a payment landing) and by the billing sweep in monitor-alerts (the
+ * trial running out, Pro about to end or ended); read by the bot.
+ *
+ * The prices and limits ride along rather than being read back by the bot: the
+ * bot has no database on purpose, and the numbers that were true when the
+ * message was decided are the numbers the message should say.
+ */
+export interface BillingNotice {
+  telegramId: string;
+  /**
+   * trial-ended — a would-be alert was answered with the pitch instead
+   * expiring   — Pro ends in daysLeft days
+   * expired    — Pro has ended; the free limits are back
+   * paid       — a payment finished; Pro now runs to paidUntil
+   */
+  kind: 'trial-ended' | 'expiring' | 'expired' | 'paid';
+  priceUsd: number;
+  wasPriceUsd: number;
+  firstMonthUsd: number;
+  /** trial-ended: how many free alerts there were */
+  freeAlerts?: number;
+  /** expiring, paid: when Pro ends. ISO 8601 */
+  paidUntil?: string;
+  /** expiring: whole days until then, at least 1 */
+  daysLeft?: number;
+  /** expired: what the free plan goes back to */
+  limits?: ProLimitsDto;
 }

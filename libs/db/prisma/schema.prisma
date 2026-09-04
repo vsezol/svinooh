@@ -32,6 +32,109 @@ model User {
   createdAt  DateTime         @default(now())
   owned      PortfolioOwner[]
   loginLinks LoginLink[]
+  subscription Subscription?
+  payments     Payment[]
+  featureUsage FeatureUsage?
+}
+
+/// Svinooh.Pro, as the one fact billing actually needs: until when it is paid.
+///
+/// No status column — whether somebody is Pro is `paidUntil > now`, and a
+/// stored status would be a second copy of that answer, wrong for the minute
+/// nobody updated it. A user with no row at all is simply on the free plan,
+/// the same way a wallet with no WalletAlerts row is on the defaults.
+///
+/// Crypto has no dependable auto-debit (nothing can pull money out of a
+/// wallet), so a "subscription" here is prepaid time: every finished payment
+/// moves paidUntil forward, and the reminders below are what stands in for a
+/// charge on file.
+model Subscription {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paidUntil DateTime
+  /// When we last said "this is about to end". Compared against paidUntil
+  /// rather than cleared on renewal: a reminder is due when none has been sent
+  /// since this paid period entered its final days, so paying re-arms it with
+  /// no second write to get wrong — the same shape as slowedNoticeAt.
+  remindedAt DateTime?
+  /// When we said "it has ended", for the same reason: once per expiry, and a
+  /// renewal moving paidUntil forward is what re-arms it.
+  expiredNoticeAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([paidUntil])
+}
+
+/// One attempt to pay for Pro, from the moment a checkout is opened.
+///
+/// The row is created BEFORE the gateway is asked for an invoice, so a webhook
+/// about an order we cannot find is loud evidence of a bug (or of somebody
+/// else's environment) rather than silent money. `orderId` is ours and unique
+/// — it is what the gateway echoes back, and matching on it is what makes the
+/// webhook unable to pay for the wrong account.
+///
+/// Rows are never deleted and `paid` is never left: a webhook can arrive
+/// twice, out of order, or after a refund, and the answer to "did this pay for
+/// a month" has to stay put once given — the subscription was extended on the
+/// strength of it.
+model Payment {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Which gateway carried it: 'nowpayments'. Beside the money rather than in
+  /// config, because a provider switch must not orphan the history.
+  provider String
+  /// Our id for the order, handed to the gateway and echoed back by its webhook
+  orderId String @unique
+  /// The gateway's own ids, once it has answered: the invoice a person was
+  /// sent to, and the payment they made against it.
+  invoiceId         String?
+  providerPaymentId String?
+  /// What was bought: months of Pro, at this price. The price is copied here
+  /// from the tunables at checkout time — the knob can move next week and this
+  /// row still has to say what THIS person was asked to pay.
+  months   Int   @default(1)
+  priceUsd Float
+  /// created → waiting → confirming → paid, or off the rails into underpaid /
+  /// failed / expired / refunded. Written only by the webhook after creation.
+  status String @default("created")
+  /// What the payer actually chose and sent, as the gateway reported it —
+  /// for reading a dispute a month later without the gateway's dashboard.
+  payCurrency String?
+  paidAmount  Float?
+  invoiceUrl  String?
+  /// The raw webhook body that decided the current status, for the same reason
+  raw Json?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  paidAt    DateTime?
+
+  @@index([userId, createdAt])
+}
+
+/// How much of the metered features one user has consumed. One row per user,
+/// upserted by whoever hands the feature out; no row is a user who has spent
+/// nothing.
+///
+/// `alertsSent` is lifetime, because the trial is "the first N alerts ever",
+/// not N per month — deleting and re-adding wallets must not refill it. The AI
+/// pair is a day's count and the day it belongs to, overwritten in place when
+/// the date rolls: a row per day would be a cleanup job for data nothing reads
+/// after midnight.
+model FeatureUsage {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Alert messages actually delivered to this user's chat, ever
+  alertsSent Int @default(0)
+  /// When we last answered a would-be alert with the upgrade pitch instead —
+  /// the throttle that keeps a busy wallet from turning marketing into spam
+  alertsUpsellAt DateTime?
+  /// The day aiUsed counts, as 'YYYY-MM-DD' in UTC; a row from yesterday reads
+  /// as zero used today
+  aiDay  String?
+  aiUsed Int     @default(0)
+  updatedAt DateTime @updatedAt
 }
 
 /// A sign-in link the bot puts in the chat. Opening it signs the visitor in as

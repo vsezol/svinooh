@@ -1,17 +1,20 @@
 import Fastify from 'fastify';
 import { PrismaClient } from '@prisma/client';
-import { RabbitService, WALLET_STATE_QUEUE } from '@svinooh/common';
+import { RabbitService, startSettings, WALLET_STATE_QUEUE } from '@svinooh/common';
 import type { WalletStateEvent } from '@svinooh/shared';
 import { Collector } from './collector';
+import { Renewals } from './renewals';
 import { Slowdown } from './slowdown';
+import { Trial } from './trial';
 import { config } from './config';
 
 /**
- * How often to look for portfolios that have gone quiet.
+ * How often to look for portfolios that have gone quiet, and for subscriptions
+ * that are about to end or have ended.
  *
- * Not urgent — the thing being announced has already been true for a day — and
- * the sweep is one indexed query, so a quarter of an hour is generous either
- * way.
+ * Not urgent — the things being announced have already been true for a day or
+ * are days away — and each sweep is one indexed query, so a quarter of an hour
+ * is generous either way.
  */
 const SLOWDOWN_SWEEP_MS = 15 * 60_000;
 
@@ -30,8 +33,18 @@ async function main(): Promise<void> {
 
   const prisma = new PrismaClient();
   const rabbit = new RabbitService(config.rabbitUrl || null);
-  const collector = new Collector(prisma, rabbit);
+  const trial = new Trial(prisma);
+  const collector = new Collector(prisma, rabbit, trial);
   const slowdown = new Slowdown(prisma, rabbit);
+  const renewals = new Renewals(prisma, rabbit);
+
+  // The trial and the sweeps pace themselves on billing knobs, and slowdown on
+  // the sync ones — followed live from the table, like every other service.
+  // Nothing awaits this: every knob falls back to environment and default.
+  startSettings(
+    () => prisma.setting.findMany({ select: { key: true, value: true } }),
+    (error) => app.log.warn(`could not read settings: ${error.message}`),
+  );
 
   await rabbit.onApplicationBootstrap();
   if (rabbit.enabled) {
@@ -48,6 +61,12 @@ async function main(): Promise<void> {
         if (sent) app.log.info(`told ${sent} owner(s) their portfolio had gone quiet`);
       } catch (e) {
         app.log.warn(`slowdown sweep failed: ${e instanceof Error ? e.message : e}`);
+      }
+      try {
+        const asked = await renewals.sweep();
+        if (asked) app.log.info(`asked ${asked} subscriber(s) about their renewal`);
+      } catch (e) {
+        app.log.warn(`renewal sweep failed: ${e instanceof Error ? e.message : e}`);
       }
     };
     setInterval(() => void sweep(), SLOWDOWN_SWEEP_MS).unref();

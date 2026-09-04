@@ -47,7 +47,9 @@ web ──HTTPS+JWT──▶ api ──HTTP /auth/*───▶ auth ──▶ T
 
 Postgres is shared, with ownership by table: **auth** writes `User`, **wallet**
 writes `Wallet` / `Position` / `WalletSnapshot`, **api** writes `Portfolio` and
-reads everything. Only the api is exposed publicly; the other two are reachable
+the billing tables (`Subscription` / `Payment` / `FeatureUsage`) and reads
+everything; **monitor-alerts** owns the alert-trial meter on `FeatureUsage` and
+the reminder stamps on `Subscription`. Only the api is exposed publicly; the other two are reachable
 over Railway's private network. JWTs are signed by auth and verified by api,
 which means both need the same `JWT_SECRET`.
 
@@ -254,11 +256,52 @@ POST   /api/portfolios/:slug/wallets          { address } — the network is det
 PATCH  /api/portfolios/:slug/wallets/:id      🔒 { label }
 DELETE /api/portfolios/:slug/wallets/:id      🔒
 GET    /api/portfolios/:slug/wallets/:id/history?range=…
+
+GET    /api/billing/offer                     — the Svinooh.Pro pitch: prices, derived
+                                                discount percents, the free plan's limits
+GET    /api/billing/me                        🔒 plan, paid-until, usage, recent payments
+POST   /api/billing/checkout                  🔒 → { url } of the gateway's hosted page
+POST   /api/billing/webhook/cryptomus         — gateway callbacks; authenticated by
+POST   /api/billing/webhook/nowpayments         signature, not by JWT
 ```
 
 An unrecognized address → 400 `{ code: "UNSUPPORTED_NETWORK" }`, a duplicate →
 409 `{ code: "WALLET_EXISTS" }`, an anonymous portfolio that is already full →
-400 `{ code: "ANONYMOUS_LIMIT" }`.
+400 `{ code: "ANONYMOUS_LIMIT" }`. A free-plan limit → 402
+`{ code: "PRO_REQUIRED", feature, offer }` — the error carries the whole offer so
+the paywall dialog can be drawn from it alone.
+
+### Svinooh.Pro
+
+The paid tier: 5 USD a month (2 USD the first month), paid in crypto. The free
+plan is the trial — 10 alert messages ever, 1 portfolio, 5 wallets per
+portfolio, 7 days of history, 1 AI request a day once the agent ships. Every
+number, both prices included, is a tunable in the admin panel (`billing.*`),
+and the derived discount percents are computed server-side so no surface can
+advertise a number the checkout would contradict.
+
+Crypto has no dependable auto-debit — nothing can pull money out of a wallet —
+so a subscription is **prepaid time**: `Subscription.paidUntil`, moved forward
+by each finished payment, asked about by the renewal sweep in monitor-alerts
+(3 days before the end, and once when it ends, over Telegram — the same road
+alerts travel). That is the pattern the crypto-native products themselves ship
+(Nansen, DexTools, LunarCrush: invoice per period, reminders, manual renewal).
+
+Payments ride a gateway behind one seam (`apps/api/src/billing/gateway.ts`):
+**Cryptomus** by default (invoices from ~1 USDT on the rails our users hold —
+USDT TRC-20, TON, SOL, BSC — so even the 2 USD welcome invoice is payable),
+**NOWPayments** as the configured alternative and the sandbox for exercising
+the whole checkout-to-webhook path. Checkout creates a `Payment` row first,
+then asks the gateway for a hosted invoice; the webhook is believed only with
+a valid signature (Cryptomus additionally re-asked via `/payment/info` before
+a month is granted), and exactly one webhook can move a payment to `paid` —
+replays and out-of-order statuses cannot double-extend or talk it back down.
+
+`billing.enforce` ships **off**: every gate stands open while the meters run,
+so the counters are honest the day the web has a paywall to show and the knob
+is flipped. Table ownership: the api writes `Subscription` / `Payment` /
+`FeatureUsage`; monitor-alerts increments the alert meter and stamps the
+reminder fields.
 
 ### Portfolios nobody owns
 

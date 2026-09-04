@@ -1,6 +1,7 @@
 import type {
   AlertEvent,
   AlertItem,
+  BillingNotice,
   PositionBand,
   SlowedNotice,
   TronResources,
@@ -262,4 +263,73 @@ export function formatSlowedNotice(
     'Open it and the usual rate comes straight back.',
   ].join('\n');
   return { text, markup: { inline_keyboard: [[{ text: 'Open portfolio →', url }]] } };
+}
+
+/** "2026-10-04" — a renewal date is a date, not a moment */
+const day = (iso: string): string => iso.slice(0, 10);
+
+/**
+ * Everything money says, in one voice: plain about what happened, concrete
+ * about the way out, and priced with the numbers that were true when the
+ * message was decided — the notice carries them so this view never guesses.
+ *
+ * The pitch line leads with the deal because that is the marketing ask, but
+ * the messages never bury what happened: the trial one opens with the alert
+ * that was NOT delivered, which is the honest half of the offer.
+ */
+export function formatBillingNotice(
+  notice: BillingNotice,
+  webUrl: string,
+): { text: string; markup: unknown } {
+  const proUrl = `${webUrl}/pro`;
+  const deal = `$${notice.priceUsd}/month instead of $${notice.wasPriceUsd}`;
+  switch (notice.kind) {
+    case 'trial-ended': {
+      const text = [
+        '<b>A wallet just tripped an alert — and your free alerts are used up</b>',
+        '',
+        `The free plan includes ${notice.freeAlerts ?? 'a few'} alert messages, and this account has spent them. ` +
+          'Until Svinooh.Pro is on, alerts are decided and remembered but not delivered.',
+        '',
+        `Svinooh.Pro keeps them coming — with unlimited portfolios, wallets and full history. ` +
+          `${deal}, and the first month is $${notice.firstMonthUsd}.`,
+      ].join('\n');
+      return { text, markup: { inline_keyboard: [[{ text: 'Get Svinooh.Pro →', url: proUrl }]] } };
+    }
+    case 'expiring': {
+      const left = notice.daysLeft ?? 1;
+      const text = [
+        `<b>Svinooh.Pro ends in ${left} day${left === 1 ? '' : 's'}</b>`,
+        '',
+        `Paid until ${notice.paidUntil ? day(notice.paidUntil) : 'soon'}. Renew for $${notice.priceUsd} and nothing changes; ` +
+          'let it lapse and the free limits come back.',
+      ].join('\n');
+      return { text, markup: { inline_keyboard: [[{ text: 'Renew →', url: proUrl }]] } };
+    }
+    case 'expired': {
+      const limits = notice.limits;
+      const back = limits
+        ? `${limits.freePortfolios} portfolio${limits.freePortfolios === 1 ? '' : 's'}, ` +
+          `${limits.freeWalletsPerPortfolio} wallets each, ${limits.freeHistoryDays} days of history, ` +
+          'and no alerts past the trial'
+        : 'the free limits';
+      const text = [
+        '<b>Svinooh.Pro has ended</b>',
+        '',
+        `The free plan is back: ${back}. Everything you built is exactly where you left it.`,
+        '',
+        `Renew for ${deal}.`,
+      ].join('\n');
+      return { text, markup: { inline_keyboard: [[{ text: 'Renew →', url: proUrl }]] } };
+    }
+    case 'paid': {
+      const text = [
+        '<b>Svinooh.Pro is active</b>',
+        '',
+        `Paid until ${notice.paidUntil ? day(notice.paidUntil) : 'next month'}. Unlimited portfolios and wallets, ` +
+          'full history, alerts without a counter. Thank you.',
+      ].join('\n');
+      return { text, markup: { inline_keyboard: [[{ text: 'Open svinooh →', url: webUrl }]] } };
+    }
+  }
 }
