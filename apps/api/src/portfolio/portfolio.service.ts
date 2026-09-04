@@ -618,6 +618,27 @@ export class PortfolioService {
     return { slug: portfolio.slug };
   }
 
+  /**
+   * Delete an owned portfolio: its memberships, labels, alerts, snapshots and
+   * ownership go with it (all cascades). The addresses themselves stay —
+   * another portfolio may be tracking them, and if none is they simply stop
+   * being due for a scan.
+   *
+   * The account's LAST portfolio is not deletable. Signing in guarantees every
+   * account a portfolio, and the UI leans on that — me.portfolioSlug is where
+   * "your portfolio" buttons point. Making another first is one press away.
+   */
+  async remove(slug: string, userId: string): Promise<{ ok: true }> {
+    const portfolio = await this.requireOwned(slug, userId);
+    const owned = await this.prisma.portfolioOwner.count({ where: { userId } });
+    if (owned <= 1) {
+      throw new ConflictException('This is your only portfolio — create another before deleting it');
+    }
+    await this.prisma.portfolio.delete({ where: { id: portfolio.id } });
+    await this.cache.del(cacheKey(slug));
+    return { ok: true };
+  }
+
   /** Publish or unpublish an owned portfolio. Owner-only, by definition. */
   async setVisibility(
     slug: string,

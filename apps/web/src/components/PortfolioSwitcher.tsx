@@ -6,7 +6,7 @@ import type { OwnedPortfolioDto } from '@svinooh/shared';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { portfolioLabel } from '../lib/format';
-import { MenuItem, Panel, Spinner, useDismiss } from '../ui';
+import { Button, Dialog, DialogActions, MenuItem, Note, Panel, Spinner, useDismiss } from '../ui';
 
 /**
  * Which of the account's portfolios this page is — and the door to another.
@@ -25,6 +25,8 @@ export function PortfolioSwitcher({
   const { refreshMe } = useAuth();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
 
@@ -46,6 +48,28 @@ export function PortfolioSwitcher({
       // The menu stays open; pressing again retries
     } finally {
       setCreating(false);
+    }
+  };
+
+  /**
+   * Deletes the portfolio this page is on, then moves to one that still
+   * exists. The me-list is refreshed first so the page we land on doesn't
+   * offer the deleted portfolio in this very switcher.
+   */
+  const deletePortfolio = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      await api(`/portfolios/${currentSlug}`, { method: 'DELETE' });
+      const next = portfolios.find((p) => p.slug !== currentSlug);
+      await refreshMe();
+      setConfirmDelete(false);
+      router.push(next ? `/p/${next.slug}` : '/');
+    } catch (err) {
+      setConfirmDelete(false);
+      alert(err instanceof Error ? err.message : 'Could not delete this portfolio');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -137,8 +161,73 @@ export function PortfolioSwitcher({
             )}
             <span style={{ marginLeft: 7 }}>New portfolio</span>
           </MenuItem>
+          {/* Only when there is somewhere to land afterwards — the account's
+              last portfolio is not deletable (the server refuses too) */}
+          {portfolios.length > 1 ? (
+            <MenuItem
+              tone="danger"
+              onClick={() => {
+                close();
+                setConfirmDelete(true);
+              }}
+            >
+              Delete this portfolio
+            </MenuItem>
+          ) : null}
         </Panel>
       ) : null}
+
+      {confirmDelete ? (
+        <DeletePortfolioModal
+          label={portfolioLabel(current?.name ?? null, currentSlug)}
+          busy={deleting}
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => void deletePortfolio()}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * Deleting takes the history and the wallet list with it and the link goes
+ * dead, so it gets the same explicit "here is what changes" step publishing
+ * does. The addresses themselves are untouched — worth saying, or "delete"
+ * reads as bigger than it is.
+ */
+function DeletePortfolioModal({
+  label,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  label: string;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog onClose={onCancel} title={`Delete ${label}?`}>
+      <div style={{ fontSize: 'var(--fs-title)', fontWeight: 'var(--fw-heavy)' }}>
+        Delete {label}?
+      </div>
+      <Note style={{ marginTop: 'var(--sp-5)', lineHeight: 1.7 }}>
+        Its wallet list and its history are deleted and{' '}
+        <strong style={{ color: 'var(--text)' }}>its link stops working</strong> — for you and for
+        anyone you shared it with. This cannot be undone.
+        <br />
+        <br />
+        The wallet addresses themselves are untouched; any other portfolio tracking them keeps its
+        own history.
+      </Note>
+      <DialogActions>
+        <Button variant="quiet" size="lg" block onClick={onCancel} disabled={busy}>
+          Cancel
+        </Button>
+        <Button variant="danger" size="lg" block loading={busy} onClick={onConfirm}>
+          Delete portfolio
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
