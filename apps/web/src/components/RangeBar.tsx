@@ -1,62 +1,52 @@
 import type { PositionBand } from '@svinooh/shared';
-import { Meter } from '../ui';
 
 /**
- * Where a liquidity position is sitting inside its own range.
+ * Where a liquidity position is sitting inside its own range, drawn as a
+ * geometric scale — the design file's own words for it, replacing the
+ * "strip with a ball".
  *
- * "IN RANGE" is a yes or a no, and the answer an LP actually needs is neither:
- * a position halfway between its bounds and one a hair from the upper edge are
- * both "in range", and only one of them is about to stop earning. The bar is
- * that missing dimension.
+ *  - The axis is a 1px hairline across the full width.
+ *  - The range is a low fill with hairline rules top and bottom and vertical
+ *    ticks standing on the bounds themselves.
+ *  - The current price is a 2px needle with its price in mono above it.
  *
- * It is drawn as an instrument, not a control. The band is a segment on a
- * longer axis — a track tinted edge to edge is the visual language of a slider
- * at maximum, and the first version read as exactly that. The axis runs 15% of
- * the span past each bound, which is also what lets a price that has just left
- * the range be SHOWN just outside it: the old bar pinned the mark to the edge,
- * so "barely out" and "long gone" were the same picture. A price further out
- * than the axis reaches still clamps to its end, and the colour carries the
- * rest — an axis that had to hold a price at 5× the upper bound would crush
- * the range itself into a sliver.
+ * In range there is NO padding: the axis runs exactly from the lower bound to
+ * the upper, and the ticks stand at its very ends — empty margins around a
+ * scale are what the design review threw out. Room appears only when the price
+ * has left the range: the axis extends exactly far enough to bring the needle
+ * into frame, the needle stands outside the fill (left of it below the range,
+ * right of it above), and the price label pins to that edge.
  *
- * The bounds sit under their own edges of the band, not at the corners of the
- * card; the current price rides above the tick that marks it. Only the verdict
- * is coloured — the bounds are furniture and stay muted.
+ * Only the verdict is coloured. In range everything structural takes the up
+ * colour; out of range the fill, its rules, the ticks and the needle all turn
+ * down. The bound labels are furniture and stay muted either way.
  */
-const PAD = 0.15;
-
-/**
- * Priced to the band, not to the dollar. fmtPrice rounds anything over a cent
- * to two decimals, and on a stable pair whose whole range is $1.001–$1.003
- * that printed the same "$1.00" three times — a bar between two identical
- * numbers. The precision a bound needs is a function of how wide the band is,
- * so it is read off the span.
- */
-function boundFmt(span: number): (v: number) => string {
-  const decimals = Math.max(2, Math.min(8, 1 - Math.floor(Math.log10(span))));
-  return (v) =>
-    '$' + v.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-}
+const FILL_ALPHA = 42; // % of tone mixed into the surface — solid, never translucent
 
 export function RangeBar({ band, inRange }: { band: PositionBand; inRange: boolean }) {
   const { lower, upper, current } = band;
   const span = upper - lower;
-  // A degenerate band has no inside to be at a point of. Nothing sensible to
-  // draw, and a full-width band with a tick at one end would be a lie.
+  // A degenerate band has no inside to be at a point of
   if (!(span > 0)) return null;
 
-  /** Price → position on the padded axis, clamped to its ends */
-  const x = (price: number) =>
-    Math.min(Math.max((price - lower + span * PAD) / (span * (1 + 2 * PAD)), 0), 1);
+  // The axis: the range itself, extended only when the needle stands outside it
+  const d0 = Math.min(lower, current);
+  const d1 = Math.max(upper, current);
+  const x = (price: number) => (price - d0) / (d1 - d0);
   const at = x(current);
-  const tone = inRange ? 'var(--up)' : 'var(--down)';
-  const price = boundFmt(span);
+  const from = x(lower);
+  const to = x(upper);
 
-  /** Centred on its point, except near the ends, where centring would hang the label off the bar */
-  const shift = (p: number) => (p < 0.1 ? '0' : p > 0.9 ? '-100%' : '-50%');
+  const tone = inRange ? 'var(--up)' : 'var(--down)';
+  const fill = `color-mix(in srgb, ${tone} ${FILL_ALPHA}%, var(--surf2))`;
+
+  /** Keeps a label (or the needle) on the scale at its ends instead of hanging half off */
+  const shift = (p: number) => (p < 0.08 ? '0' : p > 0.92 ? '-100%' : '-50%');
+
   const label = (p: number, text: string, color?: string) => (
     <span
       className="mono"
+      key={text + p}
       style={{
         position: 'absolute',
         left: `${p * 100}%`,
@@ -71,19 +61,86 @@ export function RangeBar({ band, inRange }: { band: PositionBand; inRange: boole
     </span>
   );
 
+  /** A vertical tick standing on a bound of the range */
+  const tick = (p: number) => (
+    <span
+      key={p}
+      style={{
+        position: 'absolute',
+        left: `${p * 100}%`,
+        top: '50%',
+        transform: 'translate(-50%, -50%)',
+        width: 1,
+        height: 10,
+        background: tone,
+      }}
+    />
+  );
+
+  const price = boundFmt(span);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)', padding: '2px 16px 10px' }}>
-      {/* The price rides ABOVE the axis, over its own tick — put between the
-          bounds it would read as the middle of the range, and on a position
-          that has left its band it would sit on top of the bound it left */}
       <div style={{ position: 'relative', height: 13 }}>{label(at, price(current), tone)}</div>
 
-      <Meter tone={tone} band={{ from: x(lower), to: x(upper) }} mark={at} />
+      <div style={{ position: 'relative', height: 14 }}>
+        {/* the axis */}
+        <span
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: '50%',
+            height: 1,
+            transform: 'translateY(-50%)',
+            background: 'var(--line2)',
+          }}
+        />
+        {/* the range: a low fill ruled top and bottom */}
+        <span
+          style={{
+            position: 'absolute',
+            left: `${from * 100}%`,
+            width: `${(to - from) * 100}%`,
+            top: '50%',
+            height: 8,
+            transform: 'translateY(-50%)',
+            background: fill,
+            borderTop: `1px solid ${tone}`,
+            borderBottom: `1px solid ${tone}`,
+          }}
+        />
+        {tick(from)}
+        {tick(to)}
+        {/* the needle */}
+        <span
+          style={{
+            position: 'absolute',
+            left: `${at * 100}%`,
+            top: '50%',
+            transform: `translate(${shift(at) === '-50%' ? '-50%' : shift(at) === '0' ? '0' : '-100%'}, -50%)`,
+            width: 2,
+            height: 14,
+            background: tone,
+          }}
+        />
+      </div>
 
       <div style={{ position: 'relative', height: 13, color: 'var(--mut)' }}>
-        {label(x(lower), price(lower))}
-        {label(x(upper), price(upper))}
+        {label(from, price(lower))}
+        {label(to, price(upper))}
       </div>
     </div>
   );
+}
+
+/**
+ * Priced to the band, not to the dollar: on a stable pair whose whole range is
+ * $1.001–$1.003, two-decimal rounding printed the same "$1.00" three times.
+ * The precision a bound needs is a function of the span.
+ */
+function boundFmt(span: number): (v: number) => string {
+  const decimals = Math.max(2, Math.min(8, 1 - Math.floor(Math.log10(span))));
+  return (v) =>
+    '$' + v.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
