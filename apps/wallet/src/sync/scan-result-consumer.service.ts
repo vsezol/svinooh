@@ -106,6 +106,23 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
     const { result, recheck } = outcome;
     const previousTotal = wallet.lastTotalUsd;
 
+    // A total with nothing under it is a shape no scanner can honestly produce
+    // — the total IS the sum of the positions' values — so it is judged the way
+    // a collapsed total is: doubted, retried, and only believed once it repeats
+    // enough times to be a real emptying. The night this mattered, a scan bug
+    // wiped every stored position of a five-figure wallet while its total
+    // sailed through this gate untouched.
+    if (result.totalUsd > 10 && result.positions.length === 0) {
+      const streak = wallet.lowReadings + 1;
+      if (streak < config.dropConfirmCycles) {
+        this.logger.warn(
+          `Positionless total ${key}: $${result.totalUsd.toFixed(2)} with 0 positions (${streak}/${config.dropConfirmCycles}), keeping last known`,
+        );
+        return { believe: null, lowReadings: streak };
+      }
+      return { believe: result, lowReadings: 0 };
+    }
+
     // nothing to compare against (first successful scan, or a nearly empty wallet)
     if (previousTotal === null || previousTotal <= 10) {
       return { believe: result, lowReadings: 0 };

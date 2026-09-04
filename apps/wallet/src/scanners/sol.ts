@@ -386,14 +386,19 @@ export async function scanSol(address: string): Promise<ScanResult> {
   }
 
   // Jupiter names every Meteora pool "DLMM" and, on some wallets, used to merge
-  // them all into one element — see reconcileMeteora
-  const meteoraFixed = reconcileMeteora(positions, meteoraByPool);
-  positions.length = 0;
-  positions.push(...meteoraFixed);
+  // them all into one element — see reconcileMeteora.
+  //
+  // Consumed as a return value, never spliced back into `positions`. The old
+  // `positions.length = 0; positions.push(...fixed)` idiom wiped the whole
+  // wallet whenever reconcileMeteora returned its input unchanged: `fixed` WAS
+  // `positions`, so clearing one cleared the other, and one night of Jupiter
+  // answering without Meteora elements turned a five-figure wallet into a
+  // stored empty list with its total intact.
+  const reconciled = reconcileMeteora(positions, meteoraByPool);
 
   // Kamino is only worth its 38 markets when Jupiter described a loan without
   // saying how healthy it is or what it costs, which is not the usual case
-  const lendingFacts = needsLendingFacts(positions)
+  const lendingFacts = needsLendingFacts(reconciled)
     ? await solanaLendingFacts(address)
     : NO_FACTS;
 
@@ -404,7 +409,7 @@ export async function scanSol(address: string): Promise<ScanResult> {
     // Jupiter decides what is held and what it is worth; the protocols only
     // fill in the fields it leaves blank. Nothing here adds or removes a
     // position, so a failed source costs detail and never a holding.
-    positions: enrich(enrich(positions, poolFacts), lendingFacts),
+    positions: enrich(enrich(reconciled, poolFacts), lendingFacts),
     breakdown: { defi, gmtrade },
     unpriced: unpriced.length ? unpriced : undefined,
   };

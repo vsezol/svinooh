@@ -183,6 +183,13 @@ export class SyncService {
         },
       }),
     ]);
+    // The one line that says what was actually stored. The night a scan bug
+    // wiped a wallet's positions while keeping its total, nothing in any log
+    // carried a position count — the wipe was reconstructed from the absence
+    // of evidence. Cheap enough to say every time.
+    this.logger.log(
+      `${wallet.chain}:${wallet.address} applied: ${result.positions.length} positions, $${result.totalUsd.toFixed(2)}`,
+    );
     await this.announce(wallet, result);
   }
 
