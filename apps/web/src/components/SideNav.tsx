@@ -44,11 +44,11 @@ const navItem = (active: boolean, disabled: boolean, collapsed: boolean): CSSPro
   display: 'flex',
   alignItems: 'center',
   justifyContent: collapsed ? 'center' : 'flex-start',
-  gap: collapsed ? 0 : 10,
+  gap: collapsed ? 0 : 'var(--sp-4)',
   padding: collapsed ? '11px 0' : '10px 13px',
-  borderRadius: 10,
-  fontWeight: 700,
-  fontSize: 13.5,
+  borderRadius: 'var(--r-sm)',
+  fontWeight: 'var(--fw-bold)',
+  fontSize: 'var(--fs-body)',
   cursor: disabled ? 'default' : 'pointer',
   userSelect: 'none',
   color: active ? 'var(--acc-text)' : 'var(--mut)',
@@ -103,7 +103,7 @@ export function SideNav({ tab, onTab, collapsed, onCollapse, isAdmin }: Props) {
           position: 'sticky',
           top: 78,
           flexDirection: 'column',
-          gap: 4,
+          gap: 'var(--sp-2)',
           transition: 'width 0.2s ease',
         }}
       >
@@ -138,10 +138,10 @@ export function SideNav({ tab, onTab, collapsed, onCollapse, isAdmin }: Props) {
               className="mono"
               style={{
                 marginLeft: 'auto',
-                fontSize: 8.5,
-                letterSpacing: '0.1em',
+                fontSize: 'var(--fs-micro)',
+                letterSpacing: 'var(--tr-tag)',
                 border: '1px solid var(--line2)',
-                borderRadius: 999,
+                borderRadius: 'var(--r-full)',
                 padding: '2px 7px',
               }}
             >
@@ -168,8 +168,8 @@ export function SideNav({ tab, onTab, collapsed, onCollapse, isAdmin }: Props) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            height: 34,
-            borderRadius: 10,
+            height: 'var(--h-sm)',
+            borderRadius: 'var(--r-sm)',
             border: '1px solid var(--line)',
             color: 'var(--mut)',
             cursor: 'pointer',

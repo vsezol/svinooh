@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TagButton, Tooltip } from '../ui';
 
 const SHARE_ICON = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -44,9 +45,11 @@ export function ShareButton({ title }: { title: string }) {
   };
 
   return (
-    <button className="pill-btn" onClick={() => void share()} title="Share this portfolio">
-      {SHARE_ICON}
-      <span>{copied ? 'COPIED' : 'SHARE'}</span>
-    </button>
+    <Tooltip text="Share this portfolio">
+      <TagButton onClick={() => void share()}>
+        {SHARE_ICON}
+        <span>{copied ? 'COPIED' : 'SHARE'}</span>
+      </TagButton>
+    </Tooltip>
   );
 }

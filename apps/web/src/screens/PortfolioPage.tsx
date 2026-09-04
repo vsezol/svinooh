@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import type { HistoryRange, PortfolioDto } from '@svinooh/shared';
+import { Button, Card, Eyebrow, Input, Segmented, Spinner, TagButton } from '../ui';
 import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AlertSettings } from '../components/AlertSettings';
 import { AreaChart } from '../components/AreaChart';
@@ -56,7 +57,7 @@ const AdminPanel = dynamic(() => import('../components/admin/AdminPanel'), {
   ssr: false,
   loading: () => (
     <div style={{ padding: '40px 0', textAlign: 'center' }}>
-      <span className="spin" style={{ width: 20, height: 20 }} />
+      <Spinner size={20} />
     </div>
   ),
 });
@@ -376,7 +377,7 @@ export function PortfolioPage({ slug }: { slug: string }) {
   if (!data) {
     return (
       <div style={{ padding: '120px 0', textAlign: 'center' }}>
-        <span className="spin" style={{ width: 22, height: 22 }} />
+        <Spinner size={22} />
       </div>
     );
   }
@@ -435,7 +436,7 @@ export function PortfolioPage({ slug }: { slug: string }) {
             flexWrap: 'wrap',
           }}
         >
-          <div className="mono" style={{ fontSize: 11, fontWeight: 500, color: 'var(--mut)', letterSpacing: '0.03em' }}>
+          <div className="mono" style={{ fontSize: 'var(--fs-tag)', fontWeight: 'var(--fw-normal)', color: 'var(--mut)', letterSpacing: '0.03em' }}>
             {isUnowned
               ? 'This portfolio belongs to nobody · add wallets freely'
               : 'Viewing a shared portfolio · read-only'}
@@ -444,11 +445,11 @@ export function PortfolioPage({ slug }: { slug: string }) {
             onClick={isUnowned ? startClaim : () => setAuthOpen(true)}
             className="mono"
             style={{
-              fontSize: 10.5,
+              fontSize: 'var(--fs-tag)',
               letterSpacing: '0.06em',
               color: 'var(--acc-text)',
               border: '1px solid color-mix(in srgb, var(--acc) 45%, transparent)',
-              borderRadius: 999,
+              borderRadius: 'var(--r-full)',
               padding: '5px 12px',
               cursor: 'pointer',
               whiteSpace: 'nowrap',
@@ -489,8 +490,8 @@ export function PortfolioPage({ slug }: { slug: string }) {
                       background: 'var(--acc-soft)',
                       border: '1px solid color-mix(in srgb, var(--acc) 40%, transparent)',
                       color: 'var(--acc-text)',
-                      fontSize: 11,
-                      fontWeight: 800,
+                      fontSize: 'var(--fs-tag)',
+                      fontWeight: 'var(--fw-heavy)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -500,24 +501,23 @@ export function PortfolioPage({ slug }: { slug: string }) {
                   </div>
                 )}
                 {/* the viewer's own handle, shown only to them */}
-                <span className="mono hide-mobile" style={{ fontSize: 11.5, color: 'var(--mut)' }}>
+                <span className="mono hide-mobile" style={{ fontSize: 'var(--fs-note)', color: 'var(--mut)' }}>
                   {me.username ? `@${me.username}` : me.name}
                 </span>
-                <button
-                  className="pill"
-                  style={{ border: 'none', padding: '0 6px' }}
+                <TagButton
+                  variant="bare"
                   onClick={() => {
                     logout();
                     router.push('/');
                   }}
                 >
                   EXIT
-                </button>
+                </TagButton>
               </div>
             ) : (
-              <button className="btn-acc" style={{ height: 34, fontSize: 12, padding: '0 14px' }} onClick={() => setAuthOpen(true)}>
+              <Button size="sm" onClick={() => setAuthOpen(true)}>
                 Sign in
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -555,18 +555,18 @@ export function PortfolioPage({ slug }: { slug: string }) {
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div>
-                  <div className="eyebrow">
+                  <Eyebrow>
                     {selectedWallet ? 'WALLET BALANCE' : 'TOTAL BALANCE'} · {walletCount}{' '}
                     {walletCount === 1 ? 'WALLET' : 'WALLETS'}
-                  </div>
+                  </Eyebrow>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginTop: 6 }}>
                     <AnimatedUsd
                       className="mono"
                       value={headlineTotal}
-                      style={{ fontWeight: 600, fontSize: 'clamp(30px,6vw,44px)', letterSpacing: '-0.02em', lineHeight: 1 }}
+                      style={{ fontWeight: 'var(--fw-medium)', fontSize: 'clamp(var(--fs-hero),6vw,44px)', letterSpacing: '-0.02em', lineHeight: 1 }}
                     />
                     {change ? (
-                      <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: change.up ? 'var(--up)' : 'var(--down)' }}>
+                      <div className="mono" style={{ fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-medium)', color: change.up ? 'var(--up)' : 'var(--down)' }}>
                         {`${changeLabel(change)} · ${drawn.toUpperCase()}`}
                       </div>
                     ) : null}
@@ -591,7 +591,7 @@ export function PortfolioPage({ slug }: { slug: string }) {
 
             <div
               className="mono"
-              style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 12, fontSize: 10.5, color: 'var(--mut)', letterSpacing: '0.04em' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 12, fontSize: 'var(--fs-tag)', color: 'var(--mut)', letterSpacing: '0.04em' }}
             >
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--acc)', animation: 'svpulse 2.4s ease infinite' }} />
@@ -605,12 +605,20 @@ export function PortfolioPage({ slug }: { slug: string }) {
               <>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'nowrap', marginTop: 22 }}>
                   <ScopeSelect options={scopeOptions} value={scope} onChange={setScope} />
-                  <div style={{ display: 'flex', gap: 2, border: '1px solid var(--line)', borderRadius: 999, padding: 2, flexShrink: 0 }}>
-                    {PERIODS.map((p) => (
-                      <button key={p.key} className={`period ${period === p.key ? 'active' : ''}`} onClick={() => setPeriod(p.key)}>
-                        {p.label}
-                      </button>
-                    ))}
+                  <div
+                    style={{
+                      border: '1px solid var(--line)',
+                      borderRadius: 'var(--r-full)',
+                      padding: 'var(--sp-1)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Segmented
+                      label="Chart period"
+                      items={PERIODS}
+                      value={period}
+                      onChange={setPeriod}
+                    />
                   </div>
                 </div>
 
@@ -637,8 +645,8 @@ export function PortfolioPage({ slug }: { slug: string }) {
             {canAdd ? (
               <div style={{ marginTop: 26 }}>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <input
-                    className="mono add-input"
+                  <Input
+                    mono
                     value={input}
                     onChange={(e) => {
                       setInput(e.target.value);
@@ -648,15 +656,17 @@ export function PortfolioPage({ slug }: { slug: string }) {
                       if (e.key === 'Enter') void addWallet();
                     }}
                     placeholder="Enter wallet address"
+                    aria-label="Wallet address"
                     spellCheck={false}
                     autoComplete="off"
+                    style={{ flex: 1, minWidth: 220, width: 'auto' }}
                   />
-                  <button className="btn-acc" style={{ height: 44, fontSize: 13, padding: '0 20px' }} onClick={() => void addWallet()} disabled={adding}>
-                    {adding ? <span className="spin" style={{ width: 15, height: 15, borderTopColor: 'var(--acc-ink)' }} /> : 'Add wallet'}
-                  </button>
+                  <Button size="lg" loading={adding} onClick={() => void addWallet()}>
+                    Add wallet
+                  </Button>
                 </div>
                 {addErr ? (
-                  <div className="mono" style={{ marginTop: 7, fontSize: 11, color: 'var(--down)' }}>
+                  <div className="mono" style={{ marginTop: 7, fontSize: 'var(--fs-tag)', color: 'var(--down)' }}>
                     {addErr}
                   </div>
                 ) : null}
@@ -665,26 +675,20 @@ export function PortfolioPage({ slug }: { slug: string }) {
 
             {/* which positions to show, and what they add up to */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 26, marginBottom: 12 }}>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {FILTERS.map((f) => (
-                  <button key={f.key} className={`chip ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-              <div className="mono" style={{ fontSize: 11, fontWeight: 500, color: 'var(--mut)' }}>
+              <Segmented label="Which positions to show" items={FILTERS} value={filter} onChange={setFilter} tone="accent" />
+              <div className="mono" style={{ fontSize: 'var(--fs-tag)', fontWeight: 'var(--fw-normal)', color: 'var(--mut)' }}>
                 {filter === 'all' ? `${walletCount} ${walletCount === 1 ? 'wallet' : 'wallets'}` : 'Shown'} · {fmtUsd(shownTotal)}
               </div>
             </div>
 
             {visibleWallets.length === 0 ? (
-              <div className="card" style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--mut)', fontSize: 13 }}>
+              <Card style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--mut)', fontSize: 'var(--fs-body)' }}>
                 {wallets.length === 0
                   ? canAdd
                     ? 'No wallets yet. Paste an address above — the network is detected automatically.'
                     : 'This portfolio has no wallets yet.'
                   : 'Nothing matches this filter.'}
-              </div>
+              </Card>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {visibleWallets.map((w) => (

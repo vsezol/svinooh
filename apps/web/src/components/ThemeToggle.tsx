@@ -1,3 +1,4 @@
+import { IconButton } from '../ui';
 import { useTheme } from '../lib/theme';
 
 const SUN = (
@@ -26,9 +27,9 @@ const MOON = (
 export function ThemeToggle() {
   const { toggle } = useTheme();
   return (
-    <button className="icon-btn" onClick={toggle} title="Switch theme" aria-label="Switch theme">
+    <IconButton label="Switch theme" onClick={toggle}>
       <span className="on-dark">{SUN}</span>
       <span className="on-light">{MOON}</span>
-    </button>
+    </IconButton>
   );
 }

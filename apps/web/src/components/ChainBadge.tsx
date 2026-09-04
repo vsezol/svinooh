@@ -22,6 +22,7 @@ import {
   NetworkZksync,
 } from '@web3icons/react';
 import type { ComponentType, CSSProperties } from 'react';
+import { Tooltip } from '../ui';
 
 /**
  * Base, drawn here rather than taken from the set.
@@ -105,8 +106,8 @@ export function networkName(slug: string | null | undefined): string | null {
  * belongs TO the text rather than standing beside it as a peer. The ring in the
  * card's own colour is what keeps it legible where it overlaps.
  *
- * The name comes on hover from `.chain-tip`, not from `title`: the native one
- * waits a second, is styled by the operating system, and shows a finger
+ * The name comes on hover from the kit's Tooltip, not from `title`: the native
+ * one waits a second, is styled by the operating system, and shows a finger
  * nothing at all.
  *
  * An unknown slug renders nothing at all. A grey dot with a question mark would
@@ -117,10 +118,13 @@ export function ChainBadge({ network }: { network: string | null | undefined }) 
   if (!chain) return null;
   const { Icon, name, tint } = chain;
   return (
-    <span
-      className="chain-tip"
-      data-chain={name}
-      aria-label={name}
+    // The Tooltip IS the marker rather than a box around it: wrapped, its own
+    // relative box would become what the marker is positioned against, and the
+    // marker would land on the tooltip's corner instead of the word's. The
+    // inline `position` outranks the class, and the popover then hangs off the
+    // marker, which is where it is wanted.
+    <Tooltip
+      text={name}
       style={{
         position: 'absolute',
         top: -5,
@@ -130,14 +134,13 @@ export function ChainBadge({ network }: { network: string | null | undefined }) 
         borderRadius: '50%',
         background: `color-mix(in srgb, ${tint} 20%, var(--surf2))`,
         border: '1px solid var(--surf2)',
-        display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
         cursor: 'help',
       }}
     >
       <Icon size={12} variant="branded" />
-    </span>
+    </Tooltip>
   );
 }
 

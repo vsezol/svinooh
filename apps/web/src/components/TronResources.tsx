@@ -1,7 +1,7 @@
 'use client';
 
-import type { CSSProperties } from 'react';
 import type { TronResourcesDto } from '@svinooh/shared';
+import { Meter, Row } from '../ui';
 
 /**
  * What a Tron wallet can spend, and what it has lent out.
@@ -16,8 +16,6 @@ import type { TronResourcesDto } from '@svinooh/shared';
  * off the page loses the reason the wallet is staked in the first place.
  */
 
-const LABEL: CSSProperties = { fontSize: 9.5, letterSpacing: '0.12em', color: 'var(--mut)' };
-
 const count = (n: number): string =>
   Number.isFinite(n) ? Math.round(n).toLocaleString('en-US') : '?';
 
@@ -25,49 +23,19 @@ const trx = (n: number): string =>
   Number.isFinite(n) ? (Math.round(n * 100) / 100).toLocaleString('en-US') : '?';
 
 /** One resource: the name, what is left of what there is, and the same as a bar */
-function Meter({ name, free, total }: { name: string; free: number; total: number }) {
+function Resource({ name, free, total }: { name: string; free: number; total: number }) {
   const share = total > 0 ? Math.max(0, Math.min(1, free / total)) : 0;
   return (
     <div style={{ flex: 1, minWidth: 150 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
-        <span className="mono" style={LABEL}>
-          {name}
-        </span>
-        <span className="mono" style={{ fontSize: 12.5, whiteSpace: 'nowrap' }}>
+      <Row label={name}>
+        <span className="mono" style={{ whiteSpace: 'nowrap' }}>
           {count(free)}
           <span style={{ color: 'var(--mut)' }}> / {count(total)}</span>
         </span>
+      </Row>
+      <div style={{ marginTop: 'var(--sp-3)' }}>
+        <Meter value={share} />
       </div>
-      <div
-        style={{
-          marginTop: 7,
-          height: 4,
-          borderRadius: 999,
-          background: 'var(--line2)',
-          overflow: 'hidden',
-        }}
-      >
-        <div
-          style={{
-            width: `${share * 100}%`,
-            height: '100%',
-            background: 'var(--acc)',
-            transition: 'width 0.3s ease',
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-/** A fact on one line: the label keeps the left edge, the value keeps the right */
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-      <span className="mono" style={{ ...LABEL, whiteSpace: 'nowrap', flexShrink: 0 }}>
-        {label}
-      </span>
-      <span style={{ fontSize: 12.5, textAlign: 'right', minWidth: 0 }}>{children}</span>
     </div>
   );
 }
@@ -104,14 +72,14 @@ export function TronResources({ tron }: { tron: TronResourcesDto }) {
     <div
       style={{
         border: '1px solid var(--line)',
-        borderRadius: 12,
+        borderRadius: 'var(--r-md)',
         background: 'var(--surf2)',
-        padding: '12px 14px',
+        padding: 'var(--sp-5) 14px',
       }}
     >
       <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap' }}>
-        <Meter name="ENERGY" free={tron.energyFree} total={energyTotal} />
-        <Meter name="BANDWIDTH" free={tron.bandwidthFree} total={bandwidthTotal} />
+        <Resource name="ENERGY" free={tron.energyFree} total={energyTotal} />
+        <Resource name="BANDWIDTH" free={tron.bandwidthFree} total={bandwidthTotal} />
       </div>
 
       {/* A wallet with nothing lent out gets no lines saying so — the card is
@@ -121,24 +89,24 @@ export function TronResources({ tron }: { tron: TronResourcesDto }) {
         <div
           style={{
             marginTop: 11,
-            paddingTop: 10,
+            paddingTop: 'var(--sp-4)',
             borderTop: '1px solid var(--line)',
             display: 'flex',
             flexDirection: 'column',
-            gap: 6,
+            gap: 'var(--sp-3)',
           }}
         >
-          <Fact label="DELEGATED OUT">{delegated.length ? delegated.join(' · ') : 'Yes'}</Fact>
-          <Fact label="UNLOCKS">
+          <Row label="DELEGATED OUT">{delegated.length ? delegated.join(' · ') : 'Yes'}</Row>
+          <Row label="UNLOCKS">
             <span
               style={{
                 color: tron.reclaimableNow ? 'var(--acc)' : undefined,
-                fontWeight: tron.reclaimableNow ? 700 : 400,
+                fontWeight: tron.reclaimableNow ? 'var(--fw-bold)' : undefined,
               }}
             >
               {reclaimLine(tron)}
             </span>
-          </Fact>
+          </Row>
         </div>
       ) : null}
     </div>

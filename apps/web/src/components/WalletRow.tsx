@@ -3,6 +3,7 @@ import type { KeyboardEvent, MouseEvent } from 'react';
 import type { PositionTokenRole, WalletDto } from '@svinooh/shared';
 import { blockMatches, buildBlocks, type BlockSection, type PositionFilter } from '../lib/blocks';
 import { chainMeta, fmtAmount, fmtPrice, fmtUsd, shortAddress, walletName } from '../lib/format';
+import { Card, Chevron, Spinner, Tag, Tooltip } from '../ui';
 import { badgedText, ChainBadge } from './ChainBadge';
 import { RangeBar } from './RangeBar';
 import { WalletMenu } from './WalletMenu';
@@ -18,8 +19,8 @@ const sectionColor = (section: BlockSection): string | undefined =>
 
 /** The numeric columns: mono, right-aligned, and never wrapping */
 const cellStyle = {
-  fontSize: 13,
-  fontWeight: 500,
+  fontSize: 'var(--fs-body)',
+  fontWeight: 'var(--fw-normal)',
   textAlign: 'right' as const,
   color: 'var(--mut)',
   whiteSpace: 'nowrap' as const,
@@ -27,6 +28,17 @@ const cellStyle = {
   textOverflow: 'ellipsis' as const,
   minWidth: 0,
 };
+
+/**
+ * The small mono notes on a block's header line — the kind of position, the
+ * pair, the APY, the health factor. Six of them, and each was stating the same
+ * three properties with its own idea of the size.
+ */
+const NOTE = {
+  fontSize: 'var(--fs-micro)',
+  letterSpacing: 'var(--tr-tag)',
+  color: 'var(--mut)',
+} as const;
 
 /** What accrued is worth reading as a gain, what is owed as a cost */
 const roleColor = (role: PositionTokenRole): string =>
@@ -105,16 +117,23 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
   };
 
   return (
-    <div className="card" style={{ overflow: 'hidden' }}>
+    <Card style={{ overflow: 'hidden' }}>
       <div
         onClick={() => !syncing && setCollapsed((v) => !v)}
         className="row-hover"
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', cursor: syncing ? 'default' : 'pointer', userSelect: 'none' }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--sp-5)',
+          padding: '13px 16px',
+          cursor: syncing ? 'default' : 'pointer',
+          userSelect: 'none',
+        }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* The name gives way, never the line: a long label ellipsizes and
               the chain chip stays beside it, rather than wrapping under */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-4)' }}>
             {editing ? (
               <input
                 value={editValue}
@@ -126,8 +145,8 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
                 spellCheck={false}
                 style={{
                   fontFamily: 'var(--sans)',
-                  fontWeight: 700,
-                  fontSize: 14,
+                  fontWeight: 'var(--fw-bold)',
+                  fontSize: 'var(--fs-body)',
                   color: 'var(--text)',
                   background: 'transparent',
                   border: 'none',
@@ -140,8 +159,8 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
             ) : (
               <span
                 style={{
-                  fontWeight: 700,
-                  fontSize: 15,
+                  fontWeight: 'var(--fw-bold)',
+                  fontSize: 'var(--fs-lead)',
                   minWidth: 0,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
@@ -151,67 +170,59 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
                 {label}
               </span>
             )}
+            <Tag variant="outline" size="sm" style={{ height: 20, padding: '0 var(--sp-4)', flexShrink: 0 }}>
+              {chain.label}
+            </Tag>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-4)', marginTop: 3 }}>
             <span
+              className="mono"
               style={{
-                fontFamily: 'var(--mono)',
-                fontSize: 9.5,
-                letterSpacing: '0.08em',
-                color: 'var(--mut)',
-                border: '1px solid var(--line)',
-                borderRadius: 6,
-                padding: '2px 7px',
-                flexShrink: 0,
+                fontSize: 'var(--fs-note)',
+                fontWeight: 'var(--fw-normal)',
+                color: wallet.status === 'failed' ? 'var(--down)' : 'var(--mut)',
               }}
             >
-              {chain.label}
-            </span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
-            <span className="mono" style={{ fontSize: 11.5, fontWeight: 500, color: wallet.status === 'failed' ? 'var(--down)' : 'var(--mut)' }}>
               {wallet.status === 'failed'
                 ? 'sync failed'
                 : wallet.stale
                   ? `stale · ${shortAddress(wallet.address)}`
                   : shortAddress(wallet.address)}
             </span>
-            <span onClick={copy} className="mono copy-link" style={{ fontSize: 9.5, letterSpacing: '0.08em', color: 'var(--mut)', cursor: 'pointer' }}>
+            <span
+              onClick={copy}
+              className="mono copy-link"
+              style={{
+                fontSize: 'var(--fs-micro)',
+                letterSpacing: 'var(--tr-tag)',
+                color: 'var(--mut)',
+                cursor: 'pointer',
+              }}
+            >
               {copied ? 'COPIED' : 'COPY'}
             </span>
           </div>
         </div>
 
         {syncing ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <span className="spin" style={{ width: 14, height: 14 }} />
-            <span className="mono" style={{ fontSize: 11, color: 'var(--mut)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-4)' }}>
+            <Spinner size={14} />
+            <span className="mono" style={{ fontSize: 'var(--fs-tag)', color: 'var(--mut)' }}>
               syncing…
             </span>
           </div>
         ) : (
           <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <div className="mono" style={{ fontWeight: 600, fontSize: 15.5 }}>
+            <div className="mono" style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--fs-lead)' }}>
               {fmtUsd(wallet.totalUsd)}
             </div>
-            <div className="mono" style={{ fontSize: 10.5, color: 'var(--mut)', marginTop: 2 }}>
+            <div className="mono" style={{ fontSize: 'var(--fs-tag)', color: 'var(--mut)', marginTop: 'var(--sp-1)' }}>
               {share}
             </div>
           </div>
         )}
 
-        {!syncing && blocks.length > 0 ? (
-          <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRight: '1.5px solid var(--mut)',
-              borderBottom: '1.5px solid var(--mut)',
-              transform: expanded ? 'rotate(225deg) translate(-2px,-2px)' : 'rotate(45deg)',
-              transition: 'transform 0.18s ease',
-              flexShrink: 0,
-              marginLeft: 2,
-            }}
-          />
-        ) : null}
+        {!syncing && blocks.length > 0 ? <Chevron open={expanded} /> : null}
 
         {/* Actions live behind the kebab, away from the expand chevron */}
         {actions !== 'none' && !syncing ? (
@@ -224,7 +235,15 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
       </div>
 
       {expanded ? (
-        <div style={{ borderTop: '1px solid var(--line)', padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div
+          style={{
+            borderTop: '1px solid var(--line)',
+            padding: 'var(--sp-4)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--sp-4)',
+          }}
+        >
           {tron ? <TronResources tron={tron} /> : null}
           {blocks.map((b, i) => (
             <div
@@ -233,71 +252,90 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
               // leave the card. Nothing inside paints to the edge — the section
               // rules stop at the padding box — so the rounded corners hold
               // without one.
-              style={{ border: '1px solid var(--line)', borderRadius: 12, background: 'var(--surf2)' }}
+              style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-md)', background: 'var(--surf2)' }}
             >
               {/* One line, allowed to wrap among itself: name, what kind of
                   position it is, its detail, and whether it is in range — then
                   the money, held against the right edge. The pieces are all
                   short now that the chain is a mark and the pair is in the
                   table below, so a second line would be a line of air. */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', flexWrap: 'wrap' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--sp-4)',
+                  padding: '11px 14px',
+                  flexWrap: 'wrap',
+                }}
+              >
                 <span style={badgedText(!!b.network)}>
-                  <span style={{ fontWeight: 800, fontSize: 13, whiteSpace: 'nowrap' }}>{b.proto}</span>
+                  <span style={{ fontWeight: 'var(--fw-heavy)', fontSize: 'var(--fs-body)', whiteSpace: 'nowrap' }}>
+                    {b.proto}
+                  </span>
                   <ChainBadge network={b.network} />
                 </span>
                 {b.count > 1 ? (
-                  <span className="mono" title={`${b.count} positions folded together`} style={{ fontSize: 9.5, color: 'var(--mut)' }}>
-                    ×{b.count}
-                  </span>
+                  <Tooltip text={`${b.count} positions folded together`}>
+                    <span className="mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--mut)' }}>
+                      ×{b.count}
+                    </span>
+                  </Tooltip>
                 ) : null}
                 {b.typeLabel ? (
-                  <span className="mono" style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--mut)' }}>
+                  <span className="mono" style={NOTE}>
                     {b.typeLabel}
                   </span>
                 ) : null}
                 {b.meta ? (
-                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--mut)', letterSpacing: '0.04em' }}>
+                  <span className="mono" style={NOTE}>
                     {b.meta}
                   </span>
                 ) : null}
                 {b.apy != null ? (
-                  <span className="mono" style={{ fontSize: 10.5, color: b.apy >= 0 ? 'var(--up)' : 'var(--down)', letterSpacing: '0.04em' }}>
+                  <span className="mono" style={{ ...NOTE, color: b.apy >= 0 ? 'var(--up)' : 'var(--down)' }}>
                     {fmtApy(b.apy)}
                   </span>
                 ) : null}
                 {b.healthRate != null ? (
-                  <span
-                    className="mono"
-                    title="Health factor — below 1 the position is liquidated"
-                    style={{ fontSize: 10.5, color: b.healthRate < 1.5 ? 'var(--down)' : 'var(--mut)', letterSpacing: '0.04em' }}
-                  >
-                    HF {b.healthRate.toFixed(2)}
-                  </span>
+                  <Tooltip text="Health factor — below 1 the position is liquidated">
+                    <span
+                      className="mono"
+                      style={{ ...NOTE, color: b.healthRate < 1.5 ? 'var(--down)' : 'var(--mut)' }}
+                    >
+                      HF {b.healthRate.toFixed(2)}
+                    </span>
+                  </Tooltip>
                 ) : null}
                 {b.range ? (
                   // Plain coloured text, not a bordered pill: it sits among
                   // other small mono notes and a box around one of them makes
                   // it a button that cannot be pressed
-                  <span
-                    className="mono"
-                    title={
+                  <Tooltip
+                    text={
                       b.range === 'in'
                         ? 'The price is inside the position range — it is earning fees'
                         : 'The price has left the position range — it sits in one token and earns nothing'
                     }
-                    style={{
-                      fontSize: 10,
-                      letterSpacing: '0.12em',
-                      whiteSpace: 'nowrap',
-                      fontWeight: 600,
-                      color: b.range === 'in' ? 'var(--up)' : 'var(--down)',
-                    }}
                   >
-                    {b.range === 'in' ? 'IN RANGE' : 'OUT OF RANGE'}
-                  </span>
+                    <span
+                      className="mono"
+                      style={{
+                        ...NOTE,
+                        letterSpacing: '0.12em',
+                        whiteSpace: 'nowrap',
+                        fontWeight: 'var(--fw-medium)',
+                        color: b.range === 'in' ? 'var(--up)' : 'var(--down)',
+                      }}
+                    >
+                      {b.range === 'in' ? 'IN RANGE' : 'OUT OF RANGE'}
+                    </span>
+                  </Tooltip>
                 ) : null}
                 <div style={{ flex: 1 }} />
-                <span className="mono" style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                <span
+                  className="mono"
+                  style={{ fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-medium)', whiteSpace: 'nowrap' }}
+                >
                   {fmtUsd(b.value)}
                 </span>
               </div>
@@ -322,20 +360,24 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
                         display: 'flex',
                         alignItems: 'baseline',
                         justifyContent: 'space-between',
-                        gap: 10,
-                        padding: '0 16px 8px',
+                        gap: 'var(--sp-4)',
+                        padding: '0 16px var(--sp-4)',
                       }}
                     >
                       <span
                         className="mono"
-                        style={{ fontSize: 10.5, letterSpacing: '0.14em', color: sectionColor(s) }}
+                        style={{ fontSize: 'var(--fs-micro)', letterSpacing: '0.14em', color: sectionColor(s) }}
                       >
                         {s.label}
                       </span>
                       {s.total !== null ? (
                         <span
                           className="mono"
-                          style={{ fontSize: 12.5, fontWeight: 600, color: sectionColor(s) }}
+                          style={{
+                            fontSize: 'var(--fs-note)',
+                            fontWeight: 'var(--fw-medium)',
+                            color: sectionColor(s),
+                          }}
                         >
                           {s.negative ? '−' : ''}
                           {fmtUsd(s.total)}
@@ -352,7 +394,7 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
                           key={label}
                           className={`mono${ci === 1 ? ' pos-price' : ''}`}
                           style={{
-                            fontSize: 9.5,
+                            fontSize: 'var(--fs-micro)',
                             letterSpacing: '0.14em',
                             color: 'var(--mut)',
                             textAlign: ci ? 'right' : 'left',
@@ -377,8 +419,8 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
                       <span style={badgedText(!!r.network)}>
                         <span
                           style={{
-                            fontWeight: 700,
-                            fontSize: 13.5,
+                            fontWeight: 'var(--fw-bold)',
+                            fontSize: 'var(--fs-body)',
                             color: sectionColor(s) ?? 'var(--text)',
                             whiteSpace: 'nowrap',
                           }}
@@ -407,12 +449,12 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
             </div>
           ))}
           {wallet.unpriced?.length ? (
-            <div className="mono" style={{ fontSize: 10.5, color: 'var(--mut)', padding: '2px 4px' }}>
+            <div className="mono" style={{ fontSize: 'var(--fs-tag)', color: 'var(--mut)', padding: '2px 4px' }}>
               {wallet.unpriced.length} asset(s) without a price source — not included in the total
             </div>
           ) : null}
         </div>
       ) : null}
-    </div>
+    </Card>
   );
 }

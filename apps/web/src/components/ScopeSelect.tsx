@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { MenuItem, Panel, useDismiss } from '../ui';
 import { fmtUsd } from '../lib/format';
 
 export interface ScopeOption {
@@ -23,20 +24,9 @@ export function ScopeSelect({
 }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
 
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => {
-      if (!box.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', esc);
-    return () => {
-      document.removeEventListener('mousedown', close);
-      document.removeEventListener('keydown', esc);
-    };
-  }, [open]);
+  useDismiss({ open, onClose: close, refs: [box] });
 
   const current = options.find((o) => o.id === value) ?? options[0];
 
@@ -53,15 +43,23 @@ export function ScopeSelect({
           border: '1px solid var(--line2)',
           background: 'transparent',
           color: 'var(--text)',
-          borderRadius: 999,
-          height: 34,
+          borderRadius: 'var(--r-full)',
+          height: 'var(--h-sm)',
           padding: '0 14px',
           cursor: 'pointer',
           maxWidth: '100%',
           fontFamily: 'var(--sans)',
         }}
       >
-        <span style={{ fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <span
+          style={{
+            fontWeight: 'var(--fw-bold)',
+            fontSize: 'var(--fs-note)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
           {current?.label ?? 'ALL WALLETS'}
         </span>
         <span
@@ -77,42 +75,44 @@ export function ScopeSelect({
       </button>
 
       {open ? (
-        <div
+        <Panel
           role="listbox"
           style={{
             position: 'absolute',
-            top: 'calc(100% + 6px)',
+            top: 'calc(100% + var(--sp-3))',
             left: 0,
             zIndex: 90,
             minWidth: 250,
-            background: 'var(--surf)',
-            border: '1px solid var(--line2)',
-            borderRadius: 14,
-            overflow: 'hidden',
-            boxShadow: '0 20px 50px -20px rgba(0,0,0,0.55)',
           }}
         >
           {options.map((o) => (
-            <button
+            <MenuItem
               key={o.id}
               role="option"
               aria-selected={o.id === value}
-              className="menu-item"
+              selected={o.id === value}
               onClick={() => {
                 onChange(o.id);
                 setOpen(false);
               }}
-              style={{ justifyContent: 'space-between', gap: 14, color: o.id === value ? 'var(--acc-text)' : 'var(--text)' }}
+              style={{ justifyContent: 'space-between', gap: 14 }}
             >
-              <span style={{ fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <span
+                style={{
+                  fontWeight: 'var(--fw-bold)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
                 {o.label}
               </span>
-              <span className="mono" style={{ fontSize: 11, color: 'var(--mut)', whiteSpace: 'nowrap' }}>
+              <span className="mono" style={{ fontSize: 'var(--fs-tag)', color: 'var(--mut)', whiteSpace: 'nowrap' }}>
                 {o.valueUsd === null ? '—' : fmtUsd(o.valueUsd, 0)}
               </span>
-            </button>
+            </MenuItem>
           ))}
-        </div>
+        </Panel>
       ) : null}
     </div>
   );

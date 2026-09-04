@@ -1,4 +1,5 @@
 import type { PositionBand } from '@svinooh/shared';
+import { Meter } from '../ui';
 import { fmtPrice } from '../lib/format';
 
 /**
@@ -28,7 +29,7 @@ export function RangeBar({ band, inRange }: { band: PositionBand; inRange: boole
   const tone = inRange ? 'var(--up)' : 'var(--down)';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '2px 16px 10px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)', padding: '2px 16px 10px' }}>
       {/* The price rides ABOVE the bar, over its own mark. Put in a row of its
           own rather than between the two bounds: down there it would read as
           the middle of the range, and on a position that has left its band it
@@ -43,7 +44,7 @@ export function RangeBar({ band, inRange }: { band: PositionBand; inRange: boole
             // hang the label off the bar. There it lines up with the end it is
             // nearest — which is also where a pinned mark always sits.
             transform: `translateX(${at < 0.12 ? '0' : at > 0.88 ? '-100%' : '-50%'})`,
-            fontSize: 10,
+            fontSize: 'var(--fs-micro)',
             color: tone,
             whiteSpace: 'nowrap',
           }}
@@ -52,30 +53,19 @@ export function RangeBar({ band, inRange }: { band: PositionBand; inRange: boole
         </span>
       </div>
 
-      <div style={{ position: 'relative', height: 4, borderRadius: 999, background: 'var(--line2)' }}>
-        {/* The band itself, in the colour of the verdict on it */}
-        <div style={{ position: 'absolute', inset: 0, borderRadius: 999, background: tone, opacity: 0.35 }} />
-        {/* The price. Its centre sits at `at`, and the translate keeps it on the
-            bar at both ends instead of hanging half off. */}
-        <div
-          title={`${fmtPrice(current)} — ${band.priceLabel}`}
-          style={{
-            position: 'absolute',
-            left: `${at * 100}%`,
-            top: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: 10,
-            height: 10,
-            borderRadius: '50%',
-            background: tone,
-            border: '2px solid var(--surf2)',
-          }}
-        />
-      </div>
+      {/* A band rather than a quantity: the whole track is the range, and the
+          mark is the only number being read off it. */}
+      <Meter tone={tone} soft mark={at} markTitle={`${fmtPrice(current)} — ${band.priceLabel}`} />
 
       <div
         className="mono"
-        style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 10, color: 'var(--mut)' }}
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 'var(--sp-4)',
+          fontSize: 'var(--fs-micro)',
+          color: 'var(--mut)',
+        }}
       >
         <span>{fmtPrice(lower)}</span>
         <span>{fmtPrice(upper)}</span>

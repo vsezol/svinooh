@@ -1,5 +1,5 @@
 import type { PortfolioVisibility } from '@svinooh/shared';
-import { Modal } from './Modal';
+import { Button, Dialog, DialogActions, Note } from '../ui';
 
 /**
  * The owner's visibility switch, in the top-right beside Share. Both states are
@@ -29,10 +29,10 @@ export function VisibilityCard({
       aria-label="Portfolio visibility"
       style={{
         display: 'flex',
-        gap: 2,
+        gap: 'var(--sp-1)',
         border: '1px solid var(--line2)',
-        borderRadius: 999,
-        padding: 2,
+        borderRadius: 'var(--r-full)',
+        padding: 'var(--sp-1)',
         opacity: busy ? 0.5 : 1,
       }}
     >
@@ -63,10 +63,10 @@ function Half({
       onClick={onClick}
       style={{
         fontFamily: 'var(--sans)',
-        fontSize: 12,
-        fontWeight: 700,
-        padding: '6px 14px',
-        borderRadius: 999,
+        fontSize: 'var(--fs-note)',
+        fontWeight: 'var(--fw-bold)',
+        padding: 'var(--sp-3) 14px',
+        borderRadius: 'var(--r-full)',
         border: 'none',
         cursor: busy || active ? 'default' : 'pointer',
         color: active ? (accent ? 'var(--acc-ink)' : 'var(--text)') : 'var(--mut)',
@@ -85,37 +85,26 @@ function Half({
  */
 export function GoPublicModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
   return (
-    <Modal onClose={onCancel}>
-      <div
-        style={{
-          background: 'var(--surf)',
-          border: '1px solid var(--line2)',
-          borderRadius: 20,
-          padding: '26px 24px',
-        }}
-      >
-        <div style={{ fontWeight: 800, fontSize: 17 }}>Make this portfolio public?</div>
-        <div style={{ fontSize: 13, color: 'var(--mut)', marginTop: 12, lineHeight: 1.7 }}>
+    <Dialog onClose={onCancel} title="Make this portfolio public?">
+      <div style={{ fontSize: 'var(--fs-title)', fontWeight: 'var(--fw-heavy)' }}>
+        Make this portfolio public?
+      </div>
+      <Note style={{ marginTop: 'var(--sp-5)', lineHeight: 1.7 }}>
           It will appear on the home page and in search, and <strong style={{ color: 'var(--text)' }}>anyone
           will be able to see your total and every wallet in it</strong>.
           <br />
           <br />
           Your name, your Telegram handle and the names you gave your wallets stay private either way —
           those are never shown to anyone but you. You can switch back at any time.
-        </div>
-        <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
-          <button
-            className="pill"
-            style={{ flex: 1, height: 42, justifyContent: 'center', fontSize: 12 }}
-            onClick={onCancel}
-          >
-            CANCEL
-          </button>
-          <button className="btn-acc" style={{ flex: 1, height: 42, fontSize: 13 }} onClick={onConfirm}>
-            Make public
-          </button>
-        </div>
-      </div>
-    </Modal>
+      </Note>
+      <DialogActions>
+        <Button variant="quiet" size="lg" block onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button size="lg" block onClick={onConfirm}>
+          Make public
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

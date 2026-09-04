@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { Button, Card, Spinner } from '../../ui';
 import { EYEBROW, InfoMark, Notice } from './fields';
 import { groupSettings } from './groups';
 import { SettingRow } from './SettingRow';
@@ -27,22 +28,19 @@ export function AdminPanel() {
 
   if (denied) {
     return (
-      <div
-        className="card"
-        style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--mut)', fontSize: 13 }}
-      >
+      <Card style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--mut)', fontSize: 'var(--fs-body)' }}>
         Nothing here.
-      </div>
+      </Card>
     );
   }
 
   return (
     <div>
-      <div className="mono" style={{ ...EYEBROW, fontSize: 10.5 }}>
+      <div className="mono" style={{ ...EYEBROW, fontSize: 'var(--fs-tag)' }}>
         ADMIN
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 6 }}>
-        <span style={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em' }}>Throughput</span>
+        <span style={{ fontWeight: 'var(--fw-heavy)', fontSize: 'var(--fs-display)', letterSpacing: '-0.02em' }}>Throughput</span>
         <InfoMark>
           How hard the system pushes. A change is live within fifteen seconds, and a knob left at
           its default is not stored at all.
@@ -51,7 +49,7 @@ export function AdminPanel() {
 
       {specs === null ? (
         <div style={{ padding: '40px 0', textAlign: 'center' }}>
-          <span className="spin" style={{ width: 20, height: 20 }} />
+          <Spinner size={20} />
         </div>
       ) : (
         <>
@@ -63,7 +61,7 @@ export function AdminPanel() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 18 }}>
             {groups.map((group) => (
-              <div key={group.key} className="card" style={{ padding: '15px 18px 18px' }}>
+              <Card key={group.key} style={{ padding: '15px 18px 18px' }}>
                 <div className="mono" style={EYEBROW}>
                   {group.label.toUpperCase()}
                 </div>
@@ -75,28 +73,16 @@ export function AdminPanel() {
                     onChange={(value) => set(spec.key, value)}
                   />
                 ))}
-              </div>
+              </Card>
             ))}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
-            <button
-              className="btn-acc"
-              style={{ height: 40, fontSize: 13, padding: '0 20px' }}
-              onClick={save}
-              disabled={!dirty || busy}
-            >
-              {busy ? (
-                <span
-                  className="spin"
-                  style={{ width: 14, height: 14, borderTopColor: 'var(--acc-ink)' }}
-                />
-              ) : (
-                'Save'
-              )}
-            </button>
+            <Button size="md" loading={busy} disabled={!dirty} onClick={save}>
+              Save
+            </Button>
             {/* One line, where the eye already is after pressing the button */}
-            <span className="mono" style={{ fontSize: 11, color: 'var(--mut)' }}>
+            <span className="mono" style={{ fontSize: 'var(--fs-tag)', color: 'var(--mut)' }}>
               {dirty ? `${Object.keys(changed).length} changed` : saved ? 'Saved' : ''}
             </span>
           </div>

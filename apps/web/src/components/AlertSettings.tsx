@@ -1,146 +1,60 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
+import { useState } from 'react';
 import type { WalletDto } from '@svinooh/shared';
 import { blockMatches, buildBlocks } from '../lib/blocks';
 import { armedCount, parseThreshold, useAlerts, type WalletAlerts } from '../lib/alerts';
 import { walletName } from '../lib/format';
-
-const EYEBROW: CSSProperties = {
-  fontSize: 10,
-  letterSpacing: '0.16em',
-  color: 'var(--mut)',
-};
-
-const SETTING_TITLE: CSSProperties = { fontWeight: 700, fontSize: 13.5 };
-const SETTING_NOTE: CSSProperties = { fontSize: 12, color: 'var(--mut)', marginTop: 2, lineHeight: 1.5 };
-
-const FIELD: CSSProperties = {
-  width: 86,
-  height: 36,
-  textAlign: 'right',
-  background: 'var(--surf2)',
-  border: '1px solid var(--line2)',
-  borderRadius: 10,
-  padding: '0 12px',
-  fontSize: 13,
-  color: 'var(--text)',
-  outline: 'none',
-};
+import { Card, Chevron, Display, Eyebrow, Note, NumberField, Switch, Tag } from '../ui';
 
 /** A setting and the control that changes it, on one line */
-function Row({ title, note, children }: { title: string; note: string; children: React.ReactNode }) {
+function Setting({ title, note, children }: { title: string; note: string; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 11 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={SETTING_TITLE}>{title}</div>
-        <div style={SETTING_NOTE}>{note}</div>
+        <div style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--fs-body)' }}>{title}</div>
+        <Note style={{ marginTop: 'var(--sp-1)' }}>{note}</Note>
       </div>
       {children}
     </div>
   );
 }
 
-function Toggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
-  return (
-    <div
-      role="switch"
-      aria-checked={on}
-      onClick={() => onChange(!on)}
-      style={{
-        width: 42,
-        height: 24,
-        borderRadius: 999,
-        background: on ? 'var(--acc)' : 'var(--line2)',
-        padding: 3,
-        cursor: 'pointer',
-        transition: 'background 0.18s ease',
-        flexShrink: 0,
-      }}
-    >
-      <div
-        style={{
-          width: 18,
-          height: 18,
-          borderRadius: '50%',
-          background: on ? 'var(--acc-ink)' : 'var(--surf)',
-          transform: on ? 'translateX(18px)' : 'none',
-          transition: 'transform 0.18s ease',
-        }}
-      />
-    </div>
-  );
-}
-
 /**
- * A threshold, typed. It is held as text while it is being typed — "1." is not a
- * number and neither is an empty box, and rewriting either into one under the
- * cursor is how a field stops letting you clear it. What is typed is committed
- * when the field is left, and an empty box means nobody is watching.
+ * A threshold, typed.
+ *
+ * All of the behaviour — held as text while it is being edited, committed on
+ * blur and on Enter, discarded on Escape, and never sent twice for one Enter —
+ * is NumberField's. What is left here is what makes it a threshold: the digit
+ * filter, the parse, and the unit sitting inside the box.
  */
 function Threshold({
   value,
   suffix,
+  label,
   onCommit,
 }: {
   value: number | null;
   suffix?: string;
+  label: string;
   onCommit: (value: number | null) => void;
 }) {
-  const asText = value === null ? '' : String(value);
-  const [draft, setDraft] = useState(asText);
-
-  // Somebody else's change to the same setting — another tab, a reload — wins
-  // over a draft nobody is holding
-  useEffect(() => setDraft(asText), [asText]);
-
-  /**
-   * The last value actually sent. Enter commits and then blurs, and the blur
-   * commits again before the parent's state has come back round — without this
-   * every value confirmed with Enter was saved twice.
-   */
-  const sent = useRef(value);
-  useEffect(() => {
-    sent.current = value;
-  }, [value]);
-
-  const commit = (raw: string = draft) => {
-    const parsed = parseThreshold(raw);
-    setDraft(parsed === null ? '' : String(parsed));
-    if (parsed === sent.current) return;
-    sent.current = parsed;
-    onCommit(parsed);
-  };
-
   return (
     <div style={{ position: 'relative' }}>
-      <input
-        className="mono field-flat"
-        value={draft}
-        // Digits and ONE point: "8.0.5" is not a number, and Number() turns it
-        // into NaN, which cleared the field on somebody who was only mistyping
-        onChange={(e) => setDraft(e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))}
-        onBlur={() => commit()}
-        onKeyDown={(e) => {
-          // Enter saves, and does so ITSELF. It used to only call blur() and
-          // leave the saving to the blur handler — which meant a value typed and
-          // confirmed with Enter could sit on screen, looking committed, having
-          // never been sent anywhere.
-          if (e.key === 'Enter') {
-            commit(e.currentTarget.value);
-            e.currentTarget.blur();
-          }
-          // Escape puts back what was there, rather than committing a half-typed
-          // number nobody meant
-          if (e.key === 'Escape') {
-            setDraft(asText);
-            e.currentTarget.blur();
-          }
-        }}
+      <NumberField
+        mono
+        size="md"
+        shape="box"
+        aria-label={label}
         inputMode="decimal"
         spellCheck={false}
-        style={{ ...FIELD, paddingRight: suffix ? 26 : 12 }}
+        value={value}
+        parse={parseThreshold}
+        // Digits and ONE point: "8.0.5" is not a number, and Number() turns it
+        // into NaN, which cleared the field on somebody who was only mistyping
+        clean={(raw) => raw.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1')}
+        onCommit={onCommit}
+        style={{ width: 86, paddingRight: suffix ? 26 : undefined }}
       />
       {suffix ? (
         <span
@@ -150,7 +64,7 @@ function Threshold({
             right: 11,
             top: '50%',
             transform: 'translateY(-50%)',
-            fontSize: 12,
+            fontSize: 'var(--fs-note)',
             color: 'var(--mut)',
             pointerEvents: 'none',
           }}
@@ -158,6 +72,16 @@ function Threshold({
           {suffix}
         </span>
       ) : null}
+    </div>
+  );
+}
+
+/** One group of settings, under the heading that says what they are about */
+function Group({ title, first, children }: { title: string; first: boolean; children: React.ReactNode }) {
+  return (
+    <div style={{ padding: '14px 16px', borderTop: first ? 'none' : '1px solid var(--line)' }}>
+      <Eyebrow>{title}</Eyebrow>
+      {children}
     </div>
   );
 }
@@ -181,125 +105,104 @@ function WalletCard({
   // positions at all still has energy, bandwidth and delegations to watch
   const isTron = wallet.chain === 'TRON';
   const armed = armedCount(alerts, hasPools, hasLending, isTron);
+  const name = walletName(wallet.label, wallet.chain);
 
   return (
-    <div style={{ border: '1px solid var(--line)', borderRadius: 16, background: 'var(--surf)', overflow: 'hidden' }}>
-      <div
+    <Card style={{ overflow: 'hidden' }}>
+      <button
         className="row-hover"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', cursor: 'pointer', userSelect: 'none' }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--sp-5)',
+          padding: '14px 16px',
+          width: '100%',
+          border: 'none',
+          background: 'transparent',
+          color: 'inherit',
+          textAlign: 'left',
+          font: 'inherit',
+          userSelect: 'none',
+        }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700, fontSize: 15 }}>{walletName(wallet.label, wallet.chain)}</span>
-            <span
-              className="mono"
-              style={{
-                fontSize: 9.5,
-                letterSpacing: '0.08em',
-                color: 'var(--mut)',
-                border: '1px solid var(--line2)',
-                borderRadius: 6,
-                padding: '2px 7px',
-              }}
-            >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-4)', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--fs-lead)' }}>{name}</span>
+            <Tag variant="outline" size="sm" style={{ height: 20, padding: '0 var(--sp-4)' }}>
               {wallet.chain}
-            </span>
+            </Tag>
           </div>
-          <div className="mono" style={{ fontSize: 11.5, color: 'var(--mut)', marginTop: 4 }}>
+          <div className="mono" style={{ fontSize: 'var(--fs-note)', color: 'var(--mut)', marginTop: 'var(--sp-2)' }}>
             {wallet.address.slice(0, 6)}…{wallet.address.slice(-4)}
           </div>
         </div>
-        <span className="mono" style={{ fontSize: 10.5, color: 'var(--mut)' }}>
+        <span className="mono" style={{ fontSize: 'var(--fs-tag)', color: 'var(--mut)' }}>
           {armed ? `${armed} ${armed === 1 ? 'ALERT' : 'ALERTS'}` : ''}
         </span>
-        <div
-          style={{
-            width: 8,
-            height: 8,
-            borderRight: '1.5px solid var(--mut)',
-            borderBottom: '1.5px solid var(--mut)',
-            transform: open ? 'rotate(225deg) translate(-2px,-2px)' : 'rotate(45deg)',
-            transition: 'transform 0.18s ease',
-            flexShrink: 0,
-            marginLeft: 2,
-          }}
-        />
-      </div>
+        <Chevron open={open} />
+      </button>
 
       {open ? (
         <div style={{ borderTop: '1px solid var(--line)' }}>
           {hasPools ? (
-            <div style={{ padding: '14px 16px' }}>
-              <div className="mono" style={EYEBROW}>
-                POOLS
-              </div>
-              <Row title="Range alerts" note="When an LP position exits or re-enters its liquidity range">
-                <Toggle on={alerts.rangeAlerts} onChange={(rangeAlerts) => onChange({ rangeAlerts })} />
-              </Row>
-            </div>
+            <Group title="POOLS" first>
+              <Setting title="Range alerts" note="When an LP position exits or re-enters its liquidity range">
+                <Switch
+                  on={alerts.rangeAlerts}
+                  onChange={(rangeAlerts) => onChange({ rangeAlerts })}
+                  label={`Range alerts for ${name}`}
+                />
+              </Setting>
+            </Group>
           ) : null}
 
           {hasLending ? (
-            <div style={{ padding: '14px 16px', borderTop: hasPools ? '1px solid var(--line)' : 'none' }}>
-              <div className="mono" style={EYEBROW}>
-                LENDING
-              </div>
-              <Row title="Health factor below" note="Alert when liquidation risk grows past this threshold">
+            <Group title="LENDING" first={!hasPools}>
+              <Setting title="Health factor below" note="Alert when liquidation risk grows past this threshold">
                 <Threshold
+                  label={`Health factor threshold for ${name}`}
                   value={alerts.healthFactorBelow}
                   onCommit={(healthFactorBelow) => onChange({ healthFactorBelow })}
                 />
-              </Row>
-              <Row title="Borrow APY above" note="Alert when your loan rate climbs past this threshold">
+              </Setting>
+              <Setting title="Borrow APY above" note="Alert when your loan rate climbs past this threshold">
                 <Threshold
+                  label={`Borrow APY threshold for ${name}`}
                   value={alerts.borrowApyAbove}
                   suffix="%"
                   onCommit={(borrowApyAbove) => onChange({ borrowApyAbove })}
                 />
-              </Row>
-            </div>
+              </Setting>
+            </Group>
           ) : null}
 
           {isTron ? (
-            <div
-              style={{
-                padding: '14px 16px',
-                borderTop: hasPools || hasLending ? '1px solid var(--line)' : 'none',
-              }}
-            >
-              <div className="mono" style={EYEBROW}>
-                RESOURCES
-              </div>
-              <Row
-                title="Delegation unlocked"
-                note="When resources you delegated can be taken back"
-              >
-                <Toggle
+            <Group title="RESOURCES" first={!hasPools && !hasLending}>
+              <Setting title="Delegation unlocked" note="When resources you delegated can be taken back">
+                <Switch
                   on={alerts.tronReclaimAlerts}
                   onChange={(tronReclaimAlerts) => onChange({ tronReclaimAlerts })}
+                  label={`Delegation alerts for ${name}`}
                 />
-              </Row>
-              <Row
-                title="Resources idle"
-                note="When energy and bandwidth are free and nothing is delegated"
-              >
-                <Toggle
+              </Setting>
+              <Setting title="Resources idle" note="When energy and bandwidth are free and nothing is delegated">
+                <Switch
                   on={alerts.tronDelegateAlerts}
                   onChange={(tronDelegateAlerts) => onChange({ tronDelegateAlerts })}
+                  label={`Idle resource alerts for ${name}`}
                 />
-              </Row>
-            </div>
+              </Setting>
+            </Group>
           ) : null}
 
           {!hasPools && !hasLending && !isTron ? (
-            <div style={{ padding: '14px 16px', fontSize: 12.5, color: 'var(--mut)' }}>
-              No DeFi positions to monitor in this wallet yet.
-            </div>
+            <Note style={{ padding: '14px 16px' }}>No DeFi positions to monitor in this wallet yet.</Note>
           ) : null}
         </div>
       ) : null}
-    </div>
+    </Card>
   );
 }
 
@@ -309,38 +212,46 @@ function WalletCard({
  * decides which settings it even has, and until it has told us, nothing here
  * would be right.
  */
-export function AlertSettings({ slug, wallets, syncMinutes }: { slug: string; wallets: WalletDto[]; syncMinutes: number }) {
+export function AlertSettings({
+  slug,
+  wallets,
+  syncMinutes,
+}: {
+  slug: string;
+  wallets: WalletDto[];
+  syncMinutes: number;
+}) {
   const { settingsFor, save } = useAlerts(slug, true);
   const ready = wallets.filter((w) => w.status !== 'pending');
 
   return (
     <div>
-      <div className="mono" style={{ fontSize: 10.5, letterSpacing: '0.16em', color: 'var(--mut)' }}>
-        NOTIFICATIONS
-      </div>
-      <div style={{ fontWeight: 800, fontSize: 22, letterSpacing: '-0.02em', marginTop: 6 }}>Alert settings</div>
-      <div style={{ fontSize: 13, color: 'var(--mut)', marginTop: 6, lineHeight: 1.6, maxWidth: 480 }}>
+      <Eyebrow>NOTIFICATIONS</Eyebrow>
+      <Display style={{ marginTop: 'var(--sp-3)' }}>Alert settings</Display>
+      <div
+        style={{
+          fontSize: 'var(--fs-body)',
+          color: 'var(--mut)',
+          marginTop: 'var(--sp-3)',
+          lineHeight: 1.6,
+          maxWidth: 480,
+        }}
+      >
         Per-wallet alerts, delivered to your Telegram. Checked on every {syncMinutes}-minute sync.
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)', marginTop: 'var(--sp-6)' }}>
         {ready.length === 0 ? (
-          <div
-            className="card"
-            style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--mut)', fontSize: 13 }}
+          <Card
+            style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--mut)', fontSize: 'var(--fs-body)' }}
           >
             {wallets.length === 0
               ? 'No wallets yet. Add one on the portfolio tab and its alerts appear here.'
               : 'Still reading these wallets — their alerts appear once the first sync lands.'}
-          </div>
+          </Card>
         ) : (
           ready.map((w) => (
-            <WalletCard
-              key={w.id}
-              wallet={w}
-              alerts={settingsFor(w.id)}
-              onChange={(patch) => save(w.id, patch)}
-            />
+            <WalletCard key={w.id} wallet={w} alerts={settingsFor(w.id)} onChange={(patch) => save(w.id, patch)} />
           ))
         )}
       </div>

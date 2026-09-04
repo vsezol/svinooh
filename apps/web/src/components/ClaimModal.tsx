@@ -1,4 +1,4 @@
-import { Modal } from './Modal';
+import { Button, Dialog, DialogActions, Note } from '../ui';
 
 /**
  * Taking over a portfolio that belongs to nobody. Worth a confirmation not
@@ -16,27 +16,27 @@ export function ClaimModal({
   onConfirm: () => void;
 }) {
   return (
-    <Modal onClose={onCancel}>
-      <div style={{ background: 'var(--surf)', border: '1px solid var(--line2)', borderRadius: 20, padding: '26px 24px' }}>
-        <div style={{ fontWeight: 800, fontSize: 17 }}>Make this portfolio yours?</div>
-        <div style={{ fontSize: 13, color: 'var(--mut)', marginTop: 12, lineHeight: 1.7 }}>
-          It belongs to nobody right now. Taking it over lets you{' '}
-          <strong style={{ color: 'var(--text)' }}>rename and remove its wallets</strong>, and nobody
-          else will be able to add to it.
-          <br />
-          <br />
-          It also becomes private — it leaves the home page and search, and only people you give the
-          link to can open it. You can publish it again whenever you like.
-        </div>
-        <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
-          <button className="pill" style={{ flex: 1, height: 42, justifyContent: 'center', fontSize: 12 }} onClick={onCancel}>
-            CANCEL
-          </button>
-          <button className="btn-acc" style={{ flex: 1, height: 42, fontSize: 13 }} onClick={onConfirm} disabled={busy}>
-            {busy ? <span className="spin" style={{ width: 15, height: 15, borderTopColor: 'var(--acc-ink)' }} /> : 'Make it mine'}
-          </button>
-        </div>
+    <Dialog onClose={onCancel} title="Make this portfolio yours?">
+      <div style={{ fontSize: 'var(--fs-title)', fontWeight: 'var(--fw-heavy)' }}>
+        Make this portfolio yours?
       </div>
-    </Modal>
+      <Note style={{ marginTop: 'var(--sp-5)', lineHeight: 1.7 }}>
+        It belongs to nobody right now. Taking it over lets you{' '}
+        <strong style={{ color: 'var(--text)' }}>rename and remove its wallets</strong>, and nobody
+        else will be able to add to it.
+        <br />
+        <br />
+        It also becomes private — it leaves the home page and search, and only people you give the
+        link to can open it. You can publish it again whenever you like.
+      </Note>
+      <DialogActions>
+        <Button variant="quiet" size="lg" block onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button size="lg" block loading={busy} onClick={onConfirm}>
+          Make it mine
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
