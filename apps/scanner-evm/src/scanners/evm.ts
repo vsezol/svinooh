@@ -43,7 +43,12 @@ function sourceFor(firstScan: boolean): { source: EvmSource; fallback: EvmSource
  * slow, neither waits on the other, and a wallet with no Uniswap position and
  * no Aave debt costs one call per network to find that out.
  */
-export async function scanEvm(address: string, firstScan = false): Promise<ScanResult> {
+export async function scanEvm(
+  address: string,
+  firstScan = false,
+  /** Told which source answered a first reading — the metric lives with the caller */
+  onFirstReading?: (source: string) => void,
+): Promise<ScanResult> {
   const { source, fallback } = sourceFor(firstScan);
 
   // Which one ANSWERED, not which one was asked — a fallback that logs the
@@ -65,6 +70,9 @@ export async function scanEvm(address: string, firstScan = false): Promise<ScanR
     evmFacts(address).catch(() => NO_FACTS),
   ]);
 
-  if (firstScan) logger.log(`${address}: first reading via ${answered.label}`);
+  if (firstScan) {
+    logger.log(`${address}: first reading via ${answered.label}`);
+    onFirstReading?.(answered.id);
+  }
   return { ...result, positions: enrich(result.positions, facts) };
 }

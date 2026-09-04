@@ -48,7 +48,9 @@ export class ScanConsumerService implements OnApplicationBootstrap {
   private async handle(job: ScanJob): Promise<void> {
     const started = Date.now();
     try {
-      const result = await scanEvm(job.address, job.firstScan === true);
+      const result = await scanEvm(job.address, job.firstScan === true, (source) =>
+        this.metrics.firstReadings.inc({ source }),
+      );
       // A drop this steep is usually a source having a bad minute, not money
       // moving. Reading again here costs almost nothing — the browser is open
       // and the page is warm — and it gives the consumer two readings to judge
@@ -85,6 +87,8 @@ export class ScanConsumerService implements OnApplicationBootstrap {
       } else {
         const message = error instanceof Error ? error.message : String(error);
         this.metrics.scans.inc({ chain: 'EVM', result: 'failed' });
+        // A fast check where nobody answered — the fallback failed too
+        if (job.firstScan === true) this.metrics.firstReadings.inc({ source: 'none' });
         this.metrics.errors.inc({ type: 'scan' });
         this.logger.warn(`${job.address} failed: ${message}`);
         await this.publish({ chain: 'EVM', address: job.address, ok: false, error: message });
