@@ -575,12 +575,15 @@ button.ui-tag[data-variant='soft']:not(:disabled):hover {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   Tooltip — one implementation, replacing three
+   Tooltip
 
-   There were: .infotip (a mark you hover for a paragraph), .chain-tip (a
-   ::after carrying an attribute), and thirteen native `title` attributes,
-   which wait about a second, are drawn by the operating system, and show a
-   finger nothing at all.
+   The popover is rendered into <body> and placed by the component from the
+   trigger's own rectangle — see Tooltip.tsx for why. All that is left here is
+   what it looks like; `top` and `left` arrive as inline styles.
+
+   There were three of these before the kit: .infotip (a mark you hover for a
+   paragraph), .chain-tip (a ::after carrying an attribute), and thirteen
+   native `title` attributes.
    ═══════════════════════════════════════════════════════════════════════ */
 
 .ui-tip {
@@ -590,11 +593,8 @@ button.ui-tag[data-variant='soft']:not(:disabled):hover {
 }
 
 .ui-tip-pop {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + var(--sp-3));
-  transform: translateX(-50%) translateY(4px);
-  z-index: 70;
+  position: fixed;
+  z-index: 1100;
   padding: var(--sp-3) 10px;
   border-radius: var(--r-sm);
   background: var(--surf2);
@@ -609,32 +609,18 @@ button.ui-tag[data-variant='soft']:not(:disabled):hover {
   color: var(--text);
   text-align: center;
   white-space: nowrap;
-  opacity: 0;
-  visibility: hidden;
   pointer-events: none;
-  transition: opacity var(--ease-quick), transform var(--ease-quick);
 }
 
-/* A sentence rather than a name: it wraps, it sits below the mark, and it is
-   set muted because it is an aside */
+/* A sentence rather than a name: it wraps, and it is set muted because it is
+   an aside */
 .ui-tip-pop[data-size='lg'] {
-  top: calc(100% + var(--sp-4));
-  bottom: auto;
-  transform: translateX(-50%) translateY(-4px);
-  width: min(260px, 78vw);
+  width: min(260px, calc(100vw - 2 * var(--sp-6)));
   padding: 10px var(--sp-5);
   border-radius: 11px;
   color: var(--mut);
   text-align: left;
   white-space: normal;
-}
-
-.ui-tip:hover .ui-tip-pop,
-.ui-tip:focus-visible .ui-tip-pop,
-.ui-tip:focus-within .ui-tip-pop {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) translateY(0);
 }
 
 /* The mark itself: a small italic i in a ring */
@@ -662,26 +648,6 @@ button.ui-tag[data-variant='soft']:not(:disabled):hover {
 .ui-tip:focus-within .ui-tip-mark {
   color: var(--text);
   border-color: var(--mut);
-}
-
-/* A wide popover centred on a mark near the edge of a phone gets clipped. The
-   row it sits in is the anchor instead: the popover spans it and cannot run
-   off at any width. */
-.ui-tip[data-anchor='row'] {
-  position: static;
-}
-
-.ui-tip[data-anchor='row'] .ui-tip-pop {
-  left: 0;
-  right: 0;
-  width: auto;
-  transform: translateY(-4px);
-}
-
-.ui-tip[data-anchor='row']:hover .ui-tip-pop,
-.ui-tip[data-anchor='row']:focus-visible .ui-tip-pop,
-.ui-tip[data-anchor='row']:focus-within .ui-tip-pop {
-  transform: translateY(0);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

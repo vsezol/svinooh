@@ -246,10 +246,6 @@ export function WalletRow({ wallet, actions, total, hideSmall, onRemove, onRenam
           {blocks.map((b, i) => (
             <div
               key={i}
-              // No overflow clip: the network marker's tooltip has to be able to
-              // leave the card. Nothing inside paints to the edge — the section
-              // rules stop at the padding box — so the rounded corners hold
-              // without one.
               style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-md)', background: 'var(--surf2)' }}
             >
               {/* One line, allowed to wrap among itself: name, what kind of
