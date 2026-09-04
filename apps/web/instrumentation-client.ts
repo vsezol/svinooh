@@ -40,7 +40,7 @@ if (key) {
     // Blocklists key on analytics domains; this way they never see one.
     api_host: '/relay',
     ui_host: 'https://eu.posthog.com',
-    defaults: '2025-05-24',
+    defaults: '2026-05-30',
     // No cookies. localStorage only, so a visit stores nothing a consent
     // banner would have to ask about, and a returning visitor still counts as
     // the same visitor.
