@@ -92,12 +92,21 @@ function usePortfolio(slug: string, viewerId: string | null) {
     }
   }, [slug]);
 
+  /** Fold a server-confirmed change into what's on screen, no refetch */
+  const patch = useCallback((change: Partial<PortfolioDto>) => {
+    setData((d) => (d ? { ...d, ...change } : d));
+  }, []);
+
   useEffect(() => {
     void reload();
   }, [reload, viewerId]);
 
   useEffect(() => {
-    setData(null);
+    // Landing on a DIFFERENT portfolio drops the old one before the spinner.
+    // A rename patches data.slug first and then moves slug to match, and that
+    // is the one slug change that must NOT blank the page — same portfolio,
+    // new address, everything on screen still true.
+    setData((d) => (d && d.slug === slug ? d : null));
     setError(null);
   }, [slug]);
 
@@ -112,7 +121,7 @@ function usePortfolio(slug: string, viewerId: string | null) {
     return () => window.clearInterval(id);
   }, [data, reload]);
 
-  return { data, error, reload };
+  return { data, error, reload, patch };
 }
 
 /**
@@ -162,10 +171,16 @@ function useHistory(slug: string, scope: string, period: HistoryRange, refreshKe
   return shown;
 }
 
-export function PortfolioPage({ slug }: { slug: string }) {
+export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   const router = useRouter();
   const { me, config, loading: authLoading, logout, refreshMe } = useAuth();
-  const { data, error, reload } = usePortfolio(slug, me?.id ?? null);
+  // Which portfolio the page is showing. The route says so — except right
+  // after a rename, when the portfolio moves out from under its own URL and
+  // the page follows it in place (history.replaceState) instead of taking a
+  // round trip through the router that would blank everything to a spinner.
+  const [slug, setSlug] = useState(routeSlug);
+  useEffect(() => setSlug(routeSlug), [routeSlug]);
+  const { data, error, reload, patch } = usePortfolio(slug, me?.id ?? null);
 
   const [tab, setTab] = useState<Tab>('portfolio');
   // Collapsed is the rail's own business and nobody else's — it survives a tab
@@ -344,10 +359,11 @@ export function PortfolioPage({ slug }: { slug: string }) {
   };
 
   /**
-   * The name pulls the slug with it: a successful rename usually means this
-   * page's own URL is stale, so we follow the portfolio to its new address.
-   * The switcher and me.portfolioSlug read from /auth/me — refreshed first, or
-   * the page we land on would list this portfolio under its old link.
+   * The name pulls the slug with it, but the page doesn't reload over it: the
+   * confirmed change is patched into the data on screen and the URL is
+   * rewritten in place. Patch before setSlug — that ordering is what tells the
+   * hook this is the same portfolio at a new address, not a navigation (see
+   * usePortfolio). The switcher reads /auth/me, refreshed in the background.
    */
   const renamePortfolio = async (name: string) => {
     try {
@@ -355,13 +371,12 @@ export function PortfolioPage({ slug }: { slug: string }) {
         method: 'PATCH',
         body: JSON.stringify({ name }),
       });
+      patch({ name: res.name, slug: res.slug });
       if (res.slug !== slug) {
-        await refreshMe();
-        router.replace(`/p/${res.slug}`);
-      } else {
-        await refreshMe();
-        await reload();
+        setSlug(res.slug);
+        window.history.replaceState(null, '', `/p/${res.slug}`);
       }
+      void refreshMe();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not rename');
     }

@@ -66,6 +66,13 @@ export class PortfolioController {
     return this.portfolios.rename(slug, userId, body?.name ?? '');
   }
 
+  /** Delete an owned portfolio. The account's last one is not deletable. */
+  @Delete(':slug')
+  @UseGuards(RequiredAuthGuard)
+  remove(@Param('slug') slug: string, @CurrentUserId() userId: string) {
+    return this.portfolios.remove(slug, userId);
+  }
+
   /** Take over a portfolio that belongs to nobody */
   @Post(':slug/claim')
   @UseGuards(RequiredAuthGuard)
