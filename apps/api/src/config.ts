@@ -58,12 +58,14 @@ export const config = {
    */
   publicApiUrl: (process.env.PUBLIC_API_URL || '').replace(/\/+$/, ''),
   /**
-   * Which gateway checkout opens invoices on: 'cryptomus' (default) or
-   * 'nowpayments'. Both webhook routes stay mounted regardless, so switching
-   * never strands an invoice opened on the other side. With neither
-   * configured, checkout answers 503 and everything else still works.
+   * Which gateway checkout opens invoices on: 'nowpayments' (default — the
+   * operator's own account, proven in use; non-custodial forwarding to our
+   * wallet) or 'cryptomus' (the standing fallback). Both webhook routes stay
+   * mounted regardless, so switching never strands an invoice opened on the
+   * other side. With neither configured, checkout answers 503 and everything
+   * else still works.
    */
-  billingProvider: process.env.BILLING_PROVIDER === 'nowpayments' ? 'nowpayments' : 'cryptomus',
+  billingProvider: process.env.BILLING_PROVIDER === 'cryptomus' ? 'cryptomus' : 'nowpayments',
   cryptomusMerchantId: process.env.CRYPTOMUS_MERCHANT_ID || '',
   cryptomusApiKey: process.env.CRYPTOMUS_API_KEY || '',
   cryptomusApiUrl: (process.env.CRYPTOMUS_API_URL || 'https://api.cryptomus.com/v1').replace(

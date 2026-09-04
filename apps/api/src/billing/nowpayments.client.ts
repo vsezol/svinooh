@@ -2,17 +2,19 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { CreatedInvoice, InvoiceRequest, PaymentGateway } from './gateway';
 
 /**
- * The NOWPayments corner of billing: the second gateway behind the seam.
+ * The NOWPayments corner of billing — the default gateway.
  *
- * Not the default: their terms of service (s.15.1, as of 2026-08-31) list
- * residents of the Russian Federation among prohibited users, "at their own
- * risk" — a foundation crack, not a gotcha, for this particular product. It
- * stays integrated because its sandbox is the best way to exercise the whole
- * checkout-to-webhook path, and because a working fallback is what makes the
- * default swappable in an afternoon.
+ * Chosen on operating experience over paperwork: the operator has run an
+ * account here for years without trouble, every payment auto-forwards to our
+ * own wallet (no custodial balance to sweep and no one to freeze it), the
+ * webhook signature is a real HMAC, and the sandbox exercises the whole
+ * checkout-to-webhook path with play money. The known caveat stays known:
+ * their terms (s.15.1, as of 2026-08-31) list RU residents as prohibited "at
+ * their own risk" — which is why Cryptomus stays wired in behind the same
+ * seam, one env var away.
  *
  * The class takes its credentials as arguments rather than reading config, so
- * the check script can exercise the signature math without an environment.
+ * the check scripts can exercise it against a fake server and the sandbox.
  */
 
 /**

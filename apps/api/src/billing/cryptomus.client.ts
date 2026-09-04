@@ -2,13 +2,15 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import type { CreatedInvoice, InvoiceRequest, PaymentGateway } from './gateway';
 
 /**
- * The Cryptomus corner of billing — the default gateway. Chosen over the
- * alternatives because it is the one that passes the whole brief at once:
- * invoices from 1 USDT on the rails our users actually hold (USDT TRC-20,
- * TON, SOL, BSC), onboards an individual, and answers a 2 USD welcome invoice
- * without the coin list collapsing. Its cloud is regulatory, not technical —
- * which is why funds should be swept out on a schedule, and why this file is
- * one of two behind the PaymentGateway seam.
+ * The Cryptomus corner of billing — the standing fallback behind the seam.
+ *
+ * It earned the spot on coverage: invoices from ~1 USDT on the rails our
+ * users actually hold (USDT TRC-20, TON, SOL, BSC), so even the 2 USD welcome
+ * invoice survives, and it onboards an individual. It is not the default
+ * because NOWPayments is the account the operator has actually run for years
+ * — and because Cryptomus' cloud is regulatory (a record FINTRAC fine under
+ * appeal), so if it is ever switched on, funds must be swept out on a
+ * schedule rather than left on the custodial balance.
  *
  * Their signature scheme (both directions) is
  * `md5( base64( json_encode(body) ) + API_KEY )` — PHP's json_encode, which

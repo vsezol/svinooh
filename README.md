@@ -288,14 +288,22 @@ alerts travel). That is the pattern the crypto-native products themselves ship
 (Nansen, DexTools, LunarCrush: invoice per period, reminders, manual renewal).
 
 Payments ride a gateway behind one seam (`apps/api/src/billing/gateway.ts`):
-**Cryptomus** by default (invoices from ~1 USDT on the rails our users hold —
-USDT TRC-20, TON, SOL, BSC — so even the 2 USD welcome invoice is payable),
-**NOWPayments** as the configured alternative and the sandbox for exercising
-the whole checkout-to-webhook path. Checkout creates a `Payment` row first,
-then asks the gateway for a hosted invoice; the webhook is believed only with
-a valid signature (Cryptomus additionally re-asked via `/payment/info` before
-a month is granted), and exactly one webhook can move a payment to `paid` —
-replays and out-of-order statuses cannot double-extend or talk it back down.
+**NOWPayments** by default — the account already proven in use, with every
+payment auto-forwarded to our own wallet — and **Cryptomus** wired in as the
+standing fallback (`BILLING_PROVIDER=cryptomus`; invoices from ~1 USDT on
+USDT TRC-20 / TON / SOL / BSC, but custodial: sweep funds out on a schedule).
+Checkout creates a `Payment` row first, then asks the gateway for a hosted
+invoice; the webhook is believed only with a valid signature (Cryptomus
+additionally re-asked via `/payment/info` before a month is granted), and
+exactly one webhook can move a payment to `paid` — replays and out-of-order
+statuses cannot double-extend or talk it back down.
+
+The flow is checked, not trusted: `npm run -w apps/api check` exercises the
+arithmetic and both signature schemes; `check:flow` runs the whole lifecycle —
+checkout, signed webhooks, replays, underpayment, the gates — for real against
+the local Postgres and a fake NOWPayments server; `check:sandbox` (with a
+sandbox API key) opens real invoices at NOWPayments' sandbox and probes the
+per-coin minimums against both prices.
 
 `billing.enforce` ships **off**: every gate stands open while the meters run,
 so the counters are honest the day the web has a paywall to show and the knob

@@ -43,7 +43,7 @@ export class BillingService {
   ) {}
 
   private gateway(): PaymentGateway {
-    return config.billingProvider === 'nowpayments' ? this.nowpayments : this.cryptomus;
+    return config.billingProvider === 'cryptomus' ? this.cryptomus : this.nowpayments;
   }
 
   async me(userId: string): Promise<BillingMeDto> {

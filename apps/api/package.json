@@ -7,7 +7,9 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",
-    "check": "tsx scripts/billing.check.ts"
+    "check": "tsx scripts/billing.check.ts",
+    "check:flow": "tsx scripts/billing.flow.check.ts",
+    "check:sandbox": "tsx scripts/billing.sandbox.check.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",
