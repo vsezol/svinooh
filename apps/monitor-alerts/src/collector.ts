@@ -1,7 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import type { AlertEvent, WalletStateEvent } from '@svinooh/shared';
-import { ALERTS_QUEUE, type RabbitService } from '@svinooh/common';
+import { ALERTS_QUEUE, BILLING_QUEUE, type RabbitService } from '@svinooh/common';
 import { decide, type Remembered, type Settings } from './decide';
+import type { Trial } from './trial';
 
 /**
  * What a wallet is watched for when nobody has said otherwise. The same list
@@ -43,6 +44,7 @@ export class Collector {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly rabbit: RabbitService,
+    private readonly trial: Trial,
   ) {}
 
   /**
@@ -78,7 +80,18 @@ export class Collector {
         portfolio: {
           select: {
             slug: true,
-            owner: { select: { user: { select: { telegramId: true, alertChatId: true } } } },
+            owner: {
+              select: {
+                user: {
+                  select: {
+                    id: true,
+                    telegramId: true,
+                    alertChatId: true,
+                    subscription: { select: { paidUntil: true } },
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -113,16 +126,31 @@ export class Collector {
       // and the next scan decides the same thing again — an alert arriving
       // twice is a nuisance, and one that never arrives because we recorded
       // having sent it is the failure that matters.
-      if (items.length && telegramId !== null) {
-        const alert: AlertEvent = {
-          telegramId: telegramId.toString(),
-          portfolioSlug: membership.portfolio.slug,
-          walletLabel: membership.label,
-          walletAddress: event.address,
-          chain: event.chain,
-          items,
-        };
-        await this.rabbit.publish(ALERTS_QUEUE, alert);
+      //
+      // The trial stands between deciding and saying: the first N messages go
+      // out and are counted, the one after that becomes the pitch (at most
+      // once a day), and past that the owner hears nothing until they pay.
+      // The state below is still remembered either way, exactly as it is for
+      // an owner with no chat: the day they upgrade they are baselined, not
+      // buried under a backlog of old crossings.
+      if (items.length && telegramId !== null && who !== undefined) {
+        const call = await this.trial.judge(who.id, who.subscription?.paidUntil ?? null);
+        if (call.verdict === 'send') {
+          const alert: AlertEvent = {
+            telegramId: telegramId.toString(),
+            portfolioSlug: membership.portfolio.slug,
+            walletLabel: membership.label,
+            walletAddress: event.address,
+            chain: event.chain,
+            items,
+          };
+          await this.rabbit.publish(ALERTS_QUEUE, alert);
+          if (call.count) await this.trial.counted(who.id);
+        } else if (call.verdict === 'upsell') {
+          if (await this.rabbit.publish(BILLING_QUEUE, this.trial.notice(telegramId.toString()))) {
+            await this.trial.pitched(who.id);
+          }
+        }
       }
 
       await this.remember(membership.id, next);

@@ -1,8 +1,8 @@
 import Fastify from 'fastify';
-import { ALERTS_QUEUE, NOTICES_QUEUE, RabbitService } from '@svinooh/common';
-import type { AlertEvent, SlowedNotice } from '@svinooh/shared';
+import { ALERTS_QUEUE, BILLING_QUEUE, NOTICES_QUEUE, RabbitService } from '@svinooh/common';
+import type { AlertEvent, BillingNotice, SlowedNotice } from '@svinooh/shared';
 import { config } from './config';
-import { esc, formatAlert, formatSlowedNotice } from './format';
+import { esc, formatAlert, formatBillingNotice, formatSlowedNotice } from './format';
 import { getUpdates, send, type TgUpdate } from './telegram';
 
 /**
@@ -46,7 +46,16 @@ async function main(): Promise<void> {
       },
       4,
     );
-    app.log.info(`listening on ${ALERTS_QUEUE} and ${NOTICES_QUEUE}`);
+    // Money messages most of all: a lost renewal reminder is churn
+    rabbit.consume<BillingNotice>(
+      BILLING_QUEUE,
+      async (notice) => {
+        const { text, markup } = formatBillingNotice(notice, config.webUrl);
+        await send(notice.telegramId, text, markup);
+      },
+      4,
+    );
+    app.log.info(`listening on ${ALERTS_QUEUE}, ${NOTICES_QUEUE} and ${BILLING_QUEUE}`);
   } else {
     app.log.warn('RABBITMQ_URL not set — alerts will not be delivered');
   }

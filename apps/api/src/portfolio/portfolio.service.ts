@@ -35,6 +35,7 @@ import { PrismaService } from '@svinooh/db';
 import { detectChain, normalizeAddress } from '../scanners/detect';
 import { CacheService } from '../cache/cache.service';
 import { RESERVED_SLUGS, setting, slugifyName, wordSlug } from '@svinooh/common';
+import { PremiumService } from '../billing/premium.service';
 
 /**
  * A wallet as a portfolio holds it: the address and its readings, plus the
@@ -105,6 +106,13 @@ const GRID_STEP_MS: Record<HistoryRange, number> = {
 function windowStart(range: HistoryRange): Date | null {
   const { windowMs } = RANGES[range];
   return windowMs === null ? null : new Date(Date.now() - windowMs * SCREENS);
+}
+
+/** The later of a range's own start and the viewer's floor; null — no bound */
+function laterOf(a: Date | null, b: Date | null): Date | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return a > b ? a : b;
 }
 
 export function normalizeRange(raw: string | undefined): HistoryRange {
@@ -337,6 +345,7 @@ export class PortfolioService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
+    private readonly premium: PremiumService,
   ) {}
 
   /**
@@ -614,6 +623,7 @@ export class PortfolioService {
    * owner's to write.
    */
   async createOwned(userId: string): Promise<{ slug: string }> {
+    await this.premium.assertAnotherPortfolio(userId);
     const portfolio = await this.createWithSlug({ owner: { create: { userId } } });
     return { slug: portfolio.slug };
   }
@@ -645,6 +655,12 @@ export class PortfolioService {
         message: 'This portfolio already belongs to someone',
       });
     }
+    // Claiming makes one more OWNED portfolio, so it walks the same gate as
+    // creating one — otherwise "assemble anonymously, then claim" would be the
+    // standing way around the limit. Empty portfolios are ignored because the
+    // lines below delete them: the shell sign-in handed out must not block
+    // somebody's first real portfolio.
+    await this.premium.assertAnotherPortfolio(userId, { ignoreEmpty: true });
 
     await this.prisma.portfolioOwner.create({
       data: { portfolioId: portfolio.id, userId, isPublic: false },
@@ -859,17 +875,26 @@ export class PortfolioService {
     // portfolio twice and is counted twice in its total — see normalizeAddress
     const address = normalizeAddress(chain, raw);
 
-    // A portfolio nobody owns is also a portfolio nobody is responsible for, so
-    // it doesn't get to grow without limit — every wallet is rescanned forever.
+    // Every wallet is rescanned for as long as it exists, so growth is capped:
+    // the free plan's cap on portfolios its members add to, and a hard ceiling
+    // on ownerless ones either way — a portfolio nobody owns is a portfolio
+    // nobody is responsible for, and Pro does not change who answers for it.
+    const cap = await this.premium.walletCap(userId);
+    const count = await this.prisma.portfolioWallet.count({ where: { portfolioId: portfolio.id } });
     if (!portfolio.owner) {
-      const count = await this.prisma.portfolioWallet.count({ where: { portfolioId: portfolio.id } });
-      if (count >= ANONYMOUS_WALLET_LIMIT) {
+      const limit = Math.min(cap ?? ANONYMOUS_WALLET_LIMIT, ANONYMOUS_WALLET_LIMIT);
+      if (count >= limit) {
+        // A signed-in member has a paywall to be shown; a stranger is asked to
+        // sign in first — the dialog they can act on
+        if (userId !== null && cap !== null && count >= cap) throw this.premium.paywall('wallets');
         throw new BadRequestException({
           statusCode: 400,
           code: 'ANONYMOUS_LIMIT',
-          message: `A shared portfolio holds up to ${ANONYMOUS_WALLET_LIMIT} wallets. Sign in to build a bigger one.`,
+          message: `A shared portfolio holds up to ${limit} wallets. Sign in and go Pro to build a bigger one.`,
         });
       }
+    } else if (cap !== null && count >= cap) {
+      throw this.premium.paywall('wallets');
     }
 
     const wallet = await this.upsertAddress(chain, address);
@@ -927,7 +952,8 @@ export class PortfolioService {
     return { ok: true };
   }
 
-  async history(slug: string, range: HistoryRange): Promise<HistoryDto> {
+  async history(slug: string, range: HistoryRange, userId: string | null): Promise<HistoryDto> {
+    const notBefore = await this.historyFloor(range, userId);
     const portfolio = await this.prisma.portfolio.findUnique({
       where: { slug },
       include: { wallets: { select: { wallet: { select: { chain: true, address: true } } } } },
@@ -936,8 +962,28 @@ export class PortfolioService {
     const points = await this.reconstructPortfolioSeries(
       portfolio.wallets.map((m) => m.wallet),
       range,
+      notBefore,
     );
     return { range, points };
+  }
+
+  /**
+   * Where the free plan's reach ends for this viewer, or null for the whole
+   * history. A range whose own window is wider than the reach has nothing
+   * honest to draw — that is the paywall, not a clamp; the narrower ranges
+   * still answer and simply stop scrolling past the floor.
+   *
+   * Judged per VIEWER, not per portfolio: what exists on the chart is a fact
+   * about public addresses, and how much of it one person may leaf through is
+   * a fact about their plan.
+   */
+  private async historyFloor(range: HistoryRange, userId: string | null): Promise<Date | null> {
+    const days = await this.premium.historyDays(userId);
+    if (days === null) return null;
+    const reachMs = days * 86400e3;
+    const { windowMs } = RANGES[range];
+    if (windowMs === null || windowMs > reachMs) throw this.premium.paywall('history');
+    return new Date(Date.now() - reachMs);
   }
 
   /**
@@ -954,9 +1000,10 @@ export class PortfolioService {
   private async reconstructPortfolioSeries(
     pairs: Array<{ chain: string; address: string }>,
     range: HistoryRange,
+    notBefore: Date | null,
   ): Promise<HistoryPointDto[]> {
     if (!pairs.length) return [];
-    const since = windowStart(range);
+    const since = laterOf(windowStart(range), notBefore);
     const snaps = await this.prisma.addressSnapshot.findMany({
       where: {
         OR: pairs.map((p) => ({ chain: p.chain, address: p.address })),
@@ -1109,7 +1156,13 @@ export class PortfolioService {
     return levels;
   }
 
-  async walletHistory(slug: string, walletId: string, range: HistoryRange): Promise<HistoryDto> {
+  async walletHistory(
+    slug: string,
+    walletId: string,
+    range: HistoryRange,
+    userId: string | null,
+  ): Promise<HistoryDto> {
+    const notBefore = await this.historyFloor(range, userId);
     const held = await this.prisma.portfolioWallet.findFirst({
       where: { id: walletId, portfolio: { slug } },
       select: { wallet: { select: { chain: true, address: true } } },
@@ -1117,7 +1170,7 @@ export class PortfolioService {
     if (!held) throw new NotFoundException('Wallet not found');
     // By (chain, address): a wallet's own history shows the address's full past,
     // including the stretch recorded while it lived in another portfolio.
-    const points = await this.addressSeries(held.wallet.chain, held.wallet.address, range);
+    const points = await this.addressSeries(held.wallet.chain, held.wallet.address, range, notBefore);
     return { range, points };
   }
 
@@ -1190,9 +1243,10 @@ export class PortfolioService {
     chain: string,
     address: string,
     range: HistoryRange,
+    notBefore: Date | null,
   ): Promise<HistoryPointDto[]> {
     const { bucket } = RANGES[range];
-    const since = windowStart(range);
+    const since = laterOf(windowStart(range), notBefore);
 
     let raw: Sample[];
     if (!bucket) {

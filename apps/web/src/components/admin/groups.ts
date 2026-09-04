@@ -15,6 +15,7 @@ export interface SettingGroup {
 const NAMED = [
   { key: 'source', label: 'Where balances come from' },
   { key: 'sync', label: 'How often wallet data is refreshed' },
+  { key: 'billing', label: 'Svinooh.Pro: prices and the free plan' },
 ];
 
 export function groupSettings(specs: SettingDto[]): SettingGroup[] {

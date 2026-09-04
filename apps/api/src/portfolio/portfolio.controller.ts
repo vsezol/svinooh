@@ -124,9 +124,16 @@ export class PortfolioController {
     return this.portfolios.setWalletAlerts(slug, walletId, userId, body ?? {});
   }
 
+  // Optional auth: the portfolio is public by link, but how far back the
+  // charts reach depends on who is asking — see PremiumService.historyDays
   @Get(':slug/history')
-  history(@Param('slug') slug: string, @Query('range') range?: string) {
-    return this.portfolios.history(slug, normalizeRange(range));
+  @UseGuards(OptionalAuthGuard)
+  history(
+    @Param('slug') slug: string,
+    @CurrentUserId() userId: string | null,
+    @Query('range') range?: string,
+  ) {
+    return this.portfolios.history(slug, normalizeRange(range), userId);
   }
 
   // Optional auth: an anonymous portfolio accepts wallets from anyone, an owned
@@ -163,11 +170,13 @@ export class PortfolioController {
   }
 
   @Get(':slug/wallets/:walletId/history')
+  @UseGuards(OptionalAuthGuard)
   walletHistory(
     @Param('slug') slug: string,
     @Param('walletId') walletId: string,
+    @CurrentUserId() userId: string | null,
     @Query('range') range?: string,
   ) {
-    return this.portfolios.walletHistory(slug, walletId, normalizeRange(range));
+    return this.portfolios.walletHistory(slug, walletId, normalizeRange(range), userId);
   }
 }

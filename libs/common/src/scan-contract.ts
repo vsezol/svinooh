@@ -118,3 +118,12 @@ export const ALERTS_QUEUE = 'alerts.telegram';
  * simply wait until the bot that understands them is up.
  */
 export const NOTICES_QUEUE = 'notices.telegram';
+
+/**
+ * Everything money says to a person: the trial running out, Pro about to end or
+ * ended, a payment landing. Its own queue for the same reason notices got one —
+ * a bot that predates the shape must never be handed it — and because these are
+ * the messages that must survive a Telegram outage the longest: a lost alert is
+ * a missed reading, a lost renewal reminder is churn.
+ */
+export const BILLING_QUEUE = 'billing.telegram';
