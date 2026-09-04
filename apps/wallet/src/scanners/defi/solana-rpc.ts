@@ -21,7 +21,10 @@ const ENV_RPCS = (process.env.SOLANA_RPC_URL ?? '')
 
 const RPCS = [
   ...ENV_RPCS,
-  'https://solana.lava.build',
+  // solana.lava.build was here, and answered "This endpoint has been
+  // discontinued" to every call. Being first in the list, it cost two wasted
+  // round-trips on every Orca lookup and filled the log with a failure that
+  // meant nothing — which is how a failure that means something gets missed.
   'https://rpc.magicblock.app/mainnet',
   'https://api.mainnet-beta.solana.com',
   'https://solana-rpc.publicnode.com',

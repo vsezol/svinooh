@@ -221,9 +221,27 @@ export async function scanSol(address: string): Promise<ScanResult> {
     meteoraPositions(address).catch(() => []),
   ]);
 
+  /**
+   * Jupiter answering nothing is not a wallet holding nothing.
+   *
+   * `fetchJson` throws on any non-2xx, so a broken Jupiter fails the scan
+   * honestly. What it cannot catch is a 200 with an empty body — and this used
+   * to read that as `defi = 0` and return it as a SUCCESSFUL scan. On
+   * 2026-09-04 a wallet went $34,331.98 -> $1.08 that way, the $1.08 being the
+   * GM trade side that did answer. Three of those in a row and the writer's
+   * drop-confirmation gives up and stores it.
+   *
+   * A wallet that genuinely holds nothing comes back with fetcherResults: [] —
+   * an empty list, not an absent one. So the list being absent is the source
+   * failing, and it is raised as one.
+   */
+  if (!Array.isArray(portfolio.fetcherResults)) {
+    throw new Error('jupiter answered without a portfolio — refusing to read that as an empty wallet');
+  }
+
   let defi = 0;
   const elements: JupElement[] = [];
-  for (const fetcher of portfolio.fetcherResults || []) {
+  for (const fetcher of portfolio.fetcherResults) {
     for (const element of fetcher.elements || []) {
       if (typeof element.value === 'number' && isFinite(element.value)) defi += element.value;
       elements.push(element);
