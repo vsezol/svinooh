@@ -389,7 +389,7 @@ export function AreaChart({ values, times, period, height, bare = false, tone = 
       // through the history — so the pager that carries this page leaves any
       // gesture starting inside alone. See usePager.
       data-no-swipe=""
-      className={bare ? undefined : 'card'}
+      className={bare ? undefined : 'ui-card'}
       style={{ position: 'relative', overflow: 'hidden', touchAction: 'pan-y', height: bare ? '100%' : undefined }}
     >
       <div
