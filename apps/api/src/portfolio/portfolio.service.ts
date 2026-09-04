@@ -326,6 +326,8 @@ interface CachedView {
   ownerUserId: string | null;
   owner: PortfolioOwnerDto | null;
   labels: Record<string, string | null>;
+  /** The owner's saved view preference, merged in for the owner alone */
+  hideSmallBalances: boolean;
   dto: PortfolioDto;
 }
 
@@ -451,6 +453,8 @@ export class PortfolioService {
       ...view.dto,
       isOwner,
       owner: isOwner ? view.owner : null,
+      // `?? false` covers views cached before the field existed, until they age out
+      hideSmallBalances: isOwner && (view.hideSmallBalances ?? false),
       wallets: isOwner
         ? view.dto.wallets.map((w) => ({ ...w, label: view!.labels[w.id] ?? null }))
         : view.dto.wallets,
@@ -493,6 +497,7 @@ export class PortfolioService {
       name: portfolio.name,
       // Never in the cached (public) view — filled in for the owner in getBySlug
       owner: null,
+      hideSmallBalances: false,
       visibility: !portfolio.owner ? 'anonymous' : portfolio.owner.isPublic ? 'public' : 'private',
       totalUsd: round2(wallets.reduce((sum, w) => sum + (w.totalUsd ?? 0), 0)),
       // Labels are stripped here and handed back to the owner separately
@@ -503,6 +508,7 @@ export class PortfolioService {
     };
     return {
       ownerUserId: portfolio.owner?.userId ?? null,
+      hideSmallBalances: portfolio.owner?.hideSmallBalances ?? false,
       owner: user
         ? {
             name:
@@ -618,6 +624,23 @@ export class PortfolioService {
     });
     await this.cache.del(cacheKey(slug));
     return { visibility: isPublic ? 'public' : 'private' };
+  }
+
+  /** Remember the owner's "hide small balances" switch. Owner-only. */
+  async setHideSmallBalances(
+    slug: string,
+    userId: string,
+    hideSmallBalances: boolean,
+  ): Promise<{ hideSmallBalances: boolean }> {
+    const portfolio = await this.requireOwned(slug, userId);
+    await this.prisma.portfolioOwner.update({
+      where: { portfolioId: portfolio.id },
+      data: { hideSmallBalances },
+    });
+    // The setting rides the cached view (owner-only on read), so the view is
+    // stale the moment it changes — same as visibility
+    await this.cache.del(cacheKey(slug));
+    return { hideSmallBalances };
   }
 
   /**

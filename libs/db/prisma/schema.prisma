@@ -115,6 +115,12 @@ model PortfolioOwner {
   isPublic    Boolean   @default(false)
   createdAt   DateTime  @default(now())
 
+  /// The owner's "hide small balances" switch — balances that round to $0 are
+  /// dropped from their view. A property of the ownership, like visibility:
+  /// how one person prefers to read a portfolio is not the portfolio's own
+  /// fact, and a guest viewing the same link starts from the default.
+  hideSmallBalances Boolean @default(false)
+
   /// When we last told this owner their portfolio had gone quiet and its
   /// wallets were being checked less often.
   ///

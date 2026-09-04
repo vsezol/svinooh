@@ -165,6 +165,11 @@ export interface PortfolioDto {
   /** Sorted by totalUsd descending; pending ones at the end */
   wallets: WalletDto[];
   isOwner: boolean;
+  /**
+   * The owner's saved "hide small balances" preference — sent to the OWNER
+   * ONLY, always false for everyone else, who starts from the default.
+   */
+  hideSmallBalances: boolean;
   /** The most recent lastSyncedAt among the wallets */
   updatedAt: string | null;
   createdAt: string;

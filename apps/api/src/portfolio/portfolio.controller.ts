@@ -74,6 +74,17 @@ export class PortfolioController {
     return this.portfolios.setVisibility(slug, userId, body?.isPublic === true);
   }
 
+  /** The owner's "hide small balances" switch, remembered across sessions */
+  @Patch(':slug/hide-small-balances')
+  @UseGuards(RequiredAuthGuard)
+  setHideSmallBalances(
+    @Param('slug') slug: string,
+    @CurrentUserId() userId: string,
+    @Body() body: { hideSmallBalances?: boolean },
+  ) {
+    return this.portfolios.setHideSmallBalances(slug, userId, body?.hideSmallBalances === true);
+  }
+
   /**
    * What every wallet in the portfolio is watched for, and changing one
    * wallet's settings. Owner-only, and deliberately not part of the portfolio

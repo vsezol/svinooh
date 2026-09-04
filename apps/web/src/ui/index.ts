@@ -17,6 +17,7 @@ export type { ButtonVariant, ControlSize } from './Button';
 export { Tag, TagButton } from './Tag';
 export type { TagVariant } from './Tag';
 export { Input, NumberField, Select } from './Input';
+export { Checkbox } from './Checkbox';
 export { Switch } from './Switch';
 export { Segmented } from './Segmented';
 export type { Segment } from './Segmented';

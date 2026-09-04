@@ -353,6 +353,73 @@ button.ui-tag[data-variant='soft']:not(:disabled):hover {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   Checkbox — an outlined box on a transparent ground; the accent only when
+   ticked. The input underneath is real and merely invisible, so focus and
+   keyboard belong to it and the drawing just follows its state.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ui-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  cursor: pointer;
+  user-select: none;
+}
+
+.ui-checkbox[data-disabled='true'] {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ui-checkbox input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+
+.ui-checkbox-box {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 1px solid var(--line2);
+  border-radius: 5px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  transition:
+    border-color var(--ease-settle),
+    color var(--ease-settle);
+}
+
+.ui-checkbox-box svg {
+  width: 10px;
+  height: 8px;
+}
+
+.ui-checkbox:hover input:not(:disabled) + .ui-checkbox-box {
+  border-color: var(--mut);
+}
+
+.ui-checkbox input:checked + .ui-checkbox-box {
+  border-color: var(--acc);
+  color: var(--acc-text);
+}
+
+.ui-checkbox input:focus-visible + .ui-checkbox-box {
+  border-color: var(--acc);
+}
+
+.ui-checkbox-label {
+  font-size: var(--fs-note);
+  color: var(--mut);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    Switch
    ═══════════════════════════════════════════════════════════════════════ */
 
