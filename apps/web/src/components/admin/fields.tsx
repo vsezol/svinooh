@@ -50,13 +50,14 @@ export interface ChoiceFieldProps {
 
 export function ChoiceField({ value, options, label, onChange }: ChoiceFieldProps) {
   return (
-    <Select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} style={{ width: 124 }}>
-      {options.map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
-    </Select>
+    <Select
+      label={label}
+      value={value}
+      options={options.map((option) => ({ value: option, label: option }))}
+      onChange={onChange}
+      align="right"
+      width={124}
+    />
   );
 }
 

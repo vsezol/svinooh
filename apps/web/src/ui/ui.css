@@ -352,6 +352,66 @@ button.ui-tag[data-variant='soft']:not(:disabled):hover {
   border-color: var(--down);
 }
 
+/* A number field's stepper arrows are the browser's, drawn in the browser's
+   own grey, and they sit inside the box crowding the number they step. Nobody
+   clicks them: a threshold is typed, and the keyboard's own up and down arrows
+   still step the value for anyone who wants that. */
+.ui-input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.ui-input[type='number']::-webkit-outer-spin-button,
+.ui-input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Select — the trigger. Its menu is a Panel of MenuItems.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ui-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  /* Room for the mark, so it never crowds the right edge the way the native
+     control's arrow does */
+  gap: var(--sp-4);
+  height: var(--h-md);
+  padding: 0 var(--sp-5);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-sm);
+  background: var(--surf2);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: var(--fs-body);
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--ease-quick), background var(--ease-quick);
+}
+
+.ui-select:hover,
+.ui-select:focus-visible {
+  border-color: var(--mut);
+}
+
+/* Open, not focused: a green ring on a closed control reads as "this is the
+   one thing on the page that matters", which is what the native control did
+   the moment it was clicked */
+.ui-select[data-open='true'] {
+  border-color: var(--acc);
+}
+
+/* In a header, beside pills — a round outline rather than a box */
+.ui-select[data-shape='pill'] {
+  height: var(--h-sm);
+  border-radius: var(--r-full);
+  background: transparent;
+  padding: 0 var(--sp-5);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    Switch
    ═══════════════════════════════════════════════════════════════════════ */
