@@ -42,6 +42,7 @@ export function Select<T extends string>({
   width,
   minMenuWidth = 160,
   triggerStyle,
+  className,
 }: {
   value: T;
   options: ReadonlyArray<SelectOption<T>>;
@@ -56,6 +57,8 @@ export function Select<T extends string>({
   width?: number | string;
   minMenuWidth?: number;
   triggerStyle?: CSSProperties;
+  /** On the root, so a marker class (ph-mask) covers the trigger and the menu alike */
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -66,7 +69,7 @@ export function Select<T extends string>({
   const current = options.find((o) => o.value === value);
 
   return (
-    <div ref={box} style={{ position: 'relative', minWidth: 0, flexShrink: 0 }}>
+    <div ref={box} className={className} style={{ position: 'relative', minWidth: 0, flexShrink: 0 }}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

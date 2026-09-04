@@ -1,4 +1,5 @@
 import type { MeDto } from '@svinooh/shared';
+import { track } from './analytics';
 import { api } from './api';
 
 const KEY = 'svinooh_claim';
@@ -47,6 +48,7 @@ export async function settleClaim(me: MeDto): Promise<MeDto> {
   pendingClaim.clear();
   try {
     const claimed = await api<{ slug: string }>(`/portfolios/${slug}/claim`, { method: 'POST' });
+    track('portfolio_claimed', { source: 'signin' });
     // The switcher reads me.portfolios; a portfolio claimed a moment ago has to
     // be in it without waiting for the next /auth/me round trip
     const portfolios = me.portfolios.some((p) => p.slug === claimed.slug)

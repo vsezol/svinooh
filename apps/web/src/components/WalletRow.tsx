@@ -115,7 +115,9 @@ export function WalletRow({ wallet, actions, total, hideSmall, onRemove, onRenam
   };
 
   return (
-    <Card style={{ overflow: 'hidden' }}>
+    // ph-mask: everything in a row — address, label, positions, values — is
+    // somebody's money; session replay keeps the layout and loses the words
+    <Card className="ph-mask" style={{ overflow: 'hidden' }}>
       <div
         onClick={() => !syncing && setCollapsed((v) => !v)}
         className="row-hover"

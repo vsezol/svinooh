@@ -40,7 +40,9 @@ export function SearchDropdown({
   const network = lookup?.chain ? chainMeta(lookup.chain).label : null;
 
   return (
-    <Panel style={{ position: 'absolute', top: 'calc(100% + var(--sp-3))', left: 0, right: 0, zIndex: 60 }}>
+    // ph-mask: the address row echoes what the visitor pasted and what it is
+    // worth — session replay keeps the dropdown's shape, not its words
+    <Panel className="ph-mask" style={{ position: 'absolute', top: 'calc(100% + var(--sp-3))', left: 0, right: 0, zIndex: 60 }}>
       {results === null ? (
         <div className="mono" style={{ padding: '14px 16px', fontSize: 'var(--fs-tag)', color: 'var(--mut)' }}>
           Searching…

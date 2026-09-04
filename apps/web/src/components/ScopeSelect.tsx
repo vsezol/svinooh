@@ -23,6 +23,8 @@ export function ScopeSelect({
 }) {
   return (
     <Select
+      // ph-mask: wallet names and their values — session replay stores asterisks
+      className="ph-mask"
       label="Which wallet to show"
       value={value}
       onChange={onChange}
