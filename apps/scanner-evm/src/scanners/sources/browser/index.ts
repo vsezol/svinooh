@@ -1,10 +1,10 @@
 import { Logger } from '@nestjs/common';
 import { ScanHold } from '@svinooh/common';
 import type { ScanResult } from '@svinooh/shared';
-import { scanEvmBrowser } from '../evm-browser';
-import type { EvmSource } from './source';
+import { scanEvmBrowser } from '../../evm-browser';
+import type { EvmSource } from '../source';
 
-const logger = new Logger('DebankSource');
+const logger = new Logger('BrowserSource');
 
 /**
  * EVM balances from the rendered debank.com page (headless browser,
@@ -68,8 +68,8 @@ async function read(address: string): Promise<ScanResult> {
   throw lastError;
 }
 
-export const debankSource: EvmSource = {
-  id: 'debank',
+export const browserSource: EvmSource = {
+  id: 'browser',
   label: 'debank.com, rendered',
   read,
 };

@@ -126,6 +126,14 @@ interface Capture {
  * The scraped header total stays the authority either way: it's the number
  * DeBank itself displays, and these payloads only fill in the detail behind it.
  */
+/**
+ * The intercepted payloads as positions, or null when nothing was intercepted.
+ *
+ * Null means ONE thing: DeBank never answered. It used to also mean "answered
+ * with nothing", which was harmless while a DOM fallback stood behind it and
+ * became a bug the moment the caller started reading null as "hold this
+ * wallet".
+ */
 function positionsFromCapture(capture: Capture | null): ScanPosition[] | null {
   const projects = capture?.project_list;
   if (!Array.isArray(projects)) return null;
@@ -137,7 +145,8 @@ function positionsFromCapture(capture: Capture | null): ScanPosition[] | null {
     const position = tokenPosition(token);
     if (position) positions.push(position);
   }
-  return positions.length ? positions : null;
+  // Empty is an answer. Only an absent capture is not one.
+  return positions;
 }
 
 const READ_TOTAL_SCRIPT = String.raw`(() => {
@@ -468,11 +477,23 @@ async function scanEvmBrowserLocked(address: string, patient: boolean): Promise<
      * failed, and — unlike the silent fallback — counts toward the breaker that
      * stands us down when DeBank has had enough.
      */
-    if (!captured) {
-      throw new ScanHold(`${address}: DeBank rendered the page but never answered for it`);
+    /**
+     * Only when there is something to explain. An address holding nothing never
+     * makes DeBank fetch a portfolio at all, so it has no capture either — and
+     * a bare `!captured` check held every empty wallet forever, never letting
+     * it read $0. That is how this was written first, and what a local run
+     * against production addresses caught before it shipped.
+     *
+     * A page showing $0 with no positions is coherent. A page showing money
+     * with nothing to account for it is the case above.
+     */
+    if (!captured && totalUsd > 0) {
+      throw new ScanHold(
+        `${address}: DeBank showed $${totalUsd.toFixed(2)} and never said what it is`,
+      );
     }
 
-    return { chain: 'EVM', address, totalUsd, positions: captured, breakdown };
+    return { chain: 'EVM', address, totalUsd, positions: captured ?? [], breakdown };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     // Say what debank actually returned, so the cause is diagnosable rather than

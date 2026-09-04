@@ -48,7 +48,7 @@ export class ScanConsumerService implements OnApplicationBootstrap {
   private async handle(job: ScanJob): Promise<void> {
     const started = Date.now();
     try {
-      const result = await scanEvm(job.address);
+      const result = await scanEvm(job.address, job.firstScan === true);
       // A drop this steep is usually a source having a bad minute, not money
       // moving. Reading again here costs almost nothing — the browser is open
       // and the page is warm — and it gives the consumer two readings to judge
@@ -57,6 +57,8 @@ export class ScanConsumerService implements OnApplicationBootstrap {
         job.previousTotal !== null &&
         job.previousTotal > 10 &&
         result.totalUsd < job.previousTotal * 0.75;
+      // Never a first scan: suspicion needs a previous total, and a first scan
+      // has none — so this always runs through the configured source
       const recheck: ScanResult | null = suspicious ? await scanEvm(job.address) : null;
       if (suspicious) {
         this.logger.warn(
