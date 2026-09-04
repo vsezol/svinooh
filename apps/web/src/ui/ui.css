@@ -622,35 +622,6 @@ button.ui-tag[data-variant='soft']:not(:disabled):hover {
   transition: width 0.3s ease;
 }
 
-/* A segment of the axis — a region, not an amount, so it never grows from
-   zero and never fills the track.
-
-   A solid colour, mixed into the surface, rather than the tone at partial
-   opacity: translucent green over a grey track blends into a muddy third
-   colour and the segment reads as out of focus. Mixed, the edge is one crisp
-   colour against another. Square ends for the same reason — a 4px segment
-   with fully rounded ends is all curve and no edge. */
-.ui-meter-band {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-radius: 1px;
-  background: color-mix(in srgb, var(--meter-tone, var(--acc)) 42%, var(--surf2));
-}
-
-/* Where something is on the axis: a hairline tick, not a thumb. A round dot
-   with a ring is what a slider puts where you are meant to grab it. Full tone
-   — it is the one element on the axis that carries the reading. */
-.ui-meter-mark {
-  position: absolute;
-  top: 50%;
-  width: 2px;
-  height: 12px;
-  border-radius: 1px;
-  background: var(--meter-tone, var(--acc));
-  transform: translate(-50%, -50%);
-}
-
 /* ═══════════════════════════════════════════════════════════════════════
    Tooltip
 
