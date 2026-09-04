@@ -1,4 +1,4 @@
-import type { ApiErrorDto } from '@svinooh/shared';
+import type { ApiErrorDto, ProFeature, ProOfferDto } from '@svinooh/shared';
 
 // Empty — same-origin; in production on Railway NEXT_PUBLIC_API_URL is set at
 // build time and inlined into the bundle
@@ -42,6 +42,10 @@ export class ApiError extends Error {
     public readonly statusCode: number,
     message: string,
     public readonly code?: string,
+    /** PRO_REQUIRED only: which limit was hit — what the paywall dialog is about */
+    public readonly feature?: ProFeature,
+    /** PRO_REQUIRED only: the offer rides on the error, so the dialog needs no second request */
+    public readonly offer?: ProOfferDto,
   ) {
     super(message);
   }
@@ -97,7 +101,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
         // not JSON — keep the default message
       }
       const message = Array.isArray(body.message) ? body.message.join(', ') : body.message;
-      throw new ApiError(res.status, message || `Error ${res.status}`, body.code);
+      throw new ApiError(res.status, message || `Error ${res.status}`, body.code, body.feature, body.offer);
     }
     return (await res.json()) as T;
   } finally {

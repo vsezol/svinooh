@@ -19,6 +19,7 @@ import { PortfolioSwitcher } from '../components/PortfolioSwitcher';
 import { ScopeSelect } from '../components/ScopeSelect';
 import { ShareButton } from '../components/ShareButton';
 import { MobileTabs, tabsFor, tabIndex, usePager } from '../components/MobileTabs';
+import { usePaywall } from '../components/Paywall';
 import { AgentChat } from '../components/agent/AgentChat';
 import { SideNav, type Tab } from '../components/SideNav';
 import { SyncedAgo } from '../components/SyncedAgo';
@@ -27,6 +28,7 @@ import { WalletRow, type WalletActions } from '../components/WalletRow';
 import { track } from '../lib/analytics';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { isPaywall } from '../lib/billing';
 import { pendingClaim } from '../lib/claim';
 import { debtTotals, rewardsTotals } from '../lib/blocks';
 import { fmtUsd, portfolioLabel, walletName } from '../lib/format';
@@ -145,7 +147,14 @@ function usePortfolio(slug: string, viewerId: string | null) {
  * period does not change, so nothing jumps, and a chart three minutes short at
  * the right-hand edge is not the thing worth making somebody wait for.
  */
-function useHistory(slug: string, scope: string, period: HistoryRange, refreshKey: string | null) {
+function useHistory(
+  slug: string,
+  scope: string,
+  period: HistoryRange,
+  refreshKey: string | null,
+  /** A period behind the paywall — the page decides what to say and show */
+  onBlocked: (err: unknown) => void,
+) {
   const [shown, setShown] = useState<{ period: HistoryRange; data: History } | null>(null);
 
   useEffect(() => {
@@ -161,13 +170,17 @@ function useHistory(slug: string, scope: string, period: HistoryRange, refreshKe
       .then((data) => {
         if (!cancelled) setShown({ period, data });
       })
-      .catch(() => {
-        if (!cancelled) setShown({ period, data: EMPTY_HISTORY });
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        // A walled period is not an empty one: the chart keeps what it has
+        // drawn and the paywall does the talking
+        if (isPaywall(err)) onBlocked(err);
+        else setShown({ period, data: EMPTY_HISTORY });
       });
     return () => {
       cancelled = true;
     };
-  }, [slug, scope, period, refreshKey]);
+  }, [slug, scope, period, refreshKey, onBlocked]);
 
   return shown;
 }
@@ -203,10 +216,24 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   const [confirmClaim, setConfirmClaim] = useState(false);
   const [claiming, setClaiming] = useState(false);
 
-  const history = useHistory(slug, scope, period, data?.updatedAt ?? null);
+  const { showPaywall } = usePaywall();
+  // The period the chart last managed to draw — where the buttons fall back to
+  // when the one just pressed turns out to be behind the paywall
+  const drawnPeriodRef = useRef<HistoryRange>('24h');
+  const onHistoryBlocked = useCallback(
+    (err: unknown) => {
+      showPaywall(err);
+      setPeriod(drawnPeriodRef.current);
+    },
+    [showPaywall],
+  );
+  const history = useHistory(slug, scope, period, data?.updatedAt ?? null, onHistoryBlocked);
   // The period the chart is currently drawn at, which is the period of the data
   // it has — not necessarily the button that was last pressed
   const drawn = history?.period ?? period;
+  useEffect(() => {
+    if (history) drawnPeriodRef.current = history.period;
+  }, [history]);
 
   // The other four periods, warmed one at a time whenever the page has nothing
   // else in the air, so pressing a period button is a redraw and not a wait.
@@ -335,7 +362,8 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
       setInput('');
       await reload();
     } catch (err) {
-      setAddErr(err instanceof ApiError ? err.message : 'Could not add wallet');
+      // The sixth wallet is a wall, not a mistake — the dialog explains it
+      if (!showPaywall(err)) setAddErr(err instanceof ApiError ? err.message : 'Could not add wallet');
     } finally {
       setAdding(false);
     }
@@ -405,7 +433,8 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
       setConfirmClaim(false);
       await reload();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Could not take this portfolio over');
+      if (showPaywall(err)) setConfirmClaim(false);
+      else alert(err instanceof Error ? err.message : 'Could not take this portfolio over');
     } finally {
       setClaiming(false);
     }
@@ -548,8 +577,13 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
           <Logo size={21} onClick={() => router.push('/')} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {/* Only when this account owns more than one — see the component */}
-            {/* Only when this account owns more than one — see the component */}
             {isOwner && me ? <PortfolioSwitcher portfolios={me.portfolios} currentSlug={slug} /> : null}
+            {/* The door to the offer — the page it opens knows whether Pro is on */}
+            {me ? (
+              <TagButton variant="outline" onClick={() => router.push('/pro')}>
+                PRO
+              </TagButton>
+            ) : null}
             <ThemeToggle />
             {isOwner && me ? (
               /* ph-mask / ph-no-capture: who this is never reaches session replay */
