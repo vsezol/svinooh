@@ -56,7 +56,6 @@ async function main(): Promise<void> {
 
   /* ── the environment, before any module reads it ── */
   process.env.BILLING_ENFORCE = 'on'; // the gates are half of what is bought
-  process.env.BILLING_PROVIDER = 'nowpayments';
   process.env.NOWPAYMENTS_API_KEY = 'check-key';
   process.env.NOWPAYMENTS_IPN_SECRET = 'check-secret';
   process.env.NOWPAYMENTS_API_URL = `http://127.0.0.1:${port}/v1`;
@@ -64,7 +63,6 @@ async function main(): Promise<void> {
   const { PrismaService } = await import('@svinooh/db');
   const { RabbitService, setting } = await import('@svinooh/common');
   const { NowPaymentsClient, ipnSignature } = await import('../src/billing/nowpayments.client');
-  const { CryptomusClient } = await import('../src/billing/cryptomus.client');
   const { PremiumService } = await import('../src/billing/premium.service');
   const { BillingService } = await import('../src/billing/billing.service');
   const { addMonths } = await import('../src/billing/premium');
@@ -76,7 +74,6 @@ async function main(): Promise<void> {
   const billing = new BillingService(
     prisma,
     premium,
-    new CryptomusClient('', '', 'http://unused'),
     new NowPaymentsClient(config.nowpaymentsApiKey, config.nowpaymentsIpnSecret, config.nowpaymentsApiUrl),
     new RabbitService(null), // disabled — the thank-you publish is a no-op here
   );

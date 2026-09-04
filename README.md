@@ -261,8 +261,8 @@ GET    /api/billing/offer                     — the Svinooh.Pro pitch: prices,
                                                 discount percents, the free plan's limits
 GET    /api/billing/me                        🔒 plan, paid-until, usage, recent payments
 POST   /api/billing/checkout                  🔒 → { url } of the gateway's hosted page
-POST   /api/billing/webhook/cryptomus         — gateway callbacks; authenticated by
-POST   /api/billing/webhook/nowpayments         signature, not by JWT
+POST   /api/billing/webhook/nowpayments       — the gateway calling back; authenticated
+                                                by its HMAC signature, not by JWT
 ```
 
 An unrecognized address → 400 `{ code: "UNSUPPORTED_NETWORK" }`, a duplicate →
@@ -287,16 +287,14 @@ by each finished payment, asked about by the renewal sweep in monitor-alerts
 alerts travel). That is the pattern the crypto-native products themselves ship
 (Nansen, DexTools, LunarCrush: invoice per period, reminders, manual renewal).
 
-Payments ride a gateway behind one seam (`apps/api/src/billing/gateway.ts`):
-**NOWPayments** by default — the account already proven in use, with every
-payment auto-forwarded to our own wallet — and **Cryptomus** wired in as the
-standing fallback (`BILLING_PROVIDER=cryptomus`; invoices from ~1 USDT on
-USDT TRC-20 / TON / SOL / BSC, but custodial: sweep funds out on a schedule).
-Checkout creates a `Payment` row first, then asks the gateway for a hosted
-invoice; the webhook is believed only with a valid signature (Cryptomus
-additionally re-asked via `/payment/info` before a month is granted), and
-exactly one webhook can move a payment to `paid` — replays and out-of-order
-statuses cannot double-extend or talk it back down.
+Payments ride **NOWPayments** — the account already proven in use, with every
+payment auto-forwarded to our own wallet, nothing custodial to sweep.
+Everything provider-specific sits in `apps/api/src/billing/nowpayments.client.ts`,
+so if it ever has to be replaced, that file and one webhook route are the
+whole cost. Checkout creates a `Payment` row first, then asks the gateway for
+a hosted invoice; the webhook is believed only with a valid HMAC signature,
+and exactly one webhook can move a payment to `paid` — replays and
+out-of-order statuses cannot double-extend or talk it back down.
 
 The flow is checked, not trusted: `npm run -w apps/api check` exercises the
 arithmetic and both signature schemes; `check:flow` runs the whole lifecycle —

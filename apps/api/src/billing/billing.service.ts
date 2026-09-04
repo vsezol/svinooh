@@ -10,8 +10,6 @@ import type { BillingMeDto, BillingNotice, CheckoutDto } from '@svinooh/shared';
 import { PrismaService } from '@svinooh/db';
 import { randomSlug } from '../common/util';
 import { config } from '../config';
-import { CryptomusClient, cryptomusStatusOf, cryptomusWebhookValid } from './cryptomus.client';
-import type { PaymentGateway } from './gateway';
 import { NowPaymentsClient, paymentStatusOf } from './nowpayments.client';
 import { addMonths, utcDay } from './premium';
 import { PremiumService } from './premium.service';
@@ -26,9 +24,10 @@ import { PremiumService } from './premium.service';
  * paidUntil exactly once, however many times and in whatever order its
  * webhooks arrive.
  *
- * Two gateways stand behind one seam (see gateway.ts); BILLING_PROVIDER picks
- * which one checkout uses, and both webhook routes stay mounted so a switch
- * never strands an invoice that was opened on the other side.
+ * NOWPayments is the gateway, singular; everything specific to it lives in
+ * nowpayments.client.ts, so a replacement is that file and one webhook route.
+ * `Payment.provider` still records who carried each payment — history must
+ * outlive any such swap.
  */
 @Injectable()
 export class BillingService {
@@ -37,14 +36,9 @@ export class BillingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly premium: PremiumService,
-    private readonly cryptomus: CryptomusClient,
     private readonly nowpayments: NowPaymentsClient,
     private readonly rabbit: RabbitService,
   ) {}
-
-  private gateway(): PaymentGateway {
-    return config.billingProvider === 'cryptomus' ? this.cryptomus : this.nowpayments;
-  }
 
   async me(userId: string): Promise<BillingMeDto> {
     const now = new Date();
@@ -88,8 +82,7 @@ export class BillingService {
    * order id, so its webhook can never name an order we do not know.
    */
   async checkout(userId: string): Promise<CheckoutDto> {
-    const gateway = this.gateway();
-    if (!gateway.enabled) {
+    if (!this.nowpayments.enabled) {
       throw new ServiceUnavailableException('Payments are not configured yet');
     }
     const firstMonth = await this.firstMonthEligible(userId);
@@ -100,7 +93,7 @@ export class BillingService {
     const payment = await this.prisma.payment.create({
       data: {
         userId,
-        provider: gateway.name,
+        provider: 'nowpayments',
         orderId: `pro_${randomSlug(16)}`,
         months: 1,
         priceUsd,
@@ -108,12 +101,12 @@ export class BillingService {
     });
 
     try {
-      const invoice = await gateway.createInvoice({
+      const invoice = await this.nowpayments.createInvoice({
         priceUsd,
         orderId: payment.orderId,
         description: firstMonth ? 'Svinooh.Pro — first month' : 'Svinooh.Pro — 1 month',
         ipnUrl: config.publicApiUrl
-          ? `${config.publicApiUrl}/api/billing/webhook/${gateway.name}`
+          ? `${config.publicApiUrl}/api/billing/webhook/nowpayments`
           : null,
         successUrl: `${config.webUrl}/pro?paid=1`,
         cancelUrl: `${config.webUrl}/pro`,
@@ -134,46 +127,6 @@ export class BillingService {
         'Could not reach the payment provider. Try again in a minute.',
       );
     }
-  }
-
-  /**
-   * Cryptomus calling back. The signature rides inside the body; before the
-   * one step that grants a month, the status is re-asked from their API —
-   * an MD5-of-base64 signature is thin armor for money, and asking the source
-   * costs one call.
-   */
-  async cryptomusWebhook(body: Record<string, unknown>): Promise<void> {
-    if (!cryptomusWebhookValid(body, config.cryptomusApiKey)) {
-      throw new UnauthorizedException('Bad signature');
-    }
-    const orderId = typeof body.order_id === 'string' ? body.order_id : null;
-    let status = cryptomusStatusOf(typeof body.status === 'string' ? body.status : '');
-    if (!orderId || !status) {
-      this.logger.warn(
-        `cryptomus webhook ignored: order=${orderId ?? '?'} status=${String(body.status)}`,
-      );
-      return;
-    }
-    if (status === 'paid') {
-      const confirmed = await this.cryptomus.paymentStatus(orderId).catch((error: Error) => {
-        this.logger.warn(`could not re-ask cryptomus about ${orderId}: ${error.message}`);
-        return null;
-      });
-      // The webhook's word stands when the re-ask cannot answer — the
-      // signature already vouched for it; the re-ask only gets to say no
-      if (confirmed !== null && confirmed !== 'paid') {
-        this.logger.warn(`cryptomus says ${orderId} is ${confirmed}, not paid — believing that`);
-        status = confirmed;
-      }
-    }
-    const paid = typeof body.payer_amount === 'string' ? Number(body.payer_amount) : NaN;
-    await this.applyObservation('cryptomus', orderId, {
-      status,
-      providerPaymentId: typeof body.uuid === 'string' ? body.uuid : null,
-      payCurrency: typeof body.payer_currency === 'string' ? body.payer_currency : null,
-      paidAmount: Number.isFinite(paid) ? paid : null,
-      raw: body as Prisma.InputJsonValue,
-    });
   }
 
   /**
@@ -198,7 +151,7 @@ export class BillingService {
       );
       return;
     }
-    await this.applyObservation('nowpayments', orderId, {
+    await this.applyObservation(orderId, {
       status,
       providerPaymentId:
         body.payment_id === undefined || body.payment_id === null ? null : String(body.payment_id),
@@ -215,7 +168,6 @@ export class BillingService {
    * transaction can — is the one that extends the subscription.
    */
   private async applyObservation(
-    provider: string,
     orderId: string,
     observed: {
       status: string;
@@ -226,10 +178,10 @@ export class BillingService {
     },
   ): Promise<void> {
     const payment = await this.prisma.payment.findUnique({ where: { orderId } });
-    if (!payment || payment.provider !== provider) {
+    if (!payment) {
       // Signed with our secret but naming an order we never opened — a bug or
       // another environment's traffic, and either way worth a loud line
-      this.logger.warn(`${provider} webhook for unknown order ${orderId}`);
+      this.logger.warn(`nowpayments webhook for unknown order ${orderId}`);
       return;
     }
 

@@ -30,19 +30,10 @@ export class BillingController {
   }
 
   /**
-   * The gateways calling back about payments. No JWT — the caller is a
-   * machine, and its authentication is a signature over the body, checked in
-   * the service before anything is read. Both routes stay mounted whatever
-   * BILLING_PROVIDER says, so switching providers never strands an invoice
-   * opened on the other side.
+   * NOWPayments calling back about a payment. No JWT — the caller is a
+   * machine, and its authentication is the HMAC signature over the body,
+   * checked in the service before anything is read.
    */
-  @Post('webhook/cryptomus')
-  @HttpCode(200)
-  async cryptomusWebhook(@Body() body: Record<string, unknown>) {
-    await this.billing.cryptomusWebhook(body ?? {});
-    return { ok: true };
-  }
-
   @Post('webhook/nowpayments')
   @HttpCode(200)
   async nowpaymentsWebhook(

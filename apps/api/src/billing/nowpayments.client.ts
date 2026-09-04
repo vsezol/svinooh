@@ -1,17 +1,15 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { CreatedInvoice, InvoiceRequest, PaymentGateway } from './gateway';
 
 /**
- * The NOWPayments corner of billing — the default gateway.
- *
- * Chosen on operating experience over paperwork: the operator has run an
- * account here for years without trouble, every payment auto-forwards to our
- * own wallet (no custodial balance to sweep and no one to freeze it), the
- * webhook signature is a real HMAC, and the sandbox exercises the whole
- * checkout-to-webhook path with play money. The known caveat stays known:
- * their terms (s.15.1, as of 2026-08-31) list RU residents as prohibited "at
- * their own risk" — which is why Cryptomus stays wired in behind the same
- * seam, one env var away.
+ * The NOWPayments corner of billing — the gateway, singular, by the
+ * operator's own call: the account proven over years of use, every payment
+ * auto-forwarded to our own wallet (no custodial balance to sweep and no one
+ * to freeze it), a real HMAC on the webhooks, and a sandbox that exercises
+ * the whole checkout-to-webhook path with play money. The known caveat stays
+ * written down: their terms (s.15.1, as of 2026-08-31) list RU residents as
+ * prohibited "at their own risk" — if that ever bites, this file and one
+ * webhook route are the whole cost of a replacement, which is why everything
+ * provider-specific lives here and nowhere else.
  *
  * The class takes its credentials as arguments rather than reading config, so
  * the check scripts can exercise it against a fake server and the sandbox.
@@ -84,9 +82,24 @@ export function paymentStatusOf(gateway: string): string | null {
   }
 }
 
-export class NowPaymentsClient implements PaymentGateway {
-  readonly name = 'nowpayments';
+export interface InvoiceRequest {
+  priceUsd: number;
+  /** Ours, echoed back by the webhook — how a callback finds its Payment row */
+  orderId: string;
+  description: string;
+  /** null — no callback requested (local development) */
+  ipnUrl: string | null;
+  successUrl: string;
+  cancelUrl: string;
+}
 
+export interface CreatedInvoice {
+  invoiceId: string;
+  /** The hosted payment page: the payer picks a coin and network there */
+  url: string;
+}
+
+export class NowPaymentsClient {
   constructor(
     private readonly apiKey: string,
     private readonly ipnSecret: string,

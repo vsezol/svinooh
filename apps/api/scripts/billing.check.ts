@@ -1,9 +1,9 @@
 /**
  * The billing arithmetic and the webhook cryptography, exercised.
  *
- * Everything here is pure — offer math, month arithmetic, signature schemes,
- * status mapping — so it can be run for real rather than reasoned about.
- * Run with `npm run -w apps/api check`.
+ * Everything here is pure — offer math, month arithmetic, the signature
+ * scheme, status mapping — so it can be run for real rather than reasoned
+ * about. Run with `npm run -w apps/api check`.
  */
 import { addMonths, buildOffer, paywallBody, utcDay } from '../src/billing/premium';
 import {
@@ -12,12 +12,6 @@ import {
   paymentStatusOf,
   sortedJson,
 } from '../src/billing/nowpayments.client';
-import {
-  cryptomusSign,
-  cryptomusStatusOf,
-  cryptomusWebhookValid,
-  phpJson,
-} from '../src/billing/cryptomus.client';
 
 let failures = 0;
 const check = (name: string, got: unknown, want: unknown) => {
@@ -78,22 +72,6 @@ check(
   'статусы NOWPayments ложатся в наши',
   ['finished', 'partially_paid', 'waiting', 'confirmed', 'sending', 'failed', 'refunded', 'expired', 'novel'].map(paymentStatusOf),
   ['paid', 'underpaid', 'waiting', 'confirming', 'confirming', 'failed', 'refunded', 'expired', null],
-);
-
-/* ── Cryptomus: json_encode по-пэхэпэшному и md5(base64+key) ── */
-
-check('слэши экранируются как в json_encode', phpJson({ u: 'https://x/y' }), '{"u":"https:\\/\\/x\\/y"}');
-check('не-ASCII экранируется как \\uXXXX', phpJson({ s: 'я' }), '{"s":"\\u044f"}');
-const cmBody: Record<string, unknown> = { order_id: 'pro_y', status: 'paid', amount: '5.00' };
-const cmSigned = { ...cmBody, sign: cryptomusSign(cmBody, 'key') };
-check('вебхук с подписью без поля sign — сходится', cryptomusWebhookValid(cmSigned, 'key'), true);
-check('чужой ключ — не сходится', cryptomusWebhookValid(cmSigned, 'other'), false);
-check('без sign — не сходится', cryptomusWebhookValid(cmBody, 'key'), false);
-check('без ключа — не сходится', cryptomusWebhookValid(cmSigned, ''), false);
-check(
-  'статусы Cryptomus ложатся в наши, paid_over — это paid',
-  ['check', 'process', 'confirm_check', 'paid', 'paid_over', 'wrong_amount', 'fail', 'system_fail', 'cancel', 'refund_paid', 'locked'].map(cryptomusStatusOf),
-  ['waiting', 'confirming', 'confirming', 'paid', 'paid', 'underpaid', 'failed', 'failed', 'expired', 'refunded', null],
 );
 
 console.log(failures ? `\n${failures} failure(s)` : '\nall ok');

@@ -57,21 +57,9 @@ export const config = {
    * sandbox dashboard can be pointed at a tunnel instead.
    */
   publicApiUrl: (process.env.PUBLIC_API_URL || '').replace(/\/+$/, ''),
-  /**
-   * Which gateway checkout opens invoices on: 'nowpayments' (default — the
-   * operator's own account, proven in use; non-custodial forwarding to our
-   * wallet) or 'cryptomus' (the standing fallback). Both webhook routes stay
-   * mounted regardless, so switching never strands an invoice opened on the
-   * other side. With neither configured, checkout answers 503 and everything
-   * else still works.
-   */
-  billingProvider: process.env.BILLING_PROVIDER === 'cryptomus' ? 'cryptomus' : 'nowpayments',
-  cryptomusMerchantId: process.env.CRYPTOMUS_MERCHANT_ID || '',
-  cryptomusApiKey: process.env.CRYPTOMUS_API_KEY || '',
-  cryptomusApiUrl: (process.env.CRYPTOMUS_API_URL || 'https://api.cryptomus.com/v1').replace(
-    /\/+$/,
-    '',
-  ),
+  // NOWPayments carries the checkout — the operator's own account, proven in
+  // use, forwarding every payment to our wallet. No key — payments are off:
+  // the offer endpoints still answer, checkout says so instead of pretending.
   nowpaymentsApiKey: process.env.NOWPAYMENTS_API_KEY || '',
   nowpaymentsIpnSecret: process.env.NOWPAYMENTS_IPN_SECRET || '',
   nowpaymentsApiUrl: (process.env.NOWPAYMENTS_API_URL || 'https://api.nowpayments.io/v1').replace(

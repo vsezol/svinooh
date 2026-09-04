@@ -3,7 +3,6 @@ import { RequiredAuthGuard } from '@svinooh/common';
 import { config } from '../config';
 import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
-import { CryptomusClient } from './cryptomus.client';
 import { NowPaymentsClient } from './nowpayments.client';
 import { PremiumService } from './premium.service';
 
@@ -13,11 +12,6 @@ import { PremiumService } from './premium.service';
     BillingService,
     PremiumService,
     RequiredAuthGuard,
-    {
-      provide: CryptomusClient,
-      useFactory: () =>
-        new CryptomusClient(config.cryptomusMerchantId, config.cryptomusApiKey, config.cryptomusApiUrl),
-    },
     {
       provide: NowPaymentsClient,
       useFactory: () =>
