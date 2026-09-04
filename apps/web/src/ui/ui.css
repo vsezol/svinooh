@@ -352,6 +352,133 @@ button.ui-tag[data-variant='soft']:not(:disabled):hover {
   border-color: var(--down);
 }
 
+/* A number field's stepper arrows are the browser's, drawn in the browser's
+   own grey, and they sit inside the box crowding the number they step. Nobody
+   clicks them: a threshold is typed, and the keyboard's own up and down arrows
+   still step the value for anyone who wants that. */
+.ui-input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.ui-input[type='number']::-webkit-outer-spin-button,
+.ui-input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Select — the trigger. Its menu is a Panel of MenuItems.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ui-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  /* Room for the mark, so it never crowds the right edge the way the native
+     control's arrow does */
+  gap: var(--sp-4);
+  height: var(--h-md);
+  padding: 0 var(--sp-5);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-sm);
+  background: var(--surf2);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: var(--fs-body);
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--ease-quick), background var(--ease-quick);
+}
+
+.ui-select:hover,
+.ui-select:focus-visible {
+  border-color: var(--mut);
+}
+
+/* Open, not focused: a green ring on a closed control reads as "this is the
+   one thing on the page that matters", which is what the native control did
+   the moment it was clicked */
+.ui-select[data-open='true'] {
+  border-color: var(--acc);
+}
+
+/* In a header, beside pills — a round outline rather than a box */
+.ui-select[data-shape='pill'] {
+  height: var(--h-sm);
+  border-radius: var(--r-full);
+  background: transparent;
+  padding: 0 var(--sp-5);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Checkbox — an outlined box on a transparent ground; the accent only when
+   ticked. The input underneath is real and merely invisible, so focus and
+   keyboard belong to it and the drawing just follows its state.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ui-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  cursor: pointer;
+  user-select: none;
+}
+
+.ui-checkbox[data-disabled='true'] {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ui-checkbox input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+
+.ui-checkbox-box {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 1px solid var(--line2);
+  border-radius: 5px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  transition:
+    border-color var(--ease-settle),
+    color var(--ease-settle);
+}
+
+.ui-checkbox-box svg {
+  width: 10px;
+  height: 8px;
+}
+
+.ui-checkbox:hover input:not(:disabled) + .ui-checkbox-box {
+  border-color: var(--mut);
+}
+
+.ui-checkbox input:checked + .ui-checkbox-box {
+  border-color: var(--acc);
+  color: var(--acc-text);
+}
+
+.ui-checkbox input:focus-visible + .ui-checkbox-box {
+  border-color: var(--acc);
+}
+
+.ui-checkbox-label {
+  font-size: var(--fs-note);
+  color: var(--mut);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    Switch
    ═══════════════════════════════════════════════════════════════════════ */
@@ -515,12 +642,15 @@ button.ui-tag[data-variant='soft']:not(:disabled):hover {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   Tooltip — one implementation, replacing three
+   Tooltip
 
-   There were: .infotip (a mark you hover for a paragraph), .chain-tip (a
-   ::after carrying an attribute), and thirteen native `title` attributes,
-   which wait about a second, are drawn by the operating system, and show a
-   finger nothing at all.
+   The popover is rendered into <body> and placed by the component from the
+   trigger's own rectangle — see Tooltip.tsx for why. All that is left here is
+   what it looks like; `top` and `left` arrive as inline styles.
+
+   There were three of these before the kit: .infotip (a mark you hover for a
+   paragraph), .chain-tip (a ::after carrying an attribute), and thirteen
+   native `title` attributes.
    ═══════════════════════════════════════════════════════════════════════ */
 
 .ui-tip {
@@ -530,11 +660,8 @@ button.ui-tag[data-variant='soft']:not(:disabled):hover {
 }
 
 .ui-tip-pop {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + var(--sp-3));
-  transform: translateX(-50%) translateY(4px);
-  z-index: 70;
+  position: fixed;
+  z-index: 1100;
   padding: var(--sp-3) 10px;
   border-radius: var(--r-sm);
   background: var(--surf2);
@@ -549,32 +676,18 @@ button.ui-tag[data-variant='soft']:not(:disabled):hover {
   color: var(--text);
   text-align: center;
   white-space: nowrap;
-  opacity: 0;
-  visibility: hidden;
   pointer-events: none;
-  transition: opacity var(--ease-quick), transform var(--ease-quick);
 }
 
-/* A sentence rather than a name: it wraps, it sits below the mark, and it is
-   set muted because it is an aside */
+/* A sentence rather than a name: it wraps, and it is set muted because it is
+   an aside */
 .ui-tip-pop[data-size='lg'] {
-  top: calc(100% + var(--sp-4));
-  bottom: auto;
-  transform: translateX(-50%) translateY(-4px);
-  width: min(260px, 78vw);
+  width: min(260px, calc(100vw - 2 * var(--sp-6)));
   padding: 10px var(--sp-5);
   border-radius: 11px;
   color: var(--mut);
   text-align: left;
   white-space: normal;
-}
-
-.ui-tip:hover .ui-tip-pop,
-.ui-tip:focus-visible .ui-tip-pop,
-.ui-tip:focus-within .ui-tip-pop {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) translateY(0);
 }
 
 /* The mark itself: a small italic i in a ring */
@@ -602,26 +715,6 @@ button.ui-tag[data-variant='soft']:not(:disabled):hover {
 .ui-tip:focus-within .ui-tip-mark {
   color: var(--text);
   border-color: var(--mut);
-}
-
-/* A wide popover centred on a mark near the edge of a phone gets clipped. The
-   row it sits in is the anchor instead: the popover spans it and cannot run
-   off at any width. */
-.ui-tip[data-anchor='row'] {
-  position: static;
-}
-
-.ui-tip[data-anchor='row'] .ui-tip-pop {
-  left: 0;
-  right: 0;
-  width: auto;
-  transform: translateY(-4px);
-}
-
-.ui-tip[data-anchor='row']:hover .ui-tip-pop,
-.ui-tip[data-anchor='row']:focus-visible .ui-tip-pop,
-.ui-tip[data-anchor='row']:focus-within .ui-tip-pop {
-  transform: translateY(0);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

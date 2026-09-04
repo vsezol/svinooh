@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import type { HistoryRange, PortfolioDto, WalletDto } from '@svinooh/shared';
-import { Button, Card, Eyebrow, Input, Segmented, Spinner, TagButton } from '../ui';
+import { Button, Card, Checkbox, Eyebrow, Input, Segmented, Spinner, TagButton } from '../ui';
 import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AlertSettings } from '../components/AlertSettings';
 import { AreaChart } from '../components/AreaChart';
@@ -13,6 +13,7 @@ import { ClaimModal } from '../components/ClaimModal';
 import { Logo } from '../components/Logo';
 import { MetricCards } from '../components/MetricCards';
 import { GoPublicModal, VisibilityCard } from '../components/PortfolioVisibility';
+import { PortfolioName } from '../components/PortfolioName';
 import { PortfolioSwitcher } from '../components/PortfolioSwitcher';
 import { ScopeSelect } from '../components/ScopeSelect';
 import { ShareButton } from '../components/ShareButton';
@@ -26,14 +27,7 @@ import { track } from '../lib/analytics';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { pendingClaim } from '../lib/claim';
-import {
-  blockMatches,
-  buildBlocks,
-  debtTotals,
-  filteredTotal,
-  rewardsTotals,
-  type PositionFilter,
-} from '../lib/blocks';
+import { debtTotals, rewardsTotals } from '../lib/blocks';
 import { fmtUsd, portfolioLabel, walletName } from '../lib/format';
 import {
   cachedHistory,
@@ -78,13 +72,6 @@ const changeLabel = (change: Change): string =>
   (change.up ? '+' : '') +
   change.pct.toFixed(2) +
   '%)';
-
-const FILTERS: Array<{ key: PositionFilter; label: string }> = [
-  { key: 'all', label: 'ALL' },
-  { key: 'pools', label: 'POOLS' },
-  { key: 'lending', label: 'LENDING' },
-];
-
 
 /**
  * `viewerId` is not used in the request — it's a reload trigger. The bot's
@@ -177,7 +164,7 @@ function useHistory(slug: string, scope: string, period: HistoryRange, refreshKe
 
 export function PortfolioPage({ slug }: { slug: string }) {
   const router = useRouter();
-  const { me, config, loading: authLoading, logout } = useAuth();
+  const { me, config, loading: authLoading, logout, refreshMe } = useAuth();
   const { data, error, reload } = usePortfolio(slug, me?.id ?? null);
 
   const [tab, setTab] = useState<Tab>('portfolio');
@@ -186,7 +173,11 @@ export function PortfolioPage({ slug }: { slug: string }) {
   const [sideCollapsed, setSideCollapsed] = useState(false);
   const [scope, setScope] = useState<string>('all');
   const [period, setPeriod] = useState<HistoryRange>('24h');
-  const [filter, setFilter] = useState<PositionFilter>('all');
+  const [hideSmall, setHideSmall] = useState(false);
+  // The saved preference, applied once per portfolio load. Seeding rather than
+  // deriving keeps a toggle made just now from being undone by a reload that
+  // was already in the air with the older answer.
+  const hideSmallSeeded = useRef<string | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [input, setInput] = useState('');
   const [addErr, setAddErr] = useState<string | null>(null);
@@ -226,6 +217,13 @@ export function PortfolioPage({ slug }: { slug: string }) {
     if (scope !== 'all' && data && !data.wallets.some((w) => w.id === scope)) setScope('all');
   }, [data, scope]);
 
+  useEffect(() => {
+    if (data && hideSmallSeeded.current !== slug) {
+      hideSmallSeeded.current = slug;
+      setHideSmall(data.hideSmallBalances ?? false);
+    }
+  }, [data, slug]);
+
   /**
    * A share link doing its job: somebody who does not own this portfolio is
    * looking at it. Counted once per page, and only three seconds in — an owner
@@ -258,8 +256,6 @@ export function PortfolioPage({ slug }: { slug: string }) {
   );
   const rewards = useMemo(() => rewardsTotals(scoped), [scoped]);
   const debt = useMemo(() => debtTotals(scoped), [scoped]);
-  const blocksByWallet = useMemo(() => wallets.map((w) => buildBlocks(w.positions)), [wallets]);
-  const shownTotal = useMemo(() => filteredTotal(blocksByWallet, filter), [blocksByWallet, filter]);
 
   // The series reaches back several windows so the chart has somewhere to
   // scroll to, but this line answers the button: it starts at the first reading
@@ -348,6 +344,30 @@ export function PortfolioPage({ slug }: { slug: string }) {
   };
 
   /**
+   * The name pulls the slug with it: a successful rename usually means this
+   * page's own URL is stale, so we follow the portfolio to its new address.
+   * The switcher and me.portfolioSlug read from /auth/me — refreshed first, or
+   * the page we land on would list this portfolio under its old link.
+   */
+  const renamePortfolio = async (name: string) => {
+    try {
+      const res = await api<{ name: string | null; slug: string }>(`/portfolios/${slug}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name }),
+      });
+      if (res.slug !== slug) {
+        await refreshMe();
+        router.replace(`/p/${res.slug}`);
+      } else {
+        await refreshMe();
+        await reload();
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not rename');
+    }
+  };
+
+  /**
    * Reaching for an owner-only action on a portfolio nobody owns. Signed in, we
    * ask whether they want to take it over; signed out, the intent is parked and
    * the sign-in that follows completes it (see settleClaim).
@@ -408,6 +428,22 @@ export function PortfolioPage({ slug }: { slug: string }) {
   }
 
   const isOwner = data.isOwner;
+
+  /**
+   * Applied at once, remembered on the account. The owner's press is saved so
+   * a refresh and another device agree with it; a guest's toggle is their own
+   * session's business and touches nothing. A failed save quietly puts the
+   * switch back — the page must not claim a memory the server refused to keep.
+   */
+  const toggleHideSmall = (on: boolean) => {
+    setHideSmall(on);
+    if (isOwner) {
+      void api(`/portfolios/${slug}/hide-small-balances`, {
+        method: 'PATCH',
+        body: JSON.stringify({ hideSmallBalances: on }),
+      }).catch(() => setHideSmall(!on));
+    }
+  };
   // A visitor has no rail, so they can only ever be on the one tab the link
   // pointed them at — whatever state says
   const activeTab: Tab = isOwner ? tab : 'portfolio';
@@ -438,12 +474,6 @@ export function PortfolioPage({ slug }: { slug: string }) {
       : data.visibility === 'private'
         ? 'ONLY PEOPLE WITH THE LINK'
         : 'SHARED PORTFOLIO';
-
-  // Same predicate the rows and the running total use — a second copy of it
-  // here is how the list came to disagree with the number above it
-  const visibleWallets = wallets.filter(
-    (w, i) => filter === 'all' || w.status === 'pending' || blocksByWallet[i].some((b) => blockMatches(b, filter)),
-  );
 
   return (
     <div>
@@ -582,8 +612,18 @@ export function PortfolioPage({ slug }: { slug: string }) {
             <div className="pane" data-active={activeTab === 'portfolio'}>
             {/* total */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+                <div style={{ minWidth: 0 }}>
+                  {/* ph-mask: the name is the owner's words — and unnamed, the
+                      label IS the slug, which is the share link itself */}
+                  <div className="ph-mask">
+                    <PortfolioName
+                      name={data.name}
+                      slug={data.slug}
+                      editable={isOwner}
+                      onRename={(name) => void renamePortfolio(name)}
+                    />
+                  </div>
                   <Eyebrow>
                     {selectedWallet ? 'WALLET BALANCE' : 'TOTAL BALANCE'} · {walletCount}{' '}
                     {walletCount === 1 ? 'WALLET' : 'WALLETS'}
@@ -703,31 +743,29 @@ export function PortfolioPage({ slug }: { slug: string }) {
               </div>
             ) : null}
 
-            {/* which positions to show, and what they add up to */}
+            {/* the dust switch, and what the list adds up to */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 26, marginBottom: 12 }}>
-              <Segmented label="Which positions to show" items={FILTERS} value={filter} onChange={setFilter} tone="accent" />
+              <Checkbox checked={hideSmall} onChange={toggleHideSmall} label="Hide small balances" />
               <div className="mono ph-mask" style={{ fontSize: 'var(--fs-tag)', fontWeight: 'var(--fw-normal)', color: 'var(--mut)' }}>
-                {filter === 'all' ? `${walletCount} ${walletCount === 1 ? 'wallet' : 'wallets'}` : 'Shown'} · {fmtUsd(shownTotal)}
+                {walletCount} {walletCount === 1 ? 'wallet' : 'wallets'} · {fmtUsd(data.totalUsd)}
               </div>
             </div>
 
-            {visibleWallets.length === 0 ? (
+            {wallets.length === 0 ? (
               <Card style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--mut)', fontSize: 'var(--fs-body)' }}>
-                {wallets.length === 0
-                  ? canAdd
-                    ? 'No wallets yet. Paste an address above — the network is detected automatically.'
-                    : 'This portfolio has no wallets yet.'
-                  : 'Nothing matches this filter.'}
+                {canAdd
+                  ? 'No wallets yet. Paste an address above — the network is detected automatically.'
+                  : 'This portfolio has no wallets yet.'}
               </Card>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {visibleWallets.map((w) => (
+                {wallets.map((w) => (
                   <WalletRow
                     key={w.id}
                     wallet={w}
                     actions={walletActions}
                     total={data.totalUsd}
-                    filter={filter}
+                    hideSmall={hideSmall}
                     onRemove={() => void removeWallet(w.id)}
                     onRename={(label) => void renameWallet(w.id, label)}
                     onRequireAuth={startClaim}

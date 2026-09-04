@@ -514,10 +514,45 @@ export function blockMatches(block: Block, filter: PositionFilter): boolean {
   return filter === 'pools' ? isPoolKind(block.typeLabel) : isLending(block);
 }
 
-/** Total value of everything the filter is currently showing */
-export function filteredTotal(blocksByWallet: Block[][], filter: PositionFilter): number {
-  return blocksByWallet
-    .flat()
-    .filter((b) => blockMatches(b, filter))
-    .reduce((sum, b) => sum + b.value, 0);
+/**
+ * A balance under a dollar.
+ *
+ * Measured in the display currency on purpose: "small" means small money, not a
+ * small number of tokens — a sliver of BTC is real money and stays, a million
+ * units of a dead token is dust and goes. The line is a whole dollar, not "what
+ * rounds to $0": a wallet's tail of $0.96 and $0.70 tokens is exactly the noise
+ * the switch exists to clear.
+ */
+export function isDustValue(valueUsd: number): boolean {
+  return Math.abs(valueUsd) < 1;
+}
+
+/**
+ * The same blocks with the dust taken out: rows under a dollar disappear, and
+ * a block whose whole position is under a dollar disappears with them.
+ *
+ * Sections are rebuilt around what is left — the column headings ride whichever
+ * section is now first, and a total over one surviving row is dropped the same
+ * way toSections drops it, so a pruned section keeps the single-row rule.
+ */
+export function withoutDust(blocks: Block[]): Block[] {
+  return blocks
+    .filter((block) => !isDustValue(block.value))
+    .map((block) => ({
+      ...block,
+      sections: block.sections
+        .map((section) => ({
+          ...section,
+          rows: section.rows.filter((row) => !isDustValue(row.value)),
+        }))
+        .filter((section) => section.rows.length > 0)
+        .map((section, index) => ({
+          ...section,
+          columns: index === 0,
+          total:
+            section.label !== null && section.rows.length > 1
+              ? section.rows.reduce((sum, row) => sum + Math.abs(row.value), 0)
+              : null,
+        })),
+    }));
 }

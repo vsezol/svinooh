@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import type { Portfolio, User } from '@prisma/client';
 import { PrismaService } from '@svinooh/db';
-import { randomSlug } from '../common/util';
+import { wordSlug } from '@svinooh/common';
 
 /**
  * How long a sign-in link from the bot stays good. An hour covers the case the
@@ -98,12 +99,22 @@ export class UserService {
       include: { portfolio: true },
     });
     if (existing) return existing.portfolio;
-    return this.prisma.portfolio.create({
-      data: {
-        slug: randomSlug(),
-        owner: { create: { userId: user.id } },
-      },
-    });
+    // Word slugs collide once in ~260k — the unique constraint arbitrates and a
+    // hit just deals a new hand (digits join after a couple of misses)
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.prisma.portfolio.create({
+          data: {
+            slug: wordSlug(attempt),
+            owner: { create: { userId: user.id } },
+          },
+        });
+      } catch (err) {
+        const collision =
+          err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
+        if (!collision || attempt >= 5) throw err;
+      }
+    }
   }
 
   /**

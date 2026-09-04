@@ -1,4 +1,5 @@
-import type { DefiFacts, ScanPosition } from '@svinooh/shared';
+import type { DefiFacts, PoolFact, ScanPosition } from '@svinooh/shared';
+import { hasRange } from './range';
 
 /** Nothing was asked, or nothing answered — either way there is nothing to fill in */
 export const NO_FACTS: DefiFacts = { pools: [], lending: [], failed: [] };
@@ -22,8 +23,40 @@ export function needsLendingFacts(positions: ScanPosition[]): boolean {
 
 /** The pair a position is made of, or null when it isn't a pair at all */
 function pairOf(position: ScanPosition): string | null {
-  const supplied = (position.tokens ?? []).filter((t) => t.role === 'supply');
-  return supplied.length === 2 ? pairKey(supplied[0].symbol, supplied[1].symbol) : null;
+  const legs = position.tokens ?? [];
+  const supplied = legs.filter((t) => t.role === 'supply');
+  if (supplied.length === 2) return pairKey(supplied[0].symbol, supplied[1].symbol);
+
+  // A position that has crossed a bound holds one token, so the pair can no
+  // longer be read off what it is holding — which lost the band for precisely
+  // the positions whose band is worth looking at. Its uncollected fees still
+  // name both sides, because fees accrue in the pool's own two tokens, so they
+  // finish the pair.
+  //
+  // Pools only. A lending position supplying one asset and earning a reward in
+  // another also has two symbols on it, and they are not a pair.
+  if (!hasRange(position.name)) return null;
+  const symbols = [...new Set(legs.map((t) => t.symbol.trim().toUpperCase()))];
+  return symbols.length === 2 ? pairKey(symbols[0], symbols[1]) : null;
+}
+
+/**
+ * The fact that names itself the way this position does.
+ *
+ * Tried before the pair, because it is the only one of the two that is an
+ * identity. Two positions in one pool are two rows with the same pair, and the
+ * pair was all a fact was ever matched by — so a wallet holding two ranges in
+ * USDC/WETH got a band for neither. It also does not care what the position is
+ * currently holding, which is what makes it work for a position that has been
+ * converted to one token and has no fees to name the other side with.
+ *
+ * Returns nothing when the ids do not line up, and the pair is tried next — so
+ * this can only ever resolve an ambiguity, never create one.
+ */
+function byRef(pools: PoolFact[], position: ScanPosition): PoolFact | null {
+  const ref = position.ref?.trim();
+  if (!ref) return null;
+  return only(pools.filter((p) => p.ref && p.ref.trim() === ref));
 }
 
 /** The one fact that can only be about this position, or nothing */
@@ -49,11 +82,13 @@ function only<T>(candidates: T[]): T | null {
  * and are there to be read: they are what lets an alert say how far out of
  * range a position went and which way, instead of only that it went.
  *
- * A position is matched to a fact by its pair, or by the asset it borrowed —
- * neither is an identity. So a match is only used when exactly one fact can be
- * about this position: a wallet with two positions in the same pool gets the
- * inference it had before rather than a coin-flip between two bands, because a
- * confidently wrong range on somebody's money is worse than an approximate one.
+ * A pool position is matched to a fact by its own id where both sides have one,
+ * and by its pair otherwise; a loan by the asset it borrowed. Only the id is an
+ * identity, so where the pair is all there is, a match is used only when
+ * exactly one fact can be about this position — a wallet with two positions in
+ * the same pool and no ids to tell them apart gets the inference it had before
+ * rather than a coin-flip between two bands, because a confidently wrong range
+ * on somebody's money is worse than an approximate one.
  */
 export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPosition[] {
   if (!facts.pools.length && !facts.lending.length) return positions;
@@ -61,23 +96,24 @@ export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPositio
   return positions.map((position) => {
     const patch: Partial<ScanPosition> = {};
 
+    // Its own id where both sides have one, its pair otherwise
     const pair = pairOf(position);
-    if (pair) {
-      const pool = only(facts.pools.filter((p) => p.pair === pair));
-      // A full-range position has no band to be outside of, and saying "in
-      // range" of a pool that spans every price is a badge that means nothing
-      if (pool && !pool.isFullRange) {
-        patch.range = pool.inRange ? 'in' : 'out';
-        patch.band = {
-          pair: pool.pairLabel,
-          feePct: pool.feePct,
-          chainLabel: pool.chainLabel,
-          lower: pool.lowerPrice,
-          upper: pool.upperPrice,
-          current: pool.currentPrice,
-          priceLabel: pool.priceLabel,
-        };
-      }
+    const pool =
+      byRef(facts.pools, position) ?? (pair ? only(facts.pools.filter((p) => p.pair === pair)) : null);
+
+    // A full-range position has no band to be outside of, and saying "in
+    // range" of a pool that spans every price is a badge that means nothing
+    if (pool && !pool.isFullRange) {
+      patch.range = pool.inRange ? 'in' : 'out';
+      patch.band = {
+        pair: pool.pairLabel,
+        feePct: pool.feePct,
+        chainLabel: pool.chainLabel,
+        lower: pool.lowerPrice,
+        upper: pool.upperPrice,
+        current: pool.currentPrice,
+        priceLabel: pool.priceLabel,
+      };
     }
 
     const borrowed = (position.tokens ?? []).filter((t) => t.role === 'borrow');
