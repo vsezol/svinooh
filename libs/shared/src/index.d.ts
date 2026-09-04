@@ -229,6 +229,12 @@ export interface XStartDto {
   url: string;
 }
 
+/** One portfolio an account owns — enough to name it in a switcher */
+export interface OwnedPortfolioDto {
+  slug: string;
+  name: string | null;
+}
+
 /** Start connecting a Telegram chat as the alert delivery address */
 export interface TelegramConnectStartDto {
   token: string;
@@ -251,6 +257,12 @@ export interface MeDto {
   telegramLinked: boolean;
   /** A Telegram chat is connected as the alert delivery address (non-Telegram identities) */
   alertChatConnected: boolean;
+  /**
+   * Every portfolio this account owns, oldest first — claiming an ownerless
+   * portfolio has always been able to make it more than one. portfolioSlug
+   * stays the primary (oldest); the header offers the rest when there are any.
+   */
+  portfolios: OwnedPortfolioDto[];
   /**
    * Whether this person may see the admin tab.
    *

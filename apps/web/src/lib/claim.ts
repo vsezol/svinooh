@@ -47,7 +47,12 @@ export async function settleClaim(me: MeDto): Promise<MeDto> {
   pendingClaim.clear();
   try {
     const claimed = await api<{ slug: string }>(`/portfolios/${slug}/claim`, { method: 'POST' });
-    return { ...me, portfolioSlug: claimed.slug };
+    // The switcher reads me.portfolios; a portfolio claimed a moment ago has to
+    // be in it without waiting for the next /auth/me round trip
+    const portfolios = me.portfolios.some((p) => p.slug === claimed.slug)
+      ? me.portfolios
+      : [...me.portfolios, { slug: claimed.slug, name: null }];
+    return { ...me, portfolioSlug: claimed.slug, portfolios };
   } catch {
     // Someone else got there first, or the portfolio is gone. Their own
     // portfolio is still waiting for them, so carry on with it.

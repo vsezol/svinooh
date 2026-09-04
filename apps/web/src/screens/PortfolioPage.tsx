@@ -13,6 +13,7 @@ import { ClaimModal } from '../components/ClaimModal';
 import { Logo } from '../components/Logo';
 import { MetricCards } from '../components/MetricCards';
 import { GoPublicModal, VisibilityCard } from '../components/PortfolioVisibility';
+import { PortfolioSwitcher } from '../components/PortfolioSwitcher';
 import { ScopeSelect } from '../components/ScopeSelect';
 import { ShareButton } from '../components/ShareButton';
 import { MobileTabs, tabsFor, tabIndex, usePager } from '../components/MobileTabs';
@@ -476,6 +477,9 @@ export function PortfolioPage({ slug }: { slug: string }) {
         <div className="shell" style={{ height: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <Logo size={21} onClick={() => router.push('/')} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Only when this account owns more than one — see the component */}
+            {/* Only when this account owns more than one — see the component */}
+            {isOwner && me ? <PortfolioSwitcher portfolios={me.portfolios} currentSlug={slug} /> : null}
             <ThemeToggle />
             {isOwner && me ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 4 }}>

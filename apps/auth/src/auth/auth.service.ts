@@ -12,6 +12,7 @@ import type {
   AuthConfigDto,
   AuthResponseDto,
   MeDto,
+  OwnedPortfolioDto,
   TelegramAuthPayload,
   TelegramConnectPollDto,
   TelegramConnectStartDto,
@@ -186,16 +187,26 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
     const portfolio = await this.users.ensurePortfolio(user);
-    return this.toMe(user, portfolio.slug);
+    return this.toMe(user, portfolio.slug, await this.ownedPortfolios(user.id));
   }
 
   private async finishLogin(user: User): Promise<AuthResponseDto> {
     const portfolio = await this.users.ensurePortfolio(user);
     const token = await this.jwt.signAsync({ sub: user.id });
-    return { token, me: this.toMe(user, portfolio.slug) };
+    return { token, me: this.toMe(user, portfolio.slug, await this.ownedPortfolios(user.id)) };
   }
 
-  private toMe(user: User, portfolioSlug: string): MeDto {
+  /** Everything this account owns, oldest first — claims can make it several */
+  private async ownedPortfolios(userId: string): Promise<OwnedPortfolioDto[]> {
+    const owned = await this.prisma.portfolioOwner.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+      select: { portfolio: { select: { slug: true, name: true } } },
+    });
+    return owned.map((o) => ({ slug: o.portfolio.slug, name: o.portfolio.name }));
+  }
+
+  private toMe(user: User, portfolioSlug: string, portfolios: OwnedPortfolioDto[]): MeDto {
     return {
       id: user.id,
       name:
@@ -205,6 +216,7 @@ export class AuthService {
       portfolioSlug,
       telegramLinked: user.telegramId !== null,
       alertChatConnected: user.alertChatId !== null,
+      portfolios,
       // Decides whether the browser draws the tab, and nothing else — every
       // admin route asks the database again for itself
       isAdmin: user.isAdmin,
