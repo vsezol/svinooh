@@ -428,17 +428,17 @@ export function AreaChart({ values, times, period, height, bare = false, tone = 
             position: 'absolute',
             top: 8,
             ...(bare ? { right: 10 } : { left: 12 }),
-            fontSize: bare ? 10.5 : 11,
+            fontSize: 'var(--fs-tag)',
             pointerEvents: 'none',
             display: 'flex',
             alignItems: 'baseline',
             gap: bare ? 7 : 9,
-            ...(bare ? { background: 'var(--surf)', padding: '2px 6px', borderRadius: 6 } : null),
+            ...(bare ? { background: 'var(--surf)', padding: '2px 6px', borderRadius: 'var(--r-sm)' } : null),
           }}
         >
           {range ? (
             <>
-              <span style={{ fontWeight: 600, color: range.good ? 'var(--up)' : 'var(--down)' }}>
+              <span style={{ fontWeight: 'var(--fw-medium)', color: range.good ? 'var(--up)' : 'var(--down)' }}>
                 {(range.up ? '+' : '−') + fmtUsd(Math.abs(range.chg), 0)} ({range.up ? '+' : ''}
                 {range.pct.toFixed(2)}%)
               </span>
@@ -446,7 +446,7 @@ export function AreaChart({ values, times, period, height, bare = false, tone = 
             </>
           ) : hovered !== null ? (
             <>
-              <span style={{ fontWeight: 600 }}>{fmtUsd(values[hovered])}</span>
+              <span style={{ fontWeight: 'var(--fw-medium)' }}>{fmtUsd(values[hovered])}</span>
               <span style={{ color: 'var(--mut)' }}>{dateLabel(times[hovered], period)}</span>
             </>
           ) : null}
@@ -462,7 +462,7 @@ export function AreaChart({ values, times, period, height, bare = false, tone = 
             position: 'absolute',
             top: 8,
             right: 12,
-            fontSize: 9.5,
+            fontSize: 'var(--fs-micro)',
             letterSpacing: '0.1em',
             color: 'var(--mut)',
             opacity: 0.7,
@@ -483,7 +483,7 @@ export function AreaChart({ values, times, period, height, bare = false, tone = 
             right: 12,
             display: 'flex',
             justifyContent: 'space-between',
-            fontSize: 10,
+            fontSize: 'var(--fs-micro)',
             color: 'var(--mut)',
             pointerEvents: 'none',
           }}

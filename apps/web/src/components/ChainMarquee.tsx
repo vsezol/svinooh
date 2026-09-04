@@ -1,3 +1,4 @@
+import { Eyebrow } from '../ui';
 /**
  * The networks we track, drifting past slowly. A static row of four badges
  * couldn't say "50+ chains" — a marquee can show a couple of dozen names and
@@ -37,9 +38,9 @@ const CHAINS = [
 export function ChainMarquee() {
   return (
     <div style={{ maxWidth: 1120, width: '100%', margin: '0 auto', padding: '0 clamp(14px,3.5vw,28px) 8px' }}>
-      <div className="eyebrow" style={{ textAlign: 'center' }}>
+      <Eyebrow style={{ textAlign: 'center' }}>
         EVERY NETWORK WE TRACK · 50+ CHAINS
-      </div>
+      </Eyebrow>
       <div
         style={{
           overflow: 'hidden',
@@ -58,9 +59,9 @@ export function ChainMarquee() {
                   style={{
                     border: '1px solid var(--line)',
                     background: 'var(--surf)',
-                    borderRadius: 999,
+                    borderRadius: 'var(--r-full)',
                     padding: '7px 16px',
-                    fontSize: 11,
+                    fontSize: 'var(--fs-tag)',
                     letterSpacing: '0.06em',
                     color: 'var(--mut)',
                     whiteSpace: 'nowrap',

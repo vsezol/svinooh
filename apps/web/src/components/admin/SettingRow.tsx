@@ -1,7 +1,7 @@
 'use client';
 
 import type { SettingDto } from '@svinooh/shared';
-import { ChoiceField, InfoMark, NumberField } from './fields';
+import { ChoiceField, InfoMark, SettingNumber } from './fields';
 
 /**
  * The same number said the way a person would say it, or null when the raw
@@ -46,9 +46,9 @@ export function SettingRow({ spec, value, onChange }: SettingRowProps) {
       style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, position: 'relative' }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
-        <span style={{ fontWeight: 600, fontSize: 13.5 }}>{spec.label}</span>
+        <span style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--fs-body)' }}>{spec.label}</span>
         {spec.unit ? (
-          <span className="mono" style={{ fontSize: 11, color: 'var(--mut)' }}>
+          <span className="mono" style={{ fontSize: 'var(--fs-tag)', color: 'var(--mut)' }}>
             {spec.unit}
           </span>
         ) : null}
@@ -62,13 +62,13 @@ export function SettingRow({ spec, value, onChange }: SettingRowProps) {
       </div>
 
       {spec.kind === 'choice' ? (
-        <ChoiceField value={value} options={spec.options ?? []} onChange={onChange} />
+        <ChoiceField value={value} options={spec.options ?? []} label={spec.label} onChange={onChange} />
       ) : (
         <>
-          <span className="mono" style={{ fontSize: 11, color: 'var(--mut)' }}>
+          <span className="mono" style={{ fontSize: 'var(--fs-tag)', color: 'var(--mut)' }}>
             {plainer(value, spec.unit)}
           </span>
-          <NumberField value={value} min={spec.min} max={spec.max} onChange={onChange} />
+          <SettingNumber value={value} min={spec.min} max={spec.max} label={spec.label} onChange={onChange} />
         </>
       )}
     </div>

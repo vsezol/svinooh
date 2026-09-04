@@ -74,6 +74,71 @@ own defaults, and renaming them rewrites every `${{Postgres.DATABASE_URL}}`
 reference — worth doing deliberately, not in passing. `grafana-repo` is free to
 rename, nothing references it.
 
+## The UI kit
+
+Everything the interface is built from lives in `apps/web/src/ui`, and the
+measurements it is built to are the tokens in `apps/web/src/ui/tokens.css`.
+
+**Build screens out of the kit.** Import from `../ui`:
+
+```tsx
+import { Button, Card, Input, Segmented, Switch, Tag, Tooltip } from '../ui';
+```
+
+**Never write a size in pixels.** Font sizes, radii, control heights and spacing
+are tokens, and there are eight type steps for the whole app:
+
+| token | px | what it is for |
+| :-- | --: | :-- |
+| `--fs-micro` | 10 | column headers, eyebrows, the smallest labels |
+| `--fs-tag` | 11 | pills, chips, period switches |
+| `--fs-note` | 12 | small print, menu items, tooltips |
+| `--fs-body` | 14 | the default — body copy, inputs, buttons, navigation |
+| `--fs-lead` | 16 | emphasis inside a card, a lede |
+| `--fs-title` | 18 | the top of a dialog or a section |
+| `--fs-display` | 22 | the name of a page |
+| `--fs-hero` | 30 | the one figure a screen is about |
+
+Also `--r-*` (radius), `--h-*` (control height), `--sp-*` (spacing), `--fw-*`
+(weight), `--tr-*` (tracking), `--shadow-pop`, `--ease-*`. Read tokens.css: each
+one says what it is for.
+
+There were twenty font sizes across 128 sites before this existed, eight radii
+and six control heights — half of them differing from a neighbour by half a
+pixel. Half a pixel is not a decision anybody made; it is what happens when the
+number has no home. Reaching for a raw `fontSize: 13` is how it comes back.
+
+**When the kit does not have what you need, extend it — do not work around it.**
+In order of preference:
+
+1. **An existing component takes a new prop.** A variant of a button is a
+   variant, not a second button.
+2. **A new component joins the kit**, when it is genuinely a new shape. Put it
+   in `apps/web/src/ui/`, export it from `index.ts`, and style it in `ui.css`
+   with `data-*` attributes for its variants.
+3. **Something already written twice moves into the kit.** The second time a
+   shape appears is the moment it belongs here — that is the rule that would
+   have prevented `.pill`, `.pill-btn`, `.chip`, `.agent-chip` and `.period`
+   from being five classes for two ideas.
+
+A one-off inline `style` for layout — a flex row, a margin, a width — is fine
+and expected. What does not belong at a call site is the definition of a
+control: its height, its type size, its border, its hover.
+
+**The kit knows nothing about the domain.** No wallets, portfolios, chains or
+prices in `ui/`. A component that needs to know what a position is belongs in
+`components/`, built out of the kit.
+
+**Two kinds of pressable thing, and they are not interchangeable.** An action is
+sans and heavy — that is `Button`. A label is mono and tracked — that is `Tag`.
+Conflating them is what produced ten button classes for twenty-four buttons.
+
+**Do not add a second way to do something the kit already does.** One shadow
+(`--shadow-pop`), one spinner (`Spinner`), one tooltip (`Tooltip` — never the
+native `title` attribute, which waits a second, is drawn by the operating
+system, and shows a finger nothing at all), one dismissal (`useDismiss`), one
+floating surface (`Panel`).
+
 ## Issue tracking
 
 This project uses **bd** (beads) for issue tracking, and bd is **local only**.

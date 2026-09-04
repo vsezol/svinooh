@@ -8,6 +8,7 @@ import { AuthModal } from '../components/AuthModal';
 import { ChainMarquee } from '../components/ChainMarquee';
 import { Logo } from '../components/Logo';
 import { SearchDropdown } from '../components/SearchDropdown';
+import { Button, Card, Eyebrow, Input } from '../ui';
 import { Sparkline } from '../components/Sparkline';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { api, ApiError } from '../lib/api';
@@ -142,9 +143,9 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
         <Logo size={19} />
         <div style={{ display: 'flex', gap: 8 }}>
           <ThemeToggle />
-          <button className="btn-acc" style={{ height: 32, fontSize: 12, padding: '0 14px' }} onClick={primary}>
+          <Button size="sm" onClick={primary}>
             {primaryLabel}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -162,20 +163,21 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
         }}
       >
         <div>
-          <div style={{ fontWeight: 800, fontSize: 'clamp(30px,4.6vw,52px)', letterSpacing: '-0.04em', lineHeight: 1.08 }}>
+          <div style={{ fontWeight: 'var(--fw-heavy)', fontSize: 'clamp(var(--fs-hero),4.6vw,52px)', letterSpacing: '-0.04em', lineHeight: 1.08 }}>
             <span style={{ whiteSpace: 'nowrap' }}>Every DeFi position.</span>
             <br />
             <span style={{ color: 'var(--acc-text)', whiteSpace: 'nowrap' }}>No exceptions.</span>
           </div>
-          <div style={{ maxWidth: 430, marginTop: 18, fontSize: 15, lineHeight: 1.65, color: 'var(--mut)', textWrap: 'pretty' }}>
+          <div style={{ maxWidth: 430, marginTop: 18, fontSize: 'var(--fs-lead)', lineHeight: 1.65, color: 'var(--mut)', textWrap: 'pretty' }}>
             Tokens, LP, staking, lending, farming — the DeFi positions other trackers miss, counted at full value.
           </div>
           <div style={{ marginTop: 26, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {/* Typing opens a dropdown of matches right here, rather than
                 quietly re-filtering a list further down the page. */}
             <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 0 }}>
-              <input
-                className="mono field hide-mobile"
+              <Input
+                mono
+                className="hide-mobile"
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
@@ -191,8 +193,8 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
                   if (e.key === 'Enter' && looksLikeAddress) void trackAddress();
                 }}
                 placeholder="Search a portfolio id or paste a wallet address"
+                aria-label="Search portfolios"
                 spellCheck={false}
-                style={{ width: '100%', height: 46, padding: '0 18px', fontSize: 12.5 }}
               />
               {open && search.trim() ? (
                 <SearchDropdown
@@ -208,22 +210,18 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
                 />
               ) : null}
             </div>
-            <button
-              className="btn-acc"
-              style={{ height: 46, fontSize: 14, padding: '0 22px' }}
-              onClick={primary}
-            >
+            <Button size="lg" onClick={primary}>
               {primaryLabel}
-            </button>
+            </Button>
           </div>
         </div>
 
         {/* demo card from the top public portfolio */}
         <div>
-          <div className="card" style={{ overflow: 'hidden', boxShadow: '0 30px 80px -40px color-mix(in srgb, var(--acc) 35%, transparent)' }}>
+          <Card style={{ overflow: 'hidden', boxShadow: '0 30px 80px -40px color-mix(in srgb, var(--acc) 35%, transparent)' }}>
             <div style={{ padding: '15px 18px 0' }}>
               {/* The portfolio's own name, never its owner's */}
-              <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.14em', color: 'var(--mut)' }}>
+              <span className="mono" style={{ fontSize: 'var(--fs-micro)', letterSpacing: '0.14em', color: 'var(--mut)' }}>
                 {demo ? `${portfolioLabel(demo.name, demo.slug).toUpperCase()} · PUBLIC` : 'PUBLIC'}
               </span>
             </div>
@@ -231,12 +229,12 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
               <AnimatedUsd
                 className="mono"
                 value={total}
-                style={{ fontWeight: 600, fontSize: 30, letterSpacing: '-0.02em' }}
+                style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--fs-hero)', letterSpacing: '-0.02em' }}
               />
               {change ? (
                 <span
                   className="mono"
-                  style={{ fontSize: 12, fontWeight: 600, color: change.up ? 'var(--up)' : 'var(--down)' }}
+                  style={{ fontSize: 'var(--fs-note)', fontWeight: 'var(--fw-medium)', color: change.up ? 'var(--up)' : 'var(--down)' }}
                 >
                   {(change.up ? '+' : '') + change.pct.toFixed(2)}% · 30D
                 </span>
@@ -247,14 +245,14 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
             </div>
             {demoPositions.map((p) => (
               <div key={p.id} style={{ borderTop: '1px solid var(--line)', padding: '11px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ flex: 1, minWidth: 0, fontWeight: 'var(--fw-bold)', fontSize: 'var(--fs-note)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {p.symbol}
                   {p.name && p.name !== p.symbol ? ` · ${p.name}` : ''}
                 </div>
-                <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.12em', color: 'var(--mut)' }}>
+                <span className="mono" style={{ fontSize: 'var(--fs-micro)', letterSpacing: '0.12em', color: 'var(--mut)' }}>
                   {p.category === 'staked' ? 'STAKING' : p.category === 'defi' ? 'DEFI' : 'TOKEN'}
                 </span>
-                <span className="mono" style={{ fontSize: 12, fontWeight: 600 }}>
+                <span className="mono" style={{ fontSize: 'var(--fs-note)', fontWeight: 'var(--fw-medium)' }}>
                   {fmtUsd0(p.valueUsd)}
                 </span>
               </div>
@@ -263,12 +261,12 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
               <div
                 onClick={() => router.push(`/p/${demo.slug}`)}
                 className="row-hover mono"
-                style={{ borderTop: '1px solid var(--line)', padding: '11px 18px', textAlign: 'center', fontSize: 10, letterSpacing: '0.12em', color: 'var(--acc-text)', cursor: 'pointer', userSelect: 'none' }}
+                style={{ borderTop: '1px solid var(--line)', padding: '11px 18px', textAlign: 'center', fontSize: 'var(--fs-micro)', letterSpacing: '0.12em', color: 'var(--acc-text)', cursor: 'pointer', userSelect: 'none' }}
               >
                 OPEN THIS PORTFOLIO →
               </div>
             ) : null}
-          </div>
+          </Card>
         </div>
       </div>
 
@@ -278,17 +276,17 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
       <div className="shell" style={{ width: '100%', padding: '36px clamp(14px,3.5vw,28px) 52px' }}>
         <div style={{ borderTop: '1px solid var(--line)', paddingTop: 22 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-            <div className="eyebrow">PUBLIC PORTFOLIOS</div>
-            <div className="mono" style={{ fontSize: 10, color: 'var(--mut)' }}>
+            <Eyebrow>PUBLIC PORTFOLIOS</Eyebrow>
+            <div className="mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--mut)' }}>
               {pubs.length} {pubs.length === 1 ? 'PORTFOLIO' : 'PORTFOLIOS'}
             </div>
           </div>
           {/* A plain list of what is public. Searching happens in the dropdown
               under the hero input, so this one never shifts under you. */}
-          <div className="card" style={{ position: 'relative', marginTop: 14, overflow: 'hidden' }}>
+          <Card style={{ position: 'relative', marginTop: 14, overflow: 'hidden' }}>
             <div style={{ maxHeight: 328, overflowY: 'auto' }}>
               {pubs.length === 0 ? (
-                <div className="mono" style={{ padding: '28px 16px', textAlign: 'center', fontSize: 11.5, color: 'var(--mut)' }}>
+                <div className="mono" style={{ padding: '28px 16px', textAlign: 'center', fontSize: 'var(--fs-note)', color: 'var(--mut)' }}>
                   No public portfolios yet — be the first.
                 </div>
               ) : (
@@ -299,22 +297,22 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
                     className="row-hover"
                     style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderTop: i ? '1px solid var(--line)' : 'none', cursor: 'pointer' }}
                   >
-                    <span className="mono" style={{ fontSize: 10, color: 'var(--mut)', width: 22, flexShrink: 0 }}>
+                    <span className="mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--mut)', width: 22, flexShrink: 0 }}>
                       {String(i + 1).padStart(2, '0')}
                     </span>
                     {/* The portfolio's own identity and its wallets — never who owns them. */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div
                         className={p.name ? undefined : 'mono'}
-                        style={{ fontWeight: 700, fontSize: p.name ? 13.5 : 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        style={{ fontWeight: 'var(--fw-bold)', fontSize: p.name ? 13.5 : 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                       >
                         {portfolioLabel(p.name, p.slug)}
                       </div>
-                      <div className="mono" style={{ fontSize: 10, color: 'var(--mut)', marginTop: 2 }}>
+                      <div className="mono" style={{ fontSize: 'var(--fs-micro)', color: 'var(--mut)', marginTop: 2 }}>
                         {p.walletCount} {p.walletCount === 1 ? 'wallet' : 'wallets'} · {p.chains.join(' + ') || '—'}
                       </div>
                     </div>
-                    <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
+                    <div className="mono" style={{ fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-medium)' }}>
                       {fmtUsd0(p.totalUsd)}
                     </div>
                   </div>
@@ -322,7 +320,7 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
               )}
             </div>
             <div style={{ position: 'absolute', left: 1, right: 1, bottom: 0, height: 30, background: 'linear-gradient(to top, var(--surf), transparent)', pointerEvents: 'none' }} />
-          </div>
+          </Card>
         </div>
 
         {/* CTA */}
@@ -330,7 +328,7 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
           style={{
             marginTop: 44,
             border: '1px solid var(--line)',
-            borderRadius: 20,
+            borderRadius: 'var(--r-xl)',
             background: 'var(--surf)',
             padding: 'clamp(30px,5vw,48px) 24px',
             textAlign: 'center',
@@ -340,25 +338,21 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
         >
           <div style={{ position: 'absolute', inset: '-40%', background: 'radial-gradient(ellipse at 50% 130%, var(--acc-soft), transparent 60%)', pointerEvents: 'none' }} />
           <div style={{ position: 'relative' }}>
-            <div style={{ fontWeight: 800, fontSize: 'clamp(22px,4vw,32px)', letterSpacing: '-0.03em' }}>
+            <div style={{ fontWeight: 'var(--fw-heavy)', fontSize: 'clamp(var(--fs-display),4vw,32px)', letterSpacing: '-0.03em' }}>
               All your wallets. One portfolio.
             </div>
-            <div style={{ fontSize: 13.5, color: 'var(--mut)', marginTop: 10, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 'var(--fs-body)', color: 'var(--mut)', marginTop: 10, lineHeight: 1.6 }}>
               Every chain, every DeFi position — tracked live and shareable by link.
             </div>
-            <button
-              className="btn-acc"
-              style={{ height: 46, fontSize: 14, padding: '0 26px', marginTop: 22 }}
-              onClick={primary}
-            >
+            <Button size="lg" onClick={primary} style={{ marginTop: 22 }}>
               {primaryLabel}
-            </button>
-            <div style={{ marginTop: 12, fontSize: 12, color: 'var(--mut)' }}>Sign in with Telegram or X</div>
+            </Button>
+            <div style={{ marginTop: 12, fontSize: 'var(--fs-note)', color: 'var(--mut)' }}>Sign in with Telegram or X</div>
           </div>
         </div>
       </div>
 
-      <div className="mono" style={{ textAlign: 'center', padding: '0 20px 28px', fontSize: 10, color: 'var(--mut)' }}>
+      <div className="mono" style={{ textAlign: 'center', padding: '0 20px 28px', fontSize: 'var(--fs-micro)', color: 'var(--mut)' }}>
         © 2026 svinooh
       </div>
 

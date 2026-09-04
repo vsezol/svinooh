@@ -1,4 +1,5 @@
 import type { PublicPortfolioDto } from '@svinooh/shared';
+import { Panel, Spinner } from '../ui';
 import { fmtUsd0, portfolioLabel } from '../lib/format';
 
 /**
@@ -27,22 +28,9 @@ export function SearchDropdown({
   const rows = results ?? [];
 
   return (
-    <div
-      style={{
-        position: 'absolute',
-        top: 'calc(100% + 6px)',
-        left: 0,
-        right: 0,
-        zIndex: 60,
-        background: 'var(--surf)',
-        border: '1px solid var(--line2)',
-        borderRadius: 14,
-        overflow: 'hidden',
-        boxShadow: '0 24px 60px -30px rgba(0,0,0,0.6)',
-      }}
-    >
+    <Panel style={{ position: 'absolute', top: 'calc(100% + var(--sp-3))', left: 0, right: 0, zIndex: 60 }}>
       {results === null ? (
-        <div className="mono" style={{ padding: '14px 16px', fontSize: 11, color: 'var(--mut)' }}>
+        <div className="mono" style={{ padding: '14px 16px', fontSize: 'var(--fs-tag)', color: 'var(--mut)' }}>
           Searching…
         </div>
       ) : null}
@@ -56,7 +44,7 @@ export function SearchDropdown({
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 10,
+            gap: 'var(--sp-4)',
             padding: '10px 14px',
             borderTop: i ? '1px solid var(--line)' : 'none',
             cursor: 'pointer',
@@ -65,15 +53,24 @@ export function SearchDropdown({
           <div style={{ flex: 1, minWidth: 0 }}>
             <div
               className={p.name ? undefined : 'mono'}
-              style={{ fontWeight: 700, fontSize: p.name ? 12.5 : 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              style={{
+                fontWeight: 'var(--fw-bold)',
+                fontSize: 'var(--fs-note)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
             >
               {portfolioLabel(p.name, p.slug)}
             </div>
-            <div className="mono" style={{ fontSize: 9.5, color: 'var(--mut)', marginTop: 2 }}>
+            <div
+              className="mono"
+              style={{ fontSize: 'var(--fs-micro)', color: 'var(--mut)', marginTop: 'var(--sp-1)' }}
+            >
               {p.walletCount} {p.walletCount === 1 ? 'wallet' : 'wallets'} · {p.chains.join(' + ') || '—'}
             </div>
           </div>
-          <span className="mono" style={{ fontSize: 12, fontWeight: 600 }}>
+          <span className="mono" style={{ fontSize: 'var(--fs-note)', fontWeight: 'var(--fw-medium)' }}>
             {fmtUsd0(p.totalUsd)}
           </span>
         </div>
@@ -95,27 +92,35 @@ export function SearchDropdown({
           }}
         >
           {tracking ? (
-            <span className="spin" style={{ width: 12, height: 12 }} />
+            <Spinner size={12} />
           ) : (
-            <span style={{ fontSize: 13, lineHeight: 1 }}>+</span>
+            <span style={{ fontSize: 'var(--fs-body)', lineHeight: 1 }}>+</span>
           )}
-          <span className="mono" style={{ fontSize: 11, letterSpacing: '0.04em' }}>
+          <span className="mono" style={{ fontSize: 'var(--fs-tag)', letterSpacing: 'var(--tr-tag)' }}>
             {tracking ? 'Opening…' : 'Track this address — public, no sign-in'}
           </span>
         </div>
       ) : null}
 
       {results !== null && !rows.length && !looksLikeAddress ? (
-        <div className="mono" style={{ padding: '14px 16px', fontSize: 11, color: 'var(--mut)' }}>
+        <div className="mono" style={{ padding: '14px 16px', fontSize: 'var(--fs-tag)', color: 'var(--mut)' }}>
           Nothing found. Paste a wallet address to track one.
         </div>
       ) : null}
 
       {error ? (
-        <div className="mono" style={{ padding: '10px 14px', fontSize: 10.5, color: 'var(--down)', borderTop: '1px solid var(--line)' }}>
+        <div
+          className="mono"
+          style={{
+            padding: '10px 14px',
+            fontSize: 'var(--fs-tag)',
+            color: 'var(--down)',
+            borderTop: '1px solid var(--line)',
+          }}
+        >
           {error}
         </div>
       ) : null}
-    </div>
+    </Panel>
   );
 }

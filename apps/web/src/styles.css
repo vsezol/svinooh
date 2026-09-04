@@ -1,6 +1,10 @@
 /* Svinooh design system — a pixel-for-pixel port from Claude Design (Svinooh Portfolio.dc.html).
    Tokens, dark/light themes, Manrope + IBM Plex Mono fonts. */
 
+/* The kit. @import has to precede every rule in the file, so it goes here. */
+@import './ui/tokens.css';
+@import './ui/ui.css';
+
 :root,
 body {
   --bg: #08090c;
@@ -87,12 +91,6 @@ button {
 
 ::selection {
   background: color-mix(in srgb, var(--acc) 30%, transparent);
-}
-
-@keyframes svspin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 /* The chain marquee: one list rendered twice, translated by exactly half its
@@ -293,153 +291,9 @@ body[data-theme='light'] .on-dark {
   margin-left: 0.05em;
 }
 
-/* pill buttons in the header */
-.pill {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.07em;
-  color: var(--mut);
-  border: 1px solid var(--line2);
-  border-radius: 999px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 12px;
-  background: transparent;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color 0.15s ease, border-color 0.15s ease;
-}
-
-.pill:hover {
-  color: var(--text);
-  border-color: var(--mut);
-}
-
-.btn-acc {
-  background: var(--acc);
-  color: var(--acc-ink);
-  font-weight: 800;
-  border: none;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  white-space: nowrap;
-  transition: filter 0.15s ease;
-}
-
-.btn-acc:hover {
-  filter: brightness(1.08);
-}
-
-.card {
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surf);
-}
-
-.spin {
-  display: inline-block;
-  border: 2px solid var(--line2);
-  border-top-color: var(--acc);
-  border-radius: 50%;
-  animation: svspin 0.8s linear infinite;
-}
-
-.eyebrow {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.18em;
-  color: var(--mut);
-}
-
-/* auth modal */
-.auth-btn:not([disabled]):hover {
-  border-color: var(--acc);
-  background: var(--acc-soft);
-}
-
-.auth-close:hover {
-  color: var(--text);
-  background: var(--surf2);
-}
-
 /* rows/cards with a hover highlight from the design */
 .row-hover:hover {
   background: var(--surf2);
-}
-
-.chip {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.03em;
-  padding: 6px 12px;
-  border-radius: 999px;
-  cursor: pointer;
-  white-space: nowrap;
-  border: 1px solid var(--line);
-  color: var(--mut);
-  background: transparent;
-  transition: color 0.12s ease, border-color 0.12s ease;
-}
-
-.chip:hover {
-  color: var(--text);
-}
-
-.chip.active {
-  border-color: color-mix(in srgb, var(--acc) 50%, transparent);
-  color: var(--acc-text);
-  background: var(--acc-soft);
-}
-
-.period {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.05em;
-  padding: 5px 12px;
-  border-radius: 999px;
-  cursor: pointer;
-  border: none;
-  color: var(--mut);
-  background: transparent;
-}
-
-.period.active {
-  color: var(--text);
-  background: var(--surf2);
-}
-
-.field {
-  background: var(--surf);
-  border: 1px solid var(--line2);
-  border-radius: 999px;
-  color: var(--text);
-  outline: none;
-  transition: border-color 0.15s ease;
-}
-
-.field:focus {
-  border-color: var(--acc);
-}
-
-.add-input {
-  flex: 1;
-  min-width: 220px;
-  height: 44px;
-  background: var(--surf);
-  border: 1px solid var(--line2);
-  border-radius: 999px;
-  padding: 0 18px;
-  font-size: 13px;
-  color: var(--text);
-  outline: none;
-  transition: border-color 0.15s ease;
-}
-
-.add-input:focus {
-  border-color: var(--acc);
 }
 
 .copy-link:hover {
@@ -459,7 +313,6 @@ body[data-theme='light'] .on-dark {
    separating. The vertical rhythm is the padding's, and borders are kept for
    where they separate different things: between a position's sections, and
    between the blocks. */
-.pos-head,
 .pos-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
@@ -467,20 +320,11 @@ body[data-theme='light'] .on-dark {
   align-items: center;
 }
 
-.pos-head {
-  padding: 2px 16px 4px;
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.14em;
-  color: var(--mut);
-}
-
 .pos-grid {
   padding: 10px 16px;
 }
 
 @media (max-width: 719px) {
-  .pos-head,
   .pos-grid {
     grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
   }
@@ -488,98 +332,6 @@ body[data-theme='light'] .on-dark {
     display: none;
   }
 }
-
-/* info icon with a tooltip (explains the profit calculation) */
-.infotip {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  border: 1px solid var(--line2);
-  color: var(--mut);
-  font-size: 9.5px;
-  font-weight: 700;
-  font-style: italic;
-  cursor: help;
-  user-select: none;
-  outline: none;
-  vertical-align: middle;
-  flex-shrink: 0;
-}
-.infotip:hover,
-.infotip:focus,
-.infotip:focus-visible {
-  color: var(--text);
-  border-color: var(--mut);
-}
-.infotip .infotip-pop {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%) translateY(-4px);
-  width: min(260px, 78vw);
-  background: var(--surf2);
-  border: 1px solid var(--line2);
-  border-radius: 11px;
-  padding: 10px 12px;
-  font-family: inherit;
-  font-size: 11.5px;
-  font-style: normal;
-  font-weight: 500;
-  line-height: 1.5;
-  letter-spacing: 0;
-  text-transform: none;
-  text-align: left;
-  color: var(--mut);
-  box-shadow: 0 14px 34px -14px rgba(0, 0, 0, 0.55);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.13s ease, transform 0.13s ease;
-  z-index: 70;
-  pointer-events: none;
-}
-.infotip:hover .infotip-pop,
-.infotip:focus .infotip-pop,
-.infotip:focus-visible .infotip-pop {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) translateY(0);
-}
-@media (max-width: 719px) {
-  /* near the left edge of the screen — pin the popover left so it doesn't get clipped */
-  .infotip .infotip-pop {
-    left: 0;
-    transform: translateX(-30%) translateY(-4px);
-  }
-  .infotip:hover .infotip-pop,
-  .infotip:focus .infotip-pop,
-  .infotip:focus-visible .infotip-pop {
-    transform: translateX(-30%) translateY(0);
-  }
-}
-
-/* A mark that sits mid-line in a settings row, where centring the popover on
-   the mark runs it off a narrow screen. The row is the anchor instead — the
-   popover spans it and cannot be clipped at any width. Must come after the
-   media query above, which it overrides. */
-.infotip-row {
-  position: static;
-}
-.infotip-row .infotip-pop {
-  left: 0;
-  right: 0;
-  width: auto;
-  transform: translateY(-4px);
-}
-.infotip-row:hover .infotip-pop,
-.infotip-row:focus .infotip-pop,
-.infotip-row:focus-visible .infotip-pop {
-  transform: translateY(0);
-}
-
 /* hide on mobile */
 @media (max-width: 719px) {
   .hide-mobile {
@@ -587,109 +339,10 @@ body[data-theme='light'] .on-dark {
   }
 }
 
-
-/* Round icon button — theme toggle, share, the wallet kebab */
-.icon-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  border: 1px solid var(--line2);
-  background: transparent;
-  color: var(--mut);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
-  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
-}
-
-.icon-btn:hover {
-  color: var(--text);
-  border-color: var(--mut);
-}
-
-/* Same, but sized to sit inside a row rather than a toolbar */
-.row-icon-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  color: var(--mut);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
-}
-
-.row-icon-btn:hover {
-  color: var(--text);
-  background: var(--line);
-}
-
-/* Pill button with an icon and a label — share, and anything like it */
-.pill-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 34px;
-  padding: 0 14px;
-  border-radius: 999px;
-  border: 1px solid var(--line2);
-  background: transparent;
-  color: var(--mut);
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color 0.12s ease, border-color 0.12s ease;
-}
-
-.pill-btn:hover {
-  color: var(--text);
-  border-color: var(--mut);
-}
-
-.menu-item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 10px 14px;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  font-family: var(--sans);
-  font-size: 12.5px;
-  font-weight: 600;
-  text-align: left;
-  cursor: pointer;
-}
-
-.menu-item:hover {
-  background: var(--surf2);
-}
-
-.menu-item.danger {
-  color: var(--down);
-}
-
 /* Only where there is a mouse — a hint about a keyboard modifier is noise on a phone */
 @media (hover: none), (pointer: coarse) {
   .mouse-only {
     display: none !important;
-  }
-}
-
-/* Five periods on a phone: the row keeps the tabs pinned right, so they give up
-   the padding rather than the scope selector giving up its name */
-@media (max-width: 480px) {
-  .period {
-    padding: 5px 8px;
   }
 }
 
@@ -797,12 +450,6 @@ body[data-theme='light'] .on-dark {
   border-color: var(--mut);
 }
 
-/* A threshold box: square rather than a pill, because a number typed into it is
-   read against the ones above and below it */
-.field-flat:focus {
-  border-color: var(--acc);
-}
-
 /* The agent tab fills the screen instead of scrolling with the page: the
    composer belongs at the bottom edge, and a page that scrolls underneath a
    conversation puts it somewhere different on every answer.
@@ -835,67 +482,10 @@ body[data-theme='light'] .on-dark {
   height: 0;
 }
 
-.agent-chip {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  color: var(--mut);
-  background: var(--surf);
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: color 0.12s ease, border-color 0.12s ease;
-}
-
-.agent-chip:hover:not(:disabled) {
-  color: var(--text);
-  border-color: var(--mut);
-}
-
-.agent-chip:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
 @media (max-width: 719px) {
   .agent-chat {
     /* the tabs across the top take their share of the screen too */
     height: calc(100dvh - 59px - 47px - env(safe-area-inset-top));
     padding-bottom: calc(18px + env(safe-area-inset-bottom));
   }
-}
-
-/* The network marker's tooltip.
-
-   `title` was the canvas's answer and it is the wrong one here: the browser
-   waits about a second before drawing it, styles it like an operating system,
-   and shows nothing at all to a finger. This appears at once, in the app's own
-   type, and it is the marker's own box that positions it. */
-.chain-tip::after {
-  content: attr(data-chain);
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 4px 8px;
-  border-radius: 7px;
-  border: 1px solid var(--line2);
-  background: var(--surf);
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
-  line-height: 1;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-  z-index: 5;
-}
-
-.chain-tip:hover::after {
-  opacity: 1;
 }

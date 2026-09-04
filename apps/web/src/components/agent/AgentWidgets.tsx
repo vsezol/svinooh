@@ -27,7 +27,7 @@ import { WINDOW_MS } from '../../lib/ranges';
  */
 const CARD: CSSProperties = {
   border: '1px solid var(--line)',
-  borderRadius: 14,
+  borderRadius: 'var(--r-md)',
   background: 'var(--surf)',
   marginTop: 12,
   overflow: 'hidden',
@@ -35,7 +35,7 @@ const CARD: CSSProperties = {
 
 /** The small upper-case label above a figure — the app's eyebrow, at widget scale */
 const EYEBROW: CSSProperties = {
-  fontSize: 9.5,
+  fontSize: 'var(--fs-micro)',
   letterSpacing: '0.14em',
   color: 'var(--mut)',
 };
@@ -63,7 +63,7 @@ export function AgentBlockView({ block }: { block: AgentBlock }) {
 /** The agent's own voice. Everything else on this page is a number. */
 export function AgentText({ block }: { block: TextBlock }) {
   return (
-    <div style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--text)', textWrap: 'pretty' }}>
+    <div style={{ fontSize: 'var(--fs-body)', lineHeight: 1.7, color: 'var(--text)', textWrap: 'pretty' }}>
       {block.text}
     </div>
   );
@@ -89,7 +89,7 @@ export function AgentStats({ block }: { block: StatsBlock }) {
           key={card.label}
           style={{
             border: '1px solid var(--line)',
-            borderRadius: 14,
+            borderRadius: 'var(--r-md)',
             background: 'var(--surf)',
             padding: '13px 14px',
           }}
@@ -99,12 +99,12 @@ export function AgentStats({ block }: { block: StatsBlock }) {
           </div>
           <div
             className="mono"
-            style={{ fontWeight: 700, fontSize: 18, letterSpacing: '-0.01em', marginTop: 7 }}
+            style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--fs-title)', letterSpacing: '-0.01em', marginTop: 7 }}
           >
             {card.value}
           </div>
           {card.note ? (
-            <div className="mono" style={{ fontSize: 10.5, marginTop: 6, color: toneColor(card.tone) }}>
+            <div className="mono" style={{ fontSize: 'var(--fs-tag)', marginTop: 6, color: toneColor(card.tone) }}>
               {card.note}
             </div>
           ) : null}
@@ -147,7 +147,7 @@ export function AgentChartCard({ block }: { block: ChartBlock }) {
         {block.sub ? (
           <span
             className="mono"
-            style={{ fontSize: 11.5, fontWeight: 600, color: toneColor(block.subTone, 'var(--text)') }}
+            style={{ fontSize: 'var(--fs-note)', fontWeight: 'var(--fw-medium)', color: toneColor(block.subTone, 'var(--text)') }}
           >
             {block.sub}
           </span>
@@ -169,7 +169,7 @@ export function AgentChartCard({ block }: { block: ChartBlock }) {
           display: 'flex',
           justifyContent: 'space-between',
           padding: '0 15px 12px',
-          fontSize: 10,
+          fontSize: 'var(--fs-micro)',
           color: 'var(--mut)',
         }}
       >
@@ -279,10 +279,10 @@ export function AgentBars({ block }: { block: BarsBlock }) {
           style={{ padding: '13px 15px', borderTop: i ? '1px solid var(--line)' : 'none' }}
         >
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-            <span style={{ fontWeight: 700, fontSize: 13 }}>{item.label}</span>
+            <span style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--fs-body)' }}>{item.label}</span>
             <span
               className="mono"
-              style={{ fontSize: 12.5, fontWeight: 600, color: toneColor(item.tone, 'var(--text)') }}
+              style={{ fontSize: 'var(--fs-note)', fontWeight: 'var(--fw-medium)', color: toneColor(item.tone, 'var(--text)') }}
             >
               {item.value}
             </span>
@@ -290,7 +290,7 @@ export function AgentBars({ block }: { block: BarsBlock }) {
           <div
             style={{
               height: 4,
-              borderRadius: 99,
+              borderRadius: 'var(--r-full)',
               background: 'var(--line2)',
               marginTop: 9,
               overflow: 'hidden',
@@ -301,12 +301,12 @@ export function AgentBars({ block }: { block: BarsBlock }) {
                 width: `${Math.max(0, Math.min(100, item.percent))}%`,
                 height: '100%',
                 background: toneColor(item.tone, 'var(--acc)'),
-                borderRadius: 99,
+                borderRadius: 'var(--r-full)',
               }}
             />
           </div>
           {item.sub ? (
-            <div className="mono" style={{ fontSize: 10.5, color: 'var(--mut)', marginTop: 7 }}>
+            <div className="mono" style={{ fontSize: 'var(--fs-tag)', color: 'var(--mut)', marginTop: 7 }}>
               {item.sub}
             </div>
           ) : null}
@@ -333,7 +333,7 @@ export function AgentNote({ block }: { block: NoteBlock }) {
         borderLeft: '2px solid var(--acc)',
         borderRadius: '0 14px 14px 0',
         background: 'var(--surf)',
-        fontSize: 13,
+        fontSize: 'var(--fs-body)',
         lineHeight: 1.6,
         color: 'var(--mut)',
       }}

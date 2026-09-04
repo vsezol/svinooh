@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Spinner, TagButton } from '../../ui';
 import { CHIPS, THINKING, type AgentBlock, type Answerer, type ChatMessage } from '../../lib/agent';
 import { AgentBlockView } from './AgentWidgets';
 
@@ -89,8 +90,8 @@ export function AgentChat({ answer }: { answer: Answerer }) {
                   border: '1px solid var(--line)',
                   borderRadius: '18px 18px 6px 18px',
                   padding: '11px 16px',
-                  fontSize: 14,
-                  fontWeight: 600,
+                  fontSize: 'var(--fs-body)',
+                  fontWeight: 'var(--fw-medium)',
                   lineHeight: 1.55,
                 }}
               >
@@ -108,12 +109,8 @@ export function AgentChat({ answer }: { answer: Answerer }) {
 
         {thinking ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 0 6px' }}>
-            <span
-              className="spin"
-              style={{ width: 14, height: 14, borderWidth: 2, flexShrink: 0 }}
-              aria-hidden="true"
-            />
-            <span style={{ fontSize: 13.5, color: 'var(--mut)' }}>{status}…</span>
+            <Spinner size={14} />
+            <span style={{ fontSize: 'var(--fs-body)', color: 'var(--mut)' }}>{status}…</span>
           </div>
         ) : null}
       </div>
@@ -124,18 +121,25 @@ export function AgentChat({ answer }: { answer: Answerer }) {
             questions, not one thread being refined */}
         <div className="agent-chips">
           {CHIPS.map((label) => (
-            <button key={label} className="agent-chip" onClick={() => void send(label)} disabled={thinking}>
+            <TagButton
+              key={label}
+              variant="soft"
+              size="sm"
+              onClick={() => void send(label)}
+              disabled={thinking}
+              style={{ flexShrink: 0 }}
+            >
               {label}
-            </button>
+            </TagButton>
           ))}
         </div>
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 'var(--sp-3)',
             border: '1px solid var(--line2)',
-            borderRadius: 999,
+            borderRadius: 'var(--r-full)',
             background: 'var(--surf)',
             padding: '5px 5px 5px 15px',
           }}
@@ -156,7 +160,7 @@ export function AgentChat({ answer }: { answer: Answerer }) {
               background: 'transparent',
               border: 'none',
               outline: 'none',
-              fontSize: 14,
+              fontSize: 'var(--fs-body)',
               color: 'var(--text)',
             }}
           />
@@ -234,19 +238,19 @@ function Welcome() {
           />
         </span>
       </div>
-      <div style={{ fontWeight: 800, fontSize: 20, letterSpacing: '-0.02em', marginTop: 16 }}>
+      <div style={{ fontWeight: 'var(--fw-heavy)', fontSize: 'var(--fs-display)', letterSpacing: '-0.02em', marginTop: 16 }}>
         Ask about your portfolio
       </div>
       <div
         className="mono"
-        style={{ fontSize: 10.5, letterSpacing: '0.14em', color: 'var(--acc-text)', marginTop: 8 }}
+        style={{ fontSize: 'var(--fs-tag)', letterSpacing: '0.14em', color: 'var(--acc-text)', marginTop: 8 }}
       >
         PORTFOLIO AGENT · BETA
       </div>
       <div
         style={{
           maxWidth: 360,
-          fontSize: 13.5,
+          fontSize: 'var(--fs-body)',
           lineHeight: 1.6,
           color: 'var(--mut)',
           marginTop: 14,

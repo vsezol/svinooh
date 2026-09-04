@@ -75,7 +75,7 @@ function Card({
       style={{
         position: 'relative',
         border: '1px solid var(--line)',
-        borderRadius: 16,
+        borderRadius: 'var(--r-lg)',
         background: 'var(--surf)',
         overflow: 'hidden',
       }}
@@ -89,7 +89,7 @@ function Card({
           The bottom padding is the lane the line usually runs in — the text
           stays out of it, and a card without a line yet doesn't reserve one */}
       <div style={{ position: 'relative', padding: hasLine ? '18px 20px 64px' : '18px 20px', pointerEvents: 'none' }}>
-        <div className="mono" style={{ fontSize: 11, letterSpacing: '0.16em', color: 'var(--mut)' }}>
+        <div className="mono" style={{ fontSize: 'var(--fs-tag)', letterSpacing: '0.16em', color: 'var(--mut)' }}>
           {label}
         </div>
         {children}
@@ -103,8 +103,8 @@ function Figure({ value, accent }: { value: string; accent?: boolean }) {
     <div
       className="mono"
       style={{
-        fontWeight: 700,
-        fontSize: 28,
+        fontWeight: 'var(--fw-bold)',
+        fontSize: 'var(--fs-hero)',
         letterSpacing: '-0.01em',
         marginTop: 10,
         color: accent ? 'var(--acc-text)' : 'var(--text)',
@@ -116,5 +116,5 @@ function Figure({ value, accent }: { value: string; accent?: boolean }) {
 }
 
 function Caption({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--mut)', marginTop: 7 }}>{children}</div>;
+  return <div style={{ fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-medium)', color: 'var(--mut)', marginTop: 7 }}>{children}</div>;
 }
