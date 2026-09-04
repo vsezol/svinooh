@@ -21,6 +21,10 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-me',
   botToken: process.env.TELEGRAM_BOT_TOKEN || null,
   botUsername: process.env.TELEGRAM_BOT_USERNAME || null,
+  // OAuth 2.0 app credentials from the X developer portal. Both unset simply
+  // means the X button stays "soon" — nothing else changes.
+  xClientId: process.env.X_CLIENT_ID || null,
+  xClientSecret: process.env.X_CLIENT_SECRET || null,
   devMode: bool(process.env.AUTH_DEV_MODE, false),
   // Public URL of the web app — for the "back to site" button in the bot.
   webUrl: (process.env.WEB_URL || 'https://svinooh.com').replace(/\/+$/, ''),

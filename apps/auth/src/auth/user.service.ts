@@ -47,6 +47,26 @@ export class UserService {
   }
 
   /**
+   * The X account is its own identity, exactly as a Telegram account is:
+   * signing in with X finds or makes the user that IS that X account, and
+   * never reaches for a Telegram user to attach to. X has one display name
+   * where Telegram has two, so it lands in firstName whole.
+   */
+  upsertX(p: { id: string; name?: string; username?: string; photoUrl?: string }): Promise<User> {
+    const profile = {
+      firstName: p.name ?? null,
+      lastName: null,
+      username: p.username ?? null,
+      photoUrl: p.photoUrl ?? null,
+    };
+    return this.prisma.user.upsert({
+      where: { xId: p.id },
+      create: { xId: p.id, ...profile },
+      update: profile,
+    });
+  }
+
+  /**
    * The portfolio is created on first sign-in. Just one for now; the schema
    * allows several.
    *

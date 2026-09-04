@@ -219,7 +219,14 @@ export interface AuthConfigDto {
   /** Numeric bot id (public, the token prefix) — for Telegram.Login.auth */
   botId: string | null;
   devMode: boolean;
+  /** Sign-in with X is configured on the server — the button goes live */
+  xEnabled: boolean;
   syncIntervalMin: number;
+}
+
+/** Start X sign-in: where to send the browser */
+export interface XStartDto {
+  url: string;
 }
 
 export interface MeDto {

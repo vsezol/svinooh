@@ -27,6 +27,16 @@ export class AuthController {
     return this.auth.telegramPoll(token ?? '');
   }
 
+  @Post('x/start')
+  xStart() {
+    return this.auth.xStart();
+  }
+
+  @Post('x/callback')
+  xCallback(@Body() body: { code?: string; state?: string }) {
+    return this.auth.xCallback(body?.code ?? '', body?.state ?? '');
+  }
+
   /** Redeem a sign-in link from the bot — see AuthService.issueLoginLink */
   @Post('link')
   link(@Body() body: { token?: string }) {

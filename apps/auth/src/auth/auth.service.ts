@@ -21,6 +21,7 @@ import { PrismaService } from '@svinooh/db';
 import { verifyTelegramLogin } from './telegram';
 import { TelegramLoginService } from './telegram-login.service';
 import { UserService } from './user.service';
+import { XLoginService } from './x-login.service';
 import { setting } from '@svinooh/common';
 
 /** How many times one sign-in link may be opened — see UserService.issueLoginLink */
@@ -33,6 +34,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly logins: TelegramLoginService,
     private readonly users: UserService,
+    private readonly x: XLoginService,
   ) {}
 
   getConfig(): AuthConfigDto {
@@ -42,8 +44,19 @@ export class AuthService {
       // Telegram.Login.auth with a custom button
       botId: config.botToken ? config.botToken.split(':')[0] : null,
       devMode: config.devMode,
+      xEnabled: this.x.enabled,
       syncIntervalMin: setting('sync.activeIntervalMin'),
     };
+  }
+
+  /** Where to send the browser to sign in with X */
+  xStart(): Promise<{ url: string }> {
+    return this.x.start();
+  }
+
+  /** The browser came back from X: the code becomes the same session any sign-in gives */
+  async xCallback(code: string, state: string): Promise<AuthResponseDto> {
+    return this.finishLogin(await this.users.upsertX(await this.x.callback(code, state)));
   }
 
   async telegramLogin(payload: TelegramAuthPayload): Promise<AuthResponseDto> {

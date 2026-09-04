@@ -13,6 +13,9 @@ datasource db {
 model User {
   id         String           @id @default(cuid())
   telegramId BigInt?          @unique
+  /// X (Twitter) account id — a separate identity, exactly as telegramId is:
+  /// signing in with X makes its own user, never links to a Telegram one
+  xId        String?          @unique
   // Identifier for dev login (AUTH_DEV_MODE=true), not used in production
   devKey     String?          @unique
   firstName  String?

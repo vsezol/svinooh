@@ -55,6 +55,16 @@ export class AuthProxyController {
     return forward('POST', '/auth/telegram/start', { body: {} });
   }
 
+  @Post('x/start')
+  xStart() {
+    return forward('POST', '/auth/x/start', { body: {} });
+  }
+
+  @Post('x/callback')
+  xCallback(@Body() body: unknown) {
+    return forward('POST', '/auth/x/callback', { body });
+  }
+
   @Get('telegram/poll')
   telegramPoll(@Query('token') token?: string) {
     return forward('GET', '/auth/telegram/poll', { query: { token } });

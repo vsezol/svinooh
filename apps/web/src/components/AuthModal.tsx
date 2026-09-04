@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import type { TelegramStartDto } from '@svinooh/shared';
+import type { TelegramStartDto, XStartDto } from '@svinooh/shared';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { pendingTgToken, pollTelegramLogin } from '../lib/telegram';
@@ -60,6 +60,27 @@ export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: s
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't start sign-in");
     } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * X is a full-page departure and return, not a popup and a poll: OAuth was
+   * built for redirects, X's consent page refuses to be framed, and a popup on
+   * a phone is a tab you cannot find your way back from. The claim intent in
+   * sessionStorage survives the round trip — see the callback page.
+   */
+  const startX = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { url } = await api<XStartDto>('/auth/x/start', { method: 'POST' });
+      window.location.assign(url);
+      // No setBusy(false): the page is leaving; releasing the button now would
+      // invite a second start while the first is mid-navigation
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Couldn't start sign-in");
       setBusy(false);
     }
   };
@@ -171,11 +192,19 @@ export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: s
             </form>
           ) : null}
 
-          <Button variant="soft" size="lg" block disabled style={{ marginTop: 'var(--sp-4)' }}>
+          <Button
+            variant="soft"
+            size="lg"
+            block
+            disabled={!config?.xEnabled}
+            loading={busy && !!config?.xEnabled}
+            onClick={config?.xEnabled ? startX : undefined}
+            style={{ marginTop: 'var(--sp-4)' }}
+          >
             <svg viewBox="0 0 24 24" width={13} height={13} fill="currentColor">
               <path d="M18.9 2H22l-6.8 7.8L23.2 22h-6.3l-4.9-6.4L6.4 22H3.3l7.3-8.3L1.6 2h6.4l4.4 5.9L18.9 2zm-1.1 18h1.7L6.9 3.7H5.1L17.8 20z" />
             </svg>
-            Continue with X · soon
+            {config?.xEnabled ? 'Continue with X' : 'Continue with X · soon'}
           </Button>
 
           {!config?.botUsername && !config?.devMode ? (
