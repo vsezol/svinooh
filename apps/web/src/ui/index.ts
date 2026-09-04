@@ -19,6 +19,7 @@ export type { TagVariant } from './Tag';
 export { Input, NumberField } from './Input';
 export { Select } from './Select';
 export type { SelectOption } from './Select';
+export { Checkbox } from './Checkbox';
 export { Switch } from './Switch';
 export { Segmented } from './Segmented';
 export type { Segment } from './Segmented';
