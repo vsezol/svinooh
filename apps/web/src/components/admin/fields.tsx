@@ -50,29 +50,24 @@ export interface ChoiceFieldProps {
 
 export function ChoiceField({ value, options, label, onChange }: ChoiceFieldProps) {
   return (
-    <Select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} style={{ width: 124 }}>
-      {options.map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
-    </Select>
+    <Select
+      label={label}
+      value={value}
+      options={options.map((option) => ({ value: option, label: option }))}
+      onChange={onChange}
+      align="right"
+      width={124}
+    />
   );
 }
 
 export interface InfoMarkProps {
   children: ReactNode;
-  /**
-   * Anchor the popover to the enclosing row rather than to the mark itself, so
-   * it spans the card instead of running off the side of a phone. The row has
-   * to be position:relative for this.
-   */
-  inRow?: boolean;
 }
 
 /** The site's own info mark: hover on a desktop, focus from a keyboard */
-export function InfoMark({ children, inRow = false }: InfoMarkProps) {
-  return <InfoTip text={children} anchor={inRow ? 'row' : undefined} />;
+export function InfoMark({ children }: InfoMarkProps) {
+  return <InfoTip text={children} />;
 }
 
 export interface NoticeProps {

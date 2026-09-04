@@ -165,6 +165,11 @@ export interface PortfolioDto {
   /** Sorted by totalUsd descending; pending ones at the end */
   wallets: WalletDto[];
   isOwner: boolean;
+  /**
+   * The owner's saved "hide small balances" preference — sent to the OWNER
+   * ONLY, always false for everyone else, who starts from the default.
+   */
+  hideSmallBalances: boolean;
   /** The most recent lastSyncedAt among the wallets */
   updatedAt: string | null;
   createdAt: string;
@@ -184,6 +189,24 @@ export interface PublicPortfolioDto {
   chains: Chain[];
   /** true — belongs to nobody; false — someone published it */
   anonymous: boolean;
+}
+
+/**
+ * What the landing search says about a pasted address before anything is
+ * created. Public by construction: the chain and value are readable off the
+ * chain itself, and slug/name can only come from an ownerless portfolio.
+ */
+export interface AddressLookupDto {
+  /** null — not an address on any supported network */
+  chain: Chain | null;
+  /** The stored spelling (EVM lowercased); echoes the input when unsupported */
+  address: string;
+  /** Cached value from the address's last scan; null — never scanned */
+  totalUsd: number | null;
+  /** Anonymous portfolio holding exactly this address; null — none yet */
+  slug: string | null;
+  /** That portfolio's name, if one was ever set */
+  name: string | null;
 }
 
 /**
@@ -381,6 +404,13 @@ export interface ScanPosition {
   /** Extra detail: pool/market name, the protocol's own description */
   note?: string | null;
   /**
+   * What the source calls THIS position, where it calls it anything — DeBank's
+   * `position_index`. Never shown; it exists so a fact read straight from the
+   * protocol can be matched to the right position when a wallet holds two in
+   * the same pool, which the pair alone cannot distinguish. See PoolFact.ref.
+   */
+  ref?: string | null;
+  /**
    * The network this sits on, as the source names it: `eth`, `arb`, `base`,
    * `op`, `sol`, `tron`, `btc`.
    *
@@ -573,6 +603,13 @@ export interface PositionLoan {
 export interface PoolFact {
   /** Stable across cycles: the protocol's own address for this position */
   id: string;
+  /**
+   * The bare identifier the SOURCE would also know this position by — a
+   * Uniswap V3 NFT token id, a Solana position address. `id` is namespaced and
+   * only ever compared with itself; this is what a scanned position's `ref` is
+   * matched against when one pair holds two positions.
+   */
+  ref?: string | null;
   platform: 'orca' | 'meteora' | 'uniswap';
   /** The pair, upper-cased and ordered, e.g. "CBBTC|USDC" — how a fact finds its position */
   pair: string;

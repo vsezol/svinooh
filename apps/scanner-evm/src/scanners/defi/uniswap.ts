@@ -99,6 +99,8 @@ async function positionsOn(key: NetworkKey, address: string): Promise<PoolFact[]
         const upper = Number(position.tickUpper as bigint);
         return {
           id: `uniswap:${key}:${tokenId.toString()}`,
+          // What DeBank would also call this position — see PoolFact.ref
+          ref: tokenId.toString(),
           platform: 'uniswap',
           pair: pairKey(token0.symbol, token1.symbol),
           pairLabel: `${token0.symbol}/${token1.symbol}`,

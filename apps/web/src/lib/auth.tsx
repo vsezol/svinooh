@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { AuthConfigDto, AuthResponseDto, MeDto, TelegramAuthPayload } from '@svinooh/shared';
+import { identify, resetIdentity, track, type SignInMethod } from './analytics';
 import { api, tokenStore } from './api';
 import { settleClaim } from './claim';
 
@@ -10,8 +11,8 @@ interface AuthState {
   loading: boolean;
   loginTelegram: (payload: TelegramAuthPayload) => Promise<MeDto>;
   loginDev: (name: string) => Promise<MeDto>;
-  /** Apply a ready-made auth response (e.g. from bot polling) */
-  applyAuth: (res: AuthResponseDto) => Promise<MeDto>;
+  /** Apply a ready-made auth response (e.g. from bot polling), naming the flow it came from */
+  applyAuth: (res: AuthResponseDto, method: SignInMethod) => Promise<MeDto>;
   /** Re-ask the server who we are — after something changed what we own */
   refreshMe: () => Promise<void>;
   logout: () => void;
@@ -42,7 +43,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       if (tokenStore.get()) {
         try {
-          setMe(await api<MeDto>('/auth/me'));
+          const who = await api<MeDto>('/auth/me');
+          setMe(who);
+          // A returning session: same person, and identify() with an unchanged
+          // id is free — PostHog only acts when it actually changes
+          identify(who.id);
         } catch {
           tokenStore.clear();
         }
@@ -56,8 +61,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * dev login. A portfolio the visitor set out to claim is taken over here, so
    * whatever navigates afterwards follows them to it.
    */
-  const finish = useCallback(async (res: AuthResponseDto): Promise<MeDto> => {
+  const finish = useCallback(async (res: AuthResponseDto, method: SignInMethod): Promise<MeDto> => {
     tokenStore.set(res.token);
+    // In this order on purpose: the person first, then the sign-in, then the
+    // claim settleClaim may report — so the timeline reads the way it happened
+    identify(res.me.id);
+    track('signed_in', { method });
     const settled = await settleClaim(res.me);
     setMe(settled);
     return settled;
@@ -65,13 +74,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginTelegram = useCallback(
     async (payload: TelegramAuthPayload) =>
-      finish(await api<AuthResponseDto>('/auth/telegram', { method: 'POST', body: JSON.stringify(payload) })),
+      finish(
+        await api<AuthResponseDto>('/auth/telegram', { method: 'POST', body: JSON.stringify(payload) }),
+        'telegram',
+      ),
     [finish],
   );
 
   const loginDev = useCallback(
     async (name: string) =>
-      finish(await api<AuthResponseDto>('/auth/dev', { method: 'POST', body: JSON.stringify({ name }) })),
+      finish(await api<AuthResponseDto>('/auth/dev', { method: 'POST', body: JSON.stringify({ name }) }), 'dev'),
     [finish],
   );
 
@@ -87,6 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     tokenStore.clear();
     setMe(null);
+    // Whoever signs in next on this browser is not the same person
+    resetIdentity();
   }, []);
 
   return (

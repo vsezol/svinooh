@@ -41,10 +41,7 @@ export interface SettingRowProps {
  */
 export function SettingRow({ spec, value, onChange }: SettingRowProps) {
   return (
-    // position:relative so the tooltip can anchor to the row — see InfoMark
-    <div
-      style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, position: 'relative' }}
-    >
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
         <span style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--fs-body)' }}>{spec.label}</span>
         {spec.unit ? (
@@ -52,7 +49,7 @@ export function SettingRow({ spec, value, onChange }: SettingRowProps) {
             {spec.unit}
           </span>
         ) : null}
-        <InfoMark inRow>
+        <InfoMark>
           {spec.about}
           {spec.note ? <div style={{ marginTop: 6 }}>{spec.note}</div> : null}
           {spec.live ? null : (

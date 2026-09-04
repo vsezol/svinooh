@@ -1,5 +1,5 @@
 import type { PositionTokenRole } from '@svinooh/shared';
-import { rangeFromLegs } from '@svinooh/common';
+import { hasRange, rangeFromLegs } from '@svinooh/common';
 import type { ScanPosition, ScanPositionToken } from '@svinooh/shared';
 
 /**
@@ -125,9 +125,10 @@ export function itemPositions(project: DebankProject): ScanPosition[] {
     if (usd < 0.01) continue; // dust item — kept in the total, not worth a row
     const detail = item.detail || {};
     const tokens = itemTokens(detail);
+    const kind = item.name || item.detail_types?.[0] || null;
     positions.push({
       symbol: project.name || project.id || 'DeFi',
-      name: item.name || item.detail_types?.[0] || null,
+      name: kind,
       note: itemNote(item),
       // The pool's own chain when DeBank gives one — a project spans networks
       network: item.pool?.chain || project.chain || null,
@@ -135,7 +136,12 @@ export function itemPositions(project: DebankProject): ScanPosition[] {
       platform: project.id || 'debank',
       category: STAKED_KINDS.test(item.name || '') ? 'staked' : 'defi',
       healthRate: typeof detail.health_rate === 'number' ? detail.health_rate : null,
-      range: item.position_index !== undefined ? rangeFromLegs(tokens) : null,
+      // Which position this is — for Uniswap V3 the NFT's token id, which is
+      // what the on-chain reader knows its facts by. DeBank puts it on plenty
+      // of things that are not pools, so it identifies and nothing more.
+      ref: item.position_index !== undefined ? String(item.position_index) : null,
+      // The KIND decides whether a range is a question worth answering
+      range: hasRange(kind) ? rangeFromLegs(tokens) : null,
       tokens,
     });
   }

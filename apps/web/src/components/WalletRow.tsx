@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import type { PositionTokenRole, WalletDto } from '@svinooh/shared';
-import { blockMatches, buildBlocks, type BlockSection, type PositionFilter } from '../lib/blocks';
+import { buildBlocks, withoutDust, type BlockSection } from '../lib/blocks';
 import { chainMeta, fmtAmount, fmtPrice, fmtUsd, shortAddress, walletName } from '../lib/format';
 import { Card, Chevron, Spinner, Tag, Tooltip } from '../ui';
 import { badgedText, ChainBadge } from './ChainBadge';
@@ -60,15 +60,15 @@ interface Props {
   wallet: WalletDto;
   actions: WalletActions;
   total: number;
-  /** Which positions to show; blocks that don't match are hidden */
-  filter: PositionFilter;
+  /** Hide balances under a dollar — see isDustValue */
+  hideSmall: boolean;
   onRemove: () => void;
   onRename: (label: string) => void;
   /** Pressing a locked action */
   onRequireAuth: () => void;
 }
 
-export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, onRequireAuth }: Props) {
+export function WalletRow({ wallet, actions, total, hideSmall, onRemove, onRename, onRequireAuth }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -77,13 +77,11 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
   const chain = chainMeta(wallet.chain);
   const label = walletName(wallet.label, wallet.chain);
   const syncing = wallet.status === 'pending' && wallet.totalUsd === null;
-  const blocks = useMemo(
-    () => buildBlocks(wallet.positions).filter((b) => blockMatches(b, filter)),
-    [wallet.positions, filter],
-  );
-  // Resources are not a position and not money, so they show only on the
-  // unfiltered view — a "pools" filter asked about pools
-  const tron = filter === 'all' ? (wallet.tron ?? null) : null;
+  const blocks = useMemo(() => {
+    const built = buildBlocks(wallet.positions);
+    return hideSmall ? withoutDust(built) : built;
+  }, [wallet.positions, hideSmall]);
+  const tron = wallet.tron ?? null;
   const expanded = !collapsed && !syncing && (blocks.length > 0 || tron !== null);
   const share = total > 0 && wallet.totalUsd ? ((wallet.totalUsd / total) * 100).toFixed(1) + '% of total' : '';
 
@@ -117,7 +115,9 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
   };
 
   return (
-    <Card style={{ overflow: 'hidden' }}>
+    // ph-mask: everything in a row — address, label, positions, values — is
+    // somebody's money; session replay keeps the layout and loses the words
+    <Card className="ph-mask" style={{ overflow: 'hidden' }}>
       <div
         onClick={() => !syncing && setCollapsed((v) => !v)}
         className="row-hover"
@@ -248,10 +248,6 @@ export function WalletRow({ wallet, actions, total, filter, onRemove, onRename, 
           {blocks.map((b, i) => (
             <div
               key={i}
-              // No overflow clip: the network marker's tooltip has to be able to
-              // leave the card. Nothing inside paints to the edge — the section
-              // rules stop at the padding box — so the rounded corners hold
-              // without one.
               style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-md)', background: 'var(--surf2)' }}
             >
               {/* One line, allowed to wrap among itself: name, what kind of

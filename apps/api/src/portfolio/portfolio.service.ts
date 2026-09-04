@@ -8,6 +8,7 @@ import {
 import { Prisma } from '@prisma/client';
 import type { Portfolio, PortfolioOwner, Position, Wallet } from '@prisma/client';
 import type {
+  AddressLookupDto,
   AlertSettingsDto,
   Chain,
   HistoryDto,
@@ -326,6 +327,8 @@ interface CachedView {
   ownerUserId: string | null;
   owner: PortfolioOwnerDto | null;
   labels: Record<string, string | null>;
+  /** The owner's saved view preference, merged in for the owner alone */
+  hideSmallBalances: boolean;
   dto: PortfolioDto;
 }
 
@@ -379,6 +382,45 @@ export class PortfolioService {
       .sort((a, b) => b.totalUsd - a.totalUsd)
       .slice(0, Math.min(Math.max(limit, 1), 100))
       .map(({ addresses: _addresses, ...row }) => row);
+  }
+
+  /**
+   * What the search dropdown shows for a pasted address, without creating
+   * anything: the network it belongs to, what the address was last worth, and
+   * the anonymous portfolio that already opens it (if one exists). Read-only
+   * twin of findOrCreateAnonymous — same detection, same normalization, same
+   * "exactly this one wallet" query — so what the row promises is what a click
+   * then gets.
+   *
+   * Everything returned is public by construction: the chain and the value are
+   * readable off the chain itself by anyone with the address, and slug/name can
+   * only come from an ownerless portfolio, which carries no user data at all.
+   */
+  async lookupAddress(addressRaw: string): Promise<AddressLookupDto> {
+    const raw = String(addressRaw || '').trim();
+    const chain = detectChain(raw);
+    if (!chain) return { chain: null, address: raw, totalUsd: null, slug: null, name: null };
+    const address = normalizeAddress(chain, raw);
+
+    const [wallet, existing] = await Promise.all([
+      this.prisma.wallet.findUnique({ where: { chain_address: { chain, address } } }),
+      this.prisma.portfolio.findFirst({
+        where: {
+          owner: null,
+          wallets: { some: { wallet: { address } }, every: { wallet: { address } } },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { slug: true, name: true },
+      }),
+    ]);
+
+    return {
+      chain,
+      address,
+      totalUsd: wallet?.lastTotalUsd ?? null,
+      slug: existing?.slug ?? null,
+      name: existing?.name ?? null,
+    };
   }
 
   /**
@@ -448,6 +490,8 @@ export class PortfolioService {
       ...view.dto,
       isOwner,
       owner: isOwner ? view.owner : null,
+      // `?? false` covers views cached before the field existed, until they age out
+      hideSmallBalances: isOwner && (view.hideSmallBalances ?? false),
       wallets: isOwner
         ? view.dto.wallets.map((w) => ({ ...w, label: view!.labels[w.id] ?? null }))
         : view.dto.wallets,
@@ -490,6 +534,7 @@ export class PortfolioService {
       name: portfolio.name,
       // Never in the cached (public) view — filled in for the owner in getBySlug
       owner: null,
+      hideSmallBalances: false,
       visibility: !portfolio.owner ? 'anonymous' : portfolio.owner.isPublic ? 'public' : 'private',
       totalUsd: round2(wallets.reduce((sum, w) => sum + (w.totalUsd ?? 0), 0)),
       // Labels are stripped here and handed back to the owner separately
@@ -500,6 +545,7 @@ export class PortfolioService {
     };
     return {
       ownerUserId: portfolio.owner?.userId ?? null,
+      hideSmallBalances: portfolio.owner?.hideSmallBalances ?? false,
       owner: user
         ? {
             name:
@@ -652,6 +698,23 @@ export class PortfolioService {
     });
     await this.cache.del(cacheKey(slug));
     return { visibility: isPublic ? 'public' : 'private' };
+  }
+
+  /** Remember the owner's "hide small balances" switch. Owner-only. */
+  async setHideSmallBalances(
+    slug: string,
+    userId: string,
+    hideSmallBalances: boolean,
+  ): Promise<{ hideSmallBalances: boolean }> {
+    const portfolio = await this.requireOwned(slug, userId);
+    await this.prisma.portfolioOwner.update({
+      where: { portfolioId: portfolio.id },
+      data: { hideSmallBalances },
+    });
+    // The setting rides the cached view (owner-only on read), so the view is
+    // stale the moment it changes — same as visibility
+    await this.cache.del(cacheKey(slug));
+    return { hideSmallBalances };
   }
 
   /**

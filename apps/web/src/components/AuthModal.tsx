@@ -52,7 +52,7 @@ export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: s
       setWaiting(true);
       stopPoll.current = pollTelegramLogin(s.token, {
         onResult: (res) => {
-          void applyAuth(res).then((authed) => {
+          void applyAuth(res, 'telegram').then((authed) => {
             onClose();
             router.push(`/p/${authed.portfolioSlug}`);
           });

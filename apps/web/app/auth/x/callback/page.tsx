@@ -44,7 +44,7 @@ function XCallback() {
       method: 'POST',
       body: JSON.stringify({ code, state }),
     })
-      .then(applyAuth)
+      .then((res) => applyAuth(res, 'x'))
       .then((me) => router.replace(`/p/${me.portfolioSlug}`))
       .catch((err) => {
         setFailed(err instanceof ApiError ? err.message : 'Sign-in did not complete.');
