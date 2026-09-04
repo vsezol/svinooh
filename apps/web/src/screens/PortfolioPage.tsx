@@ -25,14 +25,7 @@ import { WalletRow, type WalletActions } from '../components/WalletRow';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { pendingClaim } from '../lib/claim';
-import {
-  blockMatches,
-  buildBlocks,
-  debtTotals,
-  filteredTotal,
-  rewardsTotals,
-  type PositionFilter,
-} from '../lib/blocks';
+import { debtTotals, rewardsTotals } from '../lib/blocks';
 import { fmtUsd, portfolioLabel, walletName } from '../lib/format';
 import {
   cachedHistory,
@@ -77,13 +70,6 @@ const changeLabel = (change: Change): string =>
   (change.up ? '+' : '') +
   change.pct.toFixed(2) +
   '%)';
-
-const FILTERS: Array<{ key: PositionFilter; label: string }> = [
-  { key: 'all', label: 'ALL' },
-  { key: 'pools', label: 'POOLS' },
-  { key: 'lending', label: 'LENDING' },
-];
-
 
 /**
  * `viewerId` is not used in the request — it's a reload trigger. The bot's
@@ -185,7 +171,7 @@ export function PortfolioPage({ slug }: { slug: string }) {
   const [sideCollapsed, setSideCollapsed] = useState(false);
   const [scope, setScope] = useState<string>('all');
   const [period, setPeriod] = useState<HistoryRange>('24h');
-  const [filter, setFilter] = useState<PositionFilter>('all');
+  const [hideSmall, setHideSmall] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [input, setInput] = useState('');
   const [addErr, setAddErr] = useState<string | null>(null);
@@ -239,8 +225,6 @@ export function PortfolioPage({ slug }: { slug: string }) {
   );
   const rewards = useMemo(() => rewardsTotals(scoped), [scoped]);
   const debt = useMemo(() => debtTotals(scoped), [scoped]);
-  const blocksByWallet = useMemo(() => wallets.map((w) => buildBlocks(w.positions)), [wallets]);
-  const shownTotal = useMemo(() => filteredTotal(blocksByWallet, filter), [blocksByWallet, filter]);
 
   // The series reaches back several windows so the chart has somewhere to
   // scroll to, but this line answers the button: it starts at the first reading
@@ -414,12 +398,6 @@ export function PortfolioPage({ slug }: { slug: string }) {
       : data.visibility === 'private'
         ? 'ONLY PEOPLE WITH THE LINK'
         : 'SHARED PORTFOLIO';
-
-  // Same predicate the rows and the running total use — a second copy of it
-  // here is how the list came to disagree with the number above it
-  const visibleWallets = wallets.filter(
-    (w, i) => filter === 'all' || w.status === 'pending' || blocksByWallet[i].some((b) => blockMatches(b, filter)),
-  );
 
   return (
     <div>
@@ -677,31 +655,49 @@ export function PortfolioPage({ slug }: { slug: string }) {
               </div>
             ) : null}
 
-            {/* which positions to show, and what they add up to */}
+            {/* the dust switch, and what the list adds up to */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 26, marginBottom: 12 }}>
-              <Segmented label="Which positions to show" items={FILTERS} value={filter} onChange={setFilter} tone="accent" />
+              <label
+                className="mono"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 'var(--fs-tag)',
+                  letterSpacing: '0.06em',
+                  color: 'var(--mut)',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={hideSmall}
+                  onChange={(e) => setHideSmall(e.target.checked)}
+                  style={{ width: 14, height: 14, margin: 0, accentColor: 'var(--acc)', cursor: 'pointer' }}
+                />
+                HIDE SMALL BALANCES
+              </label>
               <div className="mono" style={{ fontSize: 'var(--fs-tag)', fontWeight: 'var(--fw-normal)', color: 'var(--mut)' }}>
-                {filter === 'all' ? `${walletCount} ${walletCount === 1 ? 'wallet' : 'wallets'}` : 'Shown'} · {fmtUsd(shownTotal)}
+                {walletCount} {walletCount === 1 ? 'wallet' : 'wallets'} · {fmtUsd(data.totalUsd)}
               </div>
             </div>
 
-            {visibleWallets.length === 0 ? (
+            {wallets.length === 0 ? (
               <Card style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--mut)', fontSize: 'var(--fs-body)' }}>
-                {wallets.length === 0
-                  ? canAdd
-                    ? 'No wallets yet. Paste an address above — the network is detected automatically.'
-                    : 'This portfolio has no wallets yet.'
-                  : 'Nothing matches this filter.'}
+                {canAdd
+                  ? 'No wallets yet. Paste an address above — the network is detected automatically.'
+                  : 'This portfolio has no wallets yet.'}
               </Card>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {visibleWallets.map((w) => (
+                {wallets.map((w) => (
                   <WalletRow
                     key={w.id}
                     wallet={w}
                     actions={walletActions}
                     total={data.totalUsd}
-                    filter={filter}
+                    hideSmall={hideSmall}
                     onRemove={() => void removeWallet(w.id)}
                     onRename={(label) => void renameWallet(w.id, label)}
                     onRequireAuth={startClaim}
