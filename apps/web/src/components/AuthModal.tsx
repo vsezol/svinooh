@@ -23,7 +23,12 @@ export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: s
   const { config, loginDev, applyAuth } = useAuth();
   const router = useRouter();
   const [devName, setDevName] = useState('');
-  const [busy, setBusy] = useState(false);
+  /**
+   * Which sign-in is in flight — the spinner belongs to the button that was
+   * pressed, not to every button in the modal. One at a time either way: a
+   * second flow started mid-first would race it for the session.
+   */
+  const [busy, setBusy] = useState<null | 'tg' | 'x' | 'dev'>(null);
   const [waiting, setWaiting] = useState(false);
   const [deepLink, setDeepLink] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +42,7 @@ export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: s
 
   const startTelegram = async () => {
     if (busy) return;
-    setBusy(true);
+    setBusy('tg');
     setError(null);
     try {
       const s = await api<TelegramStartDto>('/auth/telegram/start', { method: 'POST' });
@@ -60,7 +65,7 @@ export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: s
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't start sign-in");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -72,23 +77,23 @@ export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: s
    */
   const startX = async () => {
     if (busy) return;
-    setBusy(true);
+    setBusy('x');
     setError(null);
     try {
       const { url } = await api<XStartDto>('/auth/x/start', { method: 'POST' });
       window.location.assign(url);
-      // No setBusy(false): the page is leaving; releasing the button now would
+      // busy stays 'x': the page is leaving; releasing the button now would
       // invite a second start while the first is mid-navigation
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't start sign-in");
-      setBusy(false);
+      setBusy(null);
     }
   };
 
   const submitDev = async (event: FormEvent) => {
     event.preventDefault();
     if (!devName.trim() || busy) return;
-    setBusy(true);
+    setBusy('dev');
     setError(null);
     try {
       const authed = await loginDev(devName.trim());
@@ -96,7 +101,7 @@ export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: s
       router.push(`/p/${authed.portfolioSlug}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed');
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -165,7 +170,8 @@ export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: s
               variant="soft"
               size="lg"
               block
-              loading={busy}
+              loading={busy === 'tg'}
+              disabled={busy !== null && busy !== 'tg'}
               onClick={startTelegram}
               style={{ marginTop: 'var(--sp-6)' }}
             >
@@ -186,7 +192,15 @@ export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: s
                 placeholder="dev sign-in · your name"
                 aria-label="Your name"
               />
-              <Button type="submit" variant="soft" size="lg" block loading={busy} style={{ marginTop: 'var(--sp-4)' }}>
+              <Button
+                type="submit"
+                variant="soft"
+                size="lg"
+                block
+                loading={busy === 'dev'}
+                disabled={busy !== null && busy !== 'dev'}
+                style={{ marginTop: 'var(--sp-4)' }}
+              >
                 Continue as dev
               </Button>
             </form>
@@ -196,8 +210,8 @@ export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: s
             variant="soft"
             size="lg"
             block
-            disabled={!config?.xEnabled}
-            loading={busy && !!config?.xEnabled}
+            disabled={!config?.xEnabled || (busy !== null && busy !== 'x')}
+            loading={busy === 'x'}
             onClick={config?.xEnabled ? startX : undefined}
             style={{ marginTop: 'var(--sp-4)' }}
           >
