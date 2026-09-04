@@ -35,6 +35,24 @@
   opacity: 0.5;
 }
 
+/* A working button keeps the width its label gave it: the label stays in the
+   layout, hidden, and the spinner sits over the middle of it. */
+.ui-btn[data-loading='true'] {
+  position: relative;
+}
+
+.ui-btn-label {
+  visibility: hidden;
+}
+
+.ui-btn-spinner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .ui-btn[data-size='xs'] {
   height: var(--h-xs);
   padding: 0 var(--sp-5);
