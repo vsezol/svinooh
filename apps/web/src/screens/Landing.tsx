@@ -304,7 +304,15 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div
                         className={p.name ? undefined : 'mono'}
-                        style={{ fontWeight: 'var(--fw-bold)', fontSize: p.name ? 13.5 : 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        style={{
+                          fontWeight: 'var(--fw-bold)',
+                          // A name is set in sans and a slug in mono (see the class
+                          // above); mono runs a step smaller for the same optical size
+                          fontSize: p.name ? 'var(--fs-body)' : 'var(--fs-note)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
                       >
                         {portfolioLabel(p.name, p.slug)}
                       </div>
