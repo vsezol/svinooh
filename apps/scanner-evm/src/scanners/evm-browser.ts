@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import type { Page } from 'puppeteer';
 import { config } from '../config';
-import { sleep } from '@svinooh/common';
+import { ScanHold, sleep } from '@svinooh/common';
 import { getBrowser, closeBrowser } from './browser';
 import {
   itemPositions,
@@ -157,39 +157,20 @@ const UNFOLD_CHAINS_SCRIPT = String.raw`(() => {
   return false;
 })()`;
 
+/**
+ * The per-chain split, off the rendered page.
+ *
+ * All that is left of what used to be scraped here. The token and protocol
+ * tables went with the DOM fallback: nothing reads them any more, and running
+ * their selectors on every scan was work for a result that was thrown away.
+ * The breakdown is cosmetic — a wrong one costs a mis-drawn bar, not a wrong
+ * balance — so it stays best-effort.
+ */
 const EXTRACT_SCRIPT = String.raw`(() => {
   const parseUsd = (s) => {
     const match = (s || '').match(/\$([\d,]+(?:\.\d+)?)/);
     return match ? parseFloat(match[1].replace(/,/g, '')) : null;
   };
-  const parseNum = (s) => {
-    const match = (s || '').replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
-    return match ? parseFloat(match[0]) : null;
-  };
-
-  const tokens = [];
-  const container = document.querySelector('[class*="TokenWallet_container"]');
-  if (container) {
-    for (const row of container.querySelectorAll('.db-table-row')) {
-      const cells = Array.from(row.querySelectorAll('.db-table-cell')).map((c) => (c.innerText || '').trim());
-      if (cells.length < 4) continue;
-      const symbol = (cells[0] || '').split('\n')[0].trim();
-      const valueUsd = parseUsd(cells[3]);
-      if (!symbol || valueUsd === null) continue;
-      tokens.push({ symbol, priceUsd: parseUsd(cells[1]), amount: parseNum(cells[2]), valueUsd });
-    }
-  }
-
-  const projects = [];
-  for (const card of document.querySelectorAll('[class*="Project_project"]')) {
-    const nameEl = card.querySelector('[class*="ProjectTitle_name"]');
-    const name = nameEl ? (nameEl.innerText || '').trim() : '';
-    const numberEl = card.querySelector('.projectTitle-number');
-    const valueUsd = parseUsd(numberEl ? numberEl.innerText : '');
-    if (!name || valueUsd === null) continue;
-    const chainImg = card.querySelector('[class*="ProjectTitle_projectChain"] img');
-    projects.push({ name, chain: (chainImg && chainImg.getAttribute('alt')) || null, valueUsd });
-  }
 
   const chains = [];
   for (const item of document.querySelectorAll('[class*="AssetsOnChain_item"]')) {
@@ -199,12 +180,10 @@ const EXTRACT_SCRIPT = String.raw`(() => {
     if (lines[0] && usd !== null) chains.push({ name: lines[0], usd });
   }
 
-  return { tokens, projects, chains };
+  return { chains };
 })()`;
 
 interface ExtractedData {
-  tokens: Array<{ symbol: string; priceUsd: number | null; amount: number | null; valueUsd: number }>;
-  projects: Array<{ name: string; chain: string | null; valueUsd: number }>;
   chains: Array<{ name: string; usd: number }>;
 }
 
@@ -454,51 +433,46 @@ async function scanEvmBrowserLocked(address: string, patient: boolean): Promise<
     // be in flight — give them a moment before deciding they aren't coming
     await waitForCapture(page, 10_000);
 
-    // Positions and the per-chain breakdown are best-effort: if DeBank changes
-    // its markup, the total stays correct, there just won't be any positions
-    let positions: ScanPosition[] = [];
+    // The JSON the page fetched for itself: protocol positions split by kind,
+    // with their supply/reward/borrow legs. This is the reading — see below for
+    // why there is no longer a fallback when it does not arrive.
+    let captured: ScanPosition[] | null = null;
     let breakdown: Record<string, number> | undefined;
     try {
       await page.evaluate(UNFOLD_CHAINS_SCRIPT);
       await sleep(500);
+      captured = positionsFromCapture((await page.evaluate(READ_CAPTURE_SCRIPT)) as Capture | null);
       const data = (await page.evaluate(EXTRACT_SCRIPT)) as ExtractedData;
-      // Preferred: the JSON the page fetched for itself — protocol positions
-      // split by kind, with their supply/reward/borrow legs. The scraped DOM is
-      // the fallback: correct values, but protocol totals only.
-      const captured = positionsFromCapture((await page.evaluate(READ_CAPTURE_SCRIPT)) as Capture | null);
-      if (!captured) {
-        // Worth saying out loud. The scraped DOM has the right totals and no
-        // legs at all, so a wallet quietly loses every accrued fee and every
-        // amount — which on the page is indistinguishable from a protocol
-        // having stopped paying. Silence here is what makes that a mystery.
-        logger.warn(`${address}: no DeBank capture — falling back to protocol totals, positions will have no legs`);
-      }
-      positions = captured ?? [
-        ...data.projects.map((p) => ({
-          symbol: p.name,
-          network: p.chain,
-          valueUsd: p.valueUsd,
-          platform: 'debank',
-          category: 'defi' as const,
-        })),
-        ...data.tokens.map((t) => ({
-          symbol: t.symbol,
-          amount: t.amount,
-          priceUsd: t.priceUsd,
-          valueUsd: t.valueUsd,
-          platform: 'wallet',
-          category: 'token' as const,
-        })),
-      ];
       if (data.chains.length) {
         breakdown = {};
         for (const chain of data.chains) breakdown[chain.name] = chain.usd;
       }
     } catch {
-      // markup drifted — work with the total alone
+      // markup drifted — the capture above may still have arrived
     }
 
-    return { chain: 'EVM', address, totalUsd, positions, breakdown };
+    /**
+     * No capture means no reading. Not a smaller one — none.
+     *
+     * There used to be a fallback here that scraped the rendered DOM instead,
+     * on the theory that it has the right totals and merely loses the legs.
+     * On 2026-09-04 that theory cost a wallet its history: DeBank stopped
+     * answering its own API while still rendering the page shell, the header
+     * showed a partial figure, the DOM gave 20 of the positions, and the scan
+     * returned $4.2M for a $62.9M address — as a SUCCESS. Three of those in a
+     * row exhausted the writer's drop-confirmation and overwrote the stored
+     * total.
+     *
+     * There is no way to tell that case from a genuine one, so the fallback has
+     * to go. A hold keeps the last known value, does not mark the wallet
+     * failed, and — unlike the silent fallback — counts toward the breaker that
+     * stands us down when DeBank has had enough.
+     */
+    if (!captured) {
+      throw new ScanHold(`${address}: DeBank rendered the page but never answered for it`);
+    }
+
+    return { chain: 'EVM', address, totalUsd, positions: captured, breakdown };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     // Say what debank actually returned, so the cause is diagnosable rather than
