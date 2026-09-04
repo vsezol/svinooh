@@ -214,8 +214,10 @@ export function AgentTable({ block }: { block: TableBlock }) {
   const grid = `minmax(0,1.6fr) repeat(${block.columns.length - 1}, minmax(0,1fr))`;
   const cell = (index: number): CSSProperties => ({
     fontFamily: index ? 'var(--mono)' : 'inherit',
-    fontWeight: index ? 600 : 700,
-    fontSize: index ? 12 : 12.5,
+    fontWeight: index ? 'var(--fw-medium)' : 'var(--fw-bold)',
+    // Both arms were half a pixel apart and land on the same step: what tells a
+    // label column from a figure column is the face and the weight, not the size
+    fontSize: 'var(--fs-note)',
     textAlign: index ? 'right' : 'left',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
