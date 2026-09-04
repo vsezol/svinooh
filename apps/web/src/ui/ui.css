@@ -622,22 +622,26 @@ button.ui-tag[data-variant='soft']:not(:disabled):hover {
   transition: width 0.3s ease;
 }
 
-/* A band rather than a quantity: the whole track is the thing, and the fill
-   states its colour without claiming the bar is that full */
-.ui-meter-fill[data-soft='true'] {
+/* A segment of the axis — a region, not an amount, so it never grows from
+   zero and never fills the track */
+.ui-meter-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--r-full);
+  background: var(--meter-tone, var(--acc));
   opacity: 0.35;
 }
 
-/* Where something is on the track. The ring is the card's own colour, so the
-   mark reads as sitting on the bar rather than being a hole in it. */
+/* Where something is on the axis: a hairline tick, not a thumb. A round dot
+   with a ring is what a slider puts where you are meant to grab it. */
 .ui-meter-mark {
   position: absolute;
   top: 50%;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+  width: 2px;
+  height: 11px;
+  border-radius: 1px;
   background: var(--meter-tone, var(--acc));
-  border: 2px solid var(--surf2);
   transform: translate(-50%, -50%);
 }
 
