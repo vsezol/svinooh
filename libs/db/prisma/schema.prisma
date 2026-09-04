@@ -16,6 +16,10 @@ model User {
   /// X (Twitter) account id — a separate identity, exactly as telegramId is:
   /// signing in with X makes its own user, never links to a Telegram one
   xId        String?          @unique
+  /// Telegram chat that receives this user's alerts when the identity itself
+  /// is not Telegram. A delivery address, not an identity: the chat's own
+  /// Telegram account, if it ever signs in, is a different user entirely.
+  alertChatId BigInt?
   // Identifier for dev login (AUTH_DEV_MODE=true), not used in production
   devKey     String?          @unique
   firstName  String?
@@ -52,6 +56,9 @@ model TelegramLogin {
   token      String   @id
   /// Set when the bot confirms who pressed Start; null while still waiting
   telegramId BigInt?
+  /// Set when this token CONNECTS a chat to an existing user (alert delivery)
+  /// instead of signing somebody in. Login polls skip these rows entirely.
+  connectUserId String?
   firstName  String?
   lastName   String?
   username   String?

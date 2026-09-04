@@ -76,17 +76,23 @@ export class Collector {
         label: true,
         alerts: true,
         portfolio: {
-          select: { slug: true, owner: { select: { user: { select: { telegramId: true } } } } },
+          select: {
+            slug: true,
+            owner: { select: { user: { select: { telegramId: true, alertChatId: true } } } },
+          },
         },
       },
     });
 
     for (const membership of memberships) {
-      // A portfolio nobody owns has nobody to tell, and an owner who has never
-      // opened Telegram has no chat to tell them in. Either way the state is
-      // still worth remembering, so the day they do sign in they are baselined
-      // rather than told about a year of crossings at once.
-      const telegramId = membership.portfolio.owner?.user.telegramId ?? null;
+      // A portfolio nobody owns has nobody to tell, and an owner with no chat
+      // to reach has nowhere to be told. The chat is the identity's own when
+      // the account IS Telegram, and the connected delivery chat when it is
+      // not (an X account, say). Either way the state is still worth
+      // remembering, so the day a chat appears they are baselined rather than
+      // told about a year of crossings at once.
+      const who = membership.portfolio.owner?.user;
+      const telegramId = who?.telegramId ?? who?.alertChatId ?? null;
 
       const settings: Settings = membership.alerts
         ? {

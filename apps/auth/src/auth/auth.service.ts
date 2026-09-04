@@ -13,6 +13,8 @@ import type {
   AuthResponseDto,
   MeDto,
   TelegramAuthPayload,
+  TelegramConnectPollDto,
+  TelegramConnectStartDto,
   TelegramPollDto,
   TelegramStartDto,
 } from '@svinooh/shared';
@@ -118,6 +120,34 @@ export class AuthService {
     );
   }
 
+  /**
+   * Start connecting a Telegram chat as this user's alert delivery address.
+   * The same deep link a sign-in uses; the token is what makes it mean
+   * something else when the bot asks about it.
+   */
+  async connectStart(userId: string): Promise<TelegramConnectStartDto> {
+    if (!config.botToken || !config.botUsername) {
+      throw new ServiceUnavailableException('The Telegram bot is not configured');
+    }
+    const token = randomBytes(24).toString('base64url');
+    await this.logins.createConnect(token, userId);
+    return { token, deepLink: `https://t.me/${config.botUsername}?start=${token}` };
+  }
+
+  /** The tab asking whether its connect link has been pressed yet */
+  async connectPoll(userId: string, token: string): Promise<TelegramConnectPollDto> {
+    if (await this.logins.connectPending(token, userId)) {
+      return { pending: true, connected: false };
+    }
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    return { pending: false, connected: user?.alertChatId != null };
+  }
+
+  async connectRemove(userId: string): Promise<{ ok: true }> {
+    await this.users.unbindAlertChat(userId);
+    return { ok: true };
+  }
+
   /** Redeem one: the visitor gets the same session a normal sign-in would give */
   async loginWithLink(token: string): Promise<AuthResponseDto> {
     const expired = new UnauthorizedException(
@@ -173,6 +203,8 @@ export class AuthService {
       username: user.username,
       photoUrl: user.photoUrl,
       portfolioSlug,
+      telegramLinked: user.telegramId !== null,
+      alertChatConnected: user.alertChatId !== null,
       // Decides whether the browser draws the tab, and nothing else — every
       // admin route asks the database again for itself
       isAdmin: user.isAdmin,

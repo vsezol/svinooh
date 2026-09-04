@@ -29,8 +29,9 @@ export class Slowdown {
 
     const owners = await this.prisma.portfolioOwner.findMany({
       where: {
-        // Somebody to tell, who has told us where
-        user: { telegramId: { not: null } },
+        // Somebody to tell, who has told us where — their own Telegram, or the
+        // chat a non-Telegram identity connected for delivery
+        user: { OR: [{ telegramId: { not: null } }, { alertChatId: { not: null } }] },
         portfolio: {
           // They HAVE visited, and it has since gone quiet. Never-visited is
           // not the same thing: a portfolio created a minute ago must not be
@@ -43,7 +44,7 @@ export class Slowdown {
       select: {
         portfolioId: true,
         slowedNoticeAt: true,
-        user: { select: { telegramId: true } },
+        user: { select: { telegramId: true, alertChatId: true } },
         portfolio: { select: { slug: true, name: true, lastViewedAt: true } },
       },
     });
@@ -55,7 +56,7 @@ export class Slowdown {
       if (owner.slowedNoticeAt !== null && owner.slowedNoticeAt > lastViewedAt) continue;
 
       const notice: SlowedNotice = {
-        telegramId: (owner.user.telegramId as bigint).toString(),
+        telegramId: ((owner.user.telegramId ?? owner.user.alertChatId) as bigint).toString(),
         portfolioSlug: owner.portfolio.slug,
         portfolioName: owner.portfolio.name,
         quietForMin: Math.round((now.getTime() - lastViewedAt.getTime()) / 60_000),

@@ -67,6 +67,22 @@ export class UserService {
   }
 
   /**
+   * Point this user's alerts at a Telegram chat. A delivery address and only
+   * that: the chat's own Telegram account, if it ever signs in, is a different
+   * user — nothing here reads or writes telegramId.
+   */
+  bindAlertChat(userId: string, chatId: number): Promise<User> {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { alertChatId: BigInt(chatId) },
+    });
+  }
+
+  unbindAlertChat(userId: string): Promise<User> {
+    return this.prisma.user.update({ where: { id: userId }, data: { alertChatId: null } });
+  }
+
+  /**
    * The portfolio is created on first sign-in. Just one for now; the schema
    * allows several.
    *

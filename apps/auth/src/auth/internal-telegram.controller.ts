@@ -33,11 +33,25 @@ export class InternalTelegramController {
   async start(
     @Headers('x-internal-secret') secret: string | undefined,
     @Body() body: StartBody,
-  ): Promise<{ url: string }> {
+  ): Promise<{ kind: 'login' | 'connected'; url: string }> {
     if (!config.internalSecret || secret !== config.internalSecret) {
       throw new ForbiddenException('Not for you');
     }
     if (!body?.from?.id) throw new ForbiddenException('No sender');
+
+    // A connect token means somebody's alerts move into this chat, and nothing
+    // else happens: the sender is a delivery address here, not a sign-in — no
+    // user is created for them and no login link is minted. The reply must not
+    // carry one either: the account whose alerts these are belongs to whoever
+    // started the connect on the site, not to whoever opened the chat link.
+    if (body.token) {
+      const connectUserId = await this.logins.connectTarget(body.token);
+      if (connectUserId) {
+        await this.users.bindAlertChat(connectUserId, body.from.id);
+        await this.logins.consume(body.token);
+        return { kind: 'connected', url: config.webUrl };
+      }
+    }
 
     // Releases the tab that is waiting on this token, if there is one. A bare
     // "Start" with no token still gets a way in below — somebody who found the
@@ -52,6 +66,6 @@ export class InternalTelegramController {
     });
     const portfolio = await this.users.ensurePortfolio(user);
     const key = await this.users.issueLoginLink(user.id);
-    return { url: `${config.webUrl}/p/${portfolio.slug}?login=${key}` };
+    return { kind: 'login', url: `${config.webUrl}/p/${portfolio.slug}?login=${key}` };
   }
 }

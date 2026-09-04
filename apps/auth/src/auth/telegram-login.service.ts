@@ -41,6 +41,40 @@ export class TelegramLoginService {
   }
 
   /**
+   * A CONNECT request: the same deep link, a different meaning. Whoever opens
+   * it in Telegram does not get signed in — their chat becomes the alert
+   * delivery address of the user who asked. See InternalTelegramController.
+   */
+  async createConnect(token: string, userId: string): Promise<void> {
+    await this.prisma.telegramLogin.create({
+      data: { token, connectUserId: userId, expiresAt: new Date(Date.now() + TTL_MS) },
+    });
+  }
+
+  /** Is this live token a connect request, and for whom */
+  async connectTarget(token: string): Promise<string | null> {
+    const row = await this.prisma.telegramLogin.findFirst({
+      where: { token, expiresAt: { gt: new Date() } },
+      select: { connectUserId: true },
+    });
+    return row?.connectUserId ?? null;
+  }
+
+  /** The connect happened (or died) — the token is spent either way */
+  async consume(token: string): Promise<void> {
+    await this.prisma.telegramLogin.deleteMany({ where: { token } });
+  }
+
+  /** The site asking whether its connect token is still waiting for a press */
+  async connectPending(token: string, userId: string): Promise<boolean> {
+    const row = await this.prisma.telegramLogin.findFirst({
+      where: { token, connectUserId: userId, expiresAt: { gt: new Date() } },
+      select: { token: true },
+    });
+    return row !== null;
+  }
+
+  /**
    * The bot's answer. Silent when the token is unknown or expired: somebody who
    * opened the bot from an old link still gets their way in — see the reply the
    * bot sends — and only the tab that is waiting misses out, which is the tab
@@ -58,10 +92,10 @@ export class TelegramLoginService {
     });
   }
 
-  /** Still waiting, or gone */
+  /** Still waiting, or gone. Connect rows are not sign-ins and never answer here. */
   async pending(token: string): Promise<boolean> {
     const row = await this.prisma.telegramLogin.findFirst({
-      where: { token, expiresAt: { gt: new Date() } },
+      where: { token, connectUserId: null, expiresAt: { gt: new Date() } },
       select: { telegramId: true },
     });
     return row !== null && row.telegramId === null;
@@ -74,7 +108,7 @@ export class TelegramLoginService {
    */
   async take(token: string): Promise<TelegramIdentity | null> {
     const row = await this.prisma.telegramLogin.findFirst({
-      where: { token, expiresAt: { gt: new Date() }, telegramId: { not: null } },
+      where: { token, connectUserId: null, expiresAt: { gt: new Date() }, telegramId: { not: null } },
     });
     if (!row || row.telegramId === null) return null;
     await this.prisma.telegramLogin.deleteMany({ where: { token } });

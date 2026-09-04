@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import type { WalletDto } from '@svinooh/shared';
+import { useEffect, useRef, useState } from 'react';
+import type { TelegramConnectPollDto, TelegramConnectStartDto, WalletDto } from '@svinooh/shared';
+import { api, ApiError } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { blockMatches, buildBlocks } from '../lib/blocks';
 import { armedCount, parseThreshold, useAlerts, type WalletAlerts } from '../lib/alerts';
 import { walletName } from '../lib/format';
-import { Card, Chevron, Display, Eyebrow, Note, NumberField, Switch, Tag } from '../ui';
+import { Button, Card, Chevron, Display, Eyebrow, Note, NumberField, Switch, Tag } from '../ui';
 
 /** A setting and the control that changes it, on one line */
 function Setting({ title, note, children }: { title: string; note: string; children: React.ReactNode }) {
@@ -212,6 +214,107 @@ function WalletCard({
  * decides which settings it even has, and until it has told us, nothing here
  * would be right.
  */
+
+/**
+ * Where the alerts actually go — shown only to accounts that are not Telegram
+ * themselves. A Telegram identity already IS the chat; an X account has no
+ * chat until it connects one, and until then every threshold on this page is
+ * armed but mute.
+ *
+ * The connect is the bot's ordinary deep link carrying a token that means
+ * "bind this chat" instead of "sign me in". The tab polls while the link sits
+ * open in Telegram, the same way the sign-in flow waits.
+ */
+function DeliveryCard() {
+  const { me } = useAuth();
+  const [connected, setConnected] = useState<boolean | null>(null);
+  const [waiting, setWaiting] = useState(false);
+  const [deepLink, setDeepLink] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timer.current) clearInterval(timer.current);
+    };
+  }, []);
+
+  // A Telegram account needs none of this
+  if (!me || me.telegramLinked) return null;
+  const isConnected = connected ?? me.alertChatConnected;
+
+  const start = async () => {
+    setError(null);
+    try {
+      const s = await api<TelegramConnectStartDto>('/auth/telegram/connect/start', { method: 'POST' });
+      setDeepLink(s.deepLink);
+      window.open(s.deepLink, '_blank', 'noopener');
+      setWaiting(true);
+      timer.current = setInterval(() => {
+        void api<TelegramConnectPollDto>(`/auth/telegram/connect/poll?token=${encodeURIComponent(s.token)}`)
+          .then((res) => {
+            if (res.pending) return;
+            if (timer.current) clearInterval(timer.current);
+            setWaiting(false);
+            if (res.connected) setConnected(true);
+            else setError('The link expired before it was opened - try again.');
+          })
+          .catch(() => {
+            /* a dropped poll is not an answer; the next tick asks again */
+          });
+      }, 1500);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not start connecting');
+    }
+  };
+
+  const disconnect = async () => {
+    setError(null);
+    try {
+      await api('/auth/telegram/connect/remove', { method: 'POST' });
+      setConnected(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not disconnect');
+    }
+  };
+
+  return (
+    <Card style={{ marginTop: 'var(--sp-5)', padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontWeight: 700, fontSize: 13.5 }}>
+            {isConnected ? 'Alerts go to your Telegram' : 'Nowhere to send alerts yet'}
+          </div>
+          <Note style={{ marginTop: 3, lineHeight: 1.5 }}>
+            {isConnected
+              ? 'A Telegram chat is connected as the delivery address for everything on this page.'
+              : 'Connect a Telegram chat and every alert on this page will be delivered there.'}
+          </Note>
+        </div>
+        {waiting ? (
+          <Note>
+            Waiting for Telegram...{' '}
+            <a href={deepLink} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--acc-text)' }}>
+              open again
+            </a>
+          </Note>
+        ) : isConnected ? (
+          <Button variant="soft" size="sm" onClick={() => void disconnect()}>
+            Disconnect
+          </Button>
+        ) : (
+          <Button size="sm" onClick={() => void start()}>
+            Connect Telegram
+          </Button>
+        )}
+      </div>
+      {error ? (
+        <div style={{ marginTop: 8, fontSize: 'var(--fs-note)', color: 'var(--down)' }}>{error}</div>
+      ) : null}
+    </Card>
+  );
+}
+
 export function AlertSettings({
   slug,
   wallets,
@@ -239,6 +342,8 @@ export function AlertSettings({
       >
         Per-wallet alerts, delivered to your Telegram. Checked on every {syncMinutes}-minute sync.
       </div>
+
+      <DeliveryCard />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)', marginTop: 'var(--sp-6)' }}>
         {ready.length === 0 ? (

@@ -27,6 +27,24 @@ export class AuthController {
     return this.auth.telegramPoll(token ?? '');
   }
 
+  @Post('telegram/connect/start')
+  @UseGuards(RequiredAuthGuard)
+  connectStart(@CurrentUserId() userId: string) {
+    return this.auth.connectStart(userId);
+  }
+
+  @Get('telegram/connect/poll')
+  @UseGuards(RequiredAuthGuard)
+  connectPoll(@CurrentUserId() userId: string, @Query('token') token?: string) {
+    return this.auth.connectPoll(userId, token ?? '');
+  }
+
+  @Post('telegram/connect/remove')
+  @UseGuards(RequiredAuthGuard)
+  connectRemove(@CurrentUserId() userId: string) {
+    return this.auth.connectRemove(userId);
+  }
+
   @Post('x/start')
   xStart() {
     return this.auth.xStart();

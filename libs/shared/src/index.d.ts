@@ -229,12 +229,28 @@ export interface XStartDto {
   url: string;
 }
 
+/** Start connecting a Telegram chat as the alert delivery address */
+export interface TelegramConnectStartDto {
+  token: string;
+  deepLink: string;
+}
+
+/** Poll that connection: still waiting, done, or the token ran out */
+export interface TelegramConnectPollDto {
+  pending: boolean;
+  connected: boolean;
+}
+
 export interface MeDto {
   id: string;
   name: string;
   username?: string | null;
   photoUrl?: string | null;
   portfolioSlug: string;
+  /** The identity IS a Telegram account — alerts already have a chat to go to */
+  telegramLinked: boolean;
+  /** A Telegram chat is connected as the alert delivery address (non-Telegram identities) */
+  alertChatConnected: boolean;
   /**
    * Whether this person may see the admin tab.
    *

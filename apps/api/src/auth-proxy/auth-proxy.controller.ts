@@ -80,6 +80,21 @@ export class AuthProxyController {
     return forward('POST', '/auth/dev', { body });
   }
 
+  @Post('telegram/connect/start')
+  connectStart(@Headers('authorization') auth?: string) {
+    return forward('POST', '/auth/telegram/connect/start', { body: {}, auth });
+  }
+
+  @Get('telegram/connect/poll')
+  connectPoll(@Query('token') token?: string, @Headers('authorization') auth?: string) {
+    return forward('GET', '/auth/telegram/connect/poll', { query: { token }, auth });
+  }
+
+  @Post('telegram/connect/remove')
+  connectRemove(@Headers('authorization') auth?: string) {
+    return forward('POST', '/auth/telegram/connect/remove', { body: {}, auth });
+  }
+
   @Get('me')
   me(@Headers('authorization') auth?: string) {
     return forward('GET', '/auth/me', { auth });
