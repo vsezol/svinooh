@@ -60,7 +60,7 @@ interface Props {
   wallet: WalletDto;
   actions: WalletActions;
   total: number;
-  /** Hide balances that round to $0 — see isDustValue */
+  /** Hide balances under a dollar — see isDustValue */
   hideSmall: boolean;
   onRemove: () => void;
   onRename: (label: string) => void;

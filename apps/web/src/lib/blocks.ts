@@ -515,19 +515,21 @@ export function blockMatches(block: Block, filter: PositionFilter): boolean {
 }
 
 /**
- * A balance that rounds to nothing in dollars.
+ * A balance under a dollar.
  *
  * Measured in the display currency on purpose: "small" means small money, not a
  * small number of tokens — a sliver of BTC is real money and stays, a million
- * units of a dead token is dust and goes.
+ * units of a dead token is dust and goes. The line is a whole dollar, not "what
+ * rounds to $0": a wallet's tail of $0.96 and $0.70 tokens is exactly the noise
+ * the switch exists to clear.
  */
 export function isDustValue(valueUsd: number): boolean {
-  return Math.abs(valueUsd) < 0.5;
+  return Math.abs(valueUsd) < 1;
 }
 
 /**
- * The same blocks with the dust taken out: rows that round to $0 disappear, and
- * a block whose whole position rounds to $0 disappears with them.
+ * The same blocks with the dust taken out: rows under a dollar disappear, and
+ * a block whose whole position is under a dollar disappears with them.
  *
  * Sections are rebuilt around what is left — the column headings ride whichever
  * section is now first, and a total over one surviving row is dropped the same
