@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { PortfolioDto, PublicPortfolioDto } from '@svinooh/shared';
+import type { AddressLookupDto, PortfolioDto, PublicPortfolioDto } from '@svinooh/shared';
 import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AuthModal } from '../components/AuthModal';
 import { ChainMarquee } from '../components/ChainMarquee';
@@ -34,6 +34,7 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
   const [demoHistory, setDemoHistory] = useState(preloaded.history);
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<PublicPortfolioDto[] | null>(null);
+  const [lookup, setLookup] = useState<AddressLookupDto | null>(null);
   const [open, setOpen] = useState(false);
   const [tracking, setTracking] = useState(false);
   const [trackErr, setTrackErr] = useState<string | null>(null);
@@ -69,6 +70,7 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
   // client never sees in the list payload.
   useEffect(() => {
     const q = search.trim();
+    setLookup(null);
     if (!q) {
       setResults(null);
       return;
@@ -77,16 +79,31 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
       void api<PublicPortfolioDto[]>(`/portfolios/public?limit=6&q=${encodeURIComponent(q)}`)
         .then(setResults)
         .catch(() => setResults([]));
+      // Whatever could be an address is also looked up as one, so the dropdown
+      // row can already say which network it is, what it was last worth and
+      // where it already opens — before anything is created.
+      if (/^[A-Za-z0-9]{26,64}$/.test(q)) {
+        void api<AddressLookupDto>(`/portfolios/lookup?address=${encodeURIComponent(q)}`)
+          .then(setLookup)
+          .catch(() => setLookup(null));
+      }
     }, 220);
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Anything long enough to be an address is offered as "track this" — the
+  // Anything long enough to be an address is offered as its own row — the
   // backend is the one that decides whether the network is recognized
   const looksLikeAddress = /^[A-Za-z0-9]{26,64}$/.test(search.trim());
 
-  const trackAddress = async () => {
+  const openAddress = async () => {
     if (tracking) return;
+    // The lookup already said where this address lives — go straight there
+    if (lookup?.slug) {
+      setOpen(false);
+      router.push(`/p/${lookup.slug}`);
+      return;
+    }
+    if (lookup && lookup.chain === null) return;
     setTracking(true);
     setTrackErr(null);
     try {
@@ -190,7 +207,7 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
                 onBlur={() => setTimeout(() => setOpen(false), 150)}
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') setOpen(false);
-                  if (e.key === 'Enter' && looksLikeAddress) void trackAddress();
+                  if (e.key === 'Enter' && looksLikeAddress) void openAddress();
                 }}
                 placeholder="Search a portfolio id or paste a wallet address"
                 aria-label="Search portfolios"
@@ -200,13 +217,15 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
                 <SearchDropdown
                   results={results}
                   looksLikeAddress={looksLikeAddress}
+                  lookup={lookup}
+                  query={search.trim()}
                   tracking={tracking}
                   error={trackErr}
                   onPick={(slug) => {
                     setOpen(false);
                     router.push(`/p/${slug}`);
                   }}
-                  onTrack={() => void trackAddress()}
+                  onOpenAddress={() => void openAddress()}
                 />
               ) : null}
             </div>

@@ -187,6 +187,24 @@ export interface PublicPortfolioDto {
 }
 
 /**
+ * What the landing search says about a pasted address before anything is
+ * created. Public by construction: the chain and value are readable off the
+ * chain itself, and slug/name can only come from an ownerless portfolio.
+ */
+export interface AddressLookupDto {
+  /** null — not an address on any supported network */
+  chain: Chain | null;
+  /** The stored spelling (EVM lowercased); echoes the input when unsupported */
+  address: string;
+  /** Cached value from the address's last scan; null — never scanned */
+  totalUsd: number | null;
+  /** Anonymous portfolio holding exactly this address; null — none yet */
+  slug: string | null;
+  /** That portfolio's name, if one was ever set */
+  name: string | null;
+}
+
+/**
  * The width of the window the chart draws, not how much history it is given:
  * 24H means a day fills the width and the days before it are scrolled back to.
  * `all` is the exception — the whole history at a glance, with nothing either
