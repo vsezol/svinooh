@@ -47,6 +47,19 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  /**
+   * The fast check: the first reading of a freshly pasted EVM address, answered
+   * by the api source (Zerion) in under a second so the spinner is short, with
+   * the configured source as fallback. Counted by whoever actually answered —
+   * `api`, `browser`, or `none` when nobody could. Incremented by scanner-evm.
+   */
+  readonly firstReadings = new Counter({
+    name: 'svinooh_first_readings_total',
+    help: 'First readings of fresh addresses, by the source that answered',
+    labelNames: ['source'] as const, // api | browser | none
+    registers: [this.registry],
+  });
+
   readonly cacheOps = new Counter({
     name: 'svinooh_cache_ops_total',
     help: 'Portfolio cache operations',
