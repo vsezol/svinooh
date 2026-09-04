@@ -78,6 +78,7 @@ export class SyncService {
       tronResourcesAt: w.tronResourcesAt?.toISOString() ?? null,
       // Somebody pasted this address and is watching a spinner
       priority: w.lastSyncedAt === null ? 'urgent' : 'normal',
+      firstScan: w.lastSyncedAt === null,
     }));
   }
 

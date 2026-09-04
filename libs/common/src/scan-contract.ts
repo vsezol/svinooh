@@ -61,6 +61,16 @@ export interface ScanJob {
    */
   priority?: 'urgent' | 'normal';
   /**
+   * Nobody has ever read this address: there is no stored value behind it and
+   * somebody is watching the spinner it put on their screen.
+   *
+   * Carried separately from `priority`, which the two happen to agree on today.
+   * They are different questions — one is where the job sits in the queue, the
+   * other is what may be traded away to answer it sooner — and a source picked
+   * off a queue hint would be a surprise the day the hint changes.
+   */
+  firstScan?: boolean;
+  /**
    * TRON only: when this address's resources were last read, as an ISO string,
    * or null if never.
    *
