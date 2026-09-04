@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import type { HistoryRange, PortfolioDto } from '@svinooh/shared';
-import { Button, Card, Eyebrow, Input, Segmented, Spinner, TagButton } from '../ui';
+import { Button, Card, Checkbox, Eyebrow, Input, Segmented, Spinner, TagButton } from '../ui';
 import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AlertSettings } from '../components/AlertSettings';
 import { AreaChart } from '../components/AreaChart';
@@ -173,6 +173,10 @@ export function PortfolioPage({ slug }: { slug: string }) {
   const [scope, setScope] = useState<string>('all');
   const [period, setPeriod] = useState<HistoryRange>('24h');
   const [hideSmall, setHideSmall] = useState(false);
+  // The saved preference, applied once per portfolio load. Seeding rather than
+  // deriving keeps a toggle made just now from being undone by a reload that
+  // was already in the air with the older answer.
+  const hideSmallSeeded = useRef<string | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [input, setInput] = useState('');
   const [addErr, setAddErr] = useState<string | null>(null);
@@ -211,6 +215,13 @@ export function PortfolioPage({ slug }: { slug: string }) {
   useEffect(() => {
     if (scope !== 'all' && data && !data.wallets.some((w) => w.id === scope)) setScope('all');
   }, [data, scope]);
+
+  useEffect(() => {
+    if (data && hideSmallSeeded.current !== slug) {
+      hideSmallSeeded.current = slug;
+      setHideSmall(data.hideSmallBalances ?? false);
+    }
+  }, [data, slug]);
 
   const wallets = data?.wallets ?? [];
   /**
@@ -393,6 +404,22 @@ export function PortfolioPage({ slug }: { slug: string }) {
   }
 
   const isOwner = data.isOwner;
+
+  /**
+   * Applied at once, remembered on the account. The owner's press is saved so
+   * a refresh and another device agree with it; a guest's toggle is their own
+   * session's business and touches nothing. A failed save quietly puts the
+   * switch back — the page must not claim a memory the server refused to keep.
+   */
+  const toggleHideSmall = (on: boolean) => {
+    setHideSmall(on);
+    if (isOwner) {
+      void api(`/portfolios/${slug}/hide-small-balances`, {
+        method: 'PATCH',
+        body: JSON.stringify({ hideSmallBalances: on }),
+      }).catch(() => setHideSmall(!on));
+    }
+  };
   // A visitor has no rail, so they can only ever be on the one tab the link
   // pointed them at — whatever state says
   const activeTab: Tab = isOwner ? tab : 'portfolio';
@@ -688,27 +715,7 @@ export function PortfolioPage({ slug }: { slug: string }) {
 
             {/* the dust switch, and what the list adds up to */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 26, marginBottom: 12 }}>
-              <label
-                className="mono"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 'var(--fs-tag)',
-                  letterSpacing: '0.06em',
-                  color: 'var(--mut)',
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={hideSmall}
-                  onChange={(e) => setHideSmall(e.target.checked)}
-                  style={{ width: 14, height: 14, margin: 0, accentColor: 'var(--acc)', cursor: 'pointer' }}
-                />
-                HIDE SMALL BALANCES
-              </label>
+              <Checkbox checked={hideSmall} onChange={toggleHideSmall} label="Hide small balances" />
               <div className="mono" style={{ fontSize: 'var(--fs-tag)', fontWeight: 'var(--fw-normal)', color: 'var(--mut)' }}>
                 {walletCount} {walletCount === 1 ? 'wallet' : 'wallets'} · {fmtUsd(data.totalUsd)}
               </div>
