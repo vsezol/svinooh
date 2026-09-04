@@ -1,4 +1,5 @@
 import type { DefiFacts, PoolFact, ScanPosition } from '@svinooh/shared';
+import { hasRange } from './range';
 
 /** Nothing was asked, or nothing answered — either way there is nothing to fill in */
 export const NO_FACTS: DefiFacts = { pools: [], lending: [], failed: [] };
@@ -31,6 +32,10 @@ function pairOf(position: ScanPosition): string | null {
   // the positions whose band is worth looking at. Its uncollected fees still
   // name both sides, because fees accrue in the pool's own two tokens, so they
   // finish the pair.
+  //
+  // Pools only. A lending position supplying one asset and earning a reward in
+  // another also has two symbols on it, and they are not a pair.
+  if (!hasRange(position.name)) return null;
   const symbols = [...new Set(legs.map((t) => t.symbol.trim().toUpperCase()))];
   return symbols.length === 2 ? pairKey(symbols[0], symbols[1]) : null;
 }
