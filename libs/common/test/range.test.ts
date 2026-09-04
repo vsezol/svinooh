@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { describe, test } from 'node:test';
 import type { DefiFacts, PoolFact, ScanPosition, ScanPositionToken } from '@svinooh/shared';
-import { rangeFromLegs } from '../src/range';
+import { hasRange, rangeFromLegs } from '../src/range';
 import { enrich } from '../src/defi-facts';
 
 const leg = (symbol: string, role: ScanPositionToken['role'], valueUsd: number): ScanPositionToken =>
@@ -60,8 +60,52 @@ describe('rangeFromLegs', () => {
   });
 });
 
+/**
+ * The check the old `supplied.length !== 2` guard was doing by accident. When
+ * the single-legged case became answerable, everything that holds one asset
+ * because that is simply what it is started answering "out of range" — Venus,
+ * Aave, Karak, Hyperliquid, Polygon Staking. On a lending position that is not
+ * a small wrongness: it is a sentence about liquidation risk, said where the
+ * words mean nothing.
+ */
+describe('hasRange — which kinds have a range at all', () => {
+  test('pools do', () => {
+    for (const kind of ['Liquidity Pool', 'LP', 'Concentrated Liquidity', 'liquidity pool'])
+      assert.equal(hasRange(kind), true, kind);
+  });
+
+  test('everything that holds one asset by nature does not', () => {
+    for (const kind of ['Lending', 'Staked', 'Deposit', 'Yield', 'Farming', 'Locked', 'Vesting', 'Rewards'])
+      assert.equal(hasRange(kind), false, kind);
+  });
+
+  test('an unnamed kind is not assumed to be a pool', () => {
+    assert.equal(hasRange(null), false);
+    assert.equal(hasRange(''), false);
+  });
+});
+
 describe('enrich — finding the pool a position belongs to', () => {
   const facts = (pools: PoolFact[]): DefiFacts => ({ pools, lending: [] }) as DefiFacts;
+
+  /**
+   * A lending position supplying one asset and earning a reward in another has
+   * two symbols on it, and they are not a pair. Without the kind check it
+   * matched a pool fact and was handed somebody else's band.
+   */
+  test('a loan earning a reward in another token is not a pair', () => {
+    const [p] = enrich(
+      [
+        position({
+          name: 'Lending',
+          tokens: [leg('USDC', 'supply', 10_000), leg('WETH', 'reward', 12)],
+        }),
+      ],
+      facts([pool({})]),
+    );
+    assert.equal(p.band, undefined);
+    assert.equal(p.range, undefined);
+  });
 
   test('a two-sided position finds its pool, as it always did', () => {
     const [p] = enrich(

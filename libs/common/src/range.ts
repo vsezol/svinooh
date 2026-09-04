@@ -18,6 +18,26 @@ import type { ScanPositionToken } from '@svinooh/shared';
  */
 const EMPTY_SIDE = 0.005; // a side under 0.5% of the position has effectively been converted away
 
+/** "Liquidity Pool", "LP", "Concentrated Liquidity" — and nothing else */
+const RANGED_KIND = /pool|liquidity|\blp\b/i;
+
+/**
+ * Does a position of this KIND have a range at all?
+ *
+ * Only a two-sided pool position does. Lending, staking, deposits and yield
+ * vaults hold one asset because that is what they are, not because a price
+ * moved — and "out of range" said about one of those is not a small wrongness,
+ * it is a sentence about liquidation risk that has no meaning there.
+ *
+ * This used to be enforced by accident. The range inference bailed out unless
+ * it saw exactly two supplied legs, which quietly filtered out everything that
+ * holds one asset — until the day the single-legged case became answerable and
+ * the accident stopped covering for the missing check.
+ */
+export function hasRange(kind: string | null | undefined): boolean {
+  return !!kind && RANGED_KIND.test(kind);
+}
+
 export function rangeFromLegs(legs: ScanPositionToken[]): PositionRange | null {
   const supplied = legs.filter((leg) => leg.role === 'supply');
   // One side and nothing else: the price crossed a bound and the position has
