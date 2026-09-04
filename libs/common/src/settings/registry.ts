@@ -53,9 +53,9 @@ export const REGISTRY = {
     group: 'source',
     label: 'EVM balances',
     about:
-      'debank scrapes a page in a headless browser: ~6s, and an IP budget a few dozen wallets exhaust. zerion is an API: ~0.4s, no ban risk, needs ZERION_API_KEY on scanner-evm.',
-    options: ['debank', 'zerion'],
-    default: 'debank',
+      'browser renders debank.com headlessly: 6-19s, and an IP budget a few dozen wallets exhaust. api is Zerion plus a provider per venue it does not cover: under a second, no ban risk, needs ZERION_API_KEY on scanner-evm.',
+    options: ['browser', 'api'],
+    default: 'browser',
     env: 'SCAN_EVM_SOURCE',
     readBy: ['scanner-evm'],
     live: true,

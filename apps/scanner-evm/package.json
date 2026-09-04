@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
-    "start": "node dist/main.js"
+    "start": "node dist/main.js",
+    "test:strategies": "tsx --test test/strategies.test.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",
