@@ -25,6 +25,15 @@ export class PortfolioController {
   }
 
   /**
+   * What the search dropdown shows for a pasted address: network, cached value,
+   * and the anonymous portfolio it already opens as — without creating anything.
+   */
+  @Get('lookup')
+  lookupAddress(@Query('address') address?: string) {
+    return this.portfolios.lookupAddress(address ?? '');
+  }
+
+  /**
    * Open a wallet address as a portfolio, creating an ownerless one if nobody is
    * tracking it yet. No sign-in: the result belongs to nobody and carries no
    * user data.

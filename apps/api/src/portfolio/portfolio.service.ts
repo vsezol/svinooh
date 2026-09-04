@@ -8,6 +8,7 @@ import {
 import { Prisma } from '@prisma/client';
 import type { Portfolio, PortfolioOwner, Position, Wallet } from '@prisma/client';
 import type {
+  AddressLookupDto,
   AlertSettingsDto,
   Chain,
   HistoryDto,
@@ -379,6 +380,45 @@ export class PortfolioService {
       .sort((a, b) => b.totalUsd - a.totalUsd)
       .slice(0, Math.min(Math.max(limit, 1), 100))
       .map(({ addresses: _addresses, ...row }) => row);
+  }
+
+  /**
+   * What the search dropdown shows for a pasted address, without creating
+   * anything: the network it belongs to, what the address was last worth, and
+   * the anonymous portfolio that already opens it (if one exists). Read-only
+   * twin of findOrCreateAnonymous — same detection, same normalization, same
+   * "exactly this one wallet" query — so what the row promises is what a click
+   * then gets.
+   *
+   * Everything returned is public by construction: the chain and the value are
+   * readable off the chain itself by anyone with the address, and slug/name can
+   * only come from an ownerless portfolio, which carries no user data at all.
+   */
+  async lookupAddress(addressRaw: string): Promise<AddressLookupDto> {
+    const raw = String(addressRaw || '').trim();
+    const chain = detectChain(raw);
+    if (!chain) return { chain: null, address: raw, totalUsd: null, slug: null, name: null };
+    const address = normalizeAddress(chain, raw);
+
+    const [wallet, existing] = await Promise.all([
+      this.prisma.wallet.findUnique({ where: { chain_address: { chain, address } } }),
+      this.prisma.portfolio.findFirst({
+        where: {
+          owner: null,
+          wallets: { some: { wallet: { address } }, every: { wallet: { address } } },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { slug: true, name: true },
+      }),
+    ]);
+
+    return {
+      chain,
+      address,
+      totalUsd: wallet?.lastTotalUsd ?? null,
+      slug: existing?.slug ?? null,
+      name: existing?.name ?? null,
+    };
   }
 
   /**
