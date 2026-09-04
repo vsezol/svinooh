@@ -37,7 +37,10 @@ export function Select({
       className={['ui-input', rest.className].filter(Boolean).join(' ')}
       data-size={size}
       data-shape="box"
-      style={{ cursor: 'pointer', textAlign: 'left', ...rest.style }}
+      // Sized to its content rather than to its container: .ui-input is
+      // full-width because a text field usually should be, and a select
+      // usually should not
+      style={{ width: 'auto', cursor: 'pointer', textAlign: 'left', ...rest.style }}
     />
   );
 }

@@ -9,10 +9,16 @@ interface ButtonProps extends Omit<ComponentPropsWithRef<'button'>, 'children'> 
   /** Fills its container — a dialog's buttons, where the row is the measure */
   block?: boolean;
   /**
-   * Swaps the label for a spinner and stops the button being pressed again.
-   * Every busy button in the app used to write this out itself, which is why
-   * there were nine spinners in four sizes and two of them were the wrong
-   * colour for the button they were sitting on.
+   * Covers the label with a spinner and stops the button being pressed again.
+   *
+   * Covers rather than replaces: the label stays in the layout, holding the
+   * width it had. Swapping it out shrinks the button to the size of a spinner
+   * the moment it is pressed, which moves everything beside it — and pressing
+   * a button should never be what rearranges the row it is in.
+   *
+   * Every busy button used to write this out itself, which is how there came to
+   * be nine spinners in four sizes, two of them the wrong colour for the button
+   * they were sitting on.
    */
   loading?: boolean;
   children?: ReactNode;
@@ -44,8 +50,20 @@ export function Button({
       data-size={size}
       data-block={block ? 'true' : undefined}
       disabled={disabled || loading}
+      data-loading={loading ? 'true' : undefined}
     >
-      {loading ? <Spinner size={size === 'lg' ? 15 : 14} on={variant === 'accent' ? 'accent' : undefined} /> : children}
+      {loading ? (
+        <>
+          <span className="ui-btn-label" aria-hidden>
+            {children}
+          </span>
+          <span className="ui-btn-spinner">
+            <Spinner size={size === 'lg' ? 15 : 14} on={variant === 'accent' ? 'accent' : undefined} />
+          </span>
+        </>
+      ) : (
+        children
+      )}
     </button>
   );
 }
