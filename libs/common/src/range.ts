@@ -20,6 +20,13 @@ const EMPTY_SIDE = 0.005; // a side under 0.5% of the position has effectively b
 
 export function rangeFromLegs(legs: ScanPositionToken[]): PositionRange | null {
   const supplied = legs.filter((leg) => leg.role === 'supply');
+  // One side and nothing else: the price crossed a bound and the position has
+  // been converted whole into the token it is now holding. That is the state
+  // the paragraph above defines as out of range — and it is the state the old
+  // `!== 2` guard threw away, because a source reporting a position that holds
+  // one token reports one leg, not two with a zero. Which is to say this
+  // function refused to answer in exactly the case it exists to answer.
+  if (supplied.length === 1) return 'out';
   if (supplied.length !== 2) return null; // not a pair — we can't tell, so we don't guess
   const values = supplied.map((leg) => Math.abs(leg.valueUsd));
   const total = values[0] + values[1];

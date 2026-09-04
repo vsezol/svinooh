@@ -404,6 +404,13 @@ export interface ScanPosition {
   /** Extra detail: pool/market name, the protocol's own description */
   note?: string | null;
   /**
+   * What the source calls THIS position, where it calls it anything — DeBank's
+   * `position_index`. Never shown; it exists so a fact read straight from the
+   * protocol can be matched to the right position when a wallet holds two in
+   * the same pool, which the pair alone cannot distinguish. See PoolFact.ref.
+   */
+  ref?: string | null;
+  /**
    * The network this sits on, as the source names it: `eth`, `arb`, `base`,
    * `op`, `sol`, `tron`, `btc`.
    *
@@ -596,6 +603,13 @@ export interface PositionLoan {
 export interface PoolFact {
   /** Stable across cycles: the protocol's own address for this position */
   id: string;
+  /**
+   * The bare identifier the SOURCE would also know this position by — a
+   * Uniswap V3 NFT token id, a Solana position address. `id` is namespaced and
+   * only ever compared with itself; this is what a scanned position's `ref` is
+   * matched against when one pair holds two positions.
+   */
+  ref?: string | null;
   platform: 'orca' | 'meteora' | 'uniswap';
   /** The pair, upper-cased and ordered, e.g. "CBBTC|USDC" — how a fact finds its position */
   pair: string;

@@ -135,6 +135,10 @@ export function itemPositions(project: DebankProject): ScanPosition[] {
       platform: project.id || 'debank',
       category: STAKED_KINDS.test(item.name || '') ? 'staked' : 'defi',
       healthRate: typeof detail.health_rate === 'number' ? detail.health_rate : null,
+      // The same field that says this position HAS a range also says which
+      // position it is — for Uniswap V3 it is the NFT's token id, which is what
+      // the on-chain reader knows its facts by
+      ref: item.position_index !== undefined ? String(item.position_index) : null,
       range: item.position_index !== undefined ? rangeFromLegs(tokens) : null,
       tokens,
     });
