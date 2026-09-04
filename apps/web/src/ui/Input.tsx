@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ComponentPropsWithRef, InputHTMLAttributes } from 'react';
+import type { InputHTMLAttributes } from 'react';
 
 interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
   size?: 'md' | 'lg';
@@ -22,25 +22,6 @@ export function Input({ size = 'lg', shape = 'pill', mono, invalid, ...rest }: I
       data-shape={shape}
       data-mono={mono ? 'true' : undefined}
       data-invalid={invalid ? 'true' : undefined}
-    />
-  );
-}
-
-/** One of a fixed few, in the same box an Input comes in. */
-export function Select({
-  size = 'md',
-  ...rest
-}: Omit<ComponentPropsWithRef<'select'>, 'size'> & { size?: 'md' | 'lg' }) {
-  return (
-    <select
-      {...rest}
-      className={['ui-input', rest.className].filter(Boolean).join(' ')}
-      data-size={size}
-      data-shape="box"
-      // Sized to its content rather than to its container: .ui-input is
-      // full-width because a text field usually should be, and a select
-      // usually should not
-      style={{ width: 'auto', cursor: 'pointer', textAlign: 'left', ...rest.style }}
     />
   );
 }

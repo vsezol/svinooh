@@ -87,8 +87,9 @@ function Card({
       ) : null}
       {/* Above the chart but transparent to it: the text is read, never hit.
           The bottom padding is the lane the line usually runs in — the text
-          stays out of it, and a card without a line yet doesn't reserve one */}
-      <div style={{ position: 'relative', padding: hasLine ? '18px 20px 64px' : '18px 20px', pointerEvents: 'none' }}>
+          stays out of it, and a card without a line yet doesn't reserve one.
+          ph-mask: the figures are money — session replay stores asterisks */}
+      <div className="ph-mask" style={{ position: 'relative', padding: hasLine ? '18px 20px 64px' : '18px 20px', pointerEvents: 'none' }}>
         <div className="mono" style={{ fontSize: 'var(--fs-tag)', letterSpacing: '0.16em', color: 'var(--mut)' }}>
           {label}
         </div>

@@ -9,6 +9,11 @@ FROM node:22-alpine AS build
 WORKDIR /app
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# The PostHog project key — public by design (it can only write events), but
+# inlined at build time like every NEXT_PUBLIC_ variable. Absent, the build is
+# simply a build without analytics.
+ARG NEXT_PUBLIC_POSTHOG_KEY
+ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
 
 COPY package.json package-lock.json nx.json tsconfig.base.json ./
 COPY apps/web/package.json apps/web/

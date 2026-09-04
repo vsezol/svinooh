@@ -8,7 +8,7 @@ import type { Payment, Prisma } from '@prisma/client';
 import { BILLING_QUEUE, RabbitService, setting } from '@svinooh/common';
 import type { BillingMeDto, BillingNotice, CheckoutDto } from '@svinooh/shared';
 import { PrismaService } from '@svinooh/db';
-import { randomSlug } from '../common/util';
+import { randomUUID } from 'node:crypto';
 import { config } from '../config';
 import { NowPaymentsClient, paymentStatusOf } from './nowpayments.client';
 import { addMonths, utcDay } from './premium';
@@ -94,7 +94,9 @@ export class BillingService {
       data: {
         userId,
         provider: 'nowpayments',
-        orderId: `pro_${randomSlug(16)}`,
+        // Opaque on purpose: an order id leaks into gateway dashboards and
+        // webhook logs, and portfolio slugs went wordy — money stays boring
+        orderId: `pro_${randomUUID()}`,
         months: 1,
         priceUsd,
       },

@@ -25,6 +25,15 @@ export class PortfolioController {
   }
 
   /**
+   * What the search dropdown shows for a pasted address: network, cached value,
+   * and the anonymous portfolio it already opens as — without creating anything.
+   */
+  @Get('lookup')
+  lookupAddress(@Query('address') address?: string) {
+    return this.portfolios.lookupAddress(address ?? '');
+  }
+
+  /**
    * Open a wallet address as a portfolio, creating an ownerless one if nobody is
    * tracking it yet. No sign-in: the result belongs to nobody and carries no
    * user data.
@@ -72,6 +81,17 @@ export class PortfolioController {
     @Body() body: { isPublic?: boolean },
   ) {
     return this.portfolios.setVisibility(slug, userId, body?.isPublic === true);
+  }
+
+  /** The owner's "hide small balances" switch, remembered across sessions */
+  @Patch(':slug/hide-small-balances')
+  @UseGuards(RequiredAuthGuard)
+  setHideSmallBalances(
+    @Param('slug') slug: string,
+    @CurrentUserId() userId: string,
+    @Body() body: { hideSmallBalances?: boolean },
+  ) {
+    return this.portfolios.setHideSmallBalances(slug, userId, body?.hideSmallBalances === true);
   }
 
   /**
