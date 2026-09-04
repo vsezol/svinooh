@@ -33,6 +33,20 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  /**
+   * The same scans, seen from the pacing model: which lane was this check on.
+   * `active` is the fast tier — somebody has the portfolio open and the address
+   * is re-read every few minutes; `stale` is the slow lane; `first` is the
+   * urgent scan of a freshly pasted address. Incremented only by the wallet
+   * service, where the result is applied and the lane is known.
+   */
+  readonly scanChecks = new Counter({
+    name: 'svinooh_scan_checks_total',
+    help: 'Scan results by the pacing tier that scheduled them',
+    labelNames: ['tier', 'result'] as const, // tier: first | active | stale
+    registers: [this.registry],
+  });
+
   readonly cacheOps = new Counter({
     name: 'svinooh_cache_ops_total',
     help: 'Portfolio cache operations',

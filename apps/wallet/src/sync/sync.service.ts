@@ -83,6 +83,23 @@ export class SyncService {
   }
 
   /**
+   * Which lane this address is being checked on, read the same way schedule()
+   * decides it: never synced — `first`; a holding portfolio opened within the
+   * active window — `active`, the fast tier; otherwise `stale`. Asked at
+   * result time for the metric, so "how often does the fast lane fire" is a
+   * number on a dashboard rather than a guess from wallet counts.
+   */
+  async tierOf(wallet: Wallet): Promise<'first' | 'active' | 'stale'> {
+    if (wallet.lastSyncedAt === null) return 'first';
+    const activeSince = new Date(Date.now() - setting('sync.staleAfterMin') * 60_000);
+    const holder = await this.prisma.portfolioWallet.findFirst({
+      where: { walletId: wallet.id, portfolio: { lastViewedAt: { gte: activeSince } } },
+      select: { walletId: true },
+    });
+    return holder ? 'active' : 'stale';
+  }
+
+  /**
    * Hold these addresses for the length of a scan, so the next top-up does not
    * dispatch them again while they are still in the queue.
    *
