@@ -243,7 +243,8 @@ GET    /api/auth/me                           🔒
 
 GET    /api/portfolios/public?limit=&q=       — leaderboard/search of public portfolios (landing)
 GET    /api/portfolios/:slug                  — public; with a token it returns isOwner
-PATCH  /api/portfolios/:slug                  🔒 { name }
+PATCH  /api/portfolios/:slug                  🔒 { name } → { name, slug } — the slug follows
+                                                the name, so a rename moves the /p/ link
 GET    /api/portfolios/:slug/history?range=24h|7d|30d|all
 POST   /api/portfolios/anonymous              — { address } → open a wallet as a portfolio
                                                 that belongs to nobody, creating it if needed

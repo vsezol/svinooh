@@ -3,6 +3,7 @@ export * from './scan-contract';
 export * from './rabbit/rabbit.service';
 export * from './rabbit/rabbit.module';
 export * from './util';
+export * from './slug';
 export * from './range';
 export * from './defi-facts';
 export * from './scan-hold';

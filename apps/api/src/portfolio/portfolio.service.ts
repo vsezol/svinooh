@@ -28,12 +28,12 @@ import type {
   WalletDto,
   WalletSyncStatus,
 } from '@svinooh/shared';
-import { randomSlug, round2 } from '../common/util';
+import { round2 } from '../common/util';
 import { config } from '../config';
 import { PrismaService } from '@svinooh/db';
 import { detectChain, normalizeAddress } from '../scanners/detect';
 import { CacheService } from '../cache/cache.service';
-import { setting } from '@svinooh/common';
+import { RESERVED_SLUGS, setting, slugifyName, wordSlug } from '@svinooh/common';
 
 /**
  * A wallet as a portfolio holds it: the address and its readings, plus the
@@ -407,14 +407,11 @@ export class PortfolioService {
     if (existing) return { slug: existing.slug };
 
     const wallet = await this.upsertAddress(chain, address);
-    const portfolio = await this.prisma.portfolio.create({
-      data: {
-        // No name: a portfolio is identified by its slug. Naming it after the
-        // wallet it currently holds would be wrong the moment a second wallet
-        // joins — the whole point of a portfolio is that it aggregates.
-        slug: randomSlug(),
-        wallets: { create: { walletId: wallet.id } },
-      },
+    // No name: a portfolio is identified by its slug. Naming it after the
+    // wallet it currently holds would be wrong the moment a second wallet
+    // joins — the whole point of a portfolio is that it aggregates.
+    const portfolio = await this.createWithSlug({
+      wallets: { create: { walletId: wallet.id } },
     });
     // Only if nobody has scanned this address before — an address already known
     // to another portfolio arrives with its value and needs no queue jump
@@ -571,10 +568,26 @@ export class PortfolioService {
    * owner's to write.
    */
   async createOwned(userId: string): Promise<{ slug: string }> {
-    const portfolio = await this.prisma.portfolio.create({
-      data: { slug: randomSlug(), owner: { create: { userId } } },
-    });
+    const portfolio = await this.createWithSlug({ owner: { create: { userId } } });
     return { slug: portfolio.slug };
+  }
+
+  /**
+   * Create a portfolio under a fresh word slug. The words give ~260k
+   * combinations, which is readable but not collision-proof — so the unique
+   * constraint is the arbiter and a hit just deals a new hand (with digits
+   * joining after a couple of misses; see wordSlug).
+   */
+  private async createWithSlug(data: Omit<Prisma.PortfolioCreateInput, 'slug'>): Promise<Portfolio> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.prisma.portfolio.create({ data: { ...data, slug: wordSlug(attempt) } });
+      } catch (err) {
+        const collision =
+          err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
+        if (!collision || attempt >= 5) throw err;
+      }
+    }
   }
 
   async claim(slug: string, userId: string): Promise<{ slug: string }> {
@@ -683,13 +696,65 @@ export class PortfolioService {
     return toAlertsDto(walletId, saved);
   }
 
-  /** Set or clear the portfolio's name. Empty clears it — back to just the slug. */
-  async rename(slug: string, userId: string, nameRaw: string): Promise<{ name: string | null }> {
+  /**
+   * Set or clear the portfolio's name. Empty clears it — back to just the slug.
+   *
+   * The slug follows the name: calling it "DeFi Long Game" moves the portfolio
+   * to /p/defi-long-game, because a link that says what it points at is the
+   * point of naming it. The cost is honest and accepted: the old link stops
+   * working the moment the owner renames — their own shared links included.
+   * Clearing the name keeps the current slug; a working link beats a fresh
+   * coat of random words.
+   */
+  async rename(
+    slug: string,
+    userId: string,
+    nameRaw: string,
+  ): Promise<{ name: string | null; slug: string }> {
     const portfolio = await this.requireOwned(slug, userId);
     const name = String(nameRaw || '').trim().slice(0, 64) || null;
-    await this.prisma.portfolio.update({ where: { id: portfolio.id }, data: { name } });
+
+    let nextSlug = portfolio.slug;
+    if (name) {
+      const base = slugifyName(name);
+      if (!base) {
+        throw new BadRequestException('The name needs some English letters or digits — they become the link');
+      }
+      if (base !== portfolio.slug) nextSlug = await this.vacantSlug(base, portfolio.id);
+    }
+
+    try {
+      await this.prisma.portfolio.update({
+        where: { id: portfolio.id },
+        data: { name, slug: nextSlug },
+      });
+    } catch (err) {
+      // Somebody grabbed the slug between the check and the write
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException('That name is taken — try another');
+      }
+      throw err;
+    }
     await this.cache.del(cacheKey(slug));
-    return { name };
+    return { name, slug: nextSlug };
+  }
+
+  /**
+   * The name's slug, or the nearest free variant of it: base, base-2, base-3…
+   * Route literals count as taken — a portfolio at /p/public would shadow the
+   * public listing (see the controller's route-order note).
+   */
+  private async vacantSlug(base: string, selfId: string): Promise<string> {
+    for (let n = 1; n <= 50; n++) {
+      const candidate = n === 1 ? base : `${base}-${n}`;
+      if (RESERVED_SLUGS.has(candidate)) continue;
+      const holder = await this.prisma.portfolio.findUnique({
+        where: { slug: candidate },
+        select: { id: true },
+      });
+      if (!holder || holder.id === selfId) return candidate;
+    }
+    throw new ConflictException('That name is taken — try another');
   }
 
   /**

@@ -13,6 +13,7 @@ import { ClaimModal } from '../components/ClaimModal';
 import { Logo } from '../components/Logo';
 import { MetricCards } from '../components/MetricCards';
 import { GoPublicModal, VisibilityCard } from '../components/PortfolioVisibility';
+import { PortfolioName } from '../components/PortfolioName';
 import { PortfolioSwitcher } from '../components/PortfolioSwitcher';
 import { ScopeSelect } from '../components/ScopeSelect';
 import { ShareButton } from '../components/ShareButton';
@@ -176,7 +177,7 @@ function useHistory(slug: string, scope: string, period: HistoryRange, refreshKe
 
 export function PortfolioPage({ slug }: { slug: string }) {
   const router = useRouter();
-  const { me, config, logout } = useAuth();
+  const { me, config, logout, refreshMe } = useAuth();
   const { data, error, reload } = usePortfolio(slug, me?.id ?? null);
 
   const [tab, setTab] = useState<Tab>('portfolio');
@@ -321,6 +322,30 @@ export function PortfolioPage({ slug }: { slug: string }) {
       await reload();
     } catch {
       // didn't save — the previous name comes back on the next reload
+    }
+  };
+
+  /**
+   * The name pulls the slug with it: a successful rename usually means this
+   * page's own URL is stale, so we follow the portfolio to its new address.
+   * The switcher and me.portfolioSlug read from /auth/me — refreshed first, or
+   * the page we land on would list this portfolio under its old link.
+   */
+  const renamePortfolio = async (name: string) => {
+    try {
+      const res = await api<{ name: string | null; slug: string }>(`/portfolios/${slug}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name }),
+      });
+      if (res.slug !== slug) {
+        await refreshMe();
+        router.replace(`/p/${res.slug}`);
+      } else {
+        await refreshMe();
+        await reload();
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not rename');
     }
   };
 
@@ -557,8 +582,14 @@ export function PortfolioPage({ slug }: { slug: string }) {
             <div className="pane" data-active={activeTab === 'portfolio'}>
             {/* total */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+                <div style={{ minWidth: 0 }}>
+                  <PortfolioName
+                    name={data.name}
+                    slug={data.slug}
+                    editable={isOwner}
+                    onRename={(name) => void renamePortfolio(name)}
+                  />
                   <Eyebrow>
                     {selectedWallet ? 'WALLET BALANCE' : 'TOTAL BALANCE'} · {walletCount}{' '}
                     {walletCount === 1 ? 'WALLET' : 'WALLETS'}
