@@ -5,13 +5,13 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Payment, Prisma } from '@prisma/client';
-import { BILLING_QUEUE, RabbitService, setting } from '@svinooh/common';
+import { BILLING_QUEUE, option, RabbitService, setting } from '@svinooh/common';
 import type { BillingMeDto, BillingNotice, CheckoutDto } from '@svinooh/shared';
 import { PrismaService } from '@svinooh/db';
 import { randomUUID } from 'node:crypto';
 import { config } from '../config';
 import { NowPaymentsClient, paymentStatusOf } from './nowpayments.client';
-import { addMonths, utcDay } from './premium';
+import { addMonths, coinLock, utcDay } from './premium';
 import { PremiumService } from './premium.service';
 
 /**
@@ -47,6 +47,33 @@ export class BillingService {
       firstMonth,
       priceUsd: firstMonth ? setting('billing.firstMonthUsd') : setting('billing.proPriceUsd'),
     };
+  }
+
+  /** code → its USD minimum as last read, believed for half an hour — fees drift, not spike */
+  private readonly minKnown = new Map<string, { usd: number | null; at: number }>();
+
+  /**
+   * The coin the billing.payCoin knob locks this invoice to, or null for the
+   * gateway's open page — including when the knob's coin cannot carry the
+   * price. The operator hears about that in the log, the payer never does:
+   * their checkout simply offers the full list instead of a dead invoice.
+   */
+  private async lockFor(priceUsd: number): Promise<string | null> {
+    const coin = option('billing.payCoin');
+    if (coin === 'page') return null;
+    const known = this.minKnown.get(coin);
+    let minUsd = known !== undefined && Date.now() - known.at < 30 * 60_000 ? known.usd : undefined;
+    if (minUsd === undefined) {
+      minUsd = await this.nowpayments.minAmountUsd(coin).catch(() => null);
+      this.minKnown.set(coin, { usd: minUsd, at: Date.now() });
+    }
+    const lock = coinLock(coin, minUsd, priceUsd);
+    if (lock === null) {
+      this.logger.warn(
+        `billing.payCoin=${coin} cannot carry ${priceUsd} usd (network minimum ${minUsd ?? 'unknown'}) — falling back to the gateway's own coin page`,
+      );
+    }
+    return lock;
   }
 
   async me(userId: string): Promise<BillingMeDto> {
@@ -90,16 +117,19 @@ export class BillingService {
    * finished a payment. The Payment row exists BEFORE the gateway hears the
    * order id, so its webhook can never name an order we do not know.
    *
-   * Which coins the invoice offers is the gateway's page's business: the list
-   * is curated in the NOWPayments dashboard, and their page hides by itself
-   * any coin whose network minimum does not fit the amount (USDT-TRC20 sits
-   * above 11 USD as of 2026-09, which is why this is worth knowing).
+   * Which coin the invoice opens on is the billing.payCoin tunable: 'page'
+   * hands the choice to the gateway's own page (its list is curated in the
+   * NOWPayments dashboard, and it hides sub-minimum coins by itself); a coin
+   * locks the invoice to it — checked against its live network minimum first,
+   * because a lock below the minimum is a dead invoice (USDT-TRC20 sits above
+   * 11 USD as of 2026-09), and falling back to the open page is never wrong.
    */
   async checkout(userId: string): Promise<CheckoutDto> {
     if (!this.nowpayments.enabled) {
       throw new ServiceUnavailableException('Payments are not configured yet');
     }
     const { priceUsd, firstMonth } = await this.nextPriceUsd(userId);
+    const lock = await this.lockFor(priceUsd);
 
     const payment = await this.prisma.payment.create({
       data: {
@@ -110,6 +140,9 @@ export class BillingService {
         orderId: `pro_${randomUUID()}`,
         months: 1,
         priceUsd,
+        // What the invoice is locked to; the webhook overwrites it with what
+        // was actually paid
+        payCurrency: lock,
       },
     });
 
@@ -118,6 +151,7 @@ export class BillingService {
         priceUsd,
         orderId: payment.orderId,
         description: firstMonth ? 'Svinooh.Pro — first month' : 'Svinooh.Pro — 1 month',
+        payCurrency: lock,
         ipnUrl: config.publicApiUrl
           ? `${config.publicApiUrl}/api/billing/webhook/nowpayments`
           : null,

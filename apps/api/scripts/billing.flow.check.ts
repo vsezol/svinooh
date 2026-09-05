@@ -35,19 +35,30 @@ interface SeenRequest {
 
 async function main(): Promise<void> {
   /* ── a NOWPayments that lives on localhost ── */
+  // Minimums as the real gateway prices them as of 2026-09: TRON priced out
+  // of a small invoice, TON comfortably inside it
+  const MINS: Record<string, number> = { usdtton: 0.19, usdttrc20: 11.32 };
   const seen: SeenRequest[] = [];
+  let invoiceN = 0;
   const fake = createServer((req, res) => {
     let raw = '';
     req.on('data', (chunk) => (raw += chunk));
     req.on('end', () => {
+      const url = new URL(req.url ?? '/', 'http://fake');
       seen.push({
-        path: req.url ?? '',
+        path: url.pathname,
         apiKey: req.headers['x-api-key'] as string | undefined,
         body: raw ? (JSON.parse(raw) as Record<string, unknown>) : {},
       });
       res.setHeader('content-type', 'application/json');
+      if (url.pathname === '/v1/min-amount') {
+        const code = url.searchParams.get('currency_from') ?? '';
+        res.end(JSON.stringify({ currency_from: code, fiat_equivalent: MINS[code] ?? 999 }));
+        return;
+      }
+      invoiceN++;
       res.end(
-        JSON.stringify({ id: `inv-${seen.length}`, invoice_url: `https://fake.gateway/pay/inv-${seen.length}` }),
+        JSON.stringify({ id: `inv-${invoiceN}`, invoice_url: `https://fake.gateway/pay/inv-${invoiceN}` }),
       );
     });
   });
@@ -56,6 +67,7 @@ async function main(): Promise<void> {
 
   /* ── the environment, before any module reads it ── */
   process.env.BILLING_ENFORCE = 'on'; // the gates are half of what is bought
+  process.env.BILLING_PAY_COIN = 'usdtton'; // the knob under test: lock invoices to TON
   process.env.NOWPAYMENTS_API_KEY = 'check-key';
   process.env.NOWPAYMENTS_IPN_SECRET = 'check-secret';
   process.env.NOWPAYMENTS_API_URL = `http://127.0.0.1:${port}/v1`;
@@ -106,14 +118,26 @@ async function main(): Promise<void> {
 
     const co1 = await billing.checkout(a.id);
     const pay1 = await prisma.payment.findFirstOrThrow({ where: { userId: a.id } });
+    const inv1 = seen.find((s) => s.path === '/v1/invoice');
+    if (!inv1) throw new Error('no invoice request reached the fake gateway');
     check('первый чекаут — цена первого месяца', pay1.priceUsd, setting('billing.firstMonthUsd'));
     check('строка платежа ждёт и помнит счёт', [pay1.status, pay1.provider, pay1.invoiceUrl !== null], ['waiting', 'nowpayments', true]);
     check(
       'в шлюз ушли наши цифры под нашим ключом',
-      [seen[0].path, seen[0].apiKey, seen[0].body.price_amount, seen[0].body.price_currency, seen[0].body.order_id],
-      ['/v1/invoice', 'check-key', setting('billing.firstMonthUsd'), 'usd', pay1.orderId],
+      [inv1.apiKey, inv1.body.price_amount, inv1.body.price_currency, inv1.body.order_id],
+      ['check-key', setting('billing.firstMonthUsd'), 'usd', pay1.orderId],
     );
     check('юзеру отдана ссылка шлюза', co1.url, 'https://fake.gateway/pay/inv-1');
+    check(
+      'ручка payCoin: минималка TON влезла — инвойс заперт на TON, и строка это помнит',
+      [inv1.body.pay_currency, pay1.payCurrency],
+      ['usdtton', 'usdtton'],
+    );
+    check(
+      'минималка спрошена у шлюза один раз и закэширована',
+      seen.filter((s) => s.path === '/v1/min-amount').length,
+      1,
+    );
 
     /* ── the finished webhook: one month, exactly once ── */
 
