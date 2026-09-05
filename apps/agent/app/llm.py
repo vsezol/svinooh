@@ -30,6 +30,22 @@ def get_model() -> BaseChatModel:
     )
 
 
+@lru_cache(maxsize=1)
+def get_router_model() -> BaseChatModel:
+    """The model that labels turns (app/intent.py).
+
+    Routers ride the cheapest model that labels reliably — their output is a
+    dozen tokens, so intelligence is bought where it matters and pennies are
+    spent where it does not. Defaults to the main model (already the cheap
+    tier); AGENT_ROUTER_MODEL overrides it independently.
+    """
+    return init_chat_model(
+        settings.router_model or settings.model,
+        max_tokens=200,
+        timeout=settings.request_timeout_s,
+    )
+
+
 def extract_text(reply: BaseMessage) -> str:
     """The reply's text, whatever shape it arrived in.
 

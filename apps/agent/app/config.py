@@ -27,6 +27,9 @@ class Settings:
     # new value here plus that provider's langchain package, not a code change.
     # Haiku while we iterate: fast and cheap, and every experiment is billed.
     model: str = os.getenv("AGENT_MODEL", "anthropic:claude-haiku-4-5")
+    # The intent classifier's model (app/intent.py). Empty — same as `model`;
+    # set it when the router should ride a cheaper tier than the answers do.
+    router_model: str = os.getenv("AGENT_ROUTER_MODEL", "")
     system_prompt: str = os.getenv("AGENT_SYSTEM", DEFAULT_SYSTEM_PROMPT)
     max_tokens: int = int(os.getenv("AGENT_MAX_TOKENS", "1024"))
     request_timeout_s: int = int(os.getenv("AGENT_TIMEOUT_S", "60"))
