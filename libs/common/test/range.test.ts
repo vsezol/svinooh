@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { describe, test } from 'node:test';
-import type { DefiFacts, PoolFact, ScanPosition, ScanPositionToken } from '@svinooh/shared';
+import type { DefiFacts, LendingFact, PoolFact, ScanPosition, ScanPositionToken } from '@svinooh/shared';
 import { hasRange, rangeFromLegs } from '../src/range';
 import { enrich } from '../src/defi-facts';
 
@@ -192,5 +192,76 @@ describe('enrich — finding the pool a position belongs to', () => {
     );
     assert.equal(p.band, undefined);
     assert.equal(rangeFromLegs([leg('USDC', 'supply', 10_000)]), 'out');
+  });
+});
+
+
+describe('enrich — what a loan costs is the lending protocol\'s own number', () => {
+  const loanFact = (over: Partial<LendingFact> = {}): LendingFact =>
+    ({
+      id: 'kamino:market:reserve',
+      platform: 'kamino',
+      market: 'SOL/BTC Market',
+      token: 'USDT',
+      healthFactor: 2.5,
+      borrowRate: 5.01,
+      ...over,
+    }) as LendingFact;
+  const facts = (lending: LendingFact[]): DefiFacts => ({ pools: [], lending }) as DefiFacts;
+
+  /**
+   * The wild-caught case: Jupiter priced a Kamino USDT loan at 7.8% APR
+   * (stored as ~8.1% effective) while Kamino's own API, the owner's day of
+   * accrued interest and Kamino's own interface all said 5.0%. The protocol's
+   * rate replaces the aggregator's — on the position AND on the borrowed leg,
+   * which is what the visible "USDT · 8.1%" was printed from.
+   */
+  test('the protocol rate replaces the aggregator rate, leg included', () => {
+    const [p] = enrich(
+      [
+        position({
+          name: 'Lending',
+          borrowApy: 0.0807,
+          healthRate: 2.51,
+          tokens: [
+            leg('cbBTC', 'supply', 8_600),
+            { ...leg('USDT', 'borrow', -3_000), apy: 0.0807 },
+          ],
+        }),
+      ],
+      facts([loanFact()]),
+    );
+    assert.equal(p.borrowApy, 0.0501);
+    const borrowLeg = (p.tokens ?? []).find((t) => t.role === 'borrow')!;
+    assert.equal(borrowLeg.apy, 0.0501);
+    // the aggregator's health survives — it was present, and the fact only fills
+    assert.equal(p.healthRate, 2.51);
+    // and the supply leg is nobody's loan
+    assert.equal((p.tokens ?? []).find((t) => t.role === 'supply')!.apy, undefined);
+  });
+
+  test('no matching fact leaves the aggregator rate alone', () => {
+    const [p] = enrich(
+      [position({ name: 'Lending', borrowApy: 0.0807, tokens: [{ ...leg('USDC', 'borrow', -100), apy: 0.0807 }] })],
+      facts([loanFact()]), // fact is about USDT, position borrows USDC
+    );
+    assert.equal(p.borrowApy, 0.0807);
+  });
+
+  test('two facts about the same token cannot pick a side', () => {
+    const [p] = enrich(
+      [position({ name: 'Lending', borrowApy: 0.0807, tokens: [leg('USDT', 'borrow', -100)] })],
+      facts([loanFact(), loanFact({ id: 'kamino:other:reserve', market: 'Main Market', borrowRate: 9.9 })]),
+    );
+    assert.equal(p.borrowApy, 0.0807);
+  });
+
+  test('a fact with no rate still names the market and touches nothing else', () => {
+    const [p] = enrich(
+      [position({ name: 'Lending', borrowApy: 0.0807, tokens: [leg('USDT', 'borrow', -100)] })],
+      facts([loanFact({ borrowRate: null })]),
+    );
+    assert.equal(p.borrowApy, 0.0807);
+    assert.equal(p.loan?.market, 'SOL/BTC Market');
   });
 });
