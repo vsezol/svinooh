@@ -15,7 +15,15 @@ export const metadata: Metadata = {
   twitter: { card: 'summary_large_image', title: TITLE, description: DESCRIPTION },
 };
 
+// The same four families the lead names, in the same order a paste is
+// detected. EVM's row points down the page — its story is the network list —
+// while the other three link out to their own pages.
 const FAMILIES = [
+  {
+    href: '#evm',
+    name: 'EVM',
+    line: 'Every network the position indexes cover — sixty-plus, Ethereum to Berachain. The full list is below.',
+  },
   {
     href: '/chains/solana',
     name: 'Solana',
@@ -30,11 +38,6 @@ const FAMILIES = [
     href: '/chains/bitcoin',
     name: 'Bitcoin',
     line: 'Address balances, confirmed and pending, counted in the same total as everything else.',
-  },
-  {
-    href: '/chains/hyperliquid',
-    name: 'Hyperliquid',
-    line: 'Full account value — perps margin, spot, staked HYPE, vaults — read from the same EVM address.',
   },
 ];
 
@@ -93,7 +96,7 @@ export default function ChainsPage() {
         </div>
       </Section>
 
-      <Section title="EVM networks">
+      <Section title="EVM networks" id="evm">
         <P>
           EVM coverage follows the position indexes svinooh reads from, so it is broad by construction — sixty-plus
           networks in practice — rather than a hand-kept allowlist. The ones people ask about:
@@ -118,6 +121,10 @@ export default function ChainsPage() {
             </span>
           ))}
         </div>
+        <P>
+          One EVM corner earns its own page: <Link href="/chains/hyperliquid">Hyperliquid</Link> — the full account
+          value most trackers silently skip, read from the same address as your wallet.
+        </P>
       </Section>
 
       <Cta />

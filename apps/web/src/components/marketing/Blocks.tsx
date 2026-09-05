@@ -34,9 +34,9 @@ export function PageIntro({ eyebrow, title, lead }: { eyebrow: string; title: st
   );
 }
 
-export function Section({ title, children }: { title: string; children: React.ReactNode }) {
+export function Section({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
-    <section style={{ marginTop: 40 }}>
+    <section id={id} style={{ marginTop: 40, scrollMarginTop: 70 }}>
       <h2 style={{ margin: 0, fontWeight: 'var(--fw-heavy)', fontSize: 'var(--fs-display)', letterSpacing: 'var(--tr-tight)' }}>
         {title}
       </h2>
