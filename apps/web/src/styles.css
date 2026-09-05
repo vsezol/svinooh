@@ -496,10 +496,13 @@ body[data-theme='light'] .on-dark {
   }
 }
 
-/* ── /pro — the Pro page's own fabric ─────────────────────────────────────
-   The marketing screen follows the design file at its two anchor widths
-   (1440 and 390) and stays fluid in between. Classes rather than inline
-   styles only where a media query or a keyframe needs a home. */
+/* ── /pro — the Pro page on the site's grid ───────────────────────────────
+   The marketing screen keeps the design file's look but lives on the same
+   fabric as every other page: the .shell container (1120px + the clamped
+   gutters) and the standard 58px header. Type that the design fixed at the
+   1440 anchor scales with the viewport instead, so nothing overflows on the
+   widths in between. Classes rather than inline styles only where a media
+   query or a keyframe needs a home. */
 
 .pro-dots {
   position: relative;
@@ -517,23 +520,19 @@ body[data-theme='light'] .on-dark {
   pointer-events: none;
 }
 
-.pro-pad {
-  padding-left: 48px;
-  padding-right: 48px;
-}
-
 .pro-hero {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 480px;
-  gap: 80px;
-  padding: 96px 48px 88px;
+  grid-template-columns: minmax(0, 1fr) minmax(380px, 440px);
+  gap: clamp(36px, 5vw, 64px);
+  padding-top: clamp(48px, 7vw, 88px);
+  padding-bottom: clamp(40px, 6vw, 80px);
   align-items: center;
 }
 
 .pro-h1 {
   margin: 26px 0 0;
-  font-size: 88px;
+  font-size: clamp(44px, 6.8vw, 88px);
   line-height: 0.94;
   font-weight: var(--fw-heavy);
   letter-spacing: -0.04em;
@@ -542,7 +541,7 @@ body[data-theme='light'] .on-dark {
 .pro-lede {
   margin: 30px 0 0;
   max-width: 540px;
-  font-size: 20px;
+  font-size: clamp(16px, 1.6vw, 20px);
   line-height: 1.45;
   color: var(--mut);
   text-wrap: pretty;
@@ -550,7 +549,7 @@ body[data-theme='light'] .on-dark {
 
 /* The one figure the page is about */
 .pro-price {
-  font-size: 96px;
+  font-size: clamp(64px, 9vw, 96px);
   font-weight: var(--fw-heavy);
   letter-spacing: -0.05em;
   line-height: 0.9;
@@ -640,15 +639,16 @@ body[data-theme='light'] .on-dark {
   .pro-hero {
     grid-template-columns: minmax(0, 1fr);
     gap: 36px;
-    padding: 40px 18px 26px;
+    padding-top: 36px;
+    padding-bottom: 26px;
+  }
+  /* Five abreast has no room here; three rows as 3 + 2 */
+  .pro-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 719px) {
-  .pro-pad {
-    padding-left: 18px;
-    padding-right: 18px;
-  }
   .pro-h1 {
     margin-top: 16px;
     font-size: 54px;
@@ -690,7 +690,8 @@ body[data-theme='light'] .on-dark {
     display: block;
     position: sticky;
     bottom: 0;
-    padding: 12px 18px calc(16px + env(safe-area-inset-bottom));
+    /* The same gutters the shell gives everything else */
+    padding: 12px clamp(14px, 3.5vw, 28px) calc(16px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--line);
     background: color-mix(in srgb, var(--bg) 88%, transparent);
     backdrop-filter: blur(14px);

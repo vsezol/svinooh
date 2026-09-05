@@ -5,7 +5,9 @@ import Link from 'next/link';
 import type { BillingMeDto, ProOfferDto, ProPaymentDto } from '@svinooh/shared';
 import { AuthModal } from '../components/AuthModal';
 import { Logo } from '../components/Logo';
+import { SiteFooter } from '../components/SiteFooter';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { Button, ButtonLink } from '../ui';
 import { track } from '../lib/analytics';
 import { ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -381,37 +383,25 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* The site's one header, exactly as the landing wears it — the page
+          below is the design's, the chrome above it is the app's */}
       <header
-        className="pro-pad app-header"
-        style={{ minHeight: 64, borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        className="shell app-header"
+        style={{ minHeight: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
-          <Link href="/" aria-label="svinooh home" style={{ display: 'flex', color: 'inherit', textDecoration: 'none' }}>
-            <Logo size={21} />
-          </Link>
-          <nav className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: 22, fontSize: 13, fontWeight: 'var(--fw-medium)', color: 'var(--mut)' }}>
-            <Link href={me ? `/p/${me.portfolioSlug}` : '/'} style={{ color: 'inherit', textDecoration: 'none' }}>
-              Portfolios
-            </Link>
-            <span style={{ color: 'var(--text)' }}>Pro</span>
-          </nav>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <Link href="/" aria-label="svinooh home" style={{ display: 'flex', color: 'inherit', textDecoration: 'none' }}>
+          <Logo size={19} />
+        </Link>
+        <div style={{ display: 'flex', gap: 8 }}>
           <ThemeToggle />
           {me ? (
-            <Link
-              href={`/p/${me.portfolioSlug}`}
-              style={{ height: 34, padding: '0 18px', border: '1px solid var(--line2)', borderRadius: 'var(--r-full)', display: 'flex', alignItems: 'center', fontSize: 13, fontWeight: 'var(--fw-bold)', color: 'var(--text)', textDecoration: 'none' }}
-            >
+            <ButtonLink size="sm" href={`/p/${me.portfolioSlug}`}>
               My portfolio
-            </Link>
+            </ButtonLink>
           ) : (
-            <button
-              onClick={() => setAuthOpen(true)}
-              style={{ height: 34, padding: '0 18px', border: '1px solid var(--line2)', background: 'transparent', borderRadius: 'var(--r-full)', display: 'flex', alignItems: 'center', fontSize: 13, fontWeight: 'var(--fw-bold)', color: 'var(--text)' }}
-            >
+            <Button size="sm" onClick={() => setAuthOpen(true)}>
               Sign in
-            </button>
+            </Button>
           )}
         </div>
       </header>
@@ -419,7 +409,7 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
       <main style={{ flex: 1 }}>
         <section className="pro-dots">
           <div className="pro-fade" />
-          <div className="pro-hero">
+          <div className="shell pro-hero">
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span className="pro-pulse" />
@@ -443,7 +433,7 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
         </section>
 
         {tiles.length > 0 ? (
-          <section className="pro-pad" style={{ paddingTop: 8 }}>
+          <section className="shell" style={{ paddingTop: 8 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', paddingBottom: 20 }}>
               <span className="mono" style={EYEBROW}>WHAT PRO UNLOCKS</span>
               <span className="mono hide-mobile" style={EYEBROW}>FREE STAYS FREE</span>
@@ -451,8 +441,11 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
             <div className="pro-tiles">
               {tiles.map((t) => (
                 <div key={t.label} className="pro-tile">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span className="mono" style={{ ...EYEBROW, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.label}</span>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                    {/* Wraps rather than ellipsizes: the shell is narrower than
+                        the design's 1440 anchor, and "AGENT QUESTI…" is worse
+                        than a second line */}
+                    <span className="mono" style={{ ...EYEBROW, lineHeight: 1.5 }}>{t.label}</span>
                     {t.soon ? (
                       <span
                         className="mono"
@@ -476,7 +469,7 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
         ) : null}
 
         {!pro && offer ? (
-          <section className="pro-pad" style={{ paddingTop: 64, paddingBottom: 80 }}>
+          <section className="shell" style={{ paddingTop: 'clamp(40px, 5vw, 64px)', paddingBottom: 'clamp(48px, 6vw, 80px)' }}>
             <div className="pro-closer">
               <div>
                 <div className="pro-closer-head">Start with ${first} today.</div>
@@ -490,9 +483,11 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
             </div>
           </section>
         ) : (
-          <div style={{ paddingBottom: 64 }} />
+          <div style={{ paddingBottom: 48 }} />
         )}
       </main>
+
+      <SiteFooter />
 
       {!pro && !waiting && offer ? <div className="pro-sticky">{ctaButton(ctaLabel)}</div> : null}
 
