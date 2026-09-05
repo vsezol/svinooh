@@ -51,6 +51,15 @@ const WRAPPED_SOL_MINT = 'So11111111111111111111111111111111111111112';
  * wobble, hopeless for a snapshot frozen since yesterday evening.
  */
 const PRICE_MAX_LAG_SLOTS = 1_500;
+/**
+ * How long the scan will wait for its referee, total. The reference fetch is
+ * one price call and one getSlot — but getSlot walks an RPC rotation that is
+ * allowed two rounds of three endpoints at 30s each, and the price call
+ * retries at 15s a try. Neither budget was written for an OPTIONAL step: a
+ * referee that has not answered in six seconds is not going to say anything
+ * worth delaying every Solana wallet in the queue for.
+ */
+const REFEREE_DEADLINE_MS = 6_000;
 const GM_INDEXER_API = 'https://gmx-solana-sqd.squids.live/gmx-solana-base:prod/api/graphql';
 const SOL_NATIVE_MINT = '11111111111111111111111111111111';
 
@@ -179,22 +188,31 @@ async function freshReferencePrices(mints: string[]): Promise<Map<string, number
   const fresh = new Map<string, number>();
   if (!mints.length) return fresh;
   try {
-    const [currentSlot, priced] = await Promise.all([
-      solanaRpc<number>('getSlot', []),
-      (async () => {
-        const out: Record<string, { usdPrice?: number; blockId?: number }> = {};
-        for (let i = 0; i < mints.length; i += 50) {
-          const chunk = mints.slice(i, i + 50);
-          Object.assign(
-            out,
-            await fetchJson<Record<string, { usdPrice?: number; blockId?: number }>>(
-              `${JUP_PRICE_API}?ids=${chunk.join(',')}`,
-            ),
-          );
-        }
-        return out;
-      })(),
+    const answers = await Promise.race([
+      Promise.all([
+        solanaRpc<number>('getSlot', []),
+        (async () => {
+          const out: Record<string, { usdPrice?: number; blockId?: number }> = {};
+          for (let i = 0; i < mints.length; i += 50) {
+            const chunk = mints.slice(i, i + 50);
+            Object.assign(
+              out,
+              await fetchJson<Record<string, { usdPrice?: number; blockId?: number }>>(
+                `${JUP_PRICE_API}?ids=${chunk.join(',')}`,
+                {},
+                { tries: 1, timeoutMs: REFEREE_DEADLINE_MS },
+              ),
+            );
+          }
+          return out;
+        })(),
+      ]),
+      // The deadline loses the race by RESOLVING, not rejecting: a late
+      // referee is an absent one, and absence is the quiet path below
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), REFEREE_DEADLINE_MS).unref?.()),
     ]);
+    if (!answers) return fresh;
+    const [currentSlot, priced] = answers;
     if (typeof currentSlot !== 'number') return fresh;
     for (const [mint, p] of Object.entries(priced)) {
       if (typeof p?.usdPrice !== 'number' || typeof p.blockId !== 'number') continue;
