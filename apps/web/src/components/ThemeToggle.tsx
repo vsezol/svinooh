@@ -1,3 +1,7 @@
+'use client';
+
+// The first client boundary a server-rendered page crosses on its way here:
+// the toggle reads the theme context, which exists only in the browser bundle.
 import { IconButton } from '../ui';
 import { useTheme } from '../lib/theme';
 
