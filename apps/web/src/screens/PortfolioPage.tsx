@@ -460,6 +460,12 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
           <Logo size={24} onClick={() => router.push('/')} />
         </div>
         {error.statusCode === 404 ? 'No portfolio at this link' : error.message}
+        {/* A dead link is a dead end — hand the visitor a door, not just a verdict */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 22 }}>
+          <Button size="lg" onClick={() => router.push('/')}>
+            Go to main page
+          </Button>
+        </div>
       </div>
     );
   }
