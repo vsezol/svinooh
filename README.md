@@ -299,6 +299,13 @@ a hosted invoice; the webhook is believed only with a valid HMAC signature,
 and exactly one webhook can move a payment to `paid` — replays and
 out-of-order statuses cannot double-extend or talk it back down.
 
+Which coins the invoice offers is the gateway's page's business: the list is
+curated in the NOWPayments dashboard (Settings → coins), and their page hides
+by itself any coin whose network minimum does not fit the amount — worth
+knowing because USDT-TRC20's minimum sits above 11 USD as of 2026-09, driven
+by TRON fees, so it will not appear on a 5-10 USD invoice whatever the
+dashboard says.
+
 The flow is checked, not trusted: `npm run -w apps/api check` exercises the
 arithmetic and both signature schemes; `check:flow` runs the whole lifecycle —
 checkout, signed webhooks, replays, underpayment, the gates — for real against

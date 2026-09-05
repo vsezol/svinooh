@@ -17,11 +17,12 @@ export const getOffer = (): Promise<ProOfferDto> => api<ProOfferDto>('/billing/o
 export const getBillingMe = (): Promise<BillingMeDto> => api<BillingMeDto>('/billing/me');
 
 /**
- * Opens a checkout and hands this tab to the gateway's hosted page — the coin,
- * the network and the paying all happen there, and the success URL brings the
- * payer back to /pro.
+ * Opens a checkout and answers with the hosted page's URL — the caller
+ * decides which tab it goes into. Which coins the page offers is the
+ * gateway's business, curated in its dashboard; it hides by itself the ones
+ * whose network minimum does not fit the amount.
  */
-export async function startCheckout(): Promise<void> {
+export async function openCheckout(): Promise<string> {
   const { url } = await api<CheckoutDto>('/billing/checkout', { method: 'POST' });
-  window.location.assign(url);
+  return url;
 }

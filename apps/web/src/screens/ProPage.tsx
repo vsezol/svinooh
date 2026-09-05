@@ -11,7 +11,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { track } from '../lib/analytics';
 import { ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { getBillingMe, getOffer, startCheckout } from '../lib/billing';
+import { getBillingMe, getOffer, openCheckout } from '../lib/billing';
 import { Button, Card, Eyebrow, Note, Spinner, Tag, Title } from '../ui';
 
 /**
@@ -67,6 +67,19 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
     return () => clearInterval(timer);
   }, [awaitingPayment, me, billing?.pro, refreshBilling]);
 
+  // Coming BACK from the invoice: bfcache restores the page mid-"buying", and
+  // a button spinning forever over a checkout that already opened reads as
+  // broken. The restore also re-asks whether the payment landed meanwhile.
+  useEffect(() => {
+    const restored = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      setBuying(false);
+      void refreshBilling();
+    };
+    window.addEventListener('pageshow', restored);
+    return () => window.removeEventListener('pageshow', restored);
+  }, [refreshBilling]);
+
   const buy = async () => {
     if (buying) return;
     if (!me) {
@@ -76,11 +89,27 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
     setBuying(true);
     setBuyErr(null);
     track('checkout_opened', { firstMonth: billing?.firstMonthEligible ?? true });
+    // Claimed inside the click, before any await — a tab opened after an
+    // async gap is a tab popup blockers eat. Blocked, this stays null and the
+    // invoice takes over this tab instead, the way it always did.
+    const tab = window.open('', '_blank');
     try {
-      await startCheckout(); // navigates away on success
+      const url = await openCheckout();
+      if (tab && !tab.closed) {
+        tab.location.href = url;
+        // The page stays under the payer and starts watching for the payment
+        setAwaitingPayment(true);
+        setBuying(false);
+        void refreshBilling();
+      } else {
+        window.location.assign(url);
+      }
     } catch (err) {
+      tab?.close();
       setBuyErr(err instanceof ApiError ? err.message : 'Could not open the checkout. Try again.');
       setBuying(false);
+      // A rail can stop fitting between renders — re-ask what is on offer
+      void refreshBilling();
     }
   };
 
@@ -134,9 +163,8 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <Spinner size={14} />
               <Note>
-                Payment received on the gateway side — Pro switches on the moment the network
-                confirms it. This page is checking every few seconds; the bot will also say so in
-                Telegram.
+                Waiting for the payment — Pro switches on the moment the network confirms it.
+                This page checks by itself.
               </Note>
             </div>
           </Card>
@@ -199,8 +227,8 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
               </Button>
               {buyErr ? <Note style={{ marginTop: 8, color: 'var(--down)' }}>{buyErr}</Note> : null}
               <Note style={{ marginTop: 10 }}>
-                Paid in crypto — USDT, TON, SOL, BTC and more, any wallet or exchange. No card, no
-                auto-debit: a month is yours because you paid for it.
+                Stablecoins by default, any coin if you prefer. No auto-debit — the bot reminds you
+                in Telegram before Pro ends.
               </Note>
             </div>
           </Card>
@@ -257,27 +285,6 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
             </div>
           </Card>
         ) : null}
-
-        {/* how paying works — crypto has rules of its own, said up front */}
-        <Card style={{ padding: '18px 22px' }}>
-          <Eyebrow>HOW PAYING WORKS</Eyebrow>
-          <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
-            <Note style={{ lineHeight: 1.6 }}>
-              The button opens a hosted invoice (NOWPayments). Pick a coin and network there — the
-              cheap rails all work — send the exact amount, and Pro switches on as soon as the
-              network confirms it, usually within a minute or two.
-            </Note>
-            <Note style={{ lineHeight: 1.6 }}>
-              Every payment buys one calendar month and stacks on your paid-until date. There is no
-              auto-debit in crypto and we do not pretend otherwise: three days before the end the
-              bot reminds you in Telegram, and renewing is one more invoice.
-            </Note>
-            <Note style={{ lineHeight: 1.6 }}>
-              If Pro lapses, nothing is deleted — portfolios, wallets and history all stay exactly
-              where you left them, back behind the free limits until you return.
-            </Note>
-          </div>
-        </Card>
 
         {/* the signed-in view of their own money */}
         {me && billing && billing.payments.length > 0 ? (

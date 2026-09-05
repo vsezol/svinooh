@@ -40,9 +40,18 @@ export class BillingService {
     private readonly rabbit: RabbitService,
   ) {}
 
+  /** What this account pays for its next month — the welcome price while it applies */
+  private async nextPriceUsd(userId: string): Promise<{ priceUsd: number; firstMonth: boolean }> {
+    const firstMonth = await this.firstMonthEligible(userId);
+    return {
+      firstMonth,
+      priceUsd: firstMonth ? setting('billing.firstMonthUsd') : setting('billing.proPriceUsd'),
+    };
+  }
+
   async me(userId: string): Promise<BillingMeDto> {
     const now = new Date();
-    const [sub, usage, portfolios, payments, firstMonthEligible] = await Promise.all([
+    const [sub, usage, portfolios, payments, next] = await Promise.all([
       this.prisma.subscription.findUnique({ where: { userId }, select: { paidUntil: true } }),
       this.prisma.featureUsage.findUnique({ where: { userId } }),
       this.prisma.portfolioOwner.count({ where: { userId } }),
@@ -51,12 +60,12 @@ export class BillingService {
         orderBy: { createdAt: 'desc' },
         take: 12,
       }),
-      this.firstMonthEligible(userId),
+      this.nextPriceUsd(userId),
     ]);
     return {
       pro: sub !== null && sub.paidUntil > now,
       paidUntil: sub?.paidUntil.toISOString() ?? null,
-      firstMonthEligible,
+      firstMonthEligible: next.firstMonth,
       offer: this.premium.offer(),
       usage: {
         portfolios,
@@ -80,15 +89,17 @@ export class BillingService {
    * One month of Pro, priced at the welcome offer while this account has never
    * finished a payment. The Payment row exists BEFORE the gateway hears the
    * order id, so its webhook can never name an order we do not know.
+   *
+   * Which coins the invoice offers is the gateway's page's business: the list
+   * is curated in the NOWPayments dashboard, and their page hides by itself
+   * any coin whose network minimum does not fit the amount (USDT-TRC20 sits
+   * above 11 USD as of 2026-09, which is why this is worth knowing).
    */
   async checkout(userId: string): Promise<CheckoutDto> {
     if (!this.nowpayments.enabled) {
       throw new ServiceUnavailableException('Payments are not configured yet');
     }
-    const firstMonth = await this.firstMonthEligible(userId);
-    const priceUsd = firstMonth
-      ? setting('billing.firstMonthUsd')
-      : setting('billing.proPriceUsd');
+    const { priceUsd, firstMonth } = await this.nextPriceUsd(userId);
 
     const payment = await this.prisma.payment.create({
       data: {
