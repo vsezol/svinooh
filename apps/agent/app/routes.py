@@ -4,7 +4,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from .config import settings
 from .llm import extract_text, get_model
-from .schemas import ChatIn, ChatOut
+from .schemas import ChatRequest, ChatResponse
 from .sessions import SessionStore
 
 router = APIRouter()
@@ -16,8 +16,8 @@ def health() -> dict:
     return {"ok": True}
 
 
-@router.post("/chat", response_model=ChatOut)
-async def chat(body: ChatIn) -> ChatOut:
+@router.post("/chat", response_model=ChatResponse)
+async def chat(body: ChatRequest) -> ChatResponse:
     text = body.message.strip()
     if not text:
         raise HTTPException(status_code=400, detail="empty message")
@@ -36,4 +36,4 @@ async def chat(body: ChatIn) -> ChatOut:
     # Remembered only after the model answered: a failed call leaves the
     # session exactly as it was, instead of a question with no answer in it.
     sessions.append(session_id, text, answer)
-    return ChatOut(reply=answer, session_id=session_id)
+    return ChatResponse(reply=answer, session_id=session_id)
