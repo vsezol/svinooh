@@ -1,4 +1,5 @@
 import type { PositionTokenRole } from '@svinooh/shared';
+import { Logger } from '@nestjs/common';
 import { fetchJson } from './http';
 import {
   ASSET_BUCKETS,
@@ -59,8 +60,10 @@ const PRICE_MAX_LAG_SLOTS = 1_500;
  * referee that has not answered in six seconds is not going to say anything
  * worth delaying every Solana wallet in the queue for.
  */
-const REFEREE_DEADLINE_MS = 6_000;
+const REFEREE_DEADLINE_MS = 10_000;
 const GM_INDEXER_API = 'https://gmx-solana-sqd.squids.live/gmx-solana-base:prod/api/graphql';
+const logger = new Logger('SolScan');
+
 const SOL_NATIVE_MINT = '11111111111111111111111111111111';
 
 /** Element labels that are staking rather than "generic DeFi" */
@@ -211,16 +214,29 @@ async function freshReferencePrices(mints: string[]): Promise<Map<string, number
       // referee is an absent one, and absence is the quiet path below
       new Promise<null>((resolve) => setTimeout(() => resolve(null), REFEREE_DEADLINE_MS).unref?.()),
     ]);
-    if (!answers) return fresh;
+    if (!answers) {
+      logger.debug('price referee missed its deadline — this scan goes unarbitrated');
+      return fresh;
+    }
     const [currentSlot, priced] = answers;
     if (typeof currentSlot !== 'number') return fresh;
+    let lagged = 0;
     for (const [mint, p] of Object.entries(priced)) {
       if (typeof p?.usdPrice !== 'number' || typeof p.blockId !== 'number') continue;
-      if (currentSlot - p.blockId > PRICE_MAX_LAG_SLOTS) continue;
+      if (currentSlot - p.blockId > PRICE_MAX_LAG_SLOTS) {
+        lagged++;
+        continue;
+      }
       fresh.set(mint, p.usdPrice);
     }
-  } catch {
-    // A missing referee is a quiet scan, not a failed one
+    if (lagged) {
+      // The reference service itself served prices stamped far behind the
+      // chain — exactly the failure that disqualified the previous referee.
+      // Disqualifying is correct and silent leaking is not, so say so.
+      logger.debug(`price referee: ${lagged} price(s) lagged the chain and were disqualified`);
+    }
+  } catch (error) {
+    logger.debug(`price referee unavailable: ${(error as Error).message}`);
   }
   return fresh;
 }
