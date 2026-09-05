@@ -20,8 +20,10 @@ body {
   --acc-ink: #07130c;
   --up: #2bd576;
   --down: #f6465d;
-  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
-  --sans: 'Manrope', system-ui, -apple-system, sans-serif;
+  /* The faces themselves come through next/font in app/layout.tsx, which
+     self-hosts them and hands their names over in these variables */
+  --mono: var(--font-plex-mono), ui-monospace, 'SF Mono', Menlo, monospace;
+  --sans: var(--font-manrope), system-ui, -apple-system, sans-serif;
 }
 
 html[data-theme='light'],

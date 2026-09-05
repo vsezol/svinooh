@@ -12,7 +12,7 @@
  *     a prop if it is a variation, added as a component if it is genuinely new.
  *     Copying it is what produced twenty font sizes and ten button classes.
  */
-export { Button, IconButton, Spinner } from './Button';
+export { Button, ButtonLink, IconButton, Spinner } from './Button';
 export type { ButtonVariant, ControlSize } from './Button';
 export { Tag, TagButton } from './Tag';
 export type { TagVariant } from './Tag';

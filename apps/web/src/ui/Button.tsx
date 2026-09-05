@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { ComponentPropsWithRef, ReactNode } from 'react';
 
 export type ButtonVariant = 'accent' | 'soft' | 'quiet' | 'danger';
@@ -65,6 +66,35 @@ export function Button({
         children
       )}
     </button>
+  );
+}
+
+interface ButtonLinkProps extends Omit<ComponentPropsWithRef<typeof Link>, 'children'> {
+  variant?: ButtonVariant;
+  size?: ControlSize;
+  block?: boolean;
+  children?: ReactNode;
+}
+
+/**
+ * A Button that is really a link.
+ *
+ * Navigation dressed as an action used to be a real <button> with router.push
+ * inside, which looked identical and behaved worse: nothing for a crawler to
+ * follow, nothing for a middle-click or a long-press to open. Same classes as
+ * Button, so the two are told apart by what they do, never by how they look.
+ */
+export function ButtonLink({ variant = 'accent', size = 'md', block, children, ...rest }: ButtonLinkProps) {
+  return (
+    <Link
+      {...rest}
+      className={['ui-btn', rest.className].filter(Boolean).join(' ')}
+      data-variant={variant}
+      data-size={size}
+      data-block={block ? 'true' : undefined}
+    >
+      {children}
+    </Link>
   );
 }
 
