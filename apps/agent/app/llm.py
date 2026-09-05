@@ -12,7 +12,7 @@ still pending degrades to "chat errors" instead of a crash loop. One client
 instance is then reused for every request: what is per-request is the API
 *call*, not the client.
 """
-from functools import lru_cache
+from functools import cache
 
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -21,7 +21,7 @@ from langchain_core.messages import BaseMessage
 from .config import settings
 
 
-@lru_cache(maxsize=1)
+@cache  # lazy singleton: the client is built once and reused by every request
 def get_model() -> BaseChatModel:
     return init_chat_model(
         settings.model,
@@ -30,7 +30,7 @@ def get_model() -> BaseChatModel:
     )
 
 
-@lru_cache(maxsize=1)
+@cache
 def get_router_model() -> BaseChatModel:
     """The model that labels turns (app/intent.py).
 

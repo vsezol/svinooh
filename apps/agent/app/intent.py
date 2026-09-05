@@ -11,7 +11,7 @@ label yet. A classifier earns the right to steer traffic by being watched in
 the logs first — when the labels look right, R2 wires them into the graph.
 """
 import logging
-from functools import lru_cache
+from functools import cache
 from typing import Literal
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -23,10 +23,10 @@ logger = logging.getLogger("svinooh-ai")
 
 CLASSIFIER_PROMPT = (
     "You label questions asked to the assistant of svinooh, a DeFi portfolio "
-    "tracker. Label `portfolio` when the user asks about their own money: "
+    "tracker. Label `portfolio` when the user asks about their own money — "
     "their portfolio, wallets, positions, balance, history, yields, health "
-    "factor, debt, or what changed — in any language ('my portfolio', 'мой "
-    "портфель', 'сколько у меня'). Label `general` for everything else: DeFi "
+    "factor, debt, or what changed ('my portfolio', 'how much do I have') — "
+    "in whatever language they ask. Label `general` for everything else: DeFi "
     "concepts, how the app works, small talk. When in doubt, prefer "
     "`portfolio` — a wrong general answer to a money question costs more than "
     "a wasted context fetch."
@@ -38,7 +38,7 @@ class IntentLabel(BaseModel):
     reason: str = Field(description="One short sentence: why this label.")
 
 
-@lru_cache(maxsize=1)
+@cache  # lazy singleton: built on the first call, reused ever after
 def _labeler():
     # The model is forced to answer in the schema's shape; .with_structured_output
     # returns a runnable that yields IntentLabel instances directly.
@@ -54,9 +54,12 @@ async def classify(question: str) -> IntentLabel:
 async def classify_shadow(question: str, session_id: str) -> None:
     """Label a turn for the logs, and only the logs.
 
-    Swallows every failure by design: a shadow that can break the request path
-    is not a shadow. The label, or the failure, becomes a log line — that log
-    is the evidence R2's routing decision will be based on.
+    The split with classify() is operation vs rollout mode: classify() is the
+    real thing — returns the label, raises on failure — and it is what R2 will
+    call on the request path once labels steer routing. This wrapper exists
+    only for the shadow phase: same call, plus logging, minus every exception —
+    the "never raises, returns nothing" contract is what makes fire-and-forget
+    safe. When R2 lands, this wrapper is deleted and classify() stays.
     """
     try:
         label = await classify(question)
