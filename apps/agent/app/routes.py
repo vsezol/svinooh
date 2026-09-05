@@ -1,14 +1,20 @@
 """The HTTP surface: /health for the platform, /chat for everyone else."""
-from fastapi import APIRouter, HTTPException
+import logging
+
+from fastapi import APIRouter, Header, HTTPException
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from .config import settings
+from .context import portfolio_context
+from .datasources import PortfolioApiSource
 from .llm import extract_text, get_model
 from .schemas import ChatRequest, ChatResponse
 from .sessions import SessionStore
 
+logger = logging.getLogger("svinooh-ai")
 router = APIRouter()
 sessions = SessionStore(settings.history_max_messages, settings.history_ttl_s)
+portfolio_source = PortfolioApiSource(settings.portfolio_api_url)
 
 
 @router.get("/health")
@@ -16,17 +22,43 @@ def health() -> dict:
     return {"ok": True}
 
 
+async def _system_prompt(portfolio: str | None, authorization: str | None) -> str:
+    """The base prompt, grounded in the portfolio on screen when it can be.
+
+    Degrades honestly rather than failing the turn: the portfolio API being
+    slow or down makes the answer general, not absent — and the prompt says the
+    live numbers are unavailable, so the model does not guess them.
+    """
+    if not portfolio or not authorization:
+        return settings.system_prompt
+    try:
+        data = await portfolio_source.portfolio(portfolio, authorization)
+        return f"{settings.system_prompt}\n\nThe user is looking at this portfolio right now:\n{portfolio_context(data)}"
+    except Exception as error:  # noqa: BLE001 — any fetch failure degrades the same way
+        logger.warning("portfolio context fetch failed for %s: %r", portfolio, error)
+        return (
+            f"{settings.system_prompt}\n\n(Live portfolio data could not be fetched "
+            "for this turn — answer generally, and say the live numbers are "
+            "unavailable if asked about them.)"
+        )
+
+
 @router.post("/chat", response_model=ChatResponse)
-async def chat(body: ChatRequest) -> ChatResponse:
+async def chat(
+    body: ChatRequest,
+    authorization: str | None = Header(default=None),
+) -> ChatResponse:
     text = body.message.strip()
     if not text:
         raise HTTPException(status_code=400, detail="empty message")
 
     # One call per turn, but not one turn of context: the session's history
     # rides along, which is what makes "as we discussed" work across requests.
+    # The portfolio context is NOT stored in the session — it is refetched each
+    # turn, because balances move and a remembered number is a wrong number.
     session_id = body.session_id or sessions.new_id()
     messages = [
-        SystemMessage(content=settings.system_prompt),
+        SystemMessage(content=await _system_prompt(body.portfolio, authorization)),
         *sessions.history(session_id),
         HumanMessage(content=text),
     ]

@@ -13,6 +13,10 @@ class ChatRequest(BaseModel):
     # Continues an earlier conversation. Absent — a new session is started and
     # its id returned, so holding context is the caller's choice, not a demand.
     session_id: str | None = None
+    # The portfolio slug the user is looking at. With it (and the caller's
+    # Authorization header) the answer is grounded in that portfolio's live
+    # numbers; without it the agent answers generally.
+    portfolio: str | None = None
 
 
 class ChatResponse(BaseModel):
