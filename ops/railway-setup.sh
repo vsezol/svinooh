@@ -167,7 +167,8 @@ add_repo agent
 setvars agent \
   "PORT=3000" \
   "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" \
-  "AGENT_MODEL=claude-opus-5" \
+  "AGENT_MODEL=anthropic:claude-haiku-4-5" \
+  'PORTFOLIO_API_URL=http://${{api.RAILWAY_PRIVATE_DOMAIN}}:3000' \
   "SERVICE_NAME=svinooh-agent"
 
 # monitor-alerts — reads wallet.state, decides what each owner should be told,
