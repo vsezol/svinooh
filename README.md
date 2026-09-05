@@ -299,12 +299,12 @@ a hosted invoice; the webhook is believed only with a valid HMAC signature,
 and exactly one webhook can move a payment to `paid` — replays and
 out-of-order statuses cannot double-extend or talk it back down.
 
-The checkout leads with stables: the invoice is locked to one USDT/USDC rail
-picked on /pro (full coin list on request), and what is offered is computed
-server-side against the gateway's live per-coin minimums for the price being
-charged — a rail whose network fee outgrew the price (USDT-TRC20 at a small
-invoice) drops out instead of selling an unpayable invoice, and comes back by
-itself when it fits again. See `apps/api/src/billing/pay-rails.ts`.
+Which coins the invoice offers is the gateway's page's business: the list is
+curated in the NOWPayments dashboard (Settings → coins), and their page hides
+by itself any coin whose network minimum does not fit the amount — worth
+knowing because USDT-TRC20's minimum sits above 11 USD as of 2026-09, driven
+by TRON fees, so it will not appear on a 5-10 USD invoice whatever the
+dashboard says.
 
 The flow is checked, not trusted: `npm run -w apps/api check` exercises the
 arithmetic and both signature schemes; `check:flow` runs the whole lifecycle —

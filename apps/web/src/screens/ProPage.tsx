@@ -12,7 +12,7 @@ import { track } from '../lib/analytics';
 import { ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { getBillingMe, getOffer, openCheckout } from '../lib/billing';
-import { Button, Card, Eyebrow, Note, Select, Spinner, Tag, Title } from '../ui';
+import { Button, Card, Eyebrow, Note, Spinner, Tag, Title } from '../ui';
 
 /**
  * The marketing page: the offer, what Pro removes, how paying in crypto
@@ -34,9 +34,6 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
   // Arrived back from the gateway's success page — Pro switches on when the
   // network confirms, so the page checks back until it has
   const [awaitingPayment, setAwaitingPayment] = useState(false);
-  // Which stable rail the invoice locks to. null — nobody chose, the first
-  // server-offered option stands; 'any' — the payment page shows every coin
-  const [railChoice, setRailChoice] = useState<string | null>(null);
 
   useEffect(() => {
     track('pro_opened', {});
@@ -83,9 +80,6 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
     return () => window.removeEventListener('pageshow', restored);
   }, [refreshBilling]);
 
-  const payOptions = billing?.payOptions ?? [];
-  const payRail = railChoice ?? payOptions[0]?.code ?? 'any';
-
   const buy = async () => {
     if (buying) return;
     if (!me) {
@@ -100,7 +94,7 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
     // invoice takes over this tab instead, the way it always did.
     const tab = window.open('', '_blank');
     try {
-      const url = await openCheckout(payRail);
+      const url = await openCheckout();
       if (tab && !tab.closed) {
         tab.location.href = url;
         // The page stays under the payer and starts watching for the payment
@@ -227,31 +221,7 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
             ) : (
               <Note>The offer could not be loaded — refresh to try again.</Note>
             )}
-            {me && payOptions.length > 0 ? (
-              <div
-                style={{
-                  marginTop: 14,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 10,
-                }}
-              >
-                <Note>Pay with</Note>
-                <Select
-                  label="Payment coin"
-                  value={payRail}
-                  onChange={setRailChoice}
-                  options={[
-                    ...payOptions.map((o) => ({ value: o.code, label: o.label })),
-                    { value: 'any', label: 'Another coin' },
-                  ]}
-                  align="right"
-                  minMenuWidth={190}
-                />
-              </div>
-            ) : null}
-            <div style={{ marginTop: 14 }}>
+            <div style={{ marginTop: 18 }}>
               <Button size="lg" style={{ width: '100%' }} onClick={() => void buy()} disabled={buying}>
                 {buying ? <Spinner size={15} /> : buyLabel}
               </Button>

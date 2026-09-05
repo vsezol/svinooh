@@ -18,13 +18,11 @@ export const getBillingMe = (): Promise<BillingMeDto> => api<BillingMeDto>('/bil
 
 /**
  * Opens a checkout and answers with the hosted page's URL — the caller
- * decides which tab it goes into. `payCurrency` locks the invoice to one
- * stable rail (a BillingMeDto.payOptions code); 'any' or absent lets the
- * payment page offer the gateway's full list.
+ * decides which tab it goes into. Which coins the page offers is the
+ * gateway's business, curated in its dashboard; it hides by itself the ones
+ * whose network minimum does not fit the amount.
  */
-export async function openCheckout(payCurrency?: string): Promise<string> {
-  const body =
-    payCurrency && payCurrency !== 'any' ? JSON.stringify({ payCurrency }) : undefined;
-  const { url } = await api<CheckoutDto>('/billing/checkout', { method: 'POST', body });
+export async function openCheckout(): Promise<string> {
+  const { url } = await api<CheckoutDto>('/billing/checkout', { method: 'POST' });
   return url;
 }

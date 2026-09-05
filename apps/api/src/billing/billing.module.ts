@@ -4,7 +4,6 @@ import { config } from '../config';
 import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
 import { NowPaymentsClient } from './nowpayments.client';
-import { PayRailsService } from './pay-rails';
 import { PremiumService } from './premium.service';
 
 @Module({
@@ -12,7 +11,6 @@ import { PremiumService } from './premium.service';
   providers: [
     BillingService,
     PremiumService,
-    PayRailsService,
     RequiredAuthGuard,
     {
       provide: NowPaymentsClient,

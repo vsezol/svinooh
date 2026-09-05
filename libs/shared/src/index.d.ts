@@ -413,26 +413,6 @@ export interface ProOfferDto {
   limits: ProLimitsDto;
 }
 
-/**
- * One coin-and-network the checkout can be locked to. Stables only, served in
- * preference order with the first as the default — computed on the server
- * against the gateway's live per-coin minimums, so a rail whose network fee
- * outgrew the price (USDT on TRON at a 2 USD invoice, say) simply drops out
- * instead of selling an unpayable invoice.
- */
-export interface ProPayOptionDto {
-  /** The gateway's own ticker: 'usdttrc20', 'usdtton', ... */
-  code: string;
-  /** 'USDT · TRON' — what the picker shows */
-  label: string;
-}
-
-/** POST /api/billing/checkout body. Empty or absent — the payment page offers every coin. */
-export interface CheckoutRequestDto {
-  /** A ProPayOptionDto.code to lock the invoice to, or 'any' for the full list */
-  payCurrency?: string;
-}
-
 /** One of the signed-in user's payments, as the account screen lists them */
 export interface ProPaymentDto {
   id: string;
@@ -461,12 +441,6 @@ export interface BillingMeDto {
   /** Whether the first-month price still applies to this account */
   firstMonthEligible: boolean;
   offer: ProOfferDto;
-  /**
-   * The stable rails able to carry what THIS account would pay next, first one
-   * the default. Empty when the gateway cannot answer — the checkout then
-   * simply offers its full list.
-   */
-  payOptions: ProPayOptionDto[];
   usage: {
     portfolios: number;
     /** Alert messages delivered, ever — against offer.limits.freeAlerts */

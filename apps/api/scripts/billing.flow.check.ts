@@ -35,35 +35,17 @@ interface SeenRequest {
 
 async function main(): Promise<void> {
   /* ── a NOWPayments that lives on localhost ── */
-  // The minimums the fake gateway quotes: TRON priced out of a small invoice,
-  // exactly as the real one prices it as of 2026-09
-  const MINS: Record<string, number> = {
-    usdttrc20: 11.32,
-    usdtton: 0.19,
-    usdtbsc: 0.07,
-    usdtsol: 1.92,
-    usdterc20: 0.74,
-    usdcsol: 1.86,
-    usdcbsc: 0.08,
-    usdcbase: 0.02,
-  };
   const seen: SeenRequest[] = [];
   const fake = createServer((req, res) => {
     let raw = '';
     req.on('data', (chunk) => (raw += chunk));
     req.on('end', () => {
-      const url = new URL(req.url ?? '/', 'http://fake');
       seen.push({
-        path: url.pathname,
+        path: req.url ?? '',
         apiKey: req.headers['x-api-key'] as string | undefined,
         body: raw ? (JSON.parse(raw) as Record<string, unknown>) : {},
       });
       res.setHeader('content-type', 'application/json');
-      if (url.pathname === '/v1/min-amount') {
-        const code = url.searchParams.get('currency_from') ?? '';
-        res.end(JSON.stringify({ currency_from: code, fiat_equivalent: MINS[code] ?? 999 }));
-        return;
-      }
       res.end(
         JSON.stringify({ id: `inv-${seen.length}`, invoice_url: `https://fake.gateway/pay/inv-${seen.length}` }),
       );
@@ -81,7 +63,6 @@ async function main(): Promise<void> {
   const { PrismaService } = await import('@svinooh/db');
   const { RabbitService, setting } = await import('@svinooh/common');
   const { NowPaymentsClient, ipnSignature } = await import('../src/billing/nowpayments.client');
-  const { PayRailsService } = await import('../src/billing/pay-rails');
   const { PremiumService } = await import('../src/billing/premium.service');
   const { BillingService } = await import('../src/billing/billing.service');
   const { addMonths } = await import('../src/billing/premium');
@@ -90,16 +71,10 @@ async function main(): Promise<void> {
 
   const prisma = new PrismaService();
   const premium = new PremiumService(prisma);
-  const nowpayments = new NowPaymentsClient(
-    config.nowpaymentsApiKey,
-    config.nowpaymentsIpnSecret,
-    config.nowpaymentsApiUrl,
-  );
   const billing = new BillingService(
     prisma,
     premium,
-    nowpayments,
-    new PayRailsService(nowpayments),
+    new NowPaymentsClient(config.nowpaymentsApiKey, config.nowpaymentsIpnSecret, config.nowpaymentsApiUrl),
     new RabbitService(null), // disabled — the thank-you publish is a no-op here
   );
 
@@ -245,44 +220,6 @@ async function main(): Promise<void> {
     check('дневная квота агента — 402 сверх лимита', aiWalled, 402);
     await premium.consumeAi(a.id); // Pro is not metered
     check('агент для Pro без счётчика', true, true);
-
-    /* ── stable rails: what the checkout leads with, and what it refuses ── */
-
-    const meC = await billing.me(c.id);
-    check(
-      'дорогой TRON выпал из предложений, дефолт — следующий стейбл по порядку',
-      [meC.payOptions[0]?.code, meC.payOptions.some((o) => o.code === 'usdttrc20')],
-      ['usdtton', false],
-    );
-
-    await billing.checkout(c.id, 'usdtton');
-    const invoices = seen.filter((s) => s.path === '/v1/invoice');
-    const locked = invoices[invoices.length - 1];
-    const lockedPay = await prisma.payment.findFirstOrThrow({
-      where: { userId: c.id },
-      orderBy: { createdAt: 'desc' },
-    });
-    check(
-      'выбранная рельса уезжает в инвойс и в строку платежа',
-      [locked.body.pay_currency, lockedPay.payCurrency],
-      ['usdtton', 'usdtton'],
-    );
-
-    let railWalled = 0;
-    try {
-      await billing.checkout(c.id, 'usdttrc20');
-    } catch (error) {
-      railWalled = error instanceof HttpException ? error.getStatus() : -1;
-    }
-    check('рельса с минималкой выше цены — 400, неоплачиваемый инвойс не открывается', railWalled, 400);
-
-    await billing.checkout(c.id, 'any');
-    const open = seen.filter((s) => s.path === '/v1/invoice');
-    check(
-      '"any" — инвойс без замка, полный список на стороне шлюза',
-      'pay_currency' in open[open.length - 1].body,
-      false,
-    );
   } finally {
     await cleanup();
     await prisma.$disconnect();

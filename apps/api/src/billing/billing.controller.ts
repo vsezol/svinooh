@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Headers, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { CurrentUserId, RequiredAuthGuard } from '@svinooh/common';
-import type { CheckoutRequestDto, ProOfferDto } from '@svinooh/shared';
+import type { ProOfferDto } from '@svinooh/shared';
 import { BillingService } from './billing.service';
 import { PremiumService } from './premium.service';
 
@@ -25,8 +25,8 @@ export class BillingController {
 
   @Post('checkout')
   @UseGuards(RequiredAuthGuard)
-  checkout(@CurrentUserId() userId: string, @Body() body?: CheckoutRequestDto) {
-    return this.billing.checkout(userId, body?.payCurrency);
+  checkout(@CurrentUserId() userId: string) {
+    return this.billing.checkout(userId);
   }
 
   /**
