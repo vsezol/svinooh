@@ -253,8 +253,10 @@ export function PortfolioPage({ slug }: { slug: string }) {
    * opened.
    */
   // Answered by the agent service now (a round trip through the gateway), not
-  // the browser stand-in (agent-local.ts). A stable function, nothing to memoize.
-  const answer = serviceAnswerer;
+  // the browser stand-in (agent-local.ts). Keyed to the portfolio on screen:
+  // the slug grounds the answers, and the conversation (session) lives inside
+  // the answerer — a new portfolio is a new conversation.
+  const answer = useMemo(() => serviceAnswerer(slug), [slug]);
 
   const addWallet = async () => {
     const address = input.trim();
