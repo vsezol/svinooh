@@ -1,0 +1,46 @@
+"""The model behind the answers, behind a provider-neutral seam.
+
+No provider SDK is imported here: init_chat_model resolves the configured
+"<provider>:<model>" string at call time, so langchain-anthropic serves today's
+default and switching to another provider (Gemini, OpenAI, ...) is a new
+AGENT_MODEL value plus that provider's langchain package in requirements.txt —
+never an import change in this codebase.
+
+Built lazily, once. The service boots and answers /health before any API key is
+set — the key is only needed on the first /chat — so a deploy with the key
+still pending degrades to "chat errors" instead of a crash loop. One client
+instance is then reused for every request: what is per-request is the API
+*call*, not the client.
+"""
+from functools import lru_cache
+
+from langchain.chat_models import init_chat_model
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import BaseMessage
+
+from .config import settings
+
+
+@lru_cache(maxsize=1)
+def get_model() -> BaseChatModel:
+    return init_chat_model(
+        settings.model,
+        max_tokens=settings.max_tokens,
+        timeout=settings.request_timeout_s,
+    )
+
+
+def extract_text(reply: BaseMessage) -> str:
+    """The reply's text, whatever shape it arrived in.
+
+    Content comes back as a plain string OR as a list of blocks (models that
+    think before answering return [thinking, text, ...]); only the text blocks
+    are the answer.
+    """
+    if isinstance(reply.content, str):
+        return reply.content
+    return "".join(
+        block.get("text", "")
+        for block in reply.content
+        if isinstance(block, dict) and block.get("type") == "text"
+    )

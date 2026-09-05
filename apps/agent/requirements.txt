@@ -1,3 +1,7 @@
 fastapi>=0.115
 uvicorn[standard]>=0.32
+# init_chat_model — the provider-neutral model factory (see app/llm.py)
+langchain>=0.3
+# The provider plugin behind the default AGENT_MODEL. Another provider is
+# another line here (e.g. langchain-google-genai) plus a new AGENT_MODEL value.
 langchain-anthropic>=0.3
