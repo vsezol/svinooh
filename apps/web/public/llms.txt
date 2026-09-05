@@ -1,0 +1,28 @@
+# svinooh
+
+> Crypto portfolio tracker across EVM, Solana, TRON and Bitcoin. Tokens, LP,
+> staking, lending, farming — the DeFi positions other trackers miss, counted
+> at full value.
+
+svinooh is a web app at https://svinooh.com. Paste a wallet address to get a
+live portfolio for it, or sign in with Telegram or X to combine wallets from
+different chains into one portfolio — private by default, shareable by link.
+
+Key facts:
+
+- Tracks 50+ networks, including Ethereum, Arbitrum, Solana, Base, Bitcoin,
+  OP Mainnet, BNB Chain, Polygon, TRON, Avalanche, Hyperliquid, Berachain,
+  Scroll, Linea, zkSync, Blast, Mantle, Sonic, Gnosis, Celo, Mode, Zora, Sei
+  and Plasma.
+- Counts DeFi positions at full value: wallet tokens, liquidity pools,
+  staking, lending and farming — not just token balances.
+- Portfolios are private by default. Owners can share one by link or list it
+  publicly; nothing about the owner is ever shown.
+- Free to use. svinooh Pro is the paid tier: higher limits on portfolios,
+  wallets, history, alerts and AI, prepaid by the month.
+
+## Pages
+
+- [Home](https://svinooh.com/): product overview, public portfolios, wallet
+  address search
+- [Pro](https://svinooh.com/pro): what Pro changes and what it costs

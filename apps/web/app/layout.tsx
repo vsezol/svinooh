@@ -1,11 +1,26 @@
 import type { Metadata, Viewport } from 'next';
+import { IBM_Plex_Mono, Manrope } from 'next/font/google';
 import { Providers } from './providers';
 import '../src/styles.css';
 
+// Served from this origin and arriving with the page: the old <link> to Google
+// Fonts was a render-blocking round trip to a third party on every first
+// visit. styles.css points --sans and --mono at the variables declared here.
+const manrope = Manrope({ subsets: ['latin'], display: 'swap', variable: '--font-manrope' });
+const plexMono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  display: 'swap',
+  variable: '--font-plex-mono',
+});
+
+const TITLE = 'svinooh — every DeFi position, no exceptions';
+const DESCRIPTION =
+  'Crypto portfolio tracker across EVM, Solana, TRON and Bitcoin. Tokens, LP, staking, lending — the DeFi positions other trackers miss, counted at full value.';
+
 export const metadata: Metadata = {
-  title: 'svinooh — every DeFi position, no exceptions',
-  description:
-    'Crypto portfolio tracker across EVM, Solana, TRON and Bitcoin. Tokens, LP, staking, lending — the DeFi positions other trackers miss, counted at full value.',
+  title: TITLE,
+  description: DESCRIPTION,
   // One set of icons everywhere — the tab, the home screen, the app window —
   // so the mark can never be one thing in one place and another somewhere else
   icons: {
@@ -19,8 +34,15 @@ export const metadata: Metadata = {
   // headline with a tagline in it
   applicationName: 'svinooh',
   appleWebApp: { capable: true, title: 'svinooh', statusBarStyle: 'black-translucent' },
-  // Relative URLs in metadata need a base; the canonical link needs one too
+  // Relative URLs in metadata resolve against this. The canonical itself lives
+  // on each page — set here it would be inherited by every route, and a
+  // portfolio claiming to canonically be the landing is a lie to a crawler.
   metadataBase: new URL('https://svinooh.com'),
+  // What a pasted link unfurls into. The card image is drawn next door in
+  // opengraph-image.tsx; Next wires it into og:image and twitter:image on
+  // every route that doesn't draw its own.
+  openGraph: { type: 'website', siteName: 'svinooh', title: TITLE, description: DESCRIPTION },
+  twitter: { card: 'summary_large_image', title: TITLE, description: DESCRIPTION },
 };
 
 export const viewport: Viewport = {
@@ -49,14 +71,8 @@ const THEME_SCRIPT = `try{if(localStorage.getItem('svinooh_theme')==='light'){do
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${manrope.variable} ${plexMono.variable}`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
-          rel="stylesheet"
-        />
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body>

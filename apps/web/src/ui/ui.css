@@ -24,6 +24,8 @@
   font-family: var(--sans);
   font-weight: var(--fw-heavy);
   white-space: nowrap;
+  /* A ButtonLink is an <a> underneath — the page's anchor underline stops here */
+  text-decoration: none;
   cursor: pointer;
   user-select: none;
   transition: filter var(--ease-quick), color var(--ease-quick), border-color var(--ease-quick),
