@@ -1,5 +1,13 @@
 import type { PositionTokenRole } from '@svinooh/shared';
 import { fetchJson } from './http';
+import {
+  ASSET_BUCKETS,
+  repriceElements,
+  uiAmount,
+  type JupAsset,
+  type JupElement,
+  type JupYield,
+} from './jup';
 import { rangeFromLegs } from '@svinooh/common';
 import { enrich, needsLendingFacts, NO_FACTS } from '@svinooh/common';
 import { solanaLendingFacts, solanaPoolFacts } from './defi';
@@ -35,58 +43,6 @@ const JUP_BALANCES_API = 'https://lite-api.jup.ag/ultra/v1/balances';
 const JUP_ASSETS_API = 'https://datapi.jup.ag/v1/assets/search';
 const GM_INDEXER_API = 'https://gmx-solana-sqd.squids.live/gmx-solana-base:prod/api/graphql';
 const SOL_NATIVE_MINT = '11111111111111111111111111111111';
-
-interface JupAsset {
-  id: string;
-  name?: string;
-  symbol?: string;
-  usdPrice?: number;
-}
-
-interface JupAmount {
-  /** true — `raw` holds an integer in the token's smallest unit; false — `value` is already scaled */
-  fixed?: boolean;
-  raw?: string;
-  value?: number;
-  decimals?: number;
-}
-
-interface JupPositionAsset {
-  value?: number;
-  data?: { address?: string; price?: number; amount?: JupAmount };
-}
-
-interface JupYield {
-  apr?: number;
-  apy?: number;
-}
-
-interface JupElement {
-  platformId?: string;
-  serviceId?: string;
-  label?: string;
-  name?: string;
-  type?: string;
-  value?: number;
-  netApy?: number;
-  data?: {
-    assets?: JupPositionAsset[];
-    suppliedAssets?: JupPositionAsset[];
-    borrowedAssets?: JupPositionAsset[];
-    rewardAssets?: JupPositionAsset[];
-    /** One entry per borrowed asset, each a list whose first item is the rate */
-    borrowedYields?: JupYield[][];
-    healthRatio?: number;
-  };
-}
-
-/** Which leg of a position each Jupiter asset bucket is */
-const ASSET_BUCKETS: Array<{ key: 'assets' | 'suppliedAssets' | 'rewardAssets' | 'borrowedAssets'; role: PositionTokenRole }> = [
-  { key: 'assets', role: 'supply' },
-  { key: 'suppliedAssets', role: 'supply' },
-  { key: 'rewardAssets', role: 'reward' },
-  { key: 'borrowedAssets', role: 'borrow' },
-];
 
 /** Element labels that are staking rather than "generic DeFi" */
 const STAKED_LABELS = /^(staked|staking|farming|vesting|locked|deposit)$/i;
@@ -172,13 +128,6 @@ function borrowApyOf(element: JupElement): number | null {
  * value}` is already scaled. Reading only `raw` loses the amount on every
  * position that uses the other shape — and drops wallet tokens entirely.
  */
-function uiAmount(amount: JupAmount | undefined): number | null {
-  if (!amount) return null;
-  if (amount.raw !== undefined) return Number(amount.raw) / 10 ** (amount.decimals ?? 0);
-  if (typeof amount.value === 'number') return amount.value;
-  return null;
-}
-
 async function fetchGmPrices(mints: string[]): Promise<Record<string, number>> {
   if (!mints.length) return {};
   const ids = mints.map((m) => JSON.stringify(m)).join(',');
@@ -239,13 +188,9 @@ export async function scanSol(address: string): Promise<ScanResult> {
     throw new Error('jupiter answered without a portfolio — refusing to read that as an empty wallet');
   }
 
-  let defi = 0;
   const elements: JupElement[] = [];
   for (const fetcher of portfolio.fetcherResults) {
-    for (const element of fetcher.elements || []) {
-      if (typeof element.value === 'number' && isFinite(element.value)) defi += element.value;
-      elements.push(element);
-    }
+    for (const element of fetcher.elements || []) elements.push(element);
   }
 
   // 2) Token balances + metadata: needed for GM pools, position tickers and the
@@ -272,6 +217,16 @@ export async function scanSol(address: string): Promise<ScanResult> {
     mint === SOL_NATIVE_MINT
       ? 'SOL'
       : assetInfo.get(mint)?.symbol || assetInfo.get(mint)?.name || shortMint(mint);
+
+  // Jupiter against Jupiter: legs priced off a stale portfolio replica are
+  // repriced to the asset search's live number — see repriceElements. Done
+  // before the total is read, so the total is the sum of the corrected legs.
+  const repriced = repriceElements(elements, (mint) => assetInfo.get(mint)?.usdPrice);
+
+  let defi = 0;
+  for (const element of elements) {
+    if (typeof element.value === 'number' && isFinite(element.value)) defi += element.value;
+  }
 
   // 3) GM pools: gmtrade is in Jupiter's platform list, but its fetcher
   //    returns 0 elements — so GM is counted separately on top;
@@ -412,6 +367,7 @@ export async function scanSol(address: string): Promise<ScanResult> {
     positions: enrich(enrich(reconciled, poolFacts), lendingFacts),
     breakdown: { defi, gmtrade },
     unpriced: unpriced.length ? unpriced : undefined,
+    repriced: repriced.length ? repriced : undefined,
   };
 }
 
