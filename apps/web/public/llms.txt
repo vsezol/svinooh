@@ -26,3 +26,23 @@ Key facts:
 - [Home](https://svinooh.com/): product overview, public portfolios, wallet
   address search
 - [Pro](https://svinooh.com/pro): what Pro changes and what it costs
+- [FAQ](https://svinooh.com/faq): chains, pricing, freshness, privacy —
+  answered plainly
+- [Supported chains](https://svinooh.com/chains): the four chain families and
+  the EVM network list
+- [Solana tracking](https://svinooh.com/chains/solana): DeFi positions across
+  ~118 platforms, with ranges and health factors
+- [TRON tracking](https://svinooh.com/chains/tron): Stake 2.0 staking, energy
+  and bandwidth, delegation alerts
+- [Bitcoin tracking](https://svinooh.com/chains/bitcoin): address balances
+  counted beside everything else
+- [Hyperliquid tracking](https://svinooh.com/chains/hyperliquid): full account
+  value — perps margin, spot, staked HYPE, vaults
+- [Zapper alternative](https://svinooh.com/alternatives/zapper): where to go
+  after the August 2026 shutdown
+- [DeBank alternative](https://svinooh.com/alternatives/debank): the same EVM
+  picture plus Solana, TRON and Bitcoin
+- [Zerion alternative](https://svinooh.com/alternatives/zerion): watch-only
+  tracking — no keys, no signatures
+- [CoinStats alternative](https://svinooh.com/alternatives/coinstats): the
+  on-chain half, counted at full value

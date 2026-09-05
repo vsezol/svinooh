@@ -18,6 +18,7 @@ import { useAuth } from '../lib/auth';
 import { fmtUsd0, portfolioLabel } from '../lib/format';
 import { EMPTY_LANDING, loadLandingData, preloadedLanding, type LandingData } from '../lib/landing-data';
 import { useReplay } from '../lib/replay';
+import { SiteFooter } from '../components/SiteFooter';
 
 
 export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } = {}) {
@@ -394,9 +395,7 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
 
       </main>
 
-      <footer className="mono" style={{ textAlign: 'center', padding: '0 20px 28px', fontSize: 'var(--fs-micro)', color: 'var(--mut)' }}>
-        © 2026 svinooh
-      </footer>
+      <SiteFooter />
 
       {authOpen ? <AuthModal onClose={() => setAuthOpen(false)} /> : null}
     </div>
