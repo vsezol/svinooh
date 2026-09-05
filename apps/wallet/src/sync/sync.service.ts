@@ -208,11 +208,6 @@ export class SyncService {
     this.logger.log(
       `${wallet.chain}:${wallet.address} applied: ${result.positions.length} positions, $${result.totalUsd.toFixed(2)}`,
     );
-    if (result.repriced?.length) {
-      // A source served a price the source's own price feed disagrees with —
-      // worth a line per correction, so a stale replica upstream is a grep away
-      this.logger.warn(`${wallet.chain}:${wallet.address} repriced: ${result.repriced.join('; ')}`);
-    }
     await this.announce(wallet, result);
   }
 

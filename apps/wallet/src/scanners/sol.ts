@@ -1,18 +1,8 @@
 import type { PositionTokenRole } from '@svinooh/shared';
-import { Logger } from '@nestjs/common';
 import { fetchJson } from './http';
-import {
-  ASSET_BUCKETS,
-  repriceElements,
-  uiAmount,
-  type JupAsset,
-  type JupElement,
-  type JupYield,
-} from './jup';
 import { rangeFromLegs } from '@svinooh/common';
 import { enrich, needsLendingFacts, NO_FACTS } from '@svinooh/common';
 import { solanaLendingFacts, solanaPoolFacts } from './defi';
-import { solanaRpc } from './defi/solana-rpc';
 import { meteoraPositions, type MeteoraPoolPosition } from './defi/meteora';
 import type { ScanPosition, ScanPositionToken, ScanResult } from '@svinooh/shared';
 
@@ -43,28 +33,60 @@ const JUP_API_KEY =
   process.env.JUP_API_KEY || 'jup_103f2da0530554e4eb01d8f4af2fcda75b309d2b71aa1bcdfd17e411c59056d8';
 const JUP_BALANCES_API = 'https://lite-api.jup.ag/ultra/v1/balances';
 const JUP_ASSETS_API = 'https://datapi.jup.ag/v1/assets/search';
-const JUP_PRICE_API = 'https://lite-api.jup.ag/price/v3';
-/** Native SOL as portfolio legs spell it; the price API only knows wrapped SOL */
-const WRAPPED_SOL_MINT = 'So11111111111111111111111111111111111111112';
-/**
- * How far behind the chain a reference price may be and still arbitrate.
- * ~400ms a slot makes this about ten minutes — generous against real network
- * wobble, hopeless for a snapshot frozen since yesterday evening.
- */
-const PRICE_MAX_LAG_SLOTS = 1_500;
-/**
- * How long the scan will wait for its referee, total. The reference fetch is
- * one price call and one getSlot — but getSlot walks an RPC rotation that is
- * allowed two rounds of three endpoints at 30s each, and the price call
- * retries at 15s a try. Neither budget was written for an OPTIONAL step: a
- * referee that has not answered in six seconds is not going to say anything
- * worth delaying every Solana wallet in the queue for.
- */
-const REFEREE_DEADLINE_MS = 10_000;
 const GM_INDEXER_API = 'https://gmx-solana-sqd.squids.live/gmx-solana-base:prod/api/graphql';
-const logger = new Logger('SolScan');
-
 const SOL_NATIVE_MINT = '11111111111111111111111111111111';
+
+interface JupAsset {
+  id: string;
+  name?: string;
+  symbol?: string;
+  usdPrice?: number;
+}
+
+interface JupAmount {
+  /** true — `raw` holds an integer in the token's smallest unit; false — `value` is already scaled */
+  fixed?: boolean;
+  raw?: string;
+  value?: number;
+  decimals?: number;
+}
+
+interface JupPositionAsset {
+  value?: number;
+  data?: { address?: string; price?: number; amount?: JupAmount };
+}
+
+interface JupYield {
+  apr?: number;
+  apy?: number;
+}
+
+interface JupElement {
+  platformId?: string;
+  serviceId?: string;
+  label?: string;
+  name?: string;
+  type?: string;
+  value?: number;
+  netApy?: number;
+  data?: {
+    assets?: JupPositionAsset[];
+    suppliedAssets?: JupPositionAsset[];
+    borrowedAssets?: JupPositionAsset[];
+    rewardAssets?: JupPositionAsset[];
+    /** One entry per borrowed asset, each a list whose first item is the rate */
+    borrowedYields?: JupYield[][];
+    healthRatio?: number;
+  };
+}
+
+/** Which leg of a position each Jupiter asset bucket is */
+const ASSET_BUCKETS: Array<{ key: 'assets' | 'suppliedAssets' | 'rewardAssets' | 'borrowedAssets'; role: PositionTokenRole }> = [
+  { key: 'assets', role: 'supply' },
+  { key: 'suppliedAssets', role: 'supply' },
+  { key: 'rewardAssets', role: 'reward' },
+  { key: 'borrowedAssets', role: 'borrow' },
+];
 
 /** Element labels that are staking rather than "generic DeFi" */
 const STAKED_LABELS = /^(staked|staking|farming|vesting|locked|deposit)$/i;
@@ -150,6 +172,13 @@ function borrowApyOf(element: JupElement): number | null {
  * value}` is already scaled. Reading only `raw` loses the amount on every
  * position that uses the other shape — and drops wallet tokens entirely.
  */
+function uiAmount(amount: JupAmount | undefined): number | null {
+  if (!amount) return null;
+  if (amount.raw !== undefined) return Number(amount.raw) / 10 ** (amount.decimals ?? 0);
+  if (typeof amount.value === 'number') return amount.value;
+  return null;
+}
+
 async function fetchGmPrices(mints: string[]): Promise<Record<string, number>> {
   if (!mints.length) return {};
   const ids = mints.map((m) => JSON.stringify(m)).join(',');
@@ -172,73 +201,6 @@ async function fetchAssetInfo(mints: string[]): Promise<Map<string, JupAsset>> {
     for (const asset of Array.isArray(assets) ? assets : []) info.set(asset.id, asset);
   }
   return info;
-}
-
-/**
- * Reference prices that can prove they are current.
- *
- * price/v3 stamps every price with `blockId` — the slot it was computed at.
- * The current slot comes from our own RPC rotation, which shares nothing with
- * Jupiter's infrastructure, and anything lagging it by more than
- * PRICE_MAX_LAG_SLOTS is dropped here, before the arbiter ever sees it. See
- * repriceElements for why the proof matters.
- *
- * Best-effort by design: no slot, no prices, no arbitration — never a scan
- * failure. The scan is Jupiter's answer either way; this only decides whether
- * anything is qualified to second-guess it.
- */
-async function freshReferencePrices(mints: string[]): Promise<Map<string, number>> {
-  const fresh = new Map<string, number>();
-  if (!mints.length) return fresh;
-  try {
-    const answers = await Promise.race([
-      Promise.all([
-        solanaRpc<number>('getSlot', []),
-        (async () => {
-          const out: Record<string, { usdPrice?: number; blockId?: number }> = {};
-          for (let i = 0; i < mints.length; i += 50) {
-            const chunk = mints.slice(i, i + 50);
-            Object.assign(
-              out,
-              await fetchJson<Record<string, { usdPrice?: number; blockId?: number }>>(
-                `${JUP_PRICE_API}?ids=${chunk.join(',')}`,
-                {},
-                { tries: 1, timeoutMs: REFEREE_DEADLINE_MS },
-              ),
-            );
-          }
-          return out;
-        })(),
-      ]),
-      // The deadline loses the race by RESOLVING, not rejecting: a late
-      // referee is an absent one, and absence is the quiet path below
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), REFEREE_DEADLINE_MS).unref?.()),
-    ]);
-    if (!answers) {
-      logger.debug('price referee missed its deadline — this scan goes unarbitrated');
-      return fresh;
-    }
-    const [currentSlot, priced] = answers;
-    if (typeof currentSlot !== 'number') return fresh;
-    let lagged = 0;
-    for (const [mint, p] of Object.entries(priced)) {
-      if (typeof p?.usdPrice !== 'number' || typeof p.blockId !== 'number') continue;
-      if (currentSlot - p.blockId > PRICE_MAX_LAG_SLOTS) {
-        lagged++;
-        continue;
-      }
-      fresh.set(mint, p.usdPrice);
-    }
-    if (lagged) {
-      // The reference service itself served prices stamped far behind the
-      // chain — exactly the failure that disqualified the previous referee.
-      // Disqualifying is correct and silent leaking is not, so say so.
-      logger.debug(`price referee: ${lagged} price(s) lagged the chain and were disqualified`);
-    }
-  } catch (error) {
-    logger.debug(`price referee unavailable: ${(error as Error).message}`);
-  }
-  return fresh;
 }
 
 export async function scanSol(address: string): Promise<ScanResult> {
@@ -277,9 +239,13 @@ export async function scanSol(address: string): Promise<ScanResult> {
     throw new Error('jupiter answered without a portfolio — refusing to read that as an empty wallet');
   }
 
+  let defi = 0;
   const elements: JupElement[] = [];
   for (const fetcher of portfolio.fetcherResults) {
-    for (const element of fetcher.elements || []) elements.push(element);
+    for (const element of fetcher.elements || []) {
+      if (typeof element.value === 'number' && isFinite(element.value)) defi += element.value;
+      elements.push(element);
+    }
   }
 
   // 2) Token balances + metadata: needed for GM pools, position tickers and the
@@ -306,22 +272,6 @@ export async function scanSol(address: string): Promise<ScanResult> {
     mint === SOL_NATIVE_MINT
       ? 'SOL'
       : assetInfo.get(mint)?.symbol || assetInfo.get(mint)?.name || shortMint(mint);
-
-  // Jupiter against Jupiter — but only against prices that can prove they are
-  // current (see freshReferencePrices). Done before the total is read, so the
-  // total is the sum of the corrected legs. Native SOL is looked up under its
-  // wrapped mint, which is the only spelling the price API knows.
-  const reference = await freshReferencePrices(
-    [...referenced].map((mint) => (mint === SOL_NATIVE_MINT ? WRAPPED_SOL_MINT : mint)),
-  );
-  const repriced = repriceElements(elements, (mint) =>
-    reference.get(mint === SOL_NATIVE_MINT ? WRAPPED_SOL_MINT : mint),
-  );
-
-  let defi = 0;
-  for (const element of elements) {
-    if (typeof element.value === 'number' && isFinite(element.value)) defi += element.value;
-  }
 
   // 3) GM pools: gmtrade is in Jupiter's platform list, but its fetcher
   //    returns 0 elements — so GM is counted separately on top;
@@ -462,7 +412,6 @@ export async function scanSol(address: string): Promise<ScanResult> {
     positions: enrich(enrich(reconciled, poolFacts), lendingFacts),
     breakdown: { defi, gmtrade },
     unpriced: unpriced.length ? unpriced : undefined,
-    repriced: repriced.length ? repriced : undefined,
   };
 }
 
