@@ -69,26 +69,33 @@ export function uiAmount(amount: JupAmount | undefined): number | null {
 
 
 /**
- * Second opinions on Jupiter's prices, from Jupiter.
+ * Second opinions on Jupiter's prices — but only from a witness that can
+ * prove it was awake.
  *
  * portfolio/v2 is served by a fleet, and on 2026-09-04 one replica's price
- * snapshot froze: every answer it served priced cbBTC at $81.8k while BTC —
- * and every other replica — moved on. Two answers seconds apart differed by
- * 2.7% on the same amounts, and a wallet's chart turned into a sawtooth with a
- * tooth on every scan that landed on the stale node.
+ * snapshot froze: cbBTC at $81.8k while BTC moved on, a ~$280 tooth on every
+ * scan that landed on the stale node. The first cut of this fix arbitrated
+ * with the asset search (datapi) — which promptly failed the other way:
+ * queried from production's egress region, datapi served the SAME stale
+ * snapshot, agreed with the sick replica, and on one scan "corrected" an
+ * honest portfolio answer UP to the stale price. An arbiter that can be as
+ * stale as the thing it arbitrates is not an arbiter.
  *
- * The asset search (datapi) is a separate service with a live price per mint,
- * and this scan already calls it for every referenced mint. So it arbitrates:
- * a leg whose price disagrees with datapi's by more than the threshold is
- * repriced to datapi's number, and the element's value moves by exactly the
+ * So the reference price must carry proof of freshness, and Jupiter's price
+ * API does: `blockId`, the slot the price was computed at. The caller compares
+ * it against the chain's current slot (read from our own RPC path, which does
+ * not share Jupiter's infrastructure) and hands this function only the prices
+ * whose slot is recent. A regional stale node betrays itself with an old slot
+ * and simply disqualifies — leaving the worst case at the original sawtooth,
+ * never an active mis-correction.
+ *
+ * A leg whose price disagrees with a qualified reference by more than the
+ * threshold is repriced to it, and the element's value moves by exactly the
  * difference that leg contributed — supplied, rewards and held legs push a
- * position's value up, borrowed legs pull it down.
- *
- * Both thresholds have to trip before anything is touched. The relative one
- * keeps ordinary dispersion between two live feeds alone; the absolute one
- * keeps dust legs from being rewritten over fractions of a cent. Every
- * reprice is reported to the caller, because a corrected total should never
- * be a silent one.
+ * position's value up, borrowed legs pull it down. Both thresholds have to
+ * trip: the relative one spares ordinary dispersion between two live feeds,
+ * the absolute one spares dust legs. Every reprice is reported to the caller,
+ * because a corrected total should never be a silent one.
  */
 const REPRICE_REL = 0.015;
 const REPRICE_ABS_USD = 0.5;
