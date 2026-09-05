@@ -12,13 +12,19 @@ export function pairKey(a: string | null | undefined, b: string | null | undefin
     .join('|');
 }
 
-/** A loan the aggregator described without saying how healthy it is or what it costs */
+/**
+ * Any loan at all.
+ *
+ * This used to ask only for loans the aggregator described incompletely — no
+ * health, or no rate — on the theory that a present number is a good number.
+ * Then a present number was checked against the protocol it claimed to be
+ * from: Jupiter priced a Kamino USDT loan at 7.8% APR while Kamino's own API,
+ * the owner's day of accrued interest, and Kamino's own interface all said
+ * 5.0%. A rate the protocol can contradict is worth two requests to verify,
+ * so the facts are fetched whenever there is a loan to verify at all.
+ */
 export function needsLendingFacts(positions: ScanPosition[]): boolean {
-  return positions.some(
-    (p) =>
-      (p.tokens ?? []).some((t) => t.role === 'borrow') &&
-      (p.healthRate == null || p.borrowApy == null),
-  );
+  return positions.some((p) => (p.tokens ?? []).some((t) => t.role === 'borrow'));
 }
 
 /** The pair a position is made of, or null when it isn't a pair at all */
@@ -129,9 +135,21 @@ export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPositio
         // because DeBank happened to report the health factor first
         patch.loan = { market: loan.market, token: loan.token };
         if (position.healthRate == null) patch.healthRate = loan.healthFactor;
-        // The protocols quote a percentage; a position stores the fraction
-        if (position.borrowApy == null && loan.borrowRate !== null) {
-          patch.borrowApy = loan.borrowRate / 100;
+        // The rate REPLACES the aggregator's, the same way a pool's own tick
+        // replaces the inferred range: what a loan costs is the lending
+        // protocol's own number, and the one time the two were compared the
+        // aggregator was 2.7 points high on it. The protocols quote a
+        // percentage; a position stores the fraction.
+        if (loan.borrowRate !== null) {
+          const rate = loan.borrowRate / 100;
+          patch.borrowApy = rate;
+          // The borrowed LEG carries its own rate too — it is what the row's
+          // "USDT · 8.1%" label is printed from — so it takes the same truth
+          patch.tokens = (position.tokens ?? []).map((t) =>
+            t.role === 'borrow' && t.symbol.trim().toUpperCase() === loan.token
+              ? { ...t, apy: rate }
+              : t,
+          );
         }
       }
     }
