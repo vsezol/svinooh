@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { EVM_CHAINS } from '../../src/lib/evm-chains';
 import { Cta, P, PageIntro, Section } from '../../src/components/marketing/Blocks';
 import { MarketingShell } from '../../src/components/marketing/Shell';
 
@@ -15,7 +16,14 @@ export const metadata: Metadata = {
   twitter: { card: 'summary_large_image', title: TITLE, description: DESCRIPTION },
 };
 
+// The same four families the lead names, each linking to its own page —
+// EVM to the family write-up, the other three to their chain pages.
 const FAMILIES = [
+  {
+    href: '/chains/evm',
+    name: 'EVM',
+    line: 'Sixty-plus networks from one address — how the family works, in detail, with a page per major network.',
+  },
   {
     href: '/chains/solana',
     name: 'Solana',
@@ -31,36 +39,21 @@ const FAMILIES = [
     name: 'Bitcoin',
     line: 'Address balances, confirmed and pending, counted in the same total as everything else.',
   },
-  {
-    href: '/chains/hyperliquid',
-    name: 'Hyperliquid',
-    line: 'Full account value — perps margin, spot, staked HYPE, vaults — read from the same EVM address.',
-  },
 ];
 
-const EVM_NETWORKS = [
-  'Ethereum',
-  'Arbitrum',
-  'Base',
-  'OP Mainnet',
-  'BNB Chain',
-  'Polygon',
-  'Avalanche',
-  'Hyperliquid',
-  'Berachain',
-  'Scroll',
-  'Linea',
-  'zkSync',
-  'Blast',
-  'Mantle',
-  'Sonic',
-  'Gnosis',
-  'Celo',
-  'Mode',
-  'Zora',
-  'Sei',
-  'Plasma',
-];
+// Networks the family covers beyond the ones with a page of their own
+const UNLINKED_NETWORKS = ['Mantle', 'Blast', 'Gnosis', 'Celo', 'Mode', 'Zora', 'Sei', 'Plasma'];
+
+const CHIP = {
+  border: '1px solid var(--line)',
+  background: 'var(--surf)',
+  borderRadius: 'var(--r-full)',
+  padding: '7px 16px',
+  fontSize: 'var(--fs-tag)',
+  letterSpacing: '0.06em',
+  whiteSpace: 'nowrap' as const,
+  textDecoration: 'none',
+};
 
 export default function ChainsPage() {
   return (
@@ -93,31 +86,31 @@ export default function ChainsPage() {
         </div>
       </Section>
 
-      <Section title="EVM networks">
+      <Section title="EVM networks" id="evm">
         <P>
           EVM coverage follows the position indexes svinooh reads from, so it is broad by construction — sixty-plus
-          networks in practice — rather than a hand-kept allowlist. The ones people ask about:
+          networks in practice — rather than a hand-kept allowlist. The ones people ask about, most with a page of
+          their own:
         </P>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {EVM_NETWORKS.map((n) => (
-            <span
-              key={n}
-              className="mono"
-              style={{
-                border: '1px solid var(--line)',
-                background: 'var(--surf)',
-                borderRadius: 'var(--r-full)',
-                padding: '7px 16px',
-                fontSize: 'var(--fs-tag)',
-                letterSpacing: '0.06em',
-                color: 'var(--mut)',
-                whiteSpace: 'nowrap',
-              }}
-            >
+          {EVM_CHAINS.map((c) => (
+            <Link key={c.slug} href={`/chains/${c.slug}`} className="mono row-hover" style={{ ...CHIP, color: 'var(--text)' }}>
+              {c.name.toUpperCase()}
+            </Link>
+          ))}
+          <Link href="/chains/hyperliquid" className="mono row-hover" style={{ ...CHIP, color: 'var(--text)' }}>
+            HYPERLIQUID
+          </Link>
+          {UNLINKED_NETWORKS.map((n) => (
+            <span key={n} className="mono" style={{ ...CHIP, color: 'var(--mut)' }}>
               {n.toUpperCase()}
             </span>
           ))}
         </div>
+        <P>
+          One EVM corner earns its own page: <Link href="/chains/hyperliquid">Hyperliquid</Link> — the full account
+          value most trackers silently skip, read from the same address as your wallet.
+        </P>
       </Section>
 
       <Cta />

@@ -1,9 +1,11 @@
 import type { MetadataRoute } from 'next';
+import { EVM_CHAINS } from '../src/lib/evm-chains';
 
 /**
  * Only pages that mean the same thing to every visitor. A portfolio is
  * somebody's money behind a slug — opened by the link its owner handed out,
- * never listed for a crawler to walk.
+ * never listed for a crawler to walk. The per-network pages come from the
+ * same list that renders them, so the two cannot drift apart.
  */
 const PAGES: { path: string; changeFrequency: 'daily' | 'weekly'; priority: number }[] = [
   { path: '/', changeFrequency: 'daily', priority: 1 },
@@ -15,10 +17,12 @@ const PAGES: { path: string; changeFrequency: 'daily' | 'weekly'; priority: numb
   { path: '/alternatives/zerion', changeFrequency: 'weekly', priority: 0.7 },
   { path: '/alternatives/coinstats', changeFrequency: 'weekly', priority: 0.7 },
   { path: '/chains', changeFrequency: 'weekly', priority: 0.6 },
+  { path: '/chains/evm', changeFrequency: 'weekly', priority: 0.7 },
   { path: '/chains/solana', changeFrequency: 'weekly', priority: 0.7 },
   { path: '/chains/tron', changeFrequency: 'weekly', priority: 0.7 },
   { path: '/chains/bitcoin', changeFrequency: 'weekly', priority: 0.7 },
   { path: '/chains/hyperliquid', changeFrequency: 'weekly', priority: 0.7 },
+  ...EVM_CHAINS.map((c) => ({ path: `/chains/${c.slug}`, changeFrequency: 'weekly' as const, priority: 0.6 })),
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {

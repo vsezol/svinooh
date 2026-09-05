@@ -38,6 +38,12 @@ Key facts:
   counted beside everything else
 - [Hyperliquid tracking](https://svinooh.com/chains/hyperliquid): full account
   value — perps margin, spot, staked HYPE, vaults
+- [EVM tracking](https://svinooh.com/chains/evm): one address across 60+
+  networks — coverage, position shapes, on-chain checks
+- Per-network pages: /chains/ethereum, /chains/arbitrum, /chains/base,
+  /chains/optimism, /chains/bnb-chain, /chains/polygon, /chains/avalanche,
+  /chains/berachain, /chains/zksync, /chains/linea, /chains/scroll,
+  /chains/sonic
 - [Zapper alternative](https://svinooh.com/alternatives/zapper): where to go
   after the August 2026 shutdown
 - [DeBank alternative](https://svinooh.com/alternatives/debank): the same EVM
