@@ -92,25 +92,84 @@ loader, not the architecture, and the fallback is one line.
 current in-app tab works before the widget does. Once M3 lands, the widget
 calls the agent directly (CORS + token) and the proxy is deleted.
 
-## Milestones — one small MR each
+**D6 — One identity, two doors.** The agent never implements login providers.
+Embedded in svinooh.com, the shell hands the user's token in through `mount()`;
+as a standalone app, the agent shows its own sign-in screen that drives the
+host product's auth flows (Telegram today, Twitter when the product grows it)
+and receives the same JWT. Either way the token is the identity, and
+`GET /auth/me` is the oracle: one call answers both "whose token is this" and
+"which portfolios do they own" (`MeDto.portfolios`). The agent stores no
+credentials and mints none.
+
+**D7 — Conversation routing, as a graph.** Not every question needs portfolio
+data, and fetching it for "what is a health factor" wastes a round trip and
+tokens. A cheap classifier (structured output on the configured model) names
+the intent — `portfolio` vs `general` to start — and a LangGraph `StateGraph`
+with conditional edges runs the branch: general → answer; portfolio → resolve
+whose portfolio (D6) → analyze it, or hand off to onboarding (D8) when there is
+none. v1 was a straight line and needed no graph; branching plus shared state
+plus, later, interrupts for confirmation is exactly what LangGraph is for — it
+arrives when the shape of the problem becomes a graph, not before. New
+classifiers ship in shadow mode first: classify, log, change nothing — then
+route once the labels look right.
+
+**D8 — Onboarding is the agent's first write, and writes are confirmed.** A
+user with no portfolio who asks about "my portfolio" is offered one: the agent
+collects wallet addresses in the conversation, then creates the portfolio
+through the same public API as any client (`POST /portfolios`,
+`POST /portfolios/{slug}/wallets`) — with the user's token, so it lands owned
+by them. Reads are silent; a write happens only after the user explicitly
+confirms it in the chat. That rule outlives onboarding: every future action the
+agent can take follows it.
+
+## Milestones — one small MR each, one lesson each
+
+Deliberately over-split: each step is a reviewable MR that teaches exactly one
+agent-engineering concept and leaves the system working.
 
 - **M0 — merge v0.** #57, #58, #60 now; #59 after the agent service is
   deployed with its key (that flag turns the live tab on).
-- **M1 — real context.** `DataSource` protocol + `PortfolioApiSource`; the
-  system prompt carries the portfolio the user is looking at. Fixes the honest
-  gap in v0: today the opener chips get generic answers. Touches `apps/agent`
-  only.
-- **M2 — standalone ingress.** Public domain for the agent, CORS allowlist
-  (the portfolio origin), token validation per D2, per-user rate limit, the
-  blocks contract per D3. After this the agent no longer needs the gateway.
-- **M3 — the widget.** `apps/agent-widget`: `AgentChat` + the block widgets
-  move there; MF remote exposing `mount()`; the portfolio tab becomes a
-  ~30-line embed host. The gateway proxy and `serviceAnswerer` are deleted.
-- **M4 — the second DataSource.** Another API behind the same protocol —
-  proves the multi-API claim with code rather than a diagram.
+- **M1 — real context** (#102). `DataSource` + `PortfolioApiSource`; answers
+  grounded in the portfolio on screen. *Lesson: API-as-context, honest
+  degradation.*
 
-Later, and orthogonal: memory, tools, a LangGraph loop. All of it lives inside
-the agent service; none of it moves these boundaries.
+The routing ladder (D7/D8) — each step builds on the previous:
+
+- **R1 — the shadow router.** An intent classifier as its own module:
+  structured output (`{intent: portfolio | general}`) on the same model, wired
+  in shadow mode — every turn is classified and logged, nothing changes
+  behavior. *Lesson: structured outputs, and shipping classifiers dark before
+  trusting them.*
+- **R2 — the graph.** LangGraph `StateGraph`: classify → conditional edge →
+  `general` (plain answer) | `portfolio` (today's context flow). The shadow
+  label starts steering. *Lesson: nodes, state, conditional edges — the graph
+  arrives exactly when the shape demands it.*
+- **R3 — whose portfolio.** The portfolio branch resolves identity via
+  `GET /auth/me` (D6): owns portfolios → ground in them (the widget's slug
+  stays a hint, not a requirement); owns none → route to onboarding. *Lesson:
+  identity as data in the graph state.*
+- **R4 — onboarding, the first write.** The no-portfolio branch collects
+  wallet addresses across turns and, after explicit confirmation, creates the
+  portfolio via `POST /portfolios` + `POST /{slug}/wallets` with the user's
+  token. *Lesson: agent actions, human-in-the-loop confirmation, multi-turn
+  state.*
+
+Then the independence milestones, unchanged in substance:
+
+- **M2 — standalone ingress.** Public domain, CORS allowlist, token validation
+  per D2, per-user rate limit, the blocks contract per D3. The gateway becomes
+  unnecessary.
+- **M3 — the widget.** `apps/agent-widget`: MF remote exposing `mount()`; the
+  shell hands the token in (the embedded door of D6); the portfolio tab
+  becomes a ~30-line embed host; gateway proxy and `serviceAnswerer` deleted.
+- **S1 — the standalone door.** The agent app's own sign-in screen, driving
+  the host's auth flows (D6). The agent becomes visitable on its own domain.
+- **M4 — the second DataSource.** Another API behind the same protocol —
+  proves the multi-API claim with code.
+
+Still later, and orthogonal: durable chat history in the agent's own store
+(after M2, when validation names the user), richer tools, deeper graphs. All
+inside the service; none of it moves these boundaries.
 
 ## Contracts (v1)
 
