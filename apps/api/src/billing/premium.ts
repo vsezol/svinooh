@@ -83,3 +83,17 @@ export function addMonths(from: Date, months: number): Date {
 export function utcDay(now: Date): string {
   return now.toISOString().slice(0, 10);
 }
+
+/**
+ * Whether the operator's chosen checkout coin may carry this price — the
+ * coin to lock the invoice to, or null for the gateway's open page.
+ *
+ * Null on an unknown minimum too: a lock we cannot vouch for is an invoice
+ * that might be unpayable, and the open page is never wrong — the knob's
+ * choice degrades to it rather than to a dead checkout.
+ */
+export function coinLock(coin: string, minUsd: number | null, priceUsd: number): string | null {
+  if (coin === 'page') return null;
+  if (minUsd === null || minUsd > priceUsd) return null;
+  return coin;
+}

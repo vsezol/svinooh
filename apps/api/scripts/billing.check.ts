@@ -5,7 +5,7 @@
  * scheme, status mapping — so it can be run for real rather than reasoned
  * about. Run with `npm run -w apps/api check`.
  */
-import { addMonths, buildOffer, paywallBody, utcDay } from '../src/billing/premium';
+import { addMonths, buildOffer, coinLock, paywallBody, utcDay } from '../src/billing/premium';
 import {
   ipnSignature,
   ipnSignatureValid,
@@ -73,6 +73,14 @@ check(
   ['finished', 'partially_paid', 'waiting', 'confirmed', 'sending', 'failed', 'refunded', 'expired', 'novel'].map(paymentStatusOf),
   ['paid', 'underpaid', 'waiting', 'confirming', 'confirming', 'failed', 'refunded', 'expired', null],
 );
+
+/* ── замок на монету чекаута (ручка billing.payCoin) ── */
+
+check('page — замка нет, выбор на странице шлюза', coinLock('page', null, 10), null);
+check('минималка влезает — инвойс запирается на монету', coinLock('usdtton', 0.19, 5), 'usdtton');
+check('минималка выше цены — откат к открытой странице, не мёртвый счёт', coinLock('usdttrc20', 11.32, 10), null);
+check('минималка непрочитана — за замок не ручаемся, откат', coinLock('usdtton', null, 5), null);
+check('ровно в минималку — ещё влезает', coinLock('usdtbsc', 5, 5), 'usdtbsc');
 
 console.log(failures ? `\n${failures} failure(s)` : '\nall ok');
 process.exit(failures ? 1 : 0);

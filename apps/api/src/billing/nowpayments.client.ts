@@ -91,6 +91,12 @@ export interface InvoiceRequest {
   ipnUrl: string | null;
   successUrl: string;
   cancelUrl: string;
+  /**
+   * Lock the invoice to one coin-and-network ('usdtton', ...) — the payer
+   * lands straight on its address and cannot switch there. null — the hosted
+   * page offers the dashboard-curated list.
+   */
+  payCurrency?: string | null;
 }
 
 export interface CreatedInvoice {
@@ -125,6 +131,7 @@ export class NowPaymentsClient {
         price_currency: 'usd',
         order_id: request.orderId,
         order_description: request.description,
+        ...(request.payCurrency ? { pay_currency: request.payCurrency } : {}),
         ...(request.ipnUrl ? { ipn_callback_url: request.ipnUrl } : {}),
         success_url: request.successUrl,
         cancel_url: request.cancelUrl,
@@ -142,5 +149,21 @@ export class NowPaymentsClient {
 
   verify(body: unknown, signatureHeader: string | undefined): boolean {
     return ipnSignatureValid(body, signatureHeader, this.ipnSecret);
+  }
+
+  /**
+   * The smallest payment this coin can carry, in USD, or null when the
+   * gateway cannot say. Network fees drive it, so it moves — the caller
+   * decides how long to believe an answer.
+   */
+  async minAmountUsd(code: string): Promise<number | null> {
+    if (!this.enabled) return null;
+    const res = await fetch(
+      `${this.apiUrl}/min-amount?currency_from=${code}&currency_to=${code}&fiat_equivalent=usd`,
+      { headers: { 'x-api-key': this.apiKey }, signal: AbortSignal.timeout(10_000) },
+    );
+    if (!res.ok) return null;
+    const body = (await res.json()) as { fiat_equivalent?: number };
+    return typeof body.fiat_equivalent === 'number' ? body.fiat_equivalent : null;
   }
 }
