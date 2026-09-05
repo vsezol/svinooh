@@ -542,6 +542,12 @@ export interface ScanResult {
   /** Assets without a price: we log and surface them rather than silently swallowing them */
   unpriced?: string[];
   /**
+   * Legs whose price disagreed with the asset search and were corrected to it,
+   * as human-readable notes — a corrected total must never be a silent one.
+   * See repriceElements in the SOL scanner.
+   */
+  repriced?: string[];
+  /**
    * TRON only, and only on the scans that refreshed it — reading it costs four
    * or more sequential rate-limited calls, so it is refreshed on its own slower
    * clock (TRON_RESOURCE_INTERVAL_MIN) rather than on every sync.
