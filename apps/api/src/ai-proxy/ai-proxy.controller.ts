@@ -1,4 +1,4 @@
-import { Body, Controller, HttpException, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Headers, HttpException, Post, UseGuards } from '@nestjs/common';
 import { RequiredAuthGuard } from '@svinooh/common';
 import { config } from '../config';
 
@@ -11,10 +11,14 @@ import { config } from '../config';
  * Gated by RequiredAuthGuard: a chat turn spends real LLM tokens, so only a
  * signed-in owner may trigger one.
  */
-async function forward(path: string, body: unknown): Promise<unknown> {
+async function forward(path: string, body: unknown, auth?: string): Promise<unknown> {
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  // The caller's own token rides along: the agent fetches portfolio context
+  // with it (DESIGN.md D2), so it can never read more than the person asking.
+  if (auth) headers['authorization'] = auth;
   const res = await fetch(`${config.agentServiceUrl}${path}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
     // A model turn is slow by nature — give it room, but not forever.
     signal: AbortSignal.timeout(60_000),
@@ -34,12 +38,17 @@ async function forward(path: string, body: unknown): Promise<unknown> {
 export class AiProxyController {
   @Post('chat')
   @UseGuards(RequiredAuthGuard)
-  chat(@Body() body: { message?: string; session_id?: string }) {
+  chat(
+    @Body() body: { message?: string; session_id?: string; portfolio?: string },
+    @Headers('authorization') auth?: string,
+  ) {
     // Cap the prompt here rather than trust the client — the agent bills per token.
     const message = String(body?.message ?? '').slice(0, 4000);
     // The session id is the agent's conversation-memory handle; pass it through
     // untouched so context survives the hop through this gateway.
     const session_id = typeof body?.session_id === 'string' ? body.session_id.slice(0, 64) : undefined;
-    return forward('/chat', { message, session_id });
+    // Which portfolio the user is looking at — the agent grounds its answer in it.
+    const portfolio = typeof body?.portfolio === 'string' ? body.portfolio.slice(0, 64) : undefined;
+    return forward('/chat', { message, session_id, portfolio }, auth);
   }
 }
