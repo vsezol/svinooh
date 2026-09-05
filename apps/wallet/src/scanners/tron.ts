@@ -52,6 +52,21 @@ export async function scanTron(address: string, resourcesAt: string | null = nul
   const stakedSun = stakeParts.reduce((sum, p) => sum + p.sun, 0);
   const liquidSun = account.balance || 0;
 
+  // Stake 2.0's third state: unstaked, waiting out the lock. The TRX is the
+  // owner's the whole time, but it sits in NEITHER `balance` NOR `frozenV2` —
+  // it moves to `unfrozenV2` until `withdrawExpireUnfreeze` claims it. Without
+  // this list an unstake read as the money vanishing: the reference wallet
+  // unstaked everything and dropped from $3.6k to the $3.50 that was liquid.
+  // An entry whose expiry has passed is still here until it is withdrawn, so
+  // it is counted too — as "ready to withdraw" rather than a date.
+  const unfrozenV2 =
+    (account.unfrozenV2 as Array<{ unfreeze_amount?: number; unfreeze_expire_time?: number }> | undefined) || [];
+  const unstakes = unfrozenV2
+    .filter((u) => (u.unfreeze_amount || 0) > 0)
+    .map((u) => ({ sun: u.unfreeze_amount!, expireAt: u.unfreeze_expire_time || 0 }))
+    .sort((a, b) => a.expireAt - b.expireAt);
+  const unstakingSun = unstakes.reduce((sum, u) => sum + u.sun, 0);
+
   const trc20: Array<Record<string, string>> = account.trc20 || [];
   const trc10: Array<{ key: string }> = account.assetV2 || [];
 
@@ -63,9 +78,10 @@ export async function scanTron(address: string, resourcesAt: string | null = nul
   const trxPrice = coins['coingecko:tron']?.price || 0;
   const liquid = liquidSun / 1e6;
   const staked = stakedSun / 1e6;
+  const unstaking = unstakingSun / 1e6;
 
   const positions: ScanPosition[] = [];
-  if (liquid > 0 || staked === 0) {
+  if (liquid > 0 || (staked === 0 && unstaking === 0)) {
     positions.push({
       symbol: 'TRX',
       amount: liquid,
@@ -95,6 +111,40 @@ export async function scanTron(address: string, resourcesAt: string | null = nul
       platform: 'stake',
       category: 'staked',
       tokens: legs.length > 1 ? legs : null, // a single leg adds nothing over the header
+    });
+  }
+  if (unstaking > 0) {
+    const now = Date.now();
+    /** "ready to withdraw", or "unlocks Sep 19 · in 14 days" */
+    const stateOf = (expireAt: number): string => {
+      if (expireAt <= now) return 'ready to withdraw';
+      const date = new Date(expireAt).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'UTC',
+      });
+      const days = Math.ceil((expireAt - now) / 86_400_000);
+      return `unlocks ${date} · in ${days} day${days === 1 ? '' : 's'}`;
+    };
+    const legs: ScanPositionToken[] = unstakes.map((u) => ({
+      symbol: `TRX · ${stateOf(u.expireAt)}`,
+      amount: u.sun / 1e6,
+      priceUsd: trxPrice,
+      valueUsd: (u.sun / 1e6) * trxPrice,
+      role: 'supply' as const,
+    }));
+    positions.push({
+      symbol: 'TRX',
+      name: 'Unstaking',
+      // The soonest entry heads the block; each entry keeps its own date on
+      // its leg. Sorted above, so [0] IS the soonest.
+      note: stateOf(unstakes[0].expireAt),
+      amount: unstaking,
+      priceUsd: trxPrice,
+      valueUsd: unstaking * trxPrice,
+      platform: 'stake',
+      category: 'staked',
+      tokens: legs.length > 1 ? legs : null,
     });
   }
 
