@@ -34,9 +34,12 @@ async function forward(path: string, body: unknown): Promise<unknown> {
 export class AiProxyController {
   @Post('chat')
   @UseGuards(RequiredAuthGuard)
-  chat(@Body() body: { message?: string }) {
+  chat(@Body() body: { message?: string; session_id?: string }) {
     // Cap the prompt here rather than trust the client — the agent bills per token.
     const message = String(body?.message ?? '').slice(0, 4000);
-    return forward('/chat', { message });
+    // The session id is the agent's conversation-memory handle; pass it through
+    // untouched so context survives the hop through this gateway.
+    const session_id = typeof body?.session_id === 'string' ? body.session_id.slice(0, 64) : undefined;
+    return forward('/chat', { message, session_id });
   }
 }
