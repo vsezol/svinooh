@@ -24,6 +24,8 @@ body {
      self-hosts them and hands their names over in these variables */
   --mono: var(--font-plex-mono), ui-monospace, 'SF Mono', Menlo, monospace;
   --sans: var(--font-manrope), system-ui, -apple-system, sans-serif;
+  /* The /pro hero's dot grid — faint enough to be texture, not content */
+  --dots: color-mix(in srgb, var(--text) 7%, transparent);
 }
 
 html[data-theme='light'],
@@ -38,6 +40,8 @@ body[data-theme='light'] {
   --acc-text: color-mix(in srgb, var(--acc) 62%, #063018);
   --up: #0e9f54;
   --down: #d9304e;
+  /* A white page needs slightly darker dots to read at all */
+  --dots: color-mix(in srgb, var(--text) 9%, transparent);
 }
 
 html,
@@ -489,5 +493,207 @@ body[data-theme='light'] .on-dark {
     /* the tabs across the top take their share of the screen too */
     height: calc(100dvh - 59px - 47px - env(safe-area-inset-top));
     padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ── /pro — the Pro page's own fabric ─────────────────────────────────────
+   The marketing screen follows the design file at its two anchor widths
+   (1440 and 390) and stays fluid in between. Classes rather than inline
+   styles only where a media query or a keyframe needs a home. */
+
+.pro-dots {
+  position: relative;
+  background-image: radial-gradient(var(--dots) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 12px 12px;
+}
+
+/* Fades the dots out towards the content below; sits under the hero, which
+   carries position:relative of its own */
+.pro-fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 0%, var(--bg) 92%);
+  pointer-events: none;
+}
+
+.pro-pad {
+  padding-left: 48px;
+  padding-right: 48px;
+}
+
+.pro-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 480px;
+  gap: 80px;
+  padding: 96px 48px 88px;
+  align-items: center;
+}
+
+.pro-h1 {
+  margin: 26px 0 0;
+  font-size: 88px;
+  line-height: 0.94;
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.04em;
+}
+
+.pro-lede {
+  margin: 30px 0 0;
+  max-width: 540px;
+  font-size: 20px;
+  line-height: 1.45;
+  color: var(--mut);
+  text-wrap: pretty;
+}
+
+/* The one figure the page is about */
+.pro-price {
+  font-size: 96px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.05em;
+  line-height: 0.9;
+}
+
+.pro-tiles {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.pro-tile {
+  background: var(--surf);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 24px 24px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-height: 196px;
+}
+
+.pro-tile-value {
+  font-size: 34px;
+  line-height: 1;
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.04em;
+  color: var(--acc-text);
+}
+
+.pro-closer {
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--surf2);
+  padding: 40px 44px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 40px;
+}
+
+.pro-closer-head {
+  font-size: 30px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+/* The pulsing "live" dot before the eyebrow, and the checkout spinner */
+@keyframes pro-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes pro-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pro-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--acc);
+  animation: pro-pulse 1.6s ease-in-out infinite;
+}
+
+/* Phones buy from a bar that never scrolls away; desktop repeats the CTA in
+   the card and the closer instead */
+.pro-sticky {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pro-pulse {
+    animation: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .pro-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 36px;
+    padding: 40px 18px 26px;
+  }
+}
+
+@media (max-width: 719px) {
+  .pro-pad {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .pro-h1 {
+    margin-top: 16px;
+    font-size: 54px;
+  }
+  .pro-lede {
+    margin-top: 18px;
+    font-size: 16px;
+  }
+  .pro-price {
+    font-size: 72px;
+  }
+  .pro-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .pro-tile {
+    padding: 16px 16px 14px;
+    gap: 18px;
+    min-height: 132px;
+  }
+  .pro-tile:last-child {
+    grid-column: 1 / -1;
+  }
+  .pro-tile-value {
+    font-size: 24px;
+  }
+  .pro-closer {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 24px 22px;
+    gap: 18px;
+  }
+  .pro-closer-head {
+    font-size: 24px;
+  }
+  .pro-closer-cta {
+    display: none;
+  }
+  .pro-sticky {
+    display: block;
+    position: sticky;
+    bottom: 0;
+    padding: 12px 18px calc(16px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
   }
 }
