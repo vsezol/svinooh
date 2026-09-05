@@ -17,11 +17,14 @@ export const getOffer = (): Promise<ProOfferDto> => api<ProOfferDto>('/billing/o
 export const getBillingMe = (): Promise<BillingMeDto> => api<BillingMeDto>('/billing/me');
 
 /**
- * Opens a checkout and hands this tab to the gateway's hosted page — the coin,
- * the network and the paying all happen there, and the success URL brings the
- * payer back to /pro.
+ * Opens a checkout and answers with the hosted page's URL — the caller
+ * decides which tab it goes into. `payCurrency` locks the invoice to one
+ * stable rail (a BillingMeDto.payOptions code); 'any' or absent lets the
+ * payment page offer the gateway's full list.
  */
-export async function startCheckout(): Promise<void> {
-  const { url } = await api<CheckoutDto>('/billing/checkout', { method: 'POST' });
-  window.location.assign(url);
+export async function openCheckout(payCurrency?: string): Promise<string> {
+  const body =
+    payCurrency && payCurrency !== 'any' ? JSON.stringify({ payCurrency }) : undefined;
+  const { url } = await api<CheckoutDto>('/billing/checkout', { method: 'POST', body });
+  return url;
 }

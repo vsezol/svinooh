@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -11,6 +12,7 @@ import { PrismaService } from '@svinooh/db';
 import { randomUUID } from 'node:crypto';
 import { config } from '../config';
 import { NowPaymentsClient, paymentStatusOf } from './nowpayments.client';
+import { PayRailsService } from './pay-rails';
 import { addMonths, utcDay } from './premium';
 import { PremiumService } from './premium.service';
 
@@ -37,12 +39,22 @@ export class BillingService {
     private readonly prisma: PrismaService,
     private readonly premium: PremiumService,
     private readonly nowpayments: NowPaymentsClient,
+    private readonly payRails: PayRailsService,
     private readonly rabbit: RabbitService,
   ) {}
 
+  /** What this account pays for its next month — the welcome price while it applies */
+  private async nextPriceUsd(userId: string): Promise<{ priceUsd: number; firstMonth: boolean }> {
+    const firstMonth = await this.firstMonthEligible(userId);
+    return {
+      firstMonth,
+      priceUsd: firstMonth ? setting('billing.firstMonthUsd') : setting('billing.proPriceUsd'),
+    };
+  }
+
   async me(userId: string): Promise<BillingMeDto> {
     const now = new Date();
-    const [sub, usage, portfolios, payments, firstMonthEligible] = await Promise.all([
+    const [sub, usage, portfolios, payments, next] = await Promise.all([
       this.prisma.subscription.findUnique({ where: { userId }, select: { paidUntil: true } }),
       this.prisma.featureUsage.findUnique({ where: { userId } }),
       this.prisma.portfolioOwner.count({ where: { userId } }),
@@ -51,13 +63,16 @@ export class BillingService {
         orderBy: { createdAt: 'desc' },
         take: 12,
       }),
-      this.firstMonthEligible(userId),
+      this.nextPriceUsd(userId),
     ]);
     return {
       pro: sub !== null && sub.paidUntil > now,
       paidUntil: sub?.paidUntil.toISOString() ?? null,
-      firstMonthEligible,
+      firstMonthEligible: next.firstMonth,
       offer: this.premium.offer(),
+      // For the price THIS account would pay — a rail that fits 10 USD may
+      // not fit the welcome invoice
+      payOptions: await this.payRails.options(next.priceUsd),
       usage: {
         portfolios,
         alertsSent: usage?.alertsSent ?? 0,
@@ -80,15 +95,30 @@ export class BillingService {
    * One month of Pro, priced at the welcome offer while this account has never
    * finished a payment. The Payment row exists BEFORE the gateway hears the
    * order id, so its webhook can never name an order we do not know.
+   *
+   * `payCurrencyRaw` locks the invoice to one stable rail — the default flow;
+   * absent or 'any', the hosted page offers the gateway's full list. A lock is
+   * only accepted for a rail whose live minimum fits the price: an invoice
+   * that cannot be paid is worse than a longer coin list.
    */
-  async checkout(userId: string): Promise<CheckoutDto> {
+  async checkout(userId: string, payCurrencyRaw?: string): Promise<CheckoutDto> {
     if (!this.nowpayments.enabled) {
       throw new ServiceUnavailableException('Payments are not configured yet');
     }
-    const firstMonth = await this.firstMonthEligible(userId);
-    const priceUsd = firstMonth
-      ? setting('billing.firstMonthUsd')
-      : setting('billing.proPriceUsd');
+    const { priceUsd, firstMonth } = await this.nextPriceUsd(userId);
+
+    const wanted =
+      typeof payCurrencyRaw === 'string' && payCurrencyRaw !== '' && payCurrencyRaw !== 'any'
+        ? payCurrencyRaw
+        : null;
+    if (wanted !== null && !(await this.payRails.viable(wanted, priceUsd))) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'PAY_RAIL_UNAVAILABLE',
+        message:
+          'That coin cannot carry this amount right now — its network minimum is above the price. Pick another, or choose the full list.',
+      });
+    }
 
     const payment = await this.prisma.payment.create({
       data: {
@@ -99,6 +129,9 @@ export class BillingService {
         orderId: `pro_${randomUUID()}`,
         months: 1,
         priceUsd,
+        // What the invoice is locked to; the webhook overwrites it with what
+        // was actually paid
+        payCurrency: wanted,
       },
     });
 
@@ -107,6 +140,7 @@ export class BillingService {
         priceUsd,
         orderId: payment.orderId,
         description: firstMonth ? 'Svinooh.Pro — first month' : 'Svinooh.Pro — 1 month',
+        payCurrency: wanted,
         ipnUrl: config.publicApiUrl
           ? `${config.publicApiUrl}/api/billing/webhook/nowpayments`
           : null,

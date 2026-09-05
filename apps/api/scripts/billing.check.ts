@@ -6,6 +6,7 @@
  * about. Run with `npm run -w apps/api check`.
  */
 import { addMonths, buildOffer, paywallBody, utcDay } from '../src/billing/premium';
+import { PAY_RAILS, railOptions } from '../src/billing/pay-rails';
 import {
   ipnSignature,
   ipnSignatureValid,
@@ -73,6 +74,24 @@ check(
   ['finished', 'partially_paid', 'waiting', 'confirmed', 'sending', 'failed', 'refunded', 'expired', 'novel'].map(paymentStatusOf),
   ['paid', 'underpaid', 'waiting', 'confirming', 'confirming', 'failed', 'refunded', 'expired', null],
 );
+
+/* ── стейбл-рельсы: что реально предлагается под цену ── */
+
+const MINS = new Map<string, number>([
+  ['usdttrc20', 11.32],
+  ['usdtton', 0.19],
+  ['usdtbsc', 0.07],
+  ['usdtsol', 1.92],
+]);
+check(
+  'TRON дороже цены — выпадает, дефолтом становится следующий по порядку',
+  railOptions(MINS, 2).map((r) => r.code),
+  ['usdtton', 'usdtbsc', 'usdtsol'],
+);
+check('цена подросла до минимума TRON — он сам возвращается первым', railOptions(MINS, 12)[0]?.code, 'usdttrc20');
+check('рельса с непрочитанным минимумом не предлагается, а не предлагается вслепую', railOptions(MINS, 2).some((r) => r.code === 'usdterc20'), false);
+check('минимумов нет вовсе — пустой список, чекаут отдаст полный выбор шлюза', railOptions(new Map(), 2), []);
+check('в списке кандидатов только стейблы', PAY_RAILS.every((r) => r.code.startsWith('usdt') || r.code.startsWith('usdc')), true);
 
 console.log(failures ? `\n${failures} failure(s)` : '\nall ok');
 process.exit(failures ? 1 : 0);
