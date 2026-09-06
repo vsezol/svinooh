@@ -1,4 +1,5 @@
-"""The conversation as a graph (DESIGN.md D6/D7).
+"""The conversation as a graph — the routing and identity decisions of
+DESIGN.md, made runnable.
 
 The first version was a straight line — every turn fetched portfolio context
 and answered.
@@ -15,7 +16,8 @@ handler ever changing.
                                                           \\-> unavailable ► END
 
 The identity node is the newest branch: a portfolio question first resolves WHOSE
-portfolio (D6). The widget's slug is a hint that short-circuits the lookup;
+portfolio (the one-identity rule in DESIGN.md). The widget's slug is a hint
+that short-circuits the lookup;
 without it, GET /auth/me answers both who the caller is and what they own, and
 the second conditional edge routes on the outcome. Two failure modes are kept
 deliberately distinct: an EMPTY portfolio list means onboarding, while an
@@ -75,7 +77,7 @@ async def classify_node(state: AgentState) -> AgentState:
 
 
 async def identity_node(state: AgentState) -> AgentState:
-    """Whose portfolio is this conversation about? (DESIGN.md D6)
+    """Whose portfolio is this conversation about?
 
     Identity is data in the state, not a guard in a handler: this node writes
     `route` and the second conditional edge acts on it. The widget's slug is a
@@ -150,7 +152,7 @@ async def grounded_node(state: AgentState) -> AgentState:
 async def onboard_node(state: AgentState) -> AgentState:
     """A portfolio question with no portfolio behind it.
 
-    A stub until conversational onboarding (DESIGN.md D8) fills it.
+    A stub until conversational onboarding (described in DESIGN.md) fills it.
     """
     signed_in = bool(state.get("authorization"))
     return await _answer(onboarding_prompt(settings.system_prompt, signed_in), state)

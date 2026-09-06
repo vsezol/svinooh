@@ -106,10 +106,11 @@ def degraded_prompt(base: str) -> str:
 def onboarding_prompt(base: str, signed_in: bool) -> str:
     """For a portfolio question with no portfolio to ground in.
 
-    A deliberate stub until conversational onboarding (DESIGN.md D8) lands.
+    A deliberate stub until conversational onboarding (DESIGN.md) lands.
     Two honest cases, one rule: never pretend to see holdings that do not
     exist. The signed-in variant deliberately does NOT offer to create the
-    portfolio in the chat — that is D8's conversational onboarding; a stub
+    portfolio in the chat — that is the conversational-onboarding decision in
+    DESIGN.md; a stub
     that asked for wallet addresses and then did nothing with them would be a
     promise the code cannot keep yet.
     """

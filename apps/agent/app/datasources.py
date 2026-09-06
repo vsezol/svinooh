@@ -1,7 +1,7 @@
 """Where the agent's facts come from — and the seam that keeps it independent.
 
 The agent consumes products through their public APIs, with the caller's own
-token, exactly like any third-party client would (DESIGN.md, D1/D2). Each
+token, exactly like any third-party client would (see DESIGN.md). Each
 product is one DataSource behind this protocol; the portfolio is simply the
 first. No shared libraries, no database access — if the public API cannot
 answer something the agent needs, the fix is to extend the public API.
@@ -39,7 +39,8 @@ class PortfolioApiSource:
             return response.json()
 
     async def me(self, token: str) -> dict:
-        # The host's identity oracle (DESIGN.md D6): one call answers both
+        # The host's identity oracle (DESIGN.md, one identity, two doors):
+        # one call answers both
         # "whose token is this" and "which portfolios do they own"
         # (MeDto.portfolios). Host-specific on purpose — it is NOT part of the
         # DataSource protocol, because identity belongs to the host product,
