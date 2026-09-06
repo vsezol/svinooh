@@ -38,6 +38,14 @@ class PortfolioApiSource:
             response.raise_for_status()
             return response.json()
 
+    async def me(self, token: str) -> dict:
+        # The host's identity oracle (DESIGN.md D6): one call answers both
+        # "whose token is this" and "which portfolios do they own"
+        # (MeDto.portfolios). Host-specific on purpose — it is NOT part of the
+        # DataSource protocol, because identity belongs to the host product,
+        # while the protocol is only what every data source must answer.
+        return await self._get("/api/auth/me", token)
+
     async def portfolio(self, ref: str, token: str) -> dict:
         return await self._get(f"/api/portfolios/{ref}", token)
 
