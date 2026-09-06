@@ -1,9 +1,14 @@
-"""The HTTP surface: /health for the platform, /chat for everyone else."""
-from fastapi import APIRouter, HTTPException
-from langchain_core.messages import HumanMessage, SystemMessage
+"""The HTTP surface: /health for the platform, /chat for everyone else.
+
+Thin on purpose since R2: this layer validates the request, hands a state to
+the graph, and stores the finished turn. What happens between — routing,
+context, the model — is the graph's business (app/graph.py), which is why new
+branches land there without this file changing again.
+"""
+from fastapi import APIRouter, Header, HTTPException
 
 from .config import settings
-from .llm import extract_text, get_model
+from .graph import agent_graph
 from .schemas import ChatRequest, ChatResponse
 from .sessions import SessionStore
 
@@ -17,23 +22,28 @@ def health() -> dict:
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(body: ChatRequest) -> ChatResponse:
+async def chat(
+    body: ChatRequest,
+    authorization: str | None = Header(default=None),
+) -> ChatResponse:
     text = body.message.strip()
     if not text:
         raise HTTPException(status_code=400, detail="empty message")
 
-    # One call per turn, but not one turn of context: the session's history
-    # rides along, which is what makes "as we discussed" work across requests.
+    # The session's history rides into the graph, which is what makes "as we
+    # discussed" work across requests; the graph decides everything else.
     session_id = body.session_id or sessions.new_id()
-    messages = [
-        SystemMessage(content=settings.system_prompt),
-        *sessions.history(session_id),
-        HumanMessage(content=text),
-    ]
-    reply = await get_model().ainvoke(messages)
-    answer = extract_text(reply)
+    state = await agent_graph().ainvoke(
+        {
+            "question": text,
+            "history": sessions.history(session_id),
+            "portfolio": body.portfolio,
+            "authorization": authorization,
+        }
+    )
+    answer = state["answer"]
 
-    # Remembered only after the model answered: a failed call leaves the
+    # Remembered only after the graph answered: a failed turn leaves the
     # session exactly as it was, instead of a question with no answer in it.
     sessions.append(session_id, text, answer)
     return ChatResponse(reply=answer, session_id=session_id)

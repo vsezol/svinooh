@@ -1,7 +1,14 @@
 fastapi>=0.115
 uvicorn[standard]>=0.32
+# The portfolio public API is fetched with this (app/datasources.py)
+httpx>=0.27
 # init_chat_model — the provider-neutral model factory (see app/llm.py)
 langchain>=0.3
+# The OpenAI-compatible wire — how an aggregator like OpenRouter serves every
+# vendor's models behind one key (AGENT_MODEL_BASE_URL)
+langchain-openai>=0.3
+# The conversation graph: nodes, typed state, conditional edges (app/graph.py)
+langgraph>=0.2
 # The provider plugin behind the default AGENT_MODEL. Another provider is
 # another line here (e.g. langchain-google-genai) plus a new AGENT_MODEL value.
 langchain-anthropic>=0.3
