@@ -8,8 +8,9 @@ figures), not every dust position; every character here is billed on every
 turn of the conversation.
 """
 
-MAX_POSITIONS_PER_WALLET = 6
-MAX_CHARS = 4000
+from .config import settings
+
+MAX_CHARS = 6000
 
 
 def _usd(value) -> str:
@@ -53,9 +54,10 @@ def portfolio_context(data: dict) -> str:
         positions = sorted(
             wallet.get("positions") or [], key=lambda p: -(p.get("valueUsd") or 0)
         )
-        for position in positions[:MAX_POSITIONS_PER_WALLET]:
+        cap = settings.context_max_positions
+        for position in positions[:cap]:
             lines.append(f"  - {_position_line(position)}")
-        rest = len(positions) - MAX_POSITIONS_PER_WALLET
+        rest = len(positions) - cap
         if rest > 0:
             lines.append(f"  - …and {rest} smaller positions")
     return "\n".join(lines)[:MAX_CHARS]
