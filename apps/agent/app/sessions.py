@@ -10,7 +10,7 @@ the roadmap keeps that inside this service, never in the widget.
 Deliberately NOT a chat-history feature. "Open my past conversations" is a
 product feature that needs durable storage keyed by user — the agent's own
 store (its own small DB/Redis, never the portfolio's database, so independence
-holds), which becomes possible after M2, when token validation tells this
+holds), which becomes possible once token validation tells this
 service who the user is. This class is only the working context of a live
 conversation, which is why losing it on restart is acceptable.
 """

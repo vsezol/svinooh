@@ -1,6 +1,7 @@
-"""The conversation as a graph (R2 routing, R3 identity — DESIGN.md D6/D7).
+"""The conversation as a graph (DESIGN.md D6/D7).
 
-v1 was a straight line — every turn fetched portfolio context and answered.
+The first version was a straight line — every turn fetched portfolio context
+and answered.
 The line became a graph the moment turns stopped being alike: a question about
 DeFi in general has no business paying a portfolio fetch, and a question about
 the user's money deserves one. LangGraph is the tool for exactly this shape:
@@ -13,7 +14,7 @@ handler ever changing.
                                                           \\-> onboard ──► END
                                                           \\-> unavailable ► END
 
-R3's addition is the identity node: a portfolio question first resolves WHOSE
+The identity node is the newest branch: a portfolio question first resolves WHOSE
 portfolio (D6). The widget's slug is a hint that short-circuits the lookup;
 without it, GET /auth/me answers both who the caller is and what they own, and
 the second conditional edge routes on the outcome. Two failure modes are kept
@@ -74,7 +75,7 @@ async def classify_node(state: AgentState) -> AgentState:
 
 
 async def identity_node(state: AgentState) -> AgentState:
-    """Whose portfolio is this conversation about? (R3, D6)
+    """Whose portfolio is this conversation about? (DESIGN.md D6)
 
     Identity is data in the state, not a guard in a handler: this node writes
     `route` and the second conditional edge acts on it. The widget's slug is a
@@ -121,8 +122,8 @@ async def _answer(system: str, state: AgentState) -> AgentState:
 async def general_node(state: AgentState) -> AgentState:
     """A general question: answer directly — no portfolio fetch, by design.
 
-    This branch is the graph's first dividend: before R2, every 'what is a
-    health factor' paid a portfolio round trip it never used.
+    This branch is the graph's first dividend: before the router, every 'what
+    is a health factor' paid a portfolio round trip it never used.
     """
     return await _answer(settings.system_prompt, state)
 
@@ -130,7 +131,7 @@ async def general_node(state: AgentState) -> AgentState:
 async def grounded_node(state: AgentState) -> AgentState:
     """Ground the answer in the target portfolio identity resolved.
 
-    Degrades honestly, same as M1: the portfolio API being slow or down makes
+    Degrades honestly, as the context fetch always has: a slow or down API makes
     the answer general, not absent — and the prompt says the live numbers are
     unavailable, so the model does not guess them.
     """
@@ -147,7 +148,10 @@ async def grounded_node(state: AgentState) -> AgentState:
 
 
 async def onboard_node(state: AgentState) -> AgentState:
-    """A portfolio question with no portfolio behind it (R3 stub, R4 fills it)."""
+    """A portfolio question with no portfolio behind it.
+
+    A stub until conversational onboarding (DESIGN.md D8) fills it.
+    """
     signed_in = bool(state.get("authorization"))
     return await _answer(onboarding_prompt(settings.system_prompt, signed_in), state)
 

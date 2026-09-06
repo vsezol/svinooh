@@ -1,6 +1,6 @@
 """The HTTP surface: /health for the platform, /chat for everyone else.
 
-Thin on purpose since R2: this layer validates the request, hands a state to
+Thin on purpose: this layer validates the request, hands a state to
 the graph, and stores the finished turn. What happens between — routing,
 context, the model — is the graph's business (app/graph.py), which is why new
 branches land there without this file changing again.

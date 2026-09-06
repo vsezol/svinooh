@@ -1,4 +1,4 @@
-"""Intent classification — the router's eyes, live on the request path since R2.
+"""Intent classification — the router's eyes, live on the request path.
 
 Structured output is the whole trick: instead of parsing prose, the model is
 handed a schema (the pydantic class below) and must fill it — under the hood
