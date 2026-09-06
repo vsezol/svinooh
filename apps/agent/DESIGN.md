@@ -79,6 +79,15 @@ promoted to the wire: `POST /chat` returns `{ "schema": 1, "blocks": [...] }`.
 v1 returns a single text block; richer answers change the service, never the
 seam. The widget renders blocks and knows nothing else.
 
+The vocabulary is designed to grow, and not only with charts: the first
+*interactive* block is `signin`. When a turn needs an identity the caller does
+not have (the onboarding branch's signed-out case), the service answers with a
+`signin` block; the host renders the product's own auth UI inline in the chat
+flow — the same Telegram/Twitter options the header modal uses, but scrolling
+as a message. The block carries the pending question, and when the auth flow
+completes the chat re-asks it with the fresh token, so signing in continues
+the conversation instead of restarting it.
+
 **D4 — Module Federation, exposing `mount()`, not a React component.** The
 widget bundles its own React and exposes one function:
 `mount(el, { agentUrl, token, portfolioSlug, theme }) → { unmount }`. The host
@@ -162,6 +171,12 @@ Then the independence milestones, unchanged in substance:
 - **M3 — the widget.** `apps/agent-widget`: MF remote exposing `mount()`; the
   shell hands the token in (the embedded door of D6); the portfolio tab
   becomes a ~30-line embed host; gateway proxy and `serviceAnswerer` deleted.
+- **W1 — the sign-in block.** The first interactive block (D3): the service
+  answers a signed-out portfolio question with a `signin` block, the host
+  renders its auth UI inline in the chat, and the pending question is re-asked
+  once the flow completes. Needs blocks on the wire (M2) and reuses the host's
+  existing auth modal. *Lesson: interactive blocks — the chat as a surface for
+  UI, not only prose.*
 - **S1 — the standalone door.** The agent app's own sign-in screen, driving
   the host's auth flows (D6). The agent becomes visitable on its own domain.
 - **M4 — the second DataSource.** Another API behind the same protocol —

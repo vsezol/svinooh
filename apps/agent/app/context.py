@@ -101,3 +101,30 @@ def degraded_prompt(base: str) -> str:
         "answer generally, and say the live numbers are unavailable if asked "
         "about them.)"
     )
+
+
+def onboarding_prompt(base: str, signed_in: bool) -> str:
+    """For a portfolio question with no portfolio to ground in.
+
+    A deliberate stub until conversational onboarding (DESIGN.md) lands.
+    Two honest cases, one rule: never pretend to see holdings that do not
+    exist. The signed-in variant deliberately does NOT offer to create the
+    portfolio in the chat — that is the conversational-onboarding decision in
+    DESIGN.md; a stub
+    that asked for wallet addresses and then did nothing with them would be a
+    promise the code cannot keep yet.
+    """
+    if not signed_in:
+        return (
+            f"{base}\n\nThe user asks about their portfolio but is not signed "
+            "in, so you cannot see any holdings. Say that portfolio questions "
+            "need sign-in (via Telegram in the svinooh app), then answer "
+            "whatever general part of the question you can."
+        )
+    return (
+        f"{base}\n\nThe user asks about their portfolio but does not own one "
+        "yet, so there are no holdings to see. Say so plainly, and point them "
+        "to creating their first portfolio by adding a wallet address in the "
+        "svinooh app. Do not invent holdings, and do not promise to create "
+        "the portfolio yourself."
+    )
