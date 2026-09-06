@@ -24,7 +24,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
 from .config import settings
-from .context import portfolio_context
+from .context import degraded_prompt, grounded_prompt
 from .datasources import PortfolioApiSource
 from .intent import classify
 from .llm import extract_text, get_model
@@ -89,15 +89,10 @@ async def portfolio_node(state: AgentState) -> AgentState:
     slug, auth = state.get("portfolio"), state.get("authorization")
     if slug and auth:
         try:
-            data = await portfolio_source.portfolio(slug, auth)
-            system = f"{system}\n\nThe user is looking at this portfolio right now:\n{portfolio_context(data)}"
+            system = grounded_prompt(system, await portfolio_source.portfolio(slug, auth))
         except Exception as error:  # noqa: BLE001 — any fetch failure degrades the same way
             logger.warning("portfolio context fetch failed for %s: %r", slug, error)
-            system = (
-                f"{system}\n\n(Live portfolio data could not be fetched for this "
-                "turn — answer generally, and say the live numbers are "
-                "unavailable if asked about them.)"
-            )
+            system = degraded_prompt(system)
     return await _answer(system, state)
 
 

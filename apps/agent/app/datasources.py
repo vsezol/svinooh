@@ -42,4 +42,8 @@ class PortfolioApiSource:
         return await self._get(f"/api/portfolios/{ref}", token)
 
     async def history(self, ref: str, range_: str, token: str) -> dict:
+        # range_ is the product's own HistoryRange: 1h | 24h | 7d | 30d | all —
+        # the same values the charts use. No branch calls this yet: it is the
+        # raw material the planned drill-down tools wrap, with the model
+        # choosing the range a question actually needs.
         return await self._get(f"/api/portfolios/{ref}/history?range={range_}", token)
