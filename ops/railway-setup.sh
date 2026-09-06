@@ -55,7 +55,9 @@ BRANCH="main"
 : "${TELEGRAM_BOT_USERNAME:?export TELEGRAM_BOT_USERNAME}"
 : "${GRAFANA_ADMIN_PASSWORD:?export GRAFANA_ADMIN_PASSWORD}"
 : "${INTERNAL_SECRET:?export INTERNAL_SECRET}"
-: "${ANTHROPIC_API_KEY:?export ANTHROPIC_API_KEY}"   # the AI agent's key
+# The AI agent's key — an OpenRouter key, carried in OPENAI_API_KEY because the
+# OpenAI-compatible wire is what is being spoken (see apps/agent/app/llm.py).
+: "${OPENAI_API_KEY:?export OPENAI_API_KEY}"
 : "${PUBLIC_WEB_ORIGIN:=https://svinooh.com}"
 
 command -v railway >/dev/null || { echo "railway CLI not found"; exit 1; }
@@ -161,15 +163,17 @@ setvars scanner-evm \
   "SERVICE_NAME=svinooh-scanner-evm"
 
 # agent — AI agent microservice (Python/FastAPI + LangChain). Internal only; the
-# api gateway forwards /ai/* here. Needs its own ANTHROPIC_API_KEY. Not a Node
-# service — builds from apps/agent/Dockerfile (config apps/agent/railway.json).
+# api gateway forwards /ai/* here. Models come through OpenRouter (one key, any
+# vendor, switched by AGENT_MODEL alone). Not a Node service — builds from
+# apps/agent/Dockerfile.
 add_repo agent
 setvars agent \
   "PORT=3000" \
-  "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" \
-  "AGENT_MODEL=anthropic:claude-haiku-4-5" \
+  "OPENAI_API_KEY=${OPENAI_API_KEY}" \
+  "AGENT_MODEL=openai:google/gemini-2.5-flash" \
+  "AGENT_MODEL_BASE_URL=https://openrouter.ai/api/v1" \
   'PORTFOLIO_API_URL=http://${{api.RAILWAY_PRIVATE_DOMAIN}}:3000' \
-  "SERVICE_NAME=svinooh-agent"
+  "SERVICE_NAME=svinooh-ai"
 
 # monitor-alerts — reads wallet.state, decides what each owner should be told,
 # publishes alerts.telegram. THE second service whose absence is felt silently:
