@@ -21,12 +21,21 @@ from langchain_core.messages import BaseMessage
 from .config import settings
 
 
+def _routing_kwargs() -> dict:
+    # An aggregator (OpenRouter) speaks the OpenAI wire for every vendor, so
+    # "openai:<vendor>/<model>" plus this base_url reaches any of them with the
+    # one key that base_url's service issued. Unset — providers are called
+    # directly and each wants its own key.
+    return {"base_url": settings.model_base_url} if settings.model_base_url else {}
+
+
 @cache  # lazy singleton: the client is built once and reused by every request
 def get_model() -> BaseChatModel:
     return init_chat_model(
         settings.model,
         max_tokens=settings.max_tokens,
         timeout=settings.request_timeout_s,
+        **_routing_kwargs(),
     )
 
 
@@ -43,6 +52,7 @@ def get_router_model() -> BaseChatModel:
         settings.router_model or settings.model,
         max_tokens=200,
         timeout=settings.request_timeout_s,
+        **_routing_kwargs(),
     )
 
 

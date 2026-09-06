@@ -30,6 +30,11 @@ class Settings:
     # The intent classifier's model (app/intent.py). Empty — same as `model`;
     # set it when the router should ride a cheaper tier than the answers do.
     router_model: str = os.getenv("AGENT_ROUTER_MODEL", "")
+    # One endpoint for many providers (OpenRouter and the like): when set, model
+    # calls go to this OpenAI-compatible base URL instead of the provider's own —
+    # one key, any vendor's model, switched by AGENT_MODEL alone
+    # (e.g. AGENT_MODEL=openai:google/gemini-2.5-flash). Empty — direct.
+    model_base_url: str = os.getenv("AGENT_MODEL_BASE_URL", "")
     system_prompt: str = os.getenv("AGENT_SYSTEM", DEFAULT_SYSTEM_PROMPT)
     max_tokens: int = int(os.getenv("AGENT_MAX_TOKENS", "1024"))
     request_timeout_s: int = int(os.getenv("AGENT_TIMEOUT_S", "60"))
