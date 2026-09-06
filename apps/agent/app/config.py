@@ -44,6 +44,12 @@ class Settings:
     # A context fetch rides inside a chat turn; when it is slow, answering
     # without it beats making the person wait for it.
     context_timeout_s: int = int(os.getenv("AGENT_CONTEXT_TIMEOUT_S", "10"))
+    # How many positions per wallet the context block carries (largest first,
+    # so what falls off the end is dust by construction). A knob, not gospel:
+    # the whole context is billed on every turn of a conversation, and the
+    # planned complement is a drill-down tool the model calls for specifics
+    # rather than an ever-fatter static block.
+    context_max_positions: int = int(os.getenv("AGENT_CONTEXT_MAX_POSITIONS", "12"))
 
 
 settings = Settings()
