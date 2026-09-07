@@ -34,10 +34,9 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
 
   onApplicationBootstrap() {
     if (!this.rabbit.enabled) return;
-    // Still one at a time, but for one reason now rather than two: two
-    // addresses in the same portfolio landing together would race on that
-    // portfolio's snapshot, which is a read-then-write. The other reason — a
-    // streak counter that only existed in this process's memory — is gone.
+    // One at a time so results apply in arrival order: two readings of the
+    // same address can sit in the queue together (a retry, a late recheck),
+    // and interleaved they could let the older one land last and win.
     this.rabbit.consume<ScanOutcome>(SCAN_RESULT_QUEUE, (o) => this.apply(o), 1);
     this.logger.log(`Consuming ${SCAN_RESULT_QUEUE} — the single writer of wallet values`);
   }
@@ -90,11 +89,6 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
     await this.sync.applyResult(wallet, verdict.believe);
     this.metrics.scans.inc({ chain: outcome.chain, result: 'ok' });
     this.metrics.scanChecks.inc({ tier, result: 'ok' });
-    // One address, and every portfolio that happens to hold it — its total just
-    // moved for all of them
-    for (const portfolioId of await this.sync.portfoliosHolding(wallet.id)) {
-      await this.sync.snapshotPortfolio(portfolioId);
-    }
   }
 
   /**

@@ -681,8 +681,8 @@ export class PortfolioService {
   }
 
   /**
-   * Delete an owned portfolio: its memberships, labels, alerts, snapshots and
-   * ownership go with it (all cascades). The addresses themselves stay —
+   * Delete an owned portfolio: its memberships, labels, alerts and ownership
+   * go with it (all cascades). The addresses themselves stay —
    * another portfolio may be tracking them, and if none is they simply stop
    * being due for a scan.
    *
