@@ -11,12 +11,12 @@ the branch. Nothing here loops yet; the graph grows branches without the route
 handler ever changing.
 
     START -> pending_gate -> [proposal waiting?]
-              | no                        \\-> yes+confirmed -> execute ─► END
-              v                           \\-> yes+declined -> cancel ──► END
-            classify -> [intent?] -> general ──────────────────────────► END
-                                 \\-> identity -> [route?] -> grounded ─► END
-                                                         \\-> onboard ──► END
-                                                         \\-> unavailable ► END
+              | no                \\-> yes+confirmed -> create_portfolio ► END
+              v                   \\-> yes+declined -> cancel_creation ─► END
+            classify_intent -> [intent?] -> general ───────────────────► END
+                                        \\-> identity -> [?] -> grounded ► END
+                                                    \\-> onboard ───────► END
+                                                    \\-> unavailable ───► END
 
 The identity node resolves WHOSE portfolio a money question is about (the
 one-identity rule in DESIGN.md): the widget's slug is a hint that
@@ -59,7 +59,7 @@ from .llm import extract_text, get_model
 from .onboarding import (
     ProposePortfolio,
     classify_confirmation,
-    execute_creation,
+    create_portfolio_with_wallets,
     sanitize_addresses,
 )
 
@@ -78,7 +78,7 @@ class AgentState(TypedDict, total=False):
     authorization: str | None
     # The session's proposed-but-unconfirmed action, loaded by the route layer.
     pending_addresses: list[str] | None
-    # Written by classify_node; the first conditional edge routes on it.
+    # Written by classify_intent_node; the first conditional edge routes on it.
     intent: str
     # Written by identity_node: where the portfolio branch goes, and in which
     # portfolio to ground when it goes to `grounded`.
@@ -97,28 +97,28 @@ async def pending_gate(state: AgentState) -> AgentState:
 
     With no pending action this is a pass-through to classification. With one,
     the user's reply is read as an answer to "create it?": a clear yes goes to
-    the execute node — the only node that writes — a clear no cancels, and
-    anything else keeps the proposal waiting and lets the turn flow normally,
-    so a question asked mid-confirmation still gets its answer.
+    the create-portfolio node — the only node that writes — a clear no cancels,
+    and anything else keeps the proposal waiting and lets the turn flow
+    normally, so a question asked mid-confirmation still gets its answer.
     """
     if not state.get("pending_addresses"):
-        return {"route": "classify"}
+        return {"route": "classify_intent"}
     try:
         verdict = await classify_confirmation(state["question"])
     except Exception as error:  # noqa: BLE001 — an unreadable reply must not write
         logger.warning("confirmation classifier failed (%r) — keeping the proposal", error)
-        return {"route": "classify"}
+        return {"route": "classify_intent"}
     logger.info("confirmation: %s (%s)", verdict.decision, verdict.reason)
     if verdict.decision == "confirm":
         # A yes without a token cannot be acted on — back to onboarding, where
         # the signed-out prompt explains; the proposal stays for later.
-        return {"route": "execute" if state.get("authorization") else "onboard"}
+        return {"route": "create_portfolio" if state.get("authorization") else "onboard"}
     if verdict.decision == "cancel":
-        return {"route": "cancel"}
-    return {"route": "classify"}
+        return {"route": "cancel_creation"}
+    return {"route": "classify_intent"}
 
 
-async def classify_node(state: AgentState) -> AgentState:
+async def classify_intent_node(state: AgentState) -> AgentState:
     """Label the turn; on any failure, route where money questions are safe."""
     try:
         label = await classify(state["question"])
@@ -241,7 +241,7 @@ async def onboard_node(state: AgentState) -> AgentState:
     return {**confirmation, "pending_set": addresses}
 
 
-async def execute_node(state: AgentState) -> AgentState:
+async def create_portfolio_node(state: AgentState) -> AgentState:
     """The one node that writes — reachable only through a confirmed gate.
 
     The portfolio create failing keeps the proposal (a later yes retries); a
@@ -250,7 +250,9 @@ async def execute_node(state: AgentState) -> AgentState:
     """
     addresses = state.get("pending_addresses") or []
     try:
-        result = await execute_creation(portfolio_source, addresses, state["authorization"])
+        result = await create_portfolio_with_wallets(
+            portfolio_source, addresses, state["authorization"]
+        )
     except Exception as error:  # noqa: BLE001 — nothing was created; say so
         logger.warning("portfolio creation failed: %r", error)
         return await _answer(creation_failed_prompt(settings.system_prompt), state)
@@ -262,7 +264,7 @@ async def execute_node(state: AgentState) -> AgentState:
     return {**answered, "pending_clear": True}
 
 
-async def cancel_node(state: AgentState) -> AgentState:
+async def cancel_creation_node(state: AgentState) -> AgentState:
     """A declined proposal: drop it and say so — nothing was created."""
     answered = await _answer(cancelled_prompt(settings.system_prompt), state)
     return {**answered, "pending_clear": True}
@@ -276,14 +278,18 @@ async def unavailable_node(state: AgentState) -> AgentState:
 @cache  # built and compiled once per process, like the model clients
 def agent_graph():
     builder = StateGraph(AgentState)
+    # Node names carry the domain, not the mechanism: "create_portfolio", never
+    # "execute" — a mechanism name stops meaning anything once the graph has
+    # many branches. Registration order is irrelevant; the edges below are the
+    # topology, and compile() checks that every referenced name exists.
     builder.add_node("pending_gate", pending_gate)
-    builder.add_node("classify", classify_node)
+    builder.add_node("classify_intent", classify_intent_node)
     builder.add_node("identity", identity_node)
     builder.add_node("general", general_node)
     builder.add_node("grounded", grounded_node)
     builder.add_node("onboard", onboard_node)
-    builder.add_node("execute", execute_node)
-    builder.add_node("cancel", cancel_node)
+    builder.add_node("create_portfolio", create_portfolio_node)
+    builder.add_node("cancel_creation", cancel_creation_node)
     builder.add_node("unavailable", unavailable_node)
 
     builder.add_edge(START, "pending_gate")
@@ -293,10 +299,15 @@ def agent_graph():
     builder.add_conditional_edges(
         "pending_gate",
         lambda state: state["route"],
-        {"classify": "classify", "execute": "execute", "cancel": "cancel", "onboard": "onboard"},
+        {
+            "classify_intent": "classify_intent",
+            "create_portfolio": "create_portfolio",
+            "cancel_creation": "cancel_creation",
+            "onboard": "onboard",
+        },
     )
     builder.add_conditional_edges(
-        "classify",
+        "classify_intent",
         lambda state: state["intent"],
         {"portfolio": "identity", "general": "general"},
     )
@@ -305,6 +316,6 @@ def agent_graph():
         lambda state: state["route"],
         {"grounded": "grounded", "onboard": "onboard", "unavailable": "unavailable"},
     )
-    for leaf in ("general", "grounded", "onboard", "execute", "cancel", "unavailable"):
+    for leaf in ("general", "grounded", "onboard", "create_portfolio", "cancel_creation", "unavailable"):
         builder.add_edge(leaf, END)
     return builder.compile()

@@ -7,6 +7,12 @@ the user is asked to confirm. The actual POSTs happen on a LATER turn, and only
 after the confirmation classifier reads a clear yes — so no single model output
 can ever reach the write path on its own. That two-phase shape is the
 human-in-the-loop pattern this module exists to teach.
+
+This module is ONE action end to end, in its three phases: the proposal tool
+(what the model can say), the confirmation classifier (how a reply is read),
+the execution (what actually hits the API). The graph only orchestrates these.
+When the agent grows a second action, this file becomes actions/<name>.py —
+one module per action, each in this same three-phase shape.
 """
 import logging
 from functools import cache
@@ -18,6 +24,8 @@ from pydantic import BaseModel, Field
 from .llm import get_router_model
 
 logger = logging.getLogger("svinooh-ai")
+
+# ── phase 1: the proposal tool — the only thing the model can "do" ─────────
 
 # More than a person plausibly pastes in a chat, fewer than a paste-bomb.
 MAX_ADDRESSES = 10
@@ -52,6 +60,8 @@ def sanitize_addresses(raw: list[str]) -> list[str]:
     return clean[:MAX_ADDRESSES]
 
 
+# ── phase 2: the confirmation classifier — how the user's reply is read ────
+
 CONFIRMATION_PROMPT = (
     "The assistant proposed creating a portfolio from wallet addresses and "
     "asked the user to confirm. Classify the user's reply, in whatever "
@@ -77,7 +87,10 @@ async def classify_confirmation(reply: str) -> ConfirmationDecision:
     )
 
 
-async def execute_creation(source, addresses: list[str], token: str) -> dict:
+# ── phase 3: the execution — what actually hits the API, after the yes ─────
+
+
+async def create_portfolio_with_wallets(source, addresses: list[str], token: str) -> dict:
     """Create the portfolio and add every address, through the public API.
 
     Two failure grades on purpose. The portfolio POST failing fails the whole
