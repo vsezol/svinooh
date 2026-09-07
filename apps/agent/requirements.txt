@@ -9,6 +9,9 @@ langchain>=0.3
 langchain-openai>=0.3
 # The conversation graph: nodes, typed state, conditional edges (app/graph.py)
 langgraph>=0.2
+# Rate-limit arithmetic and storage (app/limits.py) — the engine behind
+# flask-limiter/slowapi; Redis storage is the multi-instance step
+limits>=3.13
 # The provider plugin behind the default AGENT_MODEL. Another provider is
 # another line here (e.g. langchain-google-genai) plus a new AGENT_MODEL value.
 langchain-anthropic>=0.3

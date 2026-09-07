@@ -7,13 +7,16 @@ branches land there without this file changing again.
 """
 from fastapi import APIRouter, Header, HTTPException
 
+from .auth import authenticate
 from .config import settings
 from .graph import agent_graph
+from .limits import RateLimiter
 from .schemas import ChatRequest, ChatResponse
 from .sessions import SessionStore
 
 router = APIRouter()
 sessions = SessionStore(settings.history_max_messages, settings.history_ttl_s)
+limiter = RateLimiter(settings.rate_limit_requests, settings.rate_limit_window_s)
 
 
 @router.get("/health")
@@ -29,6 +32,19 @@ async def chat(
     text = body.message.strip()
     if not text:
         raise HTTPException(status_code=400, detail="empty message")
+
+    # The lock on the door: name the caller (401 only when the host rejects
+    # the token outright), then charge the turn against their budget. The
+    # anonymous share one budget — enough to try the product, not to spend on
+    # someone else's meter.
+    caller = await authenticate(authorization)
+    retry_after = await limiter.retry_after(f"user:{caller.user_id}" if caller else "anonymous")
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=429,
+            detail="rate limited — try again shortly",
+            headers={"Retry-After": str(retry_after)},
+        )
 
     # The session's history and its pending proposal ride into the graph, which
     # is what makes "as we discussed" — and "yes, create it" — work across
