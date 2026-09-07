@@ -41,7 +41,7 @@ already in the right places; they deepen rather than move.
 
 ```
 ┌─ portfolio web (host) ──────────┐
-│  agent-widget                   │      ┌──────────────────────────┐
+│  agent-web                      │      ┌──────────────────────────┐
 │  MF remote · exposes mount()    │  ┌──▶│ portfolio public API     │
 └───────────────┬─────────────────┘  │   │ DataSource #1 · today    │
                 │ user's JWT         │   └──────────────────────────┘
@@ -89,13 +89,16 @@ completes the chat re-asks it with the fresh token, so signing in continues
 the conversation instead of restarting it.
 
 **D4 — Module Federation, exposing `mount()`, not a React component.** The
-widget bundles its own React and exposes one function:
-`mount(el, { agentUrl, token, portfolioSlug, theme }) → { unmount }`. The host
-loads it with the MF **runtime API** in a client component — the `nextjs-mf`
-build plugin does not fit App Router/Turbopack, and build-time federation would
-couple the two builds we are trying to separate. Because the exposed surface is
-one function, the same bundle also loads from a plain script tag: MF is the
-loader, not the architecture, and the fallback is one line.
+widget is built with the same stack as the product front — React 19 — as a
+webpack Module Federation remote: name `svinooh_agent`, exposing `./mount`,
+with react/react-dom shared as singletons so host and remote run one React.
+The Turbopack host consumes it with the MF **runtime API** in a client
+component — build-plugin federation does not exist for App Router/Turbopack.
+The UI kit lives in `@svinooh/ui` (libs/ui): the shell imports it at build
+time, remotes share it as an MF singleton — one source of truth either way.
+And because the same remoteEntry also registers a window global, a plain
+script tag remains the fallback loader: MF is the loader, not the
+architecture.
 
 **D5 — The gateway is transitional.** `/ai/chat` in the api exists so the
 current in-app tab works before the widget does. Once M3 lands, the widget
@@ -182,16 +185,16 @@ Then the independence milestones, unchanged in substance:
 - **M2b — the wire and the door.** The blocks contract per D3 on the wire
   (expand-then-contract: `blocks` added, `reply` kept for the transitional
   gateway), CORS allowlist, public domain. The gateway becomes unnecessary.
-- **M3a — the widget application.** `apps/agent-widget`: vanilla TS, one
-  exposed `mount(el, {agentUrl, token, portfolioSlug, theme})`, built by
-  esbuild into a single file the agent service serves at
-  `/widget/agent-widget.js` — same origin as the wire it speaks, no extra
-  service to run; a script tag loads it (the loader D4 already blesses; the
-  MF runtime can replace the loader later without touching the surface). It
+- **M3a — the widget application.** `apps/agent-web`: React 19, a webpack
+  Module Federation remote exposing one `mount()` (D4), with the full design
+  implemented — every block of the vocabulary, the standalone and embedded
+  shells, and a `/demo` kitchen sink rendering all of it from canned data.
+  The agent service serves the build at `/widget` (and the standalone page
+  at `/`) — same origin as the wire it speaks, no extra service to run. It
   calls the agent directly through the M2 door, renders blocks, refuses a
   wire schema it does not speak, and fails honest — 401, 429 and network
   each get their own note. *Lesson: a microfrontend is a contract — one
-  function in, one file out.*
+  function in, one build out.*
 - **M3b — the host embeds it.** The portfolio tab becomes a ~30-line embed
   host: load the bundle, `mount()` with the shell's token (the embedded door
   of D6 — the JWT lives in the web app's localStorage, so the shell can hand
@@ -240,8 +243,10 @@ Embed — the whole surface the host knows:
 
 ```ts
 mount(el: HTMLElement, opts: {
-  agentUrl: string; token: string;
-  portfolioSlug: string; theme: 'dark' | 'light';
+  agentUrl: string; token?: string;
+  portfolioSlug?: string; portfolios?: PortfolioRef[];
+  theme?: 'dark' | 'light'; locked?: boolean;
+  variant?: 'embedded' | 'standalone'; signedIn?: boolean;
 }): { unmount(): void }
 ```
 

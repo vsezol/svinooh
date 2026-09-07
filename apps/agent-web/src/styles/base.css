@@ -1,0 +1,112 @@
+/* Kit layers: colors (theme.css, dark default + data-theme='light'),
+   measurements (tokens.css), components (ui.css). */
+@import '@svinooh/ui/theme.css';
+@import '@svinooh/ui/tokens.css';
+@import '@svinooh/ui/ui.css';
+
+/* Shell skeleton. The non-negotiable layout rule: a strict column of
+   [log, flex:1, scrolls, content anchored to the bottom] over
+   [composer, pinned]. The page behind the chat never scrolls; the Telegram
+   in-app browser resizes the viewport on keyboard open and the same column
+   absorbs it. */
+
+.sv-a-root {
+  display: flex;
+  flex-direction: column;
+  /* Embedded: the host's pane sizes the widget. */
+  height: 100%;
+  min-height: 0;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: var(--fs-body);
+}
+
+.sv-a-root[data-variant='standalone'] {
+  height: 100dvh;
+  background: var(--bg);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.sv-a-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* History rail: standalone desktop only (250px per DESIGN-SPEC). */
+.sv-a-rail {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .sv-a-root[data-variant='standalone'] .sv-a-rail {
+    display: block;
+    flex: none;
+    width: 250px;
+    min-height: 0;
+    overflow-y: auto;
+    border-right: 1px solid var(--line);
+  }
+}
+
+.sv-a-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Embedded top bar: grounding chip left, chat controls right. */
+.sv-a-topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--sp-4) var(--sp-5);
+}
+
+.sv-a-topbar-actions {
+  display: flex;
+  gap: var(--sp-4);
+}
+
+.sv-a-log {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--sp-5);
+}
+
+/* margin-top:auto anchors a short log to the bottom edge while a long log
+   still scrolls naturally. */
+.sv-a-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  width: 100%;
+  max-width: 720px;
+  margin: auto auto 0;
+  padding: var(--sp-6) 0;
+}
+
+.sv-a-empty {
+  margin: auto;
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  justify-content: center;
+}
+
+.sv-a-composer {
+  flex: none;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+}

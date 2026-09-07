@@ -1,0 +1,26 @@
+{
+  "name": "@svinooh/agent-web",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "webpack --mode production",
+    "watch": "webpack --mode production --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@svinooh/ui": "*",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "css-loader": "^7.1.2",
+    "esbuild-loader": "^4.2.2",
+    "html-webpack-plugin": "^5.6.0",
+    "style-loader": "^4.0.0",
+    "typescript": "^5.6.3",
+    "webpack": "^5.106.2",
+    "webpack-cli": "^5.1.4"
+  }
+}

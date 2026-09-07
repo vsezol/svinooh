@@ -1,0 +1,721 @@
+/* The kit's own styles.
+
+   Variants are data-attributes rather than class names, so a component's markup
+   says `data-variant="accent" data-size="lg"` and there is exactly one place a
+   variant can be defined. The React wrappers in this directory are the only
+   things that write these attributes; nothing outside ui/ should reach for
+   `.ui-*` directly.
+
+   Everything here is measured in the tokens from tokens.css. If a number is
+   written out in pixels below, it should be because it is a hairline, an
+   optical nudge, or a shape (a 50% circle) — not because it is a size. */
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Button — the sans-set actions
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  border: 1px solid transparent;
+  border-radius: var(--r-full);
+  font-family: var(--sans);
+  font-weight: var(--fw-heavy);
+  white-space: nowrap;
+  /* A ButtonLink is an <a> underneath — the page's anchor underline stops here */
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  transition: filter var(--ease-quick), color var(--ease-quick), border-color var(--ease-quick),
+    background var(--ease-quick);
+}
+
+.ui-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* A working button keeps the width its label gave it: the label stays in the
+   layout, hidden, and the spinner sits over the middle of it. */
+.ui-btn[data-loading='true'] {
+  position: relative;
+}
+
+.ui-btn-label {
+  visibility: hidden;
+}
+
+.ui-btn-spinner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-btn[data-size='xs'] {
+  height: var(--h-xs);
+  padding: 0 var(--sp-5);
+  font-size: var(--fs-note);
+}
+
+.ui-btn[data-size='sm'] {
+  height: var(--h-sm);
+  padding: 0 var(--sp-6);
+  font-size: var(--fs-note);
+}
+
+.ui-btn[data-size='md'] {
+  height: var(--h-md);
+  padding: 0 18px;
+  font-size: var(--fs-body);
+}
+
+.ui-btn[data-size='lg'] {
+  height: var(--h-lg);
+  padding: 0 var(--sp-7);
+  font-size: var(--fs-body);
+}
+
+/* What the page is asking you to press. One per screen, ideally. */
+.ui-btn[data-variant='accent'] {
+  background: var(--acc);
+  color: var(--acc-ink);
+}
+
+.ui-btn[data-variant='accent']:not(:disabled):hover {
+  filter: brightness(1.08);
+}
+
+/* An action with a body but no urgency — the sign-in choices, where three sit
+   in a column and none of them is the recommended one */
+.ui-btn[data-variant='soft'] {
+  background: var(--surf2);
+  border-color: var(--line2);
+  color: var(--text);
+}
+
+.ui-btn[data-variant='soft']:not(:disabled):hover {
+  border-color: var(--acc);
+  background: var(--acc-soft);
+}
+
+/* Present but not competing: a cancel beside a confirm */
+.ui-btn[data-variant='quiet'] {
+  background: transparent;
+  color: var(--mut);
+}
+
+.ui-btn[data-variant='quiet']:not(:disabled):hover {
+  color: var(--text);
+  background: var(--surf2);
+}
+
+.ui-btn[data-variant='danger'] {
+  background: transparent;
+  color: var(--down);
+}
+
+.ui-btn[data-variant='danger']:not(:disabled):hover {
+  background: color-mix(in srgb, var(--down) 12%, transparent);
+}
+
+/* Spans its container — a dialog's buttons, where the row is the measure */
+.ui-btn[data-block='true'] {
+  width: 100%;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Tag — the mono-set pills
+
+   Kept apart from Button on purpose. This app has two kinds of pressable
+   thing and they are set in two different typefaces: an action is sans and
+   heavy, a label is mono and tracked. Running them through one component
+   meant every call site re-stating which one it wanted, in pixels — which is
+   how .pill, .pill-btn, .chip, .agent-chip and .period came to be five
+   classes that differ by half a pixel of type and the presence of a border.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ui-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-full);
+  font-family: var(--mono);
+  font-size: var(--fs-tag);
+  letter-spacing: var(--tr-tag);
+  color: var(--mut);
+  background: transparent;
+  white-space: nowrap;
+  transition: color var(--ease-quick), border-color var(--ease-quick), background var(--ease-quick);
+}
+
+/* Only a Tag that does something gets the hand and the hover */
+button.ui-tag,
+.ui-tag[data-interactive='true'] {
+  cursor: pointer;
+}
+
+button.ui-tag:not(:disabled):hover,
+.ui-tag[data-interactive='true']:hover {
+  color: var(--text);
+}
+
+.ui-tag:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ui-tag[data-size='sm'] {
+  height: 28px;
+  padding: 0 var(--sp-5);
+}
+
+.ui-tag[data-size='md'] {
+  height: var(--h-sm);
+  padding: 0 14px;
+}
+
+.ui-tag[data-variant='outline'] {
+  border-color: var(--line2);
+}
+
+button.ui-tag[data-variant='outline']:not(:disabled):hover {
+  border-color: var(--mut);
+}
+
+.ui-tag[data-variant='soft'] {
+  border-color: var(--line);
+  background: var(--surf);
+}
+
+button.ui-tag[data-variant='soft']:not(:disabled):hover {
+  border-color: var(--mut);
+}
+
+/* Nothing but the type until it is hovered or chosen */
+.ui-tag[data-variant='bare'] {
+  border-color: transparent;
+}
+
+/* Chosen. Two treatments: `neutral` is a change of view (which period the
+   chart is showing), `accent` is a filter narrowing what is on the page. The
+   first is where you are looking, the second is a thing you switched on. */
+.ui-tag[data-active='true'][data-tone='neutral'] {
+  color: var(--text);
+  background: var(--surf2);
+  border-color: transparent;
+}
+
+.ui-tag[data-active='true'][data-tone='accent'] {
+  color: var(--acc-text);
+  background: var(--acc-soft);
+  border-color: color-mix(in srgb, var(--acc) 50%, transparent);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   IconButton — a round target holding one glyph
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ui-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--mut);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color var(--ease-quick), border-color var(--ease-quick), background var(--ease-quick);
+}
+
+.ui-icon-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ui-icon-btn[data-size='xs'] {
+  width: var(--h-xs);
+  height: var(--h-xs);
+}
+
+.ui-icon-btn[data-size='sm'] {
+  width: var(--h-sm);
+  height: var(--h-sm);
+}
+
+/* In a toolbar, where it needs an edge to sit on the same line as a Tag */
+.ui-icon-btn[data-variant='outline'] {
+  border-color: var(--line2);
+}
+
+.ui-icon-btn[data-variant='outline']:not(:disabled):hover {
+  color: var(--text);
+  border-color: var(--mut);
+}
+
+/* In a row, where an outline on every line would be a grid */
+.ui-icon-btn[data-variant='bare']:not(:disabled):hover {
+  color: var(--text);
+  background: var(--line);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Spinner
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@keyframes svspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ui-spin {
+  display: inline-block;
+  border: 2px solid var(--line2);
+  border-top-color: var(--acc);
+  border-radius: 50%;
+  animation: svspin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+/* On an accent button the track and the head are both invisible: the track is
+   a hairline colour on a saturated green, and the head IS that green. Both
+   come from the ink the button's own label is set in. */
+.ui-spin[data-on='accent'] {
+  border-color: color-mix(in srgb, var(--acc-ink) 25%, transparent);
+  border-top-color: var(--acc-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes svspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ui-spin {
+    animation-duration: 2.4s;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Input
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ui-input {
+  width: 100%;
+  background: var(--surf);
+  border: 1px solid var(--line2);
+  color: var(--text);
+  outline: none;
+  transition: border-color var(--ease-settle);
+}
+
+.ui-input[data-mono='true'] {
+  font-family: var(--mono);
+}
+
+.ui-input:focus {
+  border-color: var(--acc);
+}
+
+.ui-input[data-size='md'] {
+  height: var(--h-md);
+  font-size: var(--fs-body);
+  padding: 0 var(--sp-5);
+}
+
+.ui-input[data-size='lg'] {
+  height: var(--h-lg);
+  font-size: var(--fs-body);
+  padding: 0 18px;
+}
+
+/* A pill is right for an address or a name — one long value, read across.
+   A number typed against other numbers wants a box: the eye reads a column of
+   them down the right edge, and a rounded end pushes each one off it. */
+.ui-input[data-shape='pill'] {
+  border-radius: var(--r-full);
+}
+
+.ui-input[data-shape='box'] {
+  border-radius: var(--r-sm);
+  background: var(--surf2);
+  text-align: right;
+}
+
+.ui-input[data-invalid='true'] {
+  border-color: var(--down);
+}
+
+/* A number field's stepper arrows are the browser's, drawn in the browser's
+   own grey, and they sit inside the box crowding the number they step. Nobody
+   clicks them: a threshold is typed, and the keyboard's own up and down arrows
+   still step the value for anyone who wants that. */
+.ui-input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.ui-input[type='number']::-webkit-outer-spin-button,
+.ui-input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Select — the trigger. Its menu is a Panel of MenuItems.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ui-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  /* Room for the mark, so it never crowds the right edge the way the native
+     control's arrow does */
+  gap: var(--sp-4);
+  height: var(--h-md);
+  padding: 0 var(--sp-5);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-sm);
+  background: var(--surf2);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: var(--fs-body);
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--ease-quick), background var(--ease-quick);
+}
+
+.ui-select:hover,
+.ui-select:focus-visible {
+  border-color: var(--mut);
+}
+
+/* Open, not focused: a green ring on a closed control reads as "this is the
+   one thing on the page that matters", which is what the native control did
+   the moment it was clicked */
+.ui-select[data-open='true'] {
+  border-color: var(--acc);
+}
+
+/* In a header, beside pills — a round outline rather than a box */
+.ui-select[data-shape='pill'] {
+  height: var(--h-sm);
+  border-radius: var(--r-full);
+  background: transparent;
+  padding: 0 var(--sp-5);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Checkbox — an outlined box on a transparent ground; the accent only when
+   ticked. The input underneath is real and merely invisible, so focus and
+   keyboard belong to it and the drawing just follows its state.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ui-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  cursor: pointer;
+  user-select: none;
+}
+
+.ui-checkbox[data-disabled='true'] {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ui-checkbox input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+
+.ui-checkbox-box {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 1px solid var(--line2);
+  border-radius: 5px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  transition:
+    border-color var(--ease-settle),
+    color var(--ease-settle);
+}
+
+.ui-checkbox-box svg {
+  width: 10px;
+  height: 8px;
+}
+
+.ui-checkbox:hover input:not(:disabled) + .ui-checkbox-box {
+  border-color: var(--mut);
+}
+
+.ui-checkbox input:checked + .ui-checkbox-box {
+  border-color: var(--acc);
+  color: var(--acc-text);
+}
+
+.ui-checkbox input:focus-visible + .ui-checkbox-box {
+  border-color: var(--acc);
+}
+
+.ui-checkbox-label {
+  font-size: var(--fs-note);
+  color: var(--mut);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Switch
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ui-switch {
+  width: 42px;
+  height: 24px;
+  border-radius: var(--r-full);
+  background: var(--line2);
+  padding: 3px;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--ease-settle);
+}
+
+.ui-switch[aria-checked='true'] {
+  background: var(--acc);
+}
+
+.ui-switch:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ui-switch > span {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--surf);
+  transition: transform var(--ease-settle);
+}
+
+.ui-switch[aria-checked='true'] > span {
+  background: var(--acc-ink);
+  transform: translateX(18px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Surfaces — the page's cards, and the panels that float over it
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ui-card {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surf);
+}
+
+/* A menu, a dropdown, a dialog's body: off the page rather than on it, so it
+   takes the heavier border and the only shadow in the system. */
+.ui-panel {
+  background: var(--surf);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-pop);
+}
+
+.ui-panel[data-size='lg'] {
+  border-radius: var(--r-xl);
+}
+
+/* A row inside a menu. Full width and left-aligned — it is a line in a list,
+   not a button that happens to be in one. */
+.ui-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: var(--fs-note);
+  font-weight: var(--fw-medium);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--ease-quick);
+}
+
+.ui-menu-item:hover {
+  background: var(--surf2);
+}
+
+.ui-menu-item[data-tone='danger'] {
+  color: var(--down);
+}
+
+.ui-menu-item[data-selected='true'] {
+  color: var(--acc-text);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Text — the labels that were being spelled out in full at every site
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ui-eyebrow {
+  font-family: var(--mono);
+  font-size: var(--fs-micro);
+  letter-spacing: var(--tr-micro);
+  color: var(--mut);
+}
+
+.ui-note {
+  font-size: var(--fs-note);
+  color: var(--mut);
+  line-height: 1.5;
+}
+
+.ui-title {
+  font-size: var(--fs-title);
+  font-weight: var(--fw-heavy);
+}
+
+.ui-display {
+  font-size: var(--fs-display);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--tr-tight);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Meter — a track with something read off it
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ui-meter {
+  position: relative;
+  height: 4px;
+  border-radius: var(--r-full);
+  background: var(--line2);
+}
+
+.ui-meter-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--r-full);
+  background: var(--meter-tone, var(--acc));
+  transition: width 0.3s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Tooltip
+
+   The popover is rendered into <body> and placed by the component from the
+   trigger's own rectangle — see Tooltip.tsx for why. All that is left here is
+   what it looks like; `top` and `left` arrive as inline styles.
+
+   There were three of these before the kit: .infotip (a mark you hover for a
+   paragraph), .chain-tip (a ::after carrying an attribute), and thirteen
+   native `title` attributes.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ui-tip {
+  position: relative;
+  display: inline-flex;
+  outline: none;
+}
+
+.ui-tip-pop {
+  position: fixed;
+  z-index: 1100;
+  padding: var(--sp-3) 10px;
+  border-radius: var(--r-sm);
+  background: var(--surf2);
+  border: 1px solid var(--line2);
+  box-shadow: var(--shadow-pop);
+  font-family: var(--sans);
+  font-size: var(--fs-note);
+  font-style: normal;
+  font-weight: var(--fw-normal);
+  letter-spacing: 0;
+  line-height: 1.5;
+  color: var(--text);
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* A sentence rather than a name: it wraps, and it is set muted because it is
+   an aside */
+.ui-tip-pop[data-size='lg'] {
+  width: min(260px, calc(100vw - 2 * var(--sp-6)));
+  padding: 10px var(--sp-5);
+  border-radius: 11px;
+  color: var(--mut);
+  text-align: left;
+  white-space: normal;
+}
+
+/* The mark itself: a small italic i in a ring */
+.ui-tip-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid var(--line2);
+  color: var(--mut);
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-bold);
+  font-style: italic;
+  cursor: help;
+  user-select: none;
+  vertical-align: middle;
+  flex-shrink: 0;
+  transition: color var(--ease-quick), border-color var(--ease-quick);
+}
+
+.ui-tip:hover .ui-tip-mark,
+.ui-tip:focus-visible .ui-tip-mark,
+.ui-tip:focus-within .ui-tip-mark {
+  color: var(--text);
+  border-color: var(--mut);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Disclosure — the chevron that says a row opens
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ui-chevron {
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid var(--mut);
+  border-bottom: 1.5px solid var(--mut);
+  transform: rotate(45deg);
+  transition: transform var(--ease-settle);
+  flex-shrink: 0;
+}
+
+.ui-chevron[data-open='true'] {
+  /* Turned past vertical so it points up, then nudged back onto the centre it
+     rotated off */
+  transform: rotate(225deg) translate(-2px, -2px);
+}
