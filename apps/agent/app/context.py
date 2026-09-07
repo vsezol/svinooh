@@ -18,11 +18,11 @@ from .config import settings
 MAX_CHARS = 6000
 
 
-def _usd(value) -> str:
+def usd(value) -> str:
     return f"${value:,.2f}" if isinstance(value, (int, float)) else "n/a"
 
 
-def _short_address(address: str) -> str:
+def short_address(address: str) -> str:
     return address if len(address) <= 14 else f"{address[:8]}…{address[-4:]}"
 
 
@@ -46,12 +46,12 @@ _POSITION_FACTS: list[tuple[str, Callable[[object], bool], Callable[[object], st
 ]
 
 
-def _position_line(position: dict) -> str:
+def position_line(position: dict) -> str:
     head = position.get("symbol") or "?"
     name = position.get("name")
     if name and name != head:
         head = f"{head} ({name})"
-    facts = [_usd(position.get("valueUsd"))]
+    facts = [usd(position.get("valueUsd"))]
     for key, usable, say in _POSITION_FACTS:
         value = position.get(key)
         if value is not None and usable(value):
@@ -62,8 +62,8 @@ def _position_line(position: dict) -> str:
 def _wallet_lines(wallet: dict) -> list[str]:
     stale = ", stale data" if wallet.get("stale") else ""
     header = (
-        f"Wallet {_short_address(wallet.get('address') or '?')} "
-        f"[{wallet.get('chain')}] — {_usd(wallet.get('totalUsd'))}, "
+        f"Wallet {short_address(wallet.get('address') or '?')} "
+        f"[{wallet.get('chain')}] — {usd(wallet.get('totalUsd'))}, "
         f"status {wallet.get('status')}{stale}:"
     )
     # Largest first — sorted here, not trusted from the wire — so the cap below
@@ -71,7 +71,7 @@ def _wallet_lines(wallet: dict) -> list[str]:
     # themselves arrive value-sorted from the API; positions we order ourselves.)
     positions = sorted(wallet.get("positions") or [], key=lambda p: -(p.get("valueUsd") or 0))
     cap = settings.context_max_positions
-    lines = [header] + [f"  - {_position_line(p)}" for p in positions[:cap]]
+    lines = [header] + [f"  - {position_line(p)}" for p in positions[:cap]]
     rest = len(positions) - cap
     if rest > 0:
         lines.append(f"  - …and {rest} smaller positions")
@@ -82,7 +82,7 @@ def portfolio_context(data: dict) -> str:
     wallets = data.get("wallets") or []
     lines = [
         f'Portfolio "{data.get("name") or data.get("slug")}" — '
-        f"total {_usd(data.get('totalUsd'))}, {len(wallets)} wallet(s)."
+        f"total {usd(data.get('totalUsd'))}, {len(wallets)} wallet(s)."
     ]
     for wallet in wallets:
         lines.extend(_wallet_lines(wallet))

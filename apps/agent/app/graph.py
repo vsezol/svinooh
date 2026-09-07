@@ -7,8 +7,9 @@ The line became a graph the moment turns stopped being alike: a question about
 DeFi in general has no business paying a portfolio fetch, and a question about
 the user's money deserves one. LangGraph is the tool for exactly this shape:
 nodes are steps, a typed state flows through them, and conditional edges pick
-the branch. Nothing here loops yet; the graph grows branches without the route
-handler ever changing.
+the branch. The graph itself still has no cycles; the one loop lives inside
+the grounded node — the agentic tool loop — and the graph grows branches
+without the route handler ever changing.
 
     START -> pending_gate -> [proposal waiting?]
               | no                \\-> yes+confirmed -> create_portfolio ► END
@@ -56,6 +57,7 @@ from .context import (
 from .datasources import PortfolioApiSource
 from .intent import classify
 from .llm import extract_text, get_model
+from .tools import portfolio_tools, run_tools
 from .onboarding import (
     ProposePortfolio,
     classify_confirmation,
@@ -184,22 +186,50 @@ async def general_node(state: AgentState) -> AgentState:
 
 
 async def grounded_node(state: AgentState) -> AgentState:
-    """Ground the answer in the target portfolio identity resolved.
+    """Ground the answer in the target portfolio — and let the model drill down.
 
-    Degrades honestly, as the context fetch always has: a slow or down API makes
-    the answer general, not absent — and the prompt says the live numbers are
-    unavailable, so the model does not guess them.
+    This node runs the agentic loop: the model answers with the context block,
+    or calls a read-only tool (history over a period it picks, position
+    search); the service executes the call and the result returns as a
+    message, until the model answers in text or the hop cap ends the loop.
+    The cap ends it gently — one last call with no tools bound, so the turn
+    ends in an answer, never in an error about loops.
+
+    Degrades honestly, as the context fetch always has: a slow or down API
+    makes the answer general, not absent — and with no data there are no
+    tools, so the model cannot drill into what could not be fetched.
     """
     system = settings.system_prompt
+    tools = []
     try:
         data = await portfolio_source.portfolio(state["target_portfolio"], state["authorization"])
         system = grounded_prompt(system, data)
+        tools = portfolio_tools(
+            portfolio_source, state["target_portfolio"], state["authorization"], data
+        )
     except Exception as error:  # noqa: BLE001 — any fetch failure degrades the same way
         logger.warning(
             "portfolio context fetch failed for %s: %r", state.get("target_portfolio"), error
         )
         system = degraded_prompt(system)
-    return await _answer(system, state)
+    if not tools:
+        return await _answer(system, state)
+
+    messages = [
+        SystemMessage(content=system),
+        *state.get("history", []),
+        HumanMessage(content=state["question"]),
+    ]
+    model = get_model().bind_tools(tools)
+    for _ in range(settings.tool_hops):
+        reply = await model.ainvoke(messages)
+        calls = getattr(reply, "tool_calls", None) or []
+        if not calls:
+            return {"answer": extract_text(reply)}
+        messages.append(reply)
+        messages.extend(await run_tools(calls, tools))
+    final = await get_model().ainvoke(messages)
+    return {"answer": extract_text(final)}
 
 
 async def onboard_node(state: AgentState) -> AgentState:
