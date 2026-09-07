@@ -174,9 +174,14 @@ The routing ladder (D7/D8) — each step builds on the previous:
 
 Then the independence milestones, unchanged in substance:
 
-- **M2 — standalone ingress.** Public domain, CORS allowlist, token validation
-  per D2, per-user rate limit, the blocks contract per D3. The gateway becomes
-  unnecessary.
+- **M2a — the lock.** Token validation per D2 (the host asked, cached briefly,
+  401 only on outright rejection — an auth outage demotes to anonymous, safe
+  because enforcement stays with the host API on every call) and a per-caller
+  rate limit (the cost lock: every turn is paid model calls). *Lesson: auth at
+  the edge without shared secrets; fail-open vs fail-closed, chosen per case.*
+- **M2b — the wire and the door.** The blocks contract per D3 on the wire
+  (expand-then-contract: `blocks` added, `reply` kept for the transitional
+  gateway), CORS allowlist, public domain. The gateway becomes unnecessary.
 - **M3 — the widget.** `apps/agent-widget`: MF remote exposing `mount()`; the
   shell hands the token in (the embedded door of D6); the portfolio tab
   becomes a ~30-line embed host; gateway proxy and `serviceAnswerer` deleted.

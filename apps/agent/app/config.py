@@ -49,6 +49,14 @@ class Settings:
     # A context fetch rides inside a chat turn; when it is slow, answering
     # without it beats making the person wait for it.
     context_timeout_s: int = int(os.getenv("AGENT_CONTEXT_TIMEOUT_S", "10"))
+    # How long a positive token validation stands before the host is asked
+    # again. Short on purpose: a validation only names the caller — data calls
+    # always carry the live token to the host.
+    auth_cache_ttl_s: int = int(os.getenv("AGENT_AUTH_CACHE_TTL_S", "60"))
+    # The cost lock: how many chat turns one caller gets per window. Every
+    # turn is at least one paid model call, several when tools run.
+    rate_limit_requests: int = int(os.getenv("AGENT_RATE_LIMIT_REQUESTS", "20"))
+    rate_limit_window_s: int = int(os.getenv("AGENT_RATE_LIMIT_WINDOW_S", "300"))
     # How many rounds of tool calls one grounded turn may take before the
     # model is asked to answer with what it has. A cap, not a target: most
     # turns take zero or one.
