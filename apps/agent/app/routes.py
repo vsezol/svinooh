@@ -38,7 +38,7 @@ async def chat(
     # anonymous share one budget — enough to try the product, not to spend on
     # someone else's meter.
     caller = await authenticate(authorization)
-    retry_after = limiter.retry_after(f"user:{caller.user_id}" if caller else "anonymous")
+    retry_after = await limiter.retry_after(f"user:{caller.user_id}" if caller else "anonymous")
     if retry_after is not None:
         raise HTTPException(
             status_code=429,
