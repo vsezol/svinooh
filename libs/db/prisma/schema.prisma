@@ -198,7 +198,6 @@ model Portfolio {
   // grouping several of them.
   name         String?
   wallets      PortfolioWallet[]
-  snapshots    PortfolioSnapshot[]
   owner        PortfolioOwner?
   createdAt    DateTime            @default(now())
   // When someone last opened this portfolio. The wallet service uses it to
@@ -434,16 +433,6 @@ model Position {
   band       Json?
   // The underlying legs — PositionTokenDto[]: what's supplied, accrued, borrowed
   tokens     Json?
-}
-
-model PortfolioSnapshot {
-  id          String    @id @default(cuid())
-  portfolioId String
-  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
-  totalUsd    Float
-  createdAt   DateTime  @default(now())
-
-  @@index([portfolioId, createdAt])
 }
 
 /// The history of what an address is worth — total, what could be collected, and

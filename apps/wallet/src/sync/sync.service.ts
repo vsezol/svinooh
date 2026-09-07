@@ -283,28 +283,4 @@ export class SyncService {
     });
   }
 
-  /** Which portfolios hold this address, so their totals can be re-recorded */
-  async portfoliosHolding(walletId: string): Promise<string[]> {
-    const rows = await this.prisma.portfolioWallet.findMany({
-      where: { walletId },
-      select: { portfolioId: true },
-    });
-    return [...new Set(rows.map((r) => r.portfolioId))];
-  }
-
-  async snapshotPortfolio(portfolioId: string): Promise<void> {
-    const held = await this.prisma.portfolioWallet.findMany({
-      where: { portfolioId },
-      select: { wallet: { select: { lastTotalUsd: true } } },
-    });
-    if (!held.length) {
-      // the last wallet was removed — record a zero so the chart reflects it
-      await this.prisma.portfolioSnapshot.create({ data: { portfolioId, totalUsd: 0 } });
-      return;
-    }
-    const known = held.filter((h) => h.wallet.lastTotalUsd !== null);
-    if (!known.length) return; // nothing has been scanned yet
-    const totalUsd = known.reduce((sum, h) => sum + (h.wallet.lastTotalUsd ?? 0), 0);
-    await this.prisma.portfolioSnapshot.create({ data: { portfolioId, totalUsd } });
-  }
 }
