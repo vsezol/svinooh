@@ -91,7 +91,9 @@ def portfolio_tools(source, slug: str, token: str, data: dict) -> list:
 
         Call when the user asks about a specific token, pool or protocol that
         the portfolio overview above does not show. The match is a
-        case-insensitive substring: "aave", "usdc", "uniswap".
+        case-insensitive substring, so pass one short word — a token symbol or
+        a protocol name: "aave", "usdc", "uniswap". If nothing matches, try
+        once more with a different word from the user's question.
         """
         return find_positions(data, query)
 
