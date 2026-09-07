@@ -18,11 +18,20 @@
 export const AGENT_ENABLED = true;
 
 /**
- * Where the agent deployment lives — its own origin, not this app's.
+ * The agent API — where questions go.
  *
- * One origin serves the remote entry and the wire it speaks, so the shell only
- * needs the address. Inlined at build time like every NEXT_PUBLIC_ value;
- * empty means the tab has nothing to load, which is every local run without
- * the variable.
+ * Inlined at build time like every NEXT_PUBLIC_ value; empty means the tab has
+ * nothing to talk to, which is every local run without the variable.
  */
 export const AGENT_URL: string = process.env.NEXT_PUBLIC_AGENT_URL || '';
+
+/**
+ * The agent frontend — where the federated remote is loaded from.
+ *
+ * A separate deployment from the API, so a separate address: the chat is its
+ * own application with its own release cadence, and this is the only place the
+ * shell learns where it lives. Empty falls back to the API's origin, which is
+ * correct when one host happens to serve both.
+ */
+export const AGENT_WIDGET_URL: string =
+  process.env.NEXT_PUBLIC_AGENT_WIDGET_URL || AGENT_URL;

@@ -18,6 +18,8 @@ ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
 # absent, the AI tab simply has nothing to load.
 ARG NEXT_PUBLIC_AGENT_URL
 ENV NEXT_PUBLIC_AGENT_URL=$NEXT_PUBLIC_AGENT_URL
+ARG NEXT_PUBLIC_AGENT_WIDGET_URL
+ENV NEXT_PUBLIC_AGENT_WIDGET_URL=$NEXT_PUBLIC_AGENT_WIDGET_URL
 
 COPY package.json package-lock.json nx.json tsconfig.base.json ./
 COPY apps/web/package.json apps/web/
