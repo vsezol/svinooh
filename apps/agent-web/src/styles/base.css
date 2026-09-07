@@ -14,6 +14,10 @@
 .sv-a-root {
   display: flex;
   flex-direction: column;
+  /* Popovers inside the chat are positioned against this box. Without it they
+     measure from whatever page happens to be their offset parent, which puts
+     them somewhere off the bottom of it. */
+  position: relative;
   /* Embedded: the host's pane sizes the widget. */
   height: 100%;
   min-height: 0;
@@ -32,6 +36,7 @@
   display: flex;
   flex: 1;
   min-height: 0;
+  min-width: 0;
 }
 
 /* History rail: standalone desktop only (250px per DESIGN-SPEC). */
@@ -79,8 +84,17 @@
 
 .sv-a-log {
   flex: 1 1 0;
+  /* min-height/min-width: without them a flex child refuses to shrink below
+     its content, which is how a long address or a wide table turns into a
+     page that scrolls sideways. */
   min-height: 0;
+  min-width: 0;
   overflow-y: auto;
+  /* The scroll stops here instead of chaining to whatever is behind the chat
+     once the transcript hits its end. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   padding: 0 var(--sp-5);
@@ -184,4 +198,78 @@
 .sv-a-c-hist[data-collapsed] {
   align-items: center;
   padding: 22px 0;
+}
+
+/* Nothing inside the chat may be wider than the chat. Long unbroken strings —
+   wallet addresses, transaction hashes — are the usual culprit, and they break
+   anywhere rather than pushing a sideways scroll onto the page. */
+.sv-a-main,
+.sv-a-items {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sv-a-items {
+  overflow-wrap: anywhere;
+}
+
+/* Every message, and everything a message contains, is bounded by the column
+   it sits in. */
+.sv-a-items > *,
+.sv-a-items > * > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sv-a-root :where(pre, table) {
+  max-width: 100%;
+}
+
+/* Popovers hang under the controls that open them, at the top right of the
+   chat, and never grow past the box they belong to. */
+.sv-a-root .sv-a-c-pop[data-align='right'] {
+  top: auto;
+  left: auto;
+  right: var(--sp-5);
+  bottom: auto;
+  max-height: min(60%, 420px);
+  overflow-y: auto;
+}
+
+.sv-a-root[data-variant='embedded'] .sv-a-c-pop[data-align='right'] {
+  top: 52px;
+}
+
+.sv-a-root[data-variant='standalone'] .sv-a-c-pop[data-align='right'] {
+  top: 62px;
+}
+
+/* Scrollbars in the product's palette. The default light-on-dark bar is the
+   one piece of chrome the browser paints for us, and it does not know the
+   theme. */
+.sv-a-root :where(*) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line2) transparent;
+}
+
+.sv-a-root :where(*)::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.sv-a-root :where(*)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sv-a-root :where(*)::-webkit-scrollbar-thumb {
+  background: var(--line2);
+  border-radius: var(--r-full);
+  /* Inset from the edge so the bar reads as a hint rather than a rail. */
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.sv-a-root :where(*)::-webkit-scrollbar-thumb:hover {
+  background: var(--mut);
+  background-clip: content-box;
 }

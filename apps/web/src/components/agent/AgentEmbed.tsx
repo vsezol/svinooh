@@ -77,6 +77,18 @@ export function AgentEmbed({ widgetUrl, agentUrl, slug, token, portfolios }: Pro
   const host = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
 
+  // A chat is a column that scrolls inside itself. Left on a page that also
+  // scrolls, iOS gives you both at once: the transcript drags the page behind
+  // it, and focusing the composer makes Safari scroll the *page* to reveal it,
+  // which is what puts the field in the middle of nowhere. So while this tab
+  // is mounted — it is mounted only while it is the open tab — the page is not
+  // a scroller at all.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('agent-open');
+    return () => root.classList.remove('agent-open');
+  }, []);
+
   useEffect(() => {
     let handle: { unmount(): void } | null = null;
     // The load is async and the tab can close before it lands; mounting into a

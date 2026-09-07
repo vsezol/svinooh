@@ -21,6 +21,16 @@ from langchain_core.messages import BaseMessage
 from .config import settings
 
 
+def _reasoning(effort: str) -> dict:
+    """Thinking budget, expressed the way an OpenAI-compatible aggregator wants.
+
+    It rides in extra_body because it is not an OpenAI parameter: the client
+    passes the field through untouched, and a provider that does not know it
+    ignores it. Empty leaves the model's own default in place.
+    """
+    return {"extra_body": {"reasoning": {"effort": effort}}} if effort else {}
+
+
 def _credentials() -> dict:
     """Where both models get their key and endpoint from.
 
@@ -48,6 +58,7 @@ def get_model() -> BaseChatModel:
         max_tokens=settings.max_tokens,
         timeout=settings.request_timeout_s,
         **_credentials(),
+        **_reasoning(settings.reasoning_effort),
     )
 
 
@@ -65,6 +76,7 @@ def get_router_model() -> BaseChatModel:
         max_tokens=200,
         timeout=settings.request_timeout_s,
         **_credentials(),
+        **_reasoning(settings.router_reasoning_effort),
     )
 
 

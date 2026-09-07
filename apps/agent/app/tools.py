@@ -19,6 +19,7 @@ Two rules hold everywhere here:
   LLM arithmetic.
 """
 import logging
+from datetime import datetime
 from typing import Literal
 
 from langchain_core.messages import ToolMessage
@@ -31,9 +32,54 @@ logger = logging.getLogger("svinooh-ai")
 MAX_MATCHES = 30
 
 
-def summarize_history(series: dict) -> str:
+# How wide each period actually is. The API answers a period with a series that
+# reaches back SEVERAL of them, so a chart has somewhere to scroll to — which
+# means the first point it returns is not the start of the period asked for.
+# The product's own figure slices the window off the end of the series, and so
+# does this: "over the last week" has to mean the same thing in the chat as it
+# does on the page.
+WINDOW_MS: dict[str, int | None] = {
+    "1h": 3_600_000,
+    "24h": 24 * 3_600_000,
+    "7d": 7 * 86_400_000,
+    "30d": 30 * 86_400_000,
+    "all": None,
+}
+
+
+def _epoch_ms(point: dict) -> float | None:
+    stamp = point.get("t")
+    if isinstance(stamp, (int, float)):
+        return float(stamp)
+    if isinstance(stamp, str):
+        try:
+            # The API sends ISO-8601; a trailing Z is not something
+            # fromisoformat accepts before 3.11's relaxation everywhere.
+            return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp() * 1000
+        except ValueError:
+            return None
+    return None
+
+
+def window_of(points: list[dict], period: str) -> list[dict]:
+    """The points inside the asked-for period, counted back from the last one."""
+    width = WINDOW_MS.get(period)
+    if width is None or not points:
+        return points
+    last = _epoch_ms(points[-1])
+    if last is None:
+        return points
+    opens = last - width
+    inside = [p for p in points if (_epoch_ms(p) or 0) >= opens]
+    # Fewer than two readings inside the window says nothing about a change;
+    # the whole series at least says something true about a longer one.
+    return inside if len(inside) >= 2 else points
+
+
+def summarize_history(series: dict, period: str) -> str:
     """The arithmetic half of a history answer: facts computed, not modeled."""
-    points = [p for p in (series.get("points") or []) if isinstance(p.get("usd"), (int, float))]
+    usable = [p for p in (series.get("points") or []) if isinstance(p.get("usd"), (int, float))]
+    points = window_of(usable, period)
     if len(points) < 2:
         return "Not enough history recorded for this period yet."
     first, last = points[0], points[-1]
@@ -42,10 +88,14 @@ def summarize_history(series: dict) -> str:
     delta = last["usd"] - first["usd"]
     percent = (delta / first["usd"] * 100) if first["usd"] else 0.0
     return (
-        f"Period {series.get('range')}: {len(points)} readings.\n"
-        f"Start {usd(first['usd'])} at {first.get('t')} -> now {usd(last['usd'])} at {last.get('t')}.\n"
+        f"Period {period}: {len(points)} readings.\n"
+        f"Start {usd(first['usd'])} at {first.get('t')} -> last reading {usd(last['usd'])} "
+        f"at {last.get('t')}.\n"
         f"Change {delta:+,.2f} USD ({percent:+.1f}%).\n"
-        f"Low {usd(low['usd'])} at {low.get('t')}; high {usd(high['usd'])} at {high.get('t')}."
+        f"Low {usd(low['usd'])} at {low.get('t')}; high {usd(high['usd'])} at {high.get('t')}.\n"
+        "The last reading is the newest recorded point, which can sit slightly "
+        "behind the live total shown in the portfolio above — quote the live "
+        "total when asked what the portfolio is worth now."
     )
 
 
@@ -83,7 +133,7 @@ def portfolio_tools(source, slug: str, token: str, data: dict) -> list:
         percent, low and high. Pick the smallest period that covers the
         question ("this week" -> 7d).
         """
-        return summarize_history(await source.history(slug, period, token))
+        return summarize_history(await source.history(slug, period, token), period)
 
     @tool
     def position_details(query: str) -> str:
