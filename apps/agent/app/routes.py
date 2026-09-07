@@ -11,7 +11,7 @@ from .auth import authenticate
 from .config import settings
 from .graph import agent_graph
 from .limits import RateLimiter
-from .schemas import ChatRequest, ChatResponse
+from .schemas import ChatRequest, ChatResponse, TextBlock
 from .sessions import SessionStore
 
 router = APIRouter()
@@ -69,4 +69,4 @@ async def chat(
     if state.get("pending_clear"):
         sessions.clear_pending(session_id)
     sessions.append(session_id, text, answer)
-    return ChatResponse(reply=answer, session_id=session_id)
+    return ChatResponse(blocks=[TextBlock(text=answer)], reply=answer, session_id=session_id)
