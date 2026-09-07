@@ -22,17 +22,33 @@ DEFAULT_SYSTEM_PROMPT = (
 
 @dataclass(frozen=True)
 class Settings:
-    # "<provider>:<model>" — the whole provider choice lives in this one string
-    # (resolved by langchain's init_chat_model), so moving to e.g. Gemini is a
-    # new value here plus that provider's langchain package, not a code change.
-    # Haiku while we iterate: fast and cheap, and every experiment is billed.
+    # ── the models ──────────────────────────────────────────────────────────
+    # Two models do two jobs, and both are named here rather than in the code
+    # that calls them:
+    #
+    #   AGENT_MODEL         answers — the one the user reads
+    #   AGENT_ROUTER_MODEL  labels — intent and confirmation classifiers, a
+    #                       dozen output tokens each, so this is where a
+    #                       cheaper tier pays off. Empty: the same model
+    #                       answers and labels.
+    #
+    # Both are "<provider>:<model>", resolved by langchain's init_chat_model,
+    # so changing vendor is a new value here plus that provider's package —
+    # never a code change. Haiku while we iterate: fast, cheap, and every
+    # experiment is billed.
     model: str = os.getenv("AGENT_MODEL", "anthropic:claude-haiku-4-5")
-    # The intent classifier's model (app/intent.py). Empty — same as `model`;
-    # set it when the router should ride a cheaper tier than the answers do.
     router_model: str = os.getenv("AGENT_ROUTER_MODEL", "")
-    # One endpoint for many providers (OpenRouter and the like): when set, model
-    # calls go to this OpenAI-compatible base URL instead of the provider's own —
-    # one key, any vendor's model, switched by AGENT_MODEL alone
+    # The credentials both models use. Named for this service's own config
+    # rather than for whichever vendor is behind it today: the provider SDKs
+    # would each read their own variable (ANTHROPIC_API_KEY, OPENAI_API_KEY,
+    # GOOGLE_API_KEY...), which turns "switch the model" into "also learn what
+    # this vendor calls its key". Passed explicitly to the client instead, so
+    # one pair of names covers every provider. Empty key — the provider plugin
+    # falls back to its own variable, which keeps existing deployments working.
+    model_api_key: str = os.getenv("AGENT_MODEL_API_KEY", "")
+    # One endpoint for many vendors (OpenRouter and the like): when set, model
+    # calls go to this OpenAI-compatible base URL instead of the provider's own
+    # — one key, any vendor's model, chosen by AGENT_MODEL alone
     # (e.g. AGENT_MODEL=openai:google/gemini-2.5-flash). Empty — direct.
     model_base_url: str = os.getenv("AGENT_MODEL_BASE_URL", "")
     system_prompt: str = os.getenv("AGENT_SYSTEM", DEFAULT_SYSTEM_PROMPT)

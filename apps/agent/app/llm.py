@@ -21,12 +21,24 @@ from langchain_core.messages import BaseMessage
 from .config import settings
 
 
-def _routing_kwargs() -> dict:
-    # An aggregator (OpenRouter) speaks the OpenAI wire for every vendor, so
-    # "openai:<vendor>/<model>" plus this base_url reaches any of them with the
-    # one key that base_url's service issued. Unset — providers are called
-    # directly and each wants its own key.
-    return {"base_url": settings.model_base_url} if settings.model_base_url else {}
+def _credentials() -> dict:
+    """Where both models get their key and endpoint from.
+
+    Passed explicitly rather than left to each provider SDK's own environment
+    variable, so the service is configured by one pair of names whatever
+    vendor is behind them. Either half unset falls back to the provider's
+    default — its own key variable, its own endpoint.
+
+    An aggregator (OpenRouter) speaks the OpenAI wire for every vendor, so
+    "openai:<vendor>/<model>" plus its base URL reaches any of them with the
+    one key that service issued.
+    """
+    credentials = {}
+    if settings.model_api_key:
+        credentials["api_key"] = settings.model_api_key
+    if settings.model_base_url:
+        credentials["base_url"] = settings.model_base_url
+    return credentials
 
 
 @cache  # lazy singleton: the client is built once and reused by every request
@@ -35,7 +47,7 @@ def get_model() -> BaseChatModel:
         settings.model,
         max_tokens=settings.max_tokens,
         timeout=settings.request_timeout_s,
-        **_routing_kwargs(),
+        **_credentials(),
     )
 
 
@@ -52,7 +64,7 @@ def get_router_model() -> BaseChatModel:
         settings.router_model or settings.model,
         max_tokens=200,
         timeout=settings.request_timeout_s,
-        **_routing_kwargs(),
+        **_credentials(),
     )
 
 
