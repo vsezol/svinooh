@@ -49,6 +49,15 @@ class Settings:
     # A context fetch rides inside a chat turn; when it is slow, answering
     # without it beats making the person wait for it.
     context_timeout_s: int = int(os.getenv("AGENT_CONTEXT_TIMEOUT_S", "10"))
+    # Origins allowed to call this service from a browser, comma-separated
+    # (the portfolio web app, later the standalone agent app). Empty — no
+    # cross-origin caller is allowed, which is right while the only door is
+    # the server-side gateway.
+    cors_origins: tuple[str, ...] = tuple(
+        origin.strip()
+        for origin in os.getenv("AGENT_CORS_ORIGINS", "").split(",")
+        if origin.strip()
+    )
     # How long a positive token validation stands before the host is asked
     # again. Short on purpose: a validation only names the caller — data calls
     # always carry the live token to the host.
