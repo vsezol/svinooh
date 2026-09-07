@@ -49,6 +49,10 @@ class Settings:
     # A context fetch rides inside a chat turn; when it is slow, answering
     # without it beats making the person wait for it.
     context_timeout_s: int = int(os.getenv("AGENT_CONTEXT_TIMEOUT_S", "10"))
+    # How many rounds of tool calls one grounded turn may take before the
+    # model is asked to answer with what it has. A cap, not a target: most
+    # turns take zero or one.
+    tool_hops: int = int(os.getenv("AGENT_TOOL_HOPS", "3"))
     # How many positions per wallet the context block carries (largest first,
     # so what falls off the end is dust by construction). A knob, not gospel:
     # the whole context is billed on every turn of a conversation, and the

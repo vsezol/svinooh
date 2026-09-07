@@ -163,6 +163,15 @@ The routing ladder (D7/D8) — each step builds on the previous:
   token. *Lesson: agent actions, human-in-the-loop confirmation, multi-turn
   state.*
 
+- **T1 — drill-down tools: the agentic loop.** The grounded branch binds two
+  read-only tools — a history summary over a model-chosen period, a position
+  search past the context cap — and loops: the model calls, the service
+  executes, the result returns as a message, until the model answers (capped
+  hops; tool errors return to the model as text). Python computes the numbers
+  from the full series; the model narrates five computed lines. *Lesson: the
+  agentic loop; tools with bodies; context injected by closure — the model
+  chooses arguments, never identity.*
+
 Then the independence milestones, unchanged in substance:
 
 - **M2 — standalone ingress.** Public domain, CORS allowlist, token validation
