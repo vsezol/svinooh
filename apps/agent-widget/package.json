@@ -1,0 +1,13 @@
+{
+  "name": "agent-widget",
+  "private": true,
+  "description": "The svinooh AI agent chat, as an embeddable widget: one file, one exposed function - mount().",
+  "scripts": {
+    "build": "esbuild src/widget.ts --bundle --minify --format=iife --global-name=SvinoohAgentWidget --outfile=dist/agent-widget.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "typescript": "^5.6.0"
+  }
+}

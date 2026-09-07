@@ -12,8 +12,10 @@ llm.py (the provider-neutral model seam), sessions.py (conversation memory),
 routes.py (the HTTP surface), schemas.py (the wire types).
 """
 from collections.abc import Sequence
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
@@ -35,4 +37,19 @@ def create_app(cors_origins: Sequence[str] | None = None) -> FastAPI:
             max_age=3600,
         )
     app.include_router(router)
+
+    # The embeddable widget, one file, same origin as the service it speaks
+    # to. A script tag anywhere may load it (static JS needs no CORS); short
+    # cache because the bundle versions with the deploy, not with a filename.
+    bundle = Path(settings.widget_dir) / "agent-widget.js"
+    if bundle.is_file():
+
+        @app.get("/widget/agent-widget.js", include_in_schema=False)
+        def widget_bundle() -> FileResponse:
+            return FileResponse(
+                bundle,
+                media_type="text/javascript",
+                headers={"Cache-Control": "public, max-age=300"},
+            )
+
     return app

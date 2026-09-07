@@ -182,9 +182,23 @@ Then the independence milestones, unchanged in substance:
 - **M2b — the wire and the door.** The blocks contract per D3 on the wire
   (expand-then-contract: `blocks` added, `reply` kept for the transitional
   gateway), CORS allowlist, public domain. The gateway becomes unnecessary.
-- **M3 — the widget.** `apps/agent-widget`: MF remote exposing `mount()`; the
-  shell hands the token in (the embedded door of D6); the portfolio tab
-  becomes a ~30-line embed host; gateway proxy and `serviceAnswerer` deleted.
+- **M3a — the widget application.** `apps/agent-widget`: vanilla TS, one
+  exposed `mount(el, {agentUrl, token, portfolioSlug, theme})`, built by
+  esbuild into a single file the agent service serves at
+  `/widget/agent-widget.js` — same origin as the wire it speaks, no extra
+  service to run; a script tag loads it (the loader D4 already blesses; the
+  MF runtime can replace the loader later without touching the surface). It
+  calls the agent directly through the M2 door, renders blocks, refuses a
+  wire schema it does not speak, and fails honest — 401, 429 and network
+  each get their own note. *Lesson: a microfrontend is a contract — one
+  function in, one file out.*
+- **M3b — the host embeds it.** The portfolio tab becomes a ~30-line embed
+  host: load the bundle, `mount()` with the shell's token (the embedded door
+  of D6 — the JWT lives in the web app's localStorage, so the shell can hand
+  it over), slug and theme. `AGENT_ENABLED` flips on; the `agent-local.ts`
+  stand-in retires; #58 and #59 close unmerged — the direct wire landed
+  before the transitional gateway path was ever needed. *Lesson: the shell
+  owns identity; the widget owns the conversation.*
 - **W1 — the sign-in block.** The first interactive block (D3): the service
   answers a signed-out portfolio question with a `signin` block, the host
   renders its auth UI inline in the chat, and the pending question is re-asked

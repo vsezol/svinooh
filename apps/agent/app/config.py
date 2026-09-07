@@ -49,6 +49,10 @@ class Settings:
     # A context fetch rides inside a chat turn; when it is slow, answering
     # without it beats making the person wait for it.
     context_timeout_s: int = int(os.getenv("AGENT_CONTEXT_TIMEOUT_S", "10"))
+    # Where the built widget bundle lives (copied in by the Dockerfile's node
+    # stage). Missing directory — the service simply does not serve a widget,
+    # which is every local dev run.
+    widget_dir: str = os.getenv("AGENT_WIDGET_DIR", "widget")
     # Origins allowed to call this service from a browser, comma-separated
     # (the portfolio web app, later the standalone agent app). Empty — no
     # cross-origin caller is allowed, which is right while the only door is

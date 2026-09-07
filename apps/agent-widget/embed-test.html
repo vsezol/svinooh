@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- Manual embed harness: `python3 -m http.server 4173 -d apps/agent-widget`
+     then open /embed-test.html. Talks to the real agent domain, so with no
+     model key configured the expected outcome is the widget's honest
+     unavailable note - the harness proves mount, styles, input flow and the
+     failure UX, not a live answer. -->
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>agent-widget embed test</title>
+  <style>
+    body { margin: 0; background: #08090c; padding: 24px; height: 80vh; }
+  </style>
+</head>
+<body>
+  <div id="host" style="height: 100%"></div>
+  <script src="./dist/agent-widget.js"></script>
+  <script>
+    SvinoohAgentWidget.mount(document.getElementById('host'), {
+      agentUrl: 'https://agent-production-7d27.up.railway.app',
+    });
+  </script>
+</body>
+</html>
