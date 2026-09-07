@@ -3,6 +3,7 @@
 @import '@svinooh/ui/theme.css';
 @import '@svinooh/ui/tokens.css';
 @import '@svinooh/ui/ui.css';
+@import '@svinooh/ui/shell.css';
 
 /* Shell skeleton. The non-negotiable layout rule: a strict column of
    [log, flex:1, scrolls, content anchored to the bottom] over
@@ -40,11 +41,13 @@
 
 @media (min-width: 1024px) {
   .sv-a-root[data-variant='standalone'] .sv-a-rail {
-    display: block;
+    display: flex;
+    position: relative;
     flex: none;
-    width: 250px;
+    /* The drag writes this variable directly, so a resize costs a style
+       recalculation instead of a React render. */
+    width: var(--sv-a-rail-width, 250px);
     min-height: 0;
-    overflow-y: auto;
     border-right: 1px solid var(--line);
   }
 }
@@ -109,4 +112,76 @@
   max-width: 720px;
   margin: 0 auto;
   padding: var(--sp-4) var(--sp-5) var(--sp-5);
+}
+
+/* ── the rail's own furniture ─────────────────────────────────────────────
+   The handle is a 10px target straddling the border: a 1px line is honest
+   about where the edge is but impossible to grab. */
+
+.sv-a-rail-body {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sv-a-rail-handle {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  bottom: 0;
+  width: 10px;
+  cursor: col-resize;
+  z-index: 2;
+  touch-action: none;
+}
+
+.sv-a-rail-handle::after {
+  content: '';
+  position: absolute;
+  inset: 0 4px;
+  background: var(--acc);
+  opacity: 0;
+  transition: opacity var(--ease-quick);
+}
+
+.sv-a-rail-handle:hover::after {
+  opacity: 0.5;
+}
+
+.sv-a-rail-toggle {
+  position: absolute;
+  right: 10px;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line2);
+  border-radius: var(--r-sm);
+  background: var(--surf);
+  color: var(--mut);
+  cursor: pointer;
+  transition: color var(--ease-quick), border-color var(--ease-quick);
+}
+
+.sv-a-rail-toggle:hover {
+  color: var(--text);
+  border-color: var(--acc);
+}
+
+.sv-a-rail[data-collapsed] .sv-a-rail-toggle {
+  right: 50%;
+  transform: translateX(50%);
+}
+
+/* The chevrons point the way the click goes. */
+.sv-a-rail[data-collapsed] .sv-a-rail-toggle svg {
+  transform: scaleX(-1);
+}
+
+.sv-a-c-hist[data-collapsed] {
+  align-items: center;
+  padding: 22px 0;
 }

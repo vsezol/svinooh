@@ -15,6 +15,13 @@ export default {
     // 'auto' derives the public path from the loading script tag.
     publicPath: 'auto',
     clean: true,
+    // Entry names stay stable — index.html points at main.js and federation
+    // hosts point at remoteEntry.js — while the chunks they pull carry a
+    // content hash, which is what makes caching them for a year safe: a
+    // changed chunk is a different name, so a browser can never hold a stale
+    // one.
+    filename: '[name].js',
+    chunkFilename: '[name].[contenthash:8].js',
   },
   devtool: 'source-map',
   resolve: {

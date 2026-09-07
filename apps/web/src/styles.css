@@ -6,6 +6,7 @@
 @import '@svinooh/ui/theme.css';
 @import './ui/tokens.css';
 @import './ui/ui.css';
+@import '@svinooh/ui/shell.css';
 
 html,
 body {
@@ -183,82 +184,13 @@ button {
   }
 }
 
-/* Shown depending on the theme, decided in CSS so that server-rendered markup
-   and the browser's first render are the same markup — see ThemeToggle. */
-.on-light {
-  display: none;
-}
 
-.on-dark {
-  display: inline-flex;
-}
 
-html[data-theme='light'] .on-light,
-body[data-theme='light'] .on-light {
-  display: inline-flex;
-}
 
-html[data-theme='light'] .on-dark,
-body[data-theme='light'] .on-dark {
-  display: none;
-}
 
-/* ───────── reusable primitives ───────── */
 
-.mono {
-  font-family: var(--mono);
-}
 
-.shell {
-  width: 100%;
-  max-width: 1120px;
-  margin: 0 auto;
-  /* Installed to a home screen the page runs under the notch and the rounded
-     corners, so the gutters grow by whatever the device says it needs */
-  padding-left: calc(clamp(14px, 3.5vw, 28px) + env(safe-area-inset-left));
-  padding-right: calc(clamp(14px, 3.5vw, 28px) + env(safe-area-inset-right));
-}
 
-/* The strip of screen the page is handed but cannot use: the notch or the
-   Dynamic Island lives there, and installed to a home screen the page runs
-   right under it. How deep it goes is the device's to say — 59pt on an Island
-   phone, ~47 on a notch, 20 on a flat top — so the header takes the number
-   from the device rather than picking one. In a browser tab the inset reads 0,
-   because the browser's own chrome is already holding that space. */
-.app-header {
-  padding-top: env(safe-area-inset-top);
-}
-
-/* svin[oo]h logo */
-.logo {
-  display: inline-flex;
-  align-items: baseline;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  cursor: pointer;
-  user-select: none;
-  color: var(--text);
-}
-
-.logo .eye {
-  display: inline-block;
-  width: 0.56em;
-  height: 0.56em;
-  border: 0.135em solid var(--acc);
-  border-radius: 50%;
-}
-
-.logo .eye-1 {
-  margin-left: 0.06em;
-}
-
-.logo .eye-2 {
-  margin-left: -0.14em;
-}
-
-.logo .h {
-  margin-left: 0.05em;
-}
 
 /* rows/cards with a hover highlight from the design */
 .row-hover:hover {

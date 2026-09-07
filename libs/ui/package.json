@@ -2,12 +2,14 @@
   "name": "@svinooh/ui",
   "version": "0.0.1",
   "private": true,
-  "description": "The svinooh UI kit: color tokens, measurement tokens, .ui-* component classes and their React wrappers. Shipped as source — consumers transpile it (Next via transpilePackages).",
+  "description": "The svinooh UI kit: color tokens, measurement tokens, .ui-* component classes and their React wrappers. Shipped as source \u2014 consumers transpile it (Next via transpilePackages).",
   "exports": {
     ".": "./src/index.ts",
     "./theme.css": "./src/theme.css",
     "./tokens.css": "./src/tokens.css",
-    "./ui.css": "./src/ui.css"
+    "./ui.css": "./src/ui.css",
+    "./shell.css": "./src/shell.css",
+    "./Logo": "./src/Logo.tsx"
   },
   "peerDependencies": {
     "react": "^19.2.0"
