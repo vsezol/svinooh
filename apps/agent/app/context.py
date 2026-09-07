@@ -106,13 +106,11 @@ def degraded_prompt(base: str) -> str:
 def onboarding_prompt(base: str, signed_in: bool) -> str:
     """For a portfolio question with no portfolio to ground in.
 
-    A deliberate stub until conversational onboarding (DESIGN.md) lands.
-    Two honest cases, one rule: never pretend to see holdings that do not
-    exist. The signed-in variant deliberately does NOT offer to create the
-    portfolio in the chat — that is the conversational-onboarding decision in
-    DESIGN.md; a stub
-    that asked for wallet addresses and then did nothing with them would be a
-    promise the code cannot keep yet.
+    One rule across both cases: never pretend to see holdings that do not
+    exist. Signed in, the conversation itself is the onboarding: the model
+    collects wallet addresses and PROPOSES creation through the tool — the
+    proposal is all it can do; the write happens only after the user confirms
+    on a later turn (see app/onboarding.py).
     """
     if not signed_in:
         return (
@@ -123,8 +121,59 @@ def onboarding_prompt(base: str, signed_in: bool) -> str:
         )
     return (
         f"{base}\n\nThe user asks about their portfolio but does not own one "
-        "yet, so there are no holdings to see. Say so plainly, and point them "
-        "to creating their first portfolio by adding a wallet address in the "
-        "svinooh app. Do not invent holdings, and do not promise to create "
-        "the portfolio yourself."
+        "yet, so there are no holdings to see. Say so plainly, and offer to "
+        "create their first portfolio right here: ask them to share the wallet "
+        "addresses to track (EVM 0x…, Solana, TRON or Bitcoin). When — and "
+        "only when — they have shared addresses and want to proceed, call the "
+        "ProposePortfolio tool with the addresses exactly as written. Never "
+        "invent or complete an address, and do not claim anything was created "
+        "— the user will be asked to confirm first."
+    )
+
+
+def confirmation_request_prompt(base: str, addresses: list[str]) -> str:
+    """Ask the user to confirm the proposed creation — the model phrases it.
+
+    Phrased by the model rather than a template so the question lands in the
+    user's own language; the addresses are injected verbatim so nothing is
+    reworded where precision matters.
+    """
+    listed = "\n".join(f"- {address}" for address in addresses)
+    return (
+        f"{base}\n\nYou proposed creating a portfolio with these wallets:\n"
+        f"{listed}\n\nAsk the user, in their language, to confirm or decline "
+        "(a plain yes/no). List the addresses exactly as above. Do not claim "
+        "anything was created yet."
+    )
+
+
+def created_prompt(base: str, result: dict) -> str:
+    """Tell the user what actually happened — including any address that failed."""
+    added = "\n".join(f"- {address}" for address in result.get("added", [])) or "- none"
+    failed = result.get("failed", [])
+    failed_lines = "\n".join(f"- {f['address']}: {f['error']}" for f in failed)
+    failure_note = f"\nThese were refused:\n{failed_lines}" if failed else ""
+    return (
+        f"{base}\n\nThe portfolio was just created. Facts to relay, in the "
+        f"user's language:\n- link: /p/{result.get('slug', '')}\n"
+        f"Wallets added:\n{added}{failure_note}\n\nTell them it is scanning "
+        "now and they can ask about it here once the first sync lands. Relay "
+        "failures honestly — do not soften a refused address into a success."
+    )
+
+
+def creation_failed_prompt(base: str) -> str:
+    """The create call itself failed: nothing exists yet, and saying otherwise lies."""
+    return (
+        f"{base}\n\nCreating the portfolio just failed — nothing was created. "
+        "Tell the user honestly, in their language, and that answering yes "
+        "again in a moment will retry."
+    )
+
+
+def cancelled_prompt(base: str) -> str:
+    return (
+        f"{base}\n\nThe user declined the portfolio-creation proposal. "
+        "Acknowledge briefly in their language — nothing was created — and "
+        "offer to help with whatever else."
     )

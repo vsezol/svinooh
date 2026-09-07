@@ -38,6 +38,14 @@ class PortfolioApiSource:
             response.raise_for_status()
             return response.json()
 
+    async def _post(self, path: str, token: str, body: dict) -> dict:
+        async with httpx.AsyncClient(timeout=settings.context_timeout_s) as client:
+            response = await client.post(
+                f"{self._base}{path}", headers={"authorization": token}, json=body
+            )
+            response.raise_for_status()
+            return response.json()
+
     async def me(self, token: str) -> dict:
         # The host's identity oracle (DESIGN.md, one identity, two doors):
         # one call answers both
@@ -46,6 +54,17 @@ class PortfolioApiSource:
         # DataSource protocol, because identity belongs to the host product,
         # while the protocol is only what every data source must answer.
         return await self._get("/api/auth/me", token)
+
+    async def create_portfolio(self, token: str) -> dict:
+        # The agent's writes go through the same public API as its reads, with
+        # the same caller's token — so what the agent creates lands owned by
+        # the person asking, and nothing the agent can do exceeds what they
+        # could click themselves. Host actions, like me(): deliberately outside
+        # the DataSource protocol, which stays read-only.
+        return await self._post("/api/portfolios", token, {})
+
+    async def add_wallet(self, slug: str, address: str, token: str) -> dict:
+        return await self._post(f"/api/portfolios/{slug}/wallets", token, {"address": address})
 
     async def portfolio(self, ref: str, token: str) -> dict:
         return await self._get(f"/api/portfolios/{ref}", token)

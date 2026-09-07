@@ -16,16 +16,27 @@ conversation, which is why losing it on restart is acceptable.
 """
 import time
 import uuid
+from dataclasses import dataclass, field
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+
+
+@dataclass
+class _Entry:
+    touched: float
+    messages: list[BaseMessage] = field(default_factory=list)
+    # An action proposed but not yet confirmed — today, the list of wallet
+    # addresses of a portfolio-creation proposal. Living in the session is what
+    # makes the confirmation a SEPARATE turn: the write physically cannot
+    # happen in the same request that proposed it.
+    pending: list[str] | None = None
 
 
 class SessionStore:
     def __init__(self, max_messages: int, ttl_s: int):
         self._max = max_messages
         self._ttl = ttl_s
-        # session_id -> (last touched at, messages so far)
-        self._sessions: dict[str, tuple[float, list[BaseMessage]]] = {}
+        self._sessions: dict[str, _Entry] = {}
 
     def new_id(self) -> str:
         return uuid.uuid4().hex
@@ -33,14 +44,33 @@ class SessionStore:
     def history(self, session_id: str) -> list[BaseMessage]:
         self._evict()
         entry = self._sessions.get(session_id)
-        return list(entry[1]) if entry else []
+        return list(entry.messages) if entry else []
 
     def append(self, session_id: str, question: str, answer: str) -> None:
-        _, messages = self._sessions.get(session_id, (0.0, []))
-        messages = messages + [HumanMessage(content=question), AIMessage(content=answer)]
+        entry = self._touch(session_id)
+        entry.messages += [HumanMessage(content=question), AIMessage(content=answer)]
         # Oldest turns fall off the front: the cap bounds both memory here and
         # tokens on every model call, and recent turns are the ones that matter.
-        self._sessions[session_id] = (time.time(), messages[-self._max :])
+        entry.messages = entry.messages[-self._max :]
+
+    def pending(self, session_id: str) -> list[str] | None:
+        entry = self._sessions.get(session_id)
+        return list(entry.pending) if entry and entry.pending else None
+
+    def set_pending(self, session_id: str, addresses: list[str]) -> None:
+        self._touch(session_id).pending = list(addresses)
+
+    def clear_pending(self, session_id: str) -> None:
+        entry = self._sessions.get(session_id)
+        if entry:
+            entry.pending = None
+
+    def _touch(self, session_id: str) -> _Entry:
+        entry = self._sessions.get(session_id)
+        if entry is None:
+            entry = self._sessions[session_id] = _Entry(touched=time.time())
+        entry.touched = time.time()
+        return entry
 
     def _evict(self) -> None:
         """Lazily forget sessions nobody has touched for the TTL.
@@ -50,6 +80,6 @@ class SessionStore:
         by at most what its callers sent.
         """
         deadline = time.time() - self._ttl
-        dead = [sid for sid, (touched, _) in self._sessions.items() if touched < deadline]
+        dead = [sid for sid, entry in self._sessions.items() if entry.touched < deadline]
         for sid in dead:
             del self._sessions[sid]

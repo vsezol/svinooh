@@ -30,8 +30,9 @@ async def chat(
     if not text:
         raise HTTPException(status_code=400, detail="empty message")
 
-    # The session's history rides into the graph, which is what makes "as we
-    # discussed" work across requests; the graph decides everything else.
+    # The session's history and its pending proposal ride into the graph, which
+    # is what makes "as we discussed" — and "yes, create it" — work across
+    # requests; the graph decides everything else and never touches the store.
     session_id = body.session_id or sessions.new_id()
     state = await agent_graph().ainvoke(
         {
@@ -39,11 +40,17 @@ async def chat(
             "history": sessions.history(session_id),
             "portfolio": body.portfolio,
             "authorization": authorization,
+            "pending_addresses": sessions.pending(session_id),
         }
     )
     answer = state["answer"]
 
-    # Remembered only after the graph answered: a failed turn leaves the
-    # session exactly as it was, instead of a question with no answer in it.
+    # Apply the graph's orders to the store, then remember the turn — only
+    # after the graph answered, so a failed turn leaves the session exactly as
+    # it was, instead of a question with no answer in it.
+    if state.get("pending_set"):
+        sessions.set_pending(session_id, state["pending_set"])
+    if state.get("pending_clear"):
+        sessions.clear_pending(session_id)
     sessions.append(session_id, text, answer)
     return ChatResponse(reply=answer, session_id=session_id)
