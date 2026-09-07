@@ -84,6 +84,34 @@ export class MetricsCollectorsService implements OnModuleInit {
       },
     });
 
+    /**
+     * Who signed up, by the identity they signed in with. The two are disjoint
+     * by design — an X account never links to a Telegram one — so the sum is
+     * the user table. `dev` exists so that sum stays honest even where a
+     * development sign-in once created a row; in production it reads zero.
+     */
+    new Gauge({
+      name: 'svinooh_users',
+      help: 'Registered users by the identity they signed in with',
+      labelNames: ['provider'] as const, // telegram | x | dev
+      registers,
+      async collect() {
+        try {
+          const [telegram, x, dev] = await Promise.all([
+            prisma.user.count({ where: { telegramId: { not: null } } }),
+            prisma.user.count({ where: { xId: { not: null } } }),
+            prisma.user.count({ where: { devKey: { not: null } } }),
+          ]);
+          this.reset();
+          this.set({ provider: 'telegram' }, telegram);
+          this.set({ provider: 'x' }, x);
+          this.set({ provider: 'dev' }, dev);
+        } catch {
+          /* DB unavailable at scrape time — skip */
+        }
+      },
+    });
+
     new Gauge({
       name: 'svinooh_portfolios_total',
       help: 'Portfolios total',
