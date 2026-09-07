@@ -14,6 +14,10 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 # simply a build without analytics.
 ARG NEXT_PUBLIC_POSTHOG_KEY
 ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
+# Where the agent deployment lives. Inlined at build time like the others;
+# absent, the AI tab simply has nothing to load.
+ARG NEXT_PUBLIC_AGENT_URL
+ENV NEXT_PUBLIC_AGENT_URL=$NEXT_PUBLIC_AGENT_URL
 
 COPY package.json package-lock.json nx.json tsconfig.base.json ./
 COPY apps/web/package.json apps/web/

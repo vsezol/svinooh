@@ -20,13 +20,13 @@ import { ScopeSelect } from '../components/ScopeSelect';
 import { ShareButton } from '../components/ShareButton';
 import { MobileTabs, tabsFor, tabIndex, usePager } from '../components/MobileTabs';
 import { usePaywall } from '../components/Paywall';
-import { AgentChat } from '../components/agent/AgentChat';
+import { AgentEmbed } from '../components/agent/AgentEmbed';
 import { SideNav, type Tab } from '../components/SideNav';
 import { SyncedAgo } from '../components/SyncedAgo';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { WalletRow, type WalletActions } from '../components/WalletRow';
 import { track } from '../lib/analytics';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, tokenStore } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { isPaywall } from '../lib/billing';
 import { pendingClaim } from '../lib/claim';
@@ -39,8 +39,7 @@ import {
   prefetchHistory,
   type History,
 } from '../lib/history';
-import { AGENT_ENABLED } from '../lib/agent';
-import { localAnswerer } from '../lib/agent-local';
+import { AGENT_ENABLED, AGENT_URL } from '../lib/agent';
 import { PERIODS, WINDOW_MS } from '../lib/ranges';
 
 /**
@@ -327,26 +326,6 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   const tabs = tabsFor(isAdmin);
   const pager = usePager(tabIndex(tab, isAdmin), (index) => setTab(tabs[index].key), tabs.length);
 
-  /**
-   * What the agent is allowed to look at: the portfolio already on screen.
-   *
-   * Nothing is fetched for it and nothing is sent anywhere — the answering is a
-   * local stand-in until the service exists, and it reads the same numbers the
-   * page is drawing. Rebuilt when the data or the window changes, so an answer
-   * quotes what the reader can see rather than what was true when the tab
-   * opened.
-   */
-  const answer = useMemo(
-    () =>
-      localAnswerer({
-        wallets: data?.wallets ?? [],
-        totalUsd: data?.totalUsd ?? 0,
-        history: history?.data.total ?? EMPTY_HISTORY.total,
-        period: history?.period ?? period,
-        change: change ? { label: changeLabel(change), up: change.up } : null,
-      }),
-    [data, history, period, change],
-  );
 
   const addWallet = async () => {
     const address = input.trim();
@@ -849,7 +828,14 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
                 thing to keep in step. See AGENT_ENABLED and isAdmin. */}
             {isOwner && AGENT_ENABLED ? (
               <div className="pane" data-active={activeTab === 'agent'}>
-                <AgentChat answer={answer} />
+                {activeTab === 'agent' ? (
+                  <AgentEmbed
+                    agentUrl={AGENT_URL}
+                    slug={slug}
+                    token={tokenStore.get() ?? undefined}
+                    portfolios={me?.portfolios}
+                  />
+                ) : null}
               </div>
             ) : null}
 
