@@ -1,3 +1,6 @@
+'use client';
+// Hooks and portals: a shipped kit must declare its client components
+// itself — the app that imports it may be a server component.
 import { useEffect, useRef, useState } from 'react';
 import type { InputHTMLAttributes } from 'react';
 

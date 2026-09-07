@@ -10,7 +10,10 @@
 
 FROM node:22-slim AS widget
 WORKDIR /build
-COPY package.json package-lock.json ./
+# tsconfig.base.json travels with the manifests: agent-web's tsconfig extends
+# it, and esbuild-loader parses that chain — without the base file the build
+# fails at the first module rather than at COPY time.
+COPY package.json package-lock.json tsconfig.base.json ./
 COPY libs ./libs
 COPY apps/agent-web ./apps/agent-web
 # npm install, not ci: only a subset of the workspaces is copied in, and ci
