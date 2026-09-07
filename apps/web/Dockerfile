@@ -18,9 +18,14 @@ ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
 COPY package.json package-lock.json nx.json tsconfig.base.json ./
 COPY apps/web/package.json apps/web/
 COPY libs/shared/package.json libs/shared/
+COPY libs/ui/package.json libs/ui/
 RUN npm ci -w apps/web --no-audit --no-fund
 
 COPY libs/shared libs/shared
+# The design system the app is built from (@svinooh/ui, transpiled by Next):
+# a workspace dependency, so its source has to be in the image like any other
+# part of the app.
+COPY libs/ui libs/ui
 COPY apps/web apps/web
 RUN npm run -w apps/web build
 
