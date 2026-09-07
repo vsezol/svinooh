@@ -52,14 +52,26 @@ export default {
       exposes: {
         './mount': './src/mount',
       },
+      // Every React entry point this bundle actually imports is shared, not
+      // just the package roots: webpack matches share keys by request, so
+      // 'react-dom/client' left out would ship a second renderer beside the
+      // host's — one React, two react-doms, and the bugs that come with it.
+      // createPortal comes from 'react-dom', createRoot from 'react-dom/client'.
       shared: {
         react: { singleton: true, requiredVersion: '^19.2.0' },
         'react-dom': { singleton: true, requiredVersion: '^19.2.0' },
+        'react-dom/client': { singleton: true, requiredVersion: '^19.2.0' },
       },
     }),
     new HtmlWebpackPlugin({
       template: './public/index.html',
       chunks: ['main'],
+      // Absolute, because the service serves this page at / and /demo while
+      // the bundle lives under /widget — a relative src would resolve against
+      // the page's path and 404. This is only the tag in the HTML: webpack's
+      // own publicPath stays 'auto', which is what lets a federation host load
+      // the chunks from the agent's origin rather than its own.
+      publicPath: '/widget/',
     }),
   ],
 };

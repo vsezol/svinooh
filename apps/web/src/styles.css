@@ -426,33 +426,25 @@ body[data-theme='light'] .on-dark {
    The margins pull back the padding the page put around every tab — this one
    wants the whole strip under the header — and the padding here puts a
    measured amount of it back. */
-.agent-chat {
-  display: flex;
-  flex-direction: column;
-  min-height: 360px;
+.agent-embed {
   height: calc(100dvh - 59px - env(safe-area-inset-top));
+  min-height: 360px;
   margin: calc(-1 * clamp(20px, 4vw, 36px)) 0 -60px;
   padding: 14px 0 22px;
+}
+
+.agent-embed-note {
+  padding: 40px 0;
+  color: var(--mut);
+  font-size: var(--fs-note);
+  text-align: center;
 }
 
 /* The openers. They scroll sideways rather than wrapping, so the row is one
    line whatever the width — and the scrollbar goes, because a bar under six
    chips reads as a second thing to operate. */
-.agent-chips {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 8px;
-  scrollbar-width: none;
-}
-
-.agent-chips::-webkit-scrollbar {
-  display: none;
-  height: 0;
-}
-
 @media (max-width: 719px) {
-  .agent-chat {
+  .agent-embed {
     /* the tabs across the top take their share of the screen too */
     height: calc(100dvh - 59px - 47px - env(safe-area-inset-top));
     padding-bottom: calc(18px + env(safe-area-inset-bottom));
