@@ -138,16 +138,20 @@ async def identity_node(state: AgentState) -> AgentState:
     `route` and the second conditional edge acts on it. The widget's slug is a
     hint that skips the lookup; otherwise /auth/me says what the caller owns.
     """
-    auth = state.get("authorization")
-    if not auth:
-        # Nobody to look up. The onboarding prompt carries the sign-in variant.
-        logger.info("identity: no token -> onboard")
-        return {"route": "onboard"}
-
     hint = state.get("portfolio")
     if hint:
-        # The user is looking at a specific portfolio — that IS the answer.
+        # A portfolio on screen is the portfolio the question is about, signed
+        # in or not: the fetch carries whatever token the caller has, and the
+        # API decides what that caller may read. A public portfolio answers a
+        # visitor; a private one refuses, and the branch degrades honestly.
         return {"route": "grounded", "target_portfolio": hint}
+
+    auth = state.get("authorization")
+    if not auth:
+        # Nothing on screen and nobody to look up. The onboarding prompt
+        # carries the sign-in variant.
+        logger.info("identity: no token, no portfolio -> onboard")
+        return {"route": "onboard"}
 
     try:
         me = await portfolio_source.me(auth)
@@ -202,10 +206,10 @@ async def grounded_node(state: AgentState) -> AgentState:
     system = settings.system_prompt
     tools = []
     try:
-        data = await portfolio_source.portfolio(state["target_portfolio"], state["authorization"])
+        data = await portfolio_source.portfolio(state["target_portfolio"], state.get("authorization"))
         system = grounded_prompt(system, data)
         tools = portfolio_tools(
-            portfolio_source, state["target_portfolio"], state["authorization"], data
+            portfolio_source, state["target_portfolio"], state.get("authorization"), data
         )
     except Exception as error:  # noqa: BLE001 — any fetch failure degrades the same way
         logger.warning(
@@ -281,7 +285,7 @@ async def create_portfolio_node(state: AgentState) -> AgentState:
     addresses = state.get("pending_addresses") or []
     try:
         result = await create_portfolio_with_wallets(
-            portfolio_source, addresses, state["authorization"]
+            portfolio_source, addresses, state.get("authorization")
         )
     except Exception as error:  # noqa: BLE001 — nothing was created; say so
         logger.warning("portfolio creation failed: %r", error)

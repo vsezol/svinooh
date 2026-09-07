@@ -46,44 +46,175 @@ _POSITION_FACTS: list[tuple[str, Callable[[object], bool], Callable[[object], st
 ]
 
 
-def position_line(position: dict) -> str:
+def _amount(value, price) -> str | None:
+    """How much of it there is — the answer to "how much ETH do I have"."""
+    if not isinstance(value, (int, float)) or value <= 0:
+        return None
+    figure = f"{value:,.4f}".rstrip("0").rstrip(".") if value < 1000 else f"{value:,.0f}"
+    if isinstance(price, (int, float)) and price > 0:
+        # Sub-cent prices are the rule in this asset class, not the exception,
+        # and a token priced at 6e-08 must not print as "$0" — a zero price
+        # next to a five-figure value is a contradiction the model is left to
+        # resolve on its own.
+        if price >= 0.01:
+            shown = f"{price:,.2f}"
+        elif price >= 1e-6:
+            shown = f"{price:.8f}".rstrip("0").rstrip(".")
+        else:
+            shown = f"{price:.2e}"
+        return f"{figure} @ ${shown}"
+    return figure
+
+
+def _where(position: dict) -> list[str]:
+    """Which network, and which protocol if it is not simply held in the wallet.
+
+    Both were missing from this block until a portfolio with a thousand
+    positions made their absence obvious: without them, a question about Base
+    or about Uniswap pools has nothing in the context to answer it, and an
+    answer with nothing behind it is the kind that gets invented.
+    """
+    facts = []
+    if _is_word(position.get("network")):
+        facts.append(str(position["network"]))
+    platform = position.get("platform")
+    if _is_word(platform) and platform != "wallet":
+        facts.append(str(platform))
+    return facts
+
+
+def _pair(position: dict) -> str | None:
+    """The pool a liquidity position is in, and how far its band reaches.
+
+    The pair sits in `band` and was dropped on the floor until a chat answered
+    "what about my Uniswap pools" with "the pairs are not in the data" — while
+    the pairs were, in fact, in the data.
+    """
+    band = position.get("band")
+    if not isinstance(band, dict):
+        return None
+    pair = band.get("pair")
+    if not _is_word(pair):
+        return None
+    fee = band.get("feePct")
+    return f"{pair}" + (f" {fee}% fee" if isinstance(fee, (int, float)) else "")
+
+
+def _composition(position: dict) -> str | None:
+    """What a position is actually made of — supplied and borrowed legs."""
+    tokens = position.get("tokens")
+    if not isinstance(tokens, list) or not tokens:
+        return None
+    parts = []
+    for leg in tokens[:6]:
+        if not isinstance(leg, dict):
+            continue
+        symbol = leg.get("symbol") or "?"
+        role = leg.get("role")
+        amount = _amount(leg.get("amount"), leg.get("priceUsd"))
+        piece = f"{symbol} {usd(leg.get('valueUsd'))}"
+        if amount:
+            piece += f" ({amount})"
+        if _is_word(role) and role != "supply":
+            piece = f"{role} {piece}"
+        parts.append(piece)
+    return " + ".join(parts) if parts else None
+
+
+def position_line(position: dict, detail: bool = False) -> str:
     head = position.get("symbol") or "?"
     name = position.get("name")
     if name and name != head:
         head = f"{head} ({name})"
+    pair = _pair(position)
+    if pair:
+        head = f"{head} [{pair}]"
     facts = [usd(position.get("valueUsd"))]
+    amount = _amount(position.get("amount"), position.get("priceUsd"))
+    if amount:
+        facts.append(amount)
+    facts.extend(_where(position))
     for key, usable, say in _POSITION_FACTS:
         value = position.get(key)
         if value is not None and usable(value):
             facts.append(say(value))
-    return f"{head}: {', '.join(facts)}"
+    line = f"{head}: {', '.join(facts)}"
+    # Composition is long enough to crowd the standing block, so it belongs to
+    # the drill-down that asked for detail.
+    composition = _composition(position) if detail else None
+    return f"{line} — {composition}" if composition else line
+
+
+def _totals_by(positions: list[dict], key: str, skip: set[str] = frozenset()) -> list[tuple[str, float]]:
+    """Value grouped by one field, largest first."""
+    sums: dict[str, float] = {}
+    for position in positions:
+        label = position.get(key)
+        value = position.get("valueUsd")
+        if _is_word(label) and label not in skip and isinstance(value, (int, float)):
+            sums[str(label)] = sums.get(str(label), 0.0) + value
+    return sorted(sums.items(), key=lambda pair: -pair[1])
+
+
+def _breakdown(label: str, totals: list[tuple[str, float]], total: float, limit: int = 8) -> str | None:
+    """One line of "where the money is", with shares that add up."""
+    if not totals:
+        return None
+    parts = []
+    for name, value in totals[:limit]:
+        share = f" ({value / total * 100:.0f}%)" if total else ""
+        parts.append(f"{name} {usd(value)}{share}")
+    if len(totals) > limit:
+        rest = sum(value for _, value in totals[limit:])
+        parts.append(f"+{len(totals) - limit} more {usd(rest)}")
+    return f"{label}: {', '.join(parts)}"
 
 
 def _wallet_lines(wallet: dict) -> list[str]:
     stale = ", stale data" if wallet.get("stale") else ""
+    positions = sorted(wallet.get("positions") or [], key=lambda p: -(p.get("valueUsd") or 0))
     header = (
         f"Wallet {short_address(wallet.get('address') or '?')} "
         f"[{wallet.get('chain')}] — {usd(wallet.get('totalUsd'))}, "
-        f"status {wallet.get('status')}{stale}:"
+        f"{len(positions)} position(s), status {wallet.get('status')}{stale}:"
     )
     # Largest first — sorted here, not trusted from the wire — so the cap below
     # can only ever drop the tail, which is dust by construction. (Wallets
     # themselves arrive value-sorted from the API; positions we order ourselves.)
-    positions = sorted(wallet.get("positions") or [], key=lambda p: -(p.get("valueUsd") or 0))
     cap = settings.context_max_positions
     lines = [header] + [f"  - {position_line(p)}" for p in positions[:cap]]
-    rest = len(positions) - cap
-    if rest > 0:
-        lines.append(f"  - …and {rest} smaller positions")
+    rest = positions[cap:]
+    if rest:
+        # The tail's value, not just its count: a model told only that 1004
+        # positions exist will either ignore them or guess at them, and both
+        # come out as a wrong total.
+        carried = sum(p.get("valueUsd") or 0 for p in rest)
+        lines.append(
+            f"  - …and {len(rest)} smaller positions worth {usd(carried)} in total "
+            "(ask for details on any of them with the position search tool)"
+        )
     return lines
 
 
 def portfolio_context(data: dict) -> str:
     wallets = data.get("wallets") or []
+    positions = [p for w in wallets for p in (w.get("positions") or [])]
+    total = data.get("totalUsd") if isinstance(data.get("totalUsd"), (int, float)) else 0.0
     lines = [
         f'Portfolio "{data.get("name") or data.get("slug")}" — '
-        f"total {usd(data.get('totalUsd'))}, {len(wallets)} wallet(s)."
+        f"total {usd(data.get('totalUsd'))}, {len(wallets)} wallet(s), "
+        f"{len(positions)} position(s)."
     ]
+    # The shape of the money, computed over EVERY position rather than the few
+    # the cap prints. These three lines are what make "where is my money by
+    # chain" answerable without guessing, however long the tail is.
+    for line in (
+        _breakdown("By network", _totals_by(positions, "network"), total),
+        _breakdown("By type", _totals_by(positions, "category"), total),
+        _breakdown("In protocols", _totals_by(positions, "platform", skip={"wallet"}), total),
+    ):
+        if line:
+            lines.append(line)
     for wallet in wallets:
         lines.extend(_wallet_lines(wallet))
     return "\n".join(lines)[:MAX_CHARS]
