@@ -11,24 +11,19 @@
       rel="stylesheet"
     />
     <style>
-      /* The host product supplies these variables via next/font; the
-         standalone page maps them to the Google Fonts faces above. */
-      :root {
-        --font-manrope: 'Manrope';
-        --font-plex-mono: 'IBM Plex Mono';
-      }
-      html,
-      body {
-        height: 100%;
-      }
-      body {
+      :root { --font-manrope: 'Manrope'; --font-plex-mono: 'IBM Plex Mono'; }
+      /* The page never scrolls — only the transcript does. That is what keeps
+         iOS Safari's toolbar and the dvh viewport from jumping when the
+         keyboard opens, and what stops a scroll inside the chat from dragging
+         the page behind it. */
+      html, body, #root {
         margin: 0;
-        /* Dark ground before any bundle CSS arrives — no white flash. */
+        height: 100%;
+        overflow: hidden;
+        overscroll-behavior: none;
         background: #08090c;
       }
-      #root {
-        height: 100dvh;
-      }
+      * { box-sizing: border-box; }
     </style>
   </head>
   <body>

@@ -32,6 +32,7 @@
   display: flex;
   flex: 1;
   min-height: 0;
+  min-width: 0;
 }
 
 /* History rail: standalone desktop only (250px per DESIGN-SPEC). */
@@ -79,8 +80,17 @@
 
 .sv-a-log {
   flex: 1 1 0;
+  /* min-height/min-width: without them a flex child refuses to shrink below
+     its content, which is how a long address or a wide table turns into a
+     page that scrolls sideways. */
   min-height: 0;
+  min-width: 0;
   overflow-y: auto;
+  /* The scroll stops here instead of chaining to whatever is behind the chat
+     once the transcript hits its end. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   padding: 0 var(--sp-5);
@@ -184,4 +194,29 @@
 .sv-a-c-hist[data-collapsed] {
   align-items: center;
   padding: 22px 0;
+}
+
+/* Nothing inside the chat may be wider than the chat. Long unbroken strings —
+   wallet addresses, transaction hashes — are the usual culprit, and they break
+   anywhere rather than pushing a sideways scroll onto the page. */
+.sv-a-main,
+.sv-a-items {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sv-a-items {
+  overflow-wrap: anywhere;
+}
+
+/* Every message, and everything a message contains, is bounded by the column
+   it sits in. */
+.sv-a-items > *,
+.sv-a-items > * > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sv-a-root :where(pre, table) {
+  max-width: 100%;
 }

@@ -359,10 +359,22 @@ button {
    wants the whole strip under the header — and the padding here puts a
    measured amount of it back. */
 .agent-embed {
+  /* Exactly the room under the sticky header, and not a pixel more: any
+     overflow here becomes a scrolling page, which is the one thing the chat
+     cannot share a screen with. */
   height: calc(100dvh - 59px - env(safe-area-inset-top));
-  min-height: 360px;
-  margin: calc(-1 * clamp(20px, 4vw, 36px)) 0 -60px;
-  padding: 14px 0 22px;
+  margin: calc(-1 * clamp(20px, 4vw, 36px)) 0 0;
+  padding: 14px 0 0;
+  overflow: hidden;
+}
+
+/* Set while the agent tab is open (see AgentEmbed). The page stops being a
+   scroller so the transcript can be one. */
+html.agent-open,
+html.agent-open body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .agent-embed-note {
@@ -379,7 +391,7 @@ button {
   .agent-embed {
     /* the tabs across the top take their share of the screen too */
     height: calc(100dvh - 59px - 47px - env(safe-area-inset-top));
-    padding-bottom: calc(18px + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }
 

@@ -126,7 +126,18 @@
 }
 
 .sv-a-b-table-scroll {
+  /* A table too wide for the screen scrolls inside its own card — the page
+     must never be the thing that scrolls sideways — and the gesture stops at
+     the card's edge instead of dragging the transcript with it. */
+  max-width: 100%;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sv-a-b-card {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .sv-a-b-table {

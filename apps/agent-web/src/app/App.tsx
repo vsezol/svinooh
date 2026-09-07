@@ -232,8 +232,13 @@ export function App(props: AppProps) {
   }, []);
 
   useEffect(() => {
-    const el = logRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    // On the next frame: the height a new message adds is not known until the
+    // browser has laid it out, and scrolling before that lands short.
+    const frame = requestAnimationFrame(() => {
+      const el = logRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
   }, [active, busy, statusText]);
 
   const empty = active.items.length === 0;
