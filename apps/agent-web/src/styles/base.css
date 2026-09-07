@@ -14,6 +14,10 @@
 .sv-a-root {
   display: flex;
   flex-direction: column;
+  /* Popovers inside the chat are positioned against this box. Without it they
+     measure from whatever page happens to be their offset parent, which puts
+     them somewhere off the bottom of it. */
+  position: relative;
   /* Embedded: the host's pane sizes the widget. */
   height: 100%;
   min-height: 0;
@@ -219,4 +223,53 @@
 
 .sv-a-root :where(pre, table) {
   max-width: 100%;
+}
+
+/* Popovers hang under the controls that open them, at the top right of the
+   chat, and never grow past the box they belong to. */
+.sv-a-root .sv-a-c-pop[data-align='right'] {
+  top: auto;
+  left: auto;
+  right: var(--sp-5);
+  bottom: auto;
+  max-height: min(60%, 420px);
+  overflow-y: auto;
+}
+
+.sv-a-root[data-variant='embedded'] .sv-a-c-pop[data-align='right'] {
+  top: 52px;
+}
+
+.sv-a-root[data-variant='standalone'] .sv-a-c-pop[data-align='right'] {
+  top: 62px;
+}
+
+/* Scrollbars in the product's palette. The default light-on-dark bar is the
+   one piece of chrome the browser paints for us, and it does not know the
+   theme. */
+.sv-a-root :where(*) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line2) transparent;
+}
+
+.sv-a-root :where(*)::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.sv-a-root :where(*)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sv-a-root :where(*)::-webkit-scrollbar-thumb {
+  background: var(--line2);
+  border-radius: var(--r-full);
+  /* Inset from the edge so the bar reads as a hint rather than a rail. */
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.sv-a-root :where(*)::-webkit-scrollbar-thumb:hover {
+  background: var(--mut);
+  background-clip: content-box;
 }

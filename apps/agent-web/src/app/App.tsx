@@ -147,6 +147,11 @@ export function App(props: AppProps) {
     async (text: string) => {
       lastQuestion.current = text;
       setBusy(true);
+      // Which conversation asked. An answer that arrives after the user has
+      // started a new chat — or opened an older one — belongs to neither of
+      // them, and appending it there is how a fresh chat ends up replying to
+      // a question it never saw.
+      const asked = activeRef.current.id;
       try {
         const res = await sendChat({
           agentUrl,
@@ -155,9 +160,11 @@ export function App(props: AppProps) {
           sessionId: activeRef.current.sessionId,
           message: text,
         });
+        if (activeRef.current.id !== asked) return;
         activeRef.current = { ...activeRef.current, sessionId: res.sessionId };
         push([{ id: uid(), role: 'agent', blocks: res.blocks }]);
       } catch (err) {
+        if (activeRef.current.id !== asked) return;
         push(notesFor(err, text));
       } finally {
         setBusy(false);
