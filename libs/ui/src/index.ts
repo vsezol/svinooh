@@ -34,3 +34,4 @@ export { Tooltip, InfoTip } from './Tooltip';
 export { Chevron } from './Disclosure';
 export { Dialog, DialogActions } from './Dialog';
 export { ChainBadge, networkName, badgedText } from './ChainBadge';
+export * from './Logo';

@@ -1,3 +1,8 @@
+// The wordmark by its own path, not through the kit's barrel: the barrel
+// re-exports ButtonLink, which imports next/link — a dependency this app
+// does not have and does not need.
+import { Logo } from '@svinooh/ui/Logo';
+
 import './chrome.css';
 
 interface Props {
@@ -50,15 +55,11 @@ export function AgentHeader({ variant, signedIn, onToggleTheme, onHistory, onNew
   }
 
   return (
-    <header className="sv-a-c-header" data-variant="standalone">
-      <span className="sv-a-c-logo" aria-label="svinooh">
-        <span>svin</span>
-        <span className="sv-a-c-logo-eye" />
-        <span className="sv-a-c-logo-eye" data-second="true" />
-        <span className="sv-a-c-logo-h">h</span>
-      </span>
+    <header className="app-header sv-a-c-header" data-variant="standalone">
+      <div className="shell sv-a-c-header-inner">
+      <Logo size={21} onClick={() => window.location.assign('/')} />
       <span className="sv-a-c-agent-pill">Agent</span>
-      <div className="sv-a-c-header-actions">
+        <div className="sv-a-c-header-actions">
         {onToggleTheme ? (
           <button
             type="button"
@@ -91,6 +92,7 @@ export function AgentHeader({ variant, signedIn, onToggleTheme, onHistory, onNew
             Sign in
           </button>
         ) : null}
+        </div>
       </div>
     </header>
   );

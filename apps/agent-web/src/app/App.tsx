@@ -10,6 +10,7 @@ import { EmptyGrounded } from '../components/EmptyGrounded';
 import { EmptyNoPortfolio } from '../components/EmptyNoPortfolio';
 import { GroundingChip } from '../components/GroundingChip';
 import { HistoryPanel } from '../components/HistoryPanel';
+import { Rail } from '../components/Rail';
 import { PortfolioSwitcher } from '../components/PortfolioSwitcher';
 import { ProLock } from '../components/ProLock';
 import { StatusLine } from '../components/StatusLine';
@@ -302,15 +303,18 @@ export function App(props: AppProps) {
       ) : null}
       <div className="sv-a-body">
         {variant === 'standalone' ? (
-          <aside className="sv-a-rail">
-            <HistoryPanel
-              mode="rail"
-              conversations={conversations}
-              currentId={active.id}
-              onSelect={selectConversation}
-              onNew={newChat}
-            />
-          </aside>
+          <Rail>
+            {(collapsed) => (
+              <HistoryPanel
+                mode="rail"
+                collapsed={collapsed}
+                conversations={conversations}
+                currentId={active.id}
+                onSelect={selectConversation}
+                onNew={newChat}
+              />
+            )}
+          </Rail>
         ) : null}
         <div className="sv-a-main">
           {variant === 'embedded' || portfolio ? (

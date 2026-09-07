@@ -210,7 +210,8 @@ body[data-theme='light'] .sv-a-c-on-light {
 
 .sv-a-c-composer {
   display: flex;
-  align-items: center;
+  /* The send button stays with the last line as the box grows. */
+  align-items: flex-end;
   gap: 8px;
   background: var(--surf);
   border: 1px solid var(--line2);
@@ -234,7 +235,14 @@ body[data-theme='light'] .sv-a-c-on-light {
   /* 16px is the floor below which iOS Safari zooms the page on focus. */
   font-size: 16px;
   font-weight: 400;
+  line-height: 1.45;
   color: var(--text);
+  /* A textarea ships with a resize grip and a text-field height; the box sizes
+     itself from its content instead (see Composer). */
+  resize: none;
+  overflow-y: auto;
+  max-height: 200px;
+  padding: 7px 0;
 }
 
 .sv-a-c-composer-input::placeholder {
@@ -685,4 +693,21 @@ body[data-theme='light'] .sv-a-c-on-light {
   font-family: var(--mono);
   font-size: 13px;
   color: var(--text);
+}
+
+/* The standalone top bar is the product's header: the shared .app-header
+   supplies the sticky, blurred band; this is the row inside it, the same
+   58px space-between the portfolio page uses. */
+.sv-a-c-header[data-variant='standalone'] {
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.sv-a-c-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  height: 58px;
 }

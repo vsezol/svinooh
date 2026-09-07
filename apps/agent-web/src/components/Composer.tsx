@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import type { FormEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { FormEvent, KeyboardEvent } from 'react';
 
 interface Props {
   placeholder: string;
@@ -13,31 +13,67 @@ const ARROW = (
   </svg>
 );
 
+/** How tall the box may grow before it scrolls instead. */
+const MAX_HEIGHT = 200;
+
 /**
- * A real form around a single text input: Enter submits through the browser's
- * implicit submission, so there is no key handler to keep in sync with the
- * button.
+ * The message box, with the conventions people already have from every other
+ * chat: Enter sends, Shift+Enter opens a line, and the box grows with the text
+ * to a ceiling and then scrolls.
+ *
+ * A textarea cannot size itself to its content in CSS, so the height is reset
+ * to auto and set from scrollHeight on every change — resetting first is what
+ * lets it shrink again when text is deleted.
  */
 export function Composer({ placeholder, disabled, onSend }: Props) {
   const [draft, setDraft] = useState('');
+  const box = useRef<HTMLTextAreaElement>(null);
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    const node = box.current;
+    if (!node) return;
+    // Measured on the next frame, not immediately: the stylesheet is injected
+    // by the bundle, so on the first mount an effect can run against a box the
+    // rules have not reached yet and read a height that was never real.
+    const frame = requestAnimationFrame(() => {
+      node.style.height = 'auto';
+      node.style.height = `${Math.min(node.scrollHeight, MAX_HEIGHT)}px`;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [draft]);
+
+  const send = () => {
     const text = draft.trim();
     if (!text || disabled) return;
     onSend(text);
     setDraft('');
   };
 
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    send();
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Shift, and the IME's own Enter while a composition is open, both mean
+    // "keep typing" — sending mid-composition would cut a word in half for
+    // anyone typing Japanese, Chinese or Korean.
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    send();
+  };
+
   return (
     <form className="sv-a-c-composer" onSubmit={submit}>
-      <input
+      <textarea
+        ref={box}
         className="sv-a-c-composer-input"
-        type="text"
+        rows={1}
         value={draft}
         placeholder={placeholder}
         disabled={disabled}
         onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={onKeyDown}
         aria-label="Message"
         autoComplete="off"
         enterKeyHint="send"
