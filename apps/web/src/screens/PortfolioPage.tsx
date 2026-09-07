@@ -39,7 +39,7 @@ import {
   prefetchHistory,
   type History,
 } from '../lib/history';
-import { AGENT_ENABLED, AGENT_URL } from '../lib/agent';
+import { AGENT_ENABLED, AGENT_URL, AGENT_WIDGET_URL } from '../lib/agent';
 import { PERIODS, WINDOW_MS } from '../lib/ranges';
 
 /**
@@ -830,6 +830,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
               <div className="pane" data-active={activeTab === 'agent'}>
                 {activeTab === 'agent' ? (
                   <AgentEmbed
+                    widgetUrl={AGENT_WIDGET_URL}
                     agentUrl={AGENT_URL}
                     slug={slug}
                     token={tokenStore.get() ?? undefined}

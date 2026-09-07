@@ -43,6 +43,13 @@ export default {
     ],
   },
   plugins: [
+    // Which agent API the standalone page talks to. A static bundle has no
+    // server to read the environment at run time, so the address is baked in;
+    // empty falls back to this page's own origin (a local build, or a host
+    // that serves both from one place).
+    new webpack.DefinePlugin({
+      'process.env.AGENT_API_URL': JSON.stringify(process.env.AGENT_API_URL || ''),
+    }),
     new webpack.container.ModuleFederationPlugin({
       name: 'svinooh_agent',
       filename: 'remoteEntry.js',
@@ -66,12 +73,12 @@ export default {
     new HtmlWebpackPlugin({
       template: './public/index.html',
       chunks: ['main'],
-      // Absolute, because the service serves this page at / and /demo while
-      // the bundle lives under /widget — a relative src would resolve against
-      // the page's path and 404. This is only the tag in the HTML: webpack's
-      // own publicPath stays 'auto', which is what lets a federation host load
-      // the chunks from the agent's origin rather than its own.
-      publicPath: '/widget/',
+      // Absolute, because every route serves this same page (/demo included)
+      // and a relative src would resolve against the route's path. This is
+      // only the tag in the HTML: webpack's own publicPath stays 'auto',
+      // which is what lets a federation host load the chunks from this
+      // service's origin rather than its own.
+      publicPath: '/',
     }),
   ],
 };

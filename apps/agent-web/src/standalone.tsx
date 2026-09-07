@@ -32,6 +32,16 @@ function applyTheme(theme: Theme): void {
   }
 }
 
+/**
+ * The agent API this page talks to.
+ *
+ * Baked in at build time (AGENT_API_URL): a static bundle has no server to
+ * read the environment at run time. Empty — the API answers on this page's own
+ * origin, which is the local build and any host that serves both from one
+ * place.
+ */
+const API_URL = process.env.AGENT_API_URL || window.location.origin;
+
 function readToken(): string | undefined {
   try {
     return localStorage.getItem(TOKEN_KEY) ?? undefined;
@@ -67,7 +77,7 @@ function Standalone() {
   const token = readToken();
   const opts: MountOptions = {
     // The page and the chat endpoint are served by the same agent service.
-    agentUrl: window.location.origin,
+    agentUrl: API_URL,
     token,
     theme,
     variant: 'standalone',

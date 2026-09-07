@@ -47,12 +47,12 @@ interface AgentMount {
  */
 let instance: ReturnType<typeof createInstance> | null = null;
 
-function federation(agentUrl: string) {
+function federation(widgetUrl: string) {
   if (!instance) {
     const shareConfig = { singleton: true, requiredVersion: '^19.2.0' as const };
     instance = createInstance({
       name: 'svinooh_shell',
-      remotes: [{ name: 'svinooh_agent', entry: `${agentUrl}/widget/remoteEntry.js` }],
+      remotes: [{ name: 'svinooh_agent', entry: `${widgetUrl}/remoteEntry.js` }],
       shared: {
         react: { version: '19.2.0', lib: () => React, shareConfig },
         'react-dom': { version: '19.2.0', lib: () => ReactDOM, shareConfig },
@@ -64,13 +64,16 @@ function federation(agentUrl: string) {
 }
 
 interface Props {
+  /** Where the remote entry is served from — the frontend deployment. */
+  widgetUrl: string;
+  /** Where questions go — the API deployment. */
   agentUrl: string;
   slug: string;
   token?: string;
   portfolios?: { slug: string; name: string | null }[];
 }
 
-export function AgentEmbed({ agentUrl, slug, token, portfolios }: Props) {
+export function AgentEmbed({ widgetUrl, agentUrl, slug, token, portfolios }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
 
@@ -82,7 +85,7 @@ export function AgentEmbed({ agentUrl, slug, token, portfolios }: Props) {
 
     void (async () => {
       try {
-        const mod = await federation(agentUrl).loadRemote<{ mount: AgentMount }>(
+        const mod = await federation(widgetUrl).loadRemote<{ mount: AgentMount }>(
           'svinooh_agent/mount',
         );
         if (cancelled || !host.current || !mod) return;
@@ -111,7 +114,7 @@ export function AgentEmbed({ agentUrl, slug, token, portfolios }: Props) {
     // Remounting on a token or portfolio change is the point: both decide what
     // the chat is allowed to see, and the mount contract has no way to revise
     // them in place.
-  }, [agentUrl, slug, token, portfolios]);
+  }, [widgetUrl, agentUrl, slug, token, portfolios]);
 
   if (failed) {
     return (
