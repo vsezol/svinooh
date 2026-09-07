@@ -5,6 +5,9 @@ export default {
   output: 'standalone',
   outputFileTracingRoot: new URL('../../', import.meta.url).pathname,
 
+  // The UI kit ships as TypeScript source; Next compiles it with the app
+  transpilePackages: ['@svinooh/ui'],
+
   // Local development against a deployed API: with DEV_API set, /api is
   // proxied there, so the browser talks to its own origin and CORS never comes
   // into it. Unset in production, where the browser calls the API directly.

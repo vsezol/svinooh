@@ -1,48 +1,11 @@
 /* Svinooh design system — a pixel-for-pixel port from Claude Design (Svinooh Portfolio.dc.html).
    Tokens, dark/light themes, Manrope + IBM Plex Mono fonts. */
 
-/* The kit. @import has to precede every rule in the file, so it goes here. */
+/* The kit. @import has to precede every rule in the file, so it goes here.
+   The color tokens themselves live in @svinooh/ui/theme.css now. */
+@import '@svinooh/ui/theme.css';
 @import './ui/tokens.css';
 @import './ui/ui.css';
-
-:root,
-body {
-  --bg: #08090c;
-  --surf: #0d0f14;
-  --surf2: #12151c;
-  --line: #1b1f28;
-  --line2: #262c38;
-  --text: #edeff4;
-  --mut: #9aa1af;
-  --acc: #2bd576;
-  --acc-text: var(--acc);
-  --acc-soft: color-mix(in srgb, var(--acc) 13%, transparent);
-  --acc-ink: #07130c;
-  --up: #2bd576;
-  --down: #f6465d;
-  /* The faces themselves come through next/font in app/layout.tsx, which
-     self-hosts them and hands their names over in these variables */
-  --mono: var(--font-plex-mono), ui-monospace, 'SF Mono', Menlo, monospace;
-  --sans: var(--font-manrope), system-ui, -apple-system, sans-serif;
-  /* The /pro hero's dot grid — faint enough to be texture, not content */
-  --dots: color-mix(in srgb, var(--text) 7%, transparent);
-}
-
-html[data-theme='light'],
-body[data-theme='light'] {
-  --bg: #f3f4f6;
-  --surf: #ffffff;
-  --surf2: #f7f8fa;
-  --line: #e5e7ec;
-  --line2: #d6dae2;
-  --text: #14171d;
-  --mut: #5a6270;
-  --acc-text: color-mix(in srgb, var(--acc) 62%, #063018);
-  --up: #0e9f54;
-  --down: #d9304e;
-  /* A white page needs slightly darker dots to read at all */
-  --dots: color-mix(in srgb, var(--text) 9%, transparent);
-}
 
 html,
 body {

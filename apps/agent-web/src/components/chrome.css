@@ -1,0 +1,688 @@
+/*
+ * Chrome of the agent chat: header, bubbles, composer, panels, empty states.
+ * Colors come from @svinooh/ui theme.css, scales from tokens.css; pixel values
+ * written here are measurements the design canvas fixed outside the token
+ * scale. Every class is sv-a-c- prefixed because the page also mounts inside
+ * svinooh.com and must not leak generic names into the host.
+ */
+
+/* ── header ──────────────────────────────────────────────────────────────── */
+
+.sv-a-c-header {
+  display: flex;
+  align-items: center;
+}
+
+.sv-a-c-header[data-variant='standalone'] {
+  gap: 10px;
+  padding: 12px clamp(14px, 3.5vw, 22px);
+  /* The standalone page owns the top edge of the screen (iOS notch). */
+  padding-top: calc(12px + env(safe-area-inset-top));
+  border-bottom: 1px solid var(--line);
+}
+
+/* The embedded bar is framed by the host screen; this is only the right-hand
+   button group, pushed to the end of whatever row the App puts it in. */
+.sv-a-c-header[data-variant='embedded'] {
+  gap: 8px;
+  margin-left: auto;
+}
+
+.sv-a-c-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.sv-a-c-logo {
+  display: inline-flex;
+  align-items: baseline;
+  font-family: var(--sans);
+  font-size: 19px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.03em;
+  color: var(--text);
+  user-select: none;
+}
+
+/* The wordmark's two o's are the product logo's ring eyes. */
+.sv-a-c-logo-eye {
+  display: inline-block;
+  width: 0.56em;
+  height: 0.56em;
+  border: 0.135em solid var(--acc);
+  border-radius: 50%;
+  margin-left: 0.06em;
+}
+
+.sv-a-c-logo-eye[data-second='true'] {
+  margin-left: -0.14em;
+}
+
+.sv-a-c-logo-h {
+  margin-left: 0.05em;
+}
+
+.sv-a-c-agent-pill {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--acc-text);
+  background: var(--acc-soft);
+  border-radius: var(--r-full);
+  padding: 3px 7px;
+}
+
+/* Which theme icon shows is decided in CSS off data-theme, not in JS: the
+   attribute is set before first paint, a JS choice would flash on hydration.
+   Dark is the themeless default, matching the host convention. */
+.sv-a-c-on-dark {
+  display: inline-flex;
+}
+
+.sv-a-c-on-light {
+  display: none;
+}
+
+html[data-theme='light'] .sv-a-c-on-dark,
+body[data-theme='light'] .sv-a-c-on-dark {
+  display: none;
+}
+
+html[data-theme='light'] .sv-a-c-on-light,
+body[data-theme='light'] .sv-a-c-on-light {
+  display: inline-flex;
+}
+
+/* At >=1024 the standalone screen shows the history rail; the header icon is
+   the mobile way into history. */
+@media (min-width: 1024px) {
+  .sv-a-c-hide-desktop {
+    display: none;
+  }
+}
+
+/* ── shared small print ──────────────────────────────────────────────────── */
+
+.sv-a-c-eyebrow {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 400;
+  letter-spacing: var(--tr-micro);
+  text-transform: uppercase;
+  color: var(--mut);
+}
+
+/* ── log entries ─────────────────────────────────────────────────────────── */
+
+/* width:fit-content + margin-left:auto right-aligns even outside a flex log. */
+.sv-a-c-user {
+  width: fit-content;
+  max-width: 85%;
+  margin-left: auto;
+  align-self: flex-end;
+  background: var(--acc-soft);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: var(--fw-bold);
+  line-height: 1.45;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.sv-a-c-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.sv-a-c-msg-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sv-a-c-msg-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--acc-soft);
+  color: var(--acc);
+  display: grid;
+  place-items: center;
+}
+
+.sv-a-c-msg-name {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: var(--mut);
+}
+
+.sv-a-c-status {
+  align-self: flex-start;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--mut);
+  animation: sv-a-c-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes sv-a-c-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sv-a-c-status {
+    animation: none;
+  }
+}
+
+.sv-a-c-note {
+  align-self: center;
+  width: fit-content;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.sv-a-c-note-text {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--mut);
+}
+
+/* ── composer ────────────────────────────────────────────────────────────── */
+
+.sv-a-c-composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surf);
+  border: 1px solid var(--line2);
+  border-radius: 24px;
+  padding: 5px 5px 5px 16px;
+  transition: border-color var(--ease-quick);
+}
+
+.sv-a-c-composer:focus-within {
+  border-color: var(--acc);
+}
+
+.sv-a-c-composer-input {
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: var(--sans);
+  /* 16px is the floor below which iOS Safari zooms the page on focus. */
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--text);
+}
+
+.sv-a-c-composer-input::placeholder {
+  color: var(--mut);
+}
+
+.sv-a-c-composer-send {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  background: var(--acc);
+  color: var(--acc-ink);
+  display: grid;
+  place-items: center;
+  transition: opacity var(--ease-quick);
+}
+
+.sv-a-c-composer-send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ── chips ───────────────────────────────────────────────────────────────── */
+
+.sv-a-c-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sv-a-c-chip {
+  border: 1px solid var(--line2);
+  background: none;
+  cursor: pointer;
+  border-radius: var(--r-full);
+  padding: 7px 12px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: var(--fw-normal);
+  color: var(--text);
+  transition: background var(--ease-quick), border-color var(--ease-quick);
+}
+
+.sv-a-c-chip:hover {
+  background: var(--surf2);
+}
+
+.sv-a-c-ground {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line2);
+  background: none;
+  cursor: pointer;
+  border-radius: var(--r-full);
+  padding: 6px 12px;
+  color: var(--text);
+  transition: background var(--ease-quick);
+}
+
+.sv-a-c-ground:hover {
+  background: var(--surf2);
+}
+
+.sv-a-c-ground-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--acc);
+}
+
+.sv-a-c-ground[data-empty='true'] .sv-a-c-ground-dot {
+  background: var(--mut);
+}
+
+.sv-a-c-ground-name {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: var(--fw-bold);
+}
+
+.sv-a-c-ground-chev {
+  display: inline-flex;
+  color: var(--mut);
+}
+
+/* ── sheet and popover surfaces ──────────────────────────────────────────── */
+
+.sv-a-c-sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  display: flex;
+  align-items: flex-end;
+}
+
+.sv-a-c-sheet {
+  width: 100%;
+  background: var(--surf);
+  border-top: 1px solid var(--line2);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  /* Keyboardless phones park the home indicator where the buttons go. */
+  padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
+  /* The token expands to duration+easing and collapses to 0s under
+     prefers-reduced-motion, so the rise disappears with it. */
+  animation: sv-a-c-rise var(--ease-settle);
+}
+
+@keyframes sv-a-c-rise {
+  from {
+    transform: translateY(16px);
+    opacity: 0.4;
+  }
+}
+
+.sv-a-c-sheet-notch {
+  width: 36px;
+  height: 4px;
+  border-radius: var(--r-full);
+  background: var(--line2);
+  margin: 4px auto 14px;
+}
+
+/* Anchored to the nearest positioned ancestor: the caller wraps the trigger
+   in position:relative. */
+.sv-a-c-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 900;
+  min-width: 240px;
+  background: var(--surf);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-pop);
+  padding: 10px;
+}
+
+.sv-a-c-pop[data-align='right'] {
+  left: auto;
+  right: 0;
+}
+
+/* ── portfolio switcher ──────────────────────────────────────────────────── */
+
+.sv-a-c-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sv-a-c-switch > .sv-a-c-eyebrow {
+  padding: 4px 10px 8px;
+}
+
+.sv-a-c-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  cursor: pointer;
+  color: var(--text);
+  transition: background var(--ease-quick);
+}
+
+.sv-a-c-switch-row:hover {
+  background: var(--surf2);
+}
+
+.sv-a-c-switch-row[data-current='true'] {
+  background: var(--acc-soft);
+}
+
+.sv-a-c-switch-row[data-new='true'] {
+  color: var(--mut);
+}
+
+.sv-a-c-switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sv-a-c-switch-name {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: var(--fw-bold);
+}
+
+.sv-a-c-switch-sub {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--mut);
+}
+
+.sv-a-c-switch-check {
+  display: inline-flex;
+  color: var(--acc-text);
+}
+
+.sv-a-c-switch-plus {
+  display: inline-flex;
+}
+
+/* ── history ─────────────────────────────────────────────────────────────── */
+
+.sv-a-c-hist {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sv-a-c-hist[data-mode='rail'] {
+  width: 250px;
+  flex: none;
+  padding: 22px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sv-a-c-hist[data-mode='popover'],
+.sv-a-c-hist[data-mode='sheet'] {
+  gap: 10px;
+}
+
+.sv-a-c-hist-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 2px 0;
+}
+
+.sv-a-c-hist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sv-a-c-hist[data-mode='popover'] .sv-a-c-hist-list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.sv-a-c-hist-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  cursor: pointer;
+  color: var(--text);
+  transition: background var(--ease-quick);
+}
+
+.sv-a-c-hist-item:hover {
+  background: var(--surf2);
+}
+
+.sv-a-c-hist-item[data-active='true'] {
+  background: var(--acc-soft);
+}
+
+.sv-a-c-hist-title {
+  display: block;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sv-a-c-hist-date {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--mut);
+}
+
+/* ── pro lock ────────────────────────────────────────────────────────────── */
+
+.sv-a-c-prolock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.sv-a-c-prolock-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: var(--surf);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-lg);
+  padding: 22px;
+}
+
+.sv-a-c-prolock-title {
+  font-family: var(--sans);
+  font-size: var(--fs-title);
+  font-weight: var(--fw-heavy);
+  color: var(--text);
+}
+
+.sv-a-c-prolock-sub {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--mut);
+  max-width: 380px;
+}
+
+.sv-a-c-prolock-card .ui-btn {
+  margin-top: 4px;
+}
+
+.sv-a-c-prolock-caption {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--mut);
+}
+
+/* ── empty states ────────────────────────────────────────────────────────── */
+
+.sv-a-c-door {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 24px 16px;
+}
+
+.sv-a-c-door-head {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: var(--fs-display);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--tr-tight);
+  color: var(--text);
+}
+
+.sv-a-c-door-sub {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--mut);
+  max-width: 400px;
+}
+
+.sv-a-c-door-features {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 14px 0;
+  text-align: left;
+}
+
+.sv-a-c-door-feature {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.sv-a-c-door-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--acc-text);
+}
+
+.sv-a-c-door-ctas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.sv-a-c-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 24px 16px;
+}
+
+.sv-a-c-empty-title {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: var(--fs-title);
+  font-weight: var(--fw-heavy);
+  color: var(--text);
+}
+
+.sv-a-c-empty-copy {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--mut);
+  max-width: 420px;
+}
+
+.sv-a-c-empty .sv-a-c-chips {
+  justify-content: center;
+  margin-top: 8px;
+  max-width: 460px;
+}
+
+.sv-a-c-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 6px 0 2px;
+}
+
+.sv-a-c-pill {
+  border: 1px solid var(--line2);
+  border-radius: var(--r-full);
+  padding: 7px 12px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+}

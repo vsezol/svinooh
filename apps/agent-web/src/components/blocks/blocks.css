@@ -1,0 +1,381 @@
+/* Answer-block renderers (BlockView). Colors, radii, families and spacing
+   come from the @svinooh/ui tokens; the fractional px type sizes are the
+   design-canvas measurements, which sit between the --fs-* steps. */
+
+.sv-a-b-card {
+  background: var(--surf2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+}
+
+.sv-a-b-eyebrow {
+  font: 400 9.5px var(--mono);
+  letter-spacing: var(--tr-micro, 0.14em);
+  text-transform: uppercase;
+  color: var(--mut);
+}
+
+/* ── text ─────────────────────────────────────────────────────────────── */
+
+.sv-a-b-text {
+  margin: 0;
+  font: 500 var(--fs-body) / 1.55 var(--sans);
+  color: var(--text);
+  /* The wire sends paragraph breaks as blank lines inside one text block. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── stats ────────────────────────────────────────────────────────────── */
+
+.sv-a-b-stats {
+  display: grid;
+  /* 150px floor lands on two columns at a 375px viewport. */
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--sp-4);
+}
+
+.sv-a-b-stat {
+  min-width: 0;
+}
+
+.sv-a-b-stat-value {
+  margin-top: 5px;
+  font: 600 19px var(--mono);
+  color: var(--text);
+}
+
+.sv-a-b-stat-sub {
+  margin-top: 3px;
+  font: 400 10.5px var(--mono);
+}
+
+.sv-a-b-stat-sub[data-tone='up'] {
+  color: var(--up);
+}
+
+.sv-a-b-stat-sub[data-tone='down'] {
+  color: var(--down);
+}
+
+.sv-a-b-stat-sub[data-tone='mut'] {
+  color: var(--mut);
+}
+
+/* ── chart ────────────────────────────────────────────────────────────── */
+
+.sv-a-b-chart-delta {
+  margin-top: 4px;
+  font: 600 19px var(--mono);
+  color: var(--text);
+}
+
+.sv-a-b-chart-delta[data-tone='up'] {
+  color: var(--up);
+}
+
+.sv-a-b-chart-delta[data-tone='down'] {
+  color: var(--down);
+}
+
+.sv-a-b-chart-plot {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.sv-a-b-chart-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.sv-a-b-chart-svg {
+  display: block;
+  width: 100%;
+  height: 140px;
+  /* The area fill and line both draw in currentColor. */
+  color: var(--acc);
+}
+
+.sv-a-b-chart-y {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  /* Matches the svg height so the labels track the plot, not the x row. */
+  height: 140px;
+  text-align: right;
+  font: 400 10px var(--mono);
+  color: var(--mut);
+}
+
+.sv-a-b-chart-x {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-top: 6px;
+  font: 400 10px var(--mono);
+  color: var(--mut);
+}
+
+/* ── table ────────────────────────────────────────────────────────────── */
+
+.sv-a-b-table-card {
+  /* Rows carry their own padding; the note is the only other inhabitant. */
+  padding: 0;
+}
+
+.sv-a-b-table-scroll {
+  overflow-x: auto;
+}
+
+.sv-a-b-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sv-a-b-table th {
+  padding: 10px 10px 7px;
+  font: 400 9.5px var(--mono);
+  letter-spacing: var(--tr-micro, 0.14em);
+  text-transform: uppercase;
+  color: var(--mut);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.sv-a-b-table td {
+  padding: 8px 10px;
+  font: 400 12.5px var(--mono);
+  color: var(--text);
+  border-top: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.sv-a-b-table th:first-child,
+.sv-a-b-table td:first-child {
+  padding-left: 14px;
+}
+
+.sv-a-b-table th:last-child,
+.sv-a-b-table td:last-child {
+  padding-right: 14px;
+}
+
+.sv-a-b-table th[data-align='right'],
+.sv-a-b-table td[data-align='right'] {
+  text-align: right;
+}
+
+.sv-a-b-table td[data-tone='down'] {
+  color: var(--down);
+}
+
+.sv-a-b-table-note {
+  padding: 9px 14px 11px;
+  border-top: 1px solid var(--line);
+  font: 400 10.5px var(--mono);
+  color: var(--mut);
+}
+
+@media (max-width: 480px) {
+  /* Columns flagged mobile:false collapse, same discipline as the
+     portfolio tables. */
+  .sv-a-b-desktop-only {
+    display: none;
+  }
+}
+
+/* ── bars ─────────────────────────────────────────────────────────────── */
+
+.sv-a-b-bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.sv-a-b-bar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.sv-a-b-bar-label {
+  font: 500 13px var(--sans);
+  color: var(--text);
+}
+
+.sv-a-b-bar-value {
+  font: 600 12.5px var(--mono);
+  color: var(--text);
+}
+
+.sv-a-b-bar-track {
+  height: 6px;
+  margin-top: 6px;
+  border-radius: var(--r-full);
+  background: var(--line);
+  overflow: hidden;
+}
+
+.sv-a-b-bar-fill {
+  height: 100%;
+  border-radius: var(--r-full);
+  background: var(--acc);
+}
+
+.sv-a-b-bar-sub {
+  margin-top: 5px;
+  font: 400 10.5px var(--mono);
+  color: var(--mut);
+}
+
+/* ── note / unsupported ───────────────────────────────────────────────── */
+
+.sv-a-b-note,
+.sv-a-b-unsupported {
+  text-align: center;
+  font: 400 11px var(--mono);
+  color: var(--mut);
+}
+
+/* ── signin ───────────────────────────────────────────────────────────── */
+
+.sv-a-b-signin {
+  border-color: var(--line2);
+  padding: 16px;
+}
+
+.sv-a-b-signin-title {
+  font: 700 15px var(--sans);
+  color: var(--text);
+}
+
+.sv-a-b-signin-sub {
+  margin-top: 4px;
+  font: 500 12.5px var(--sans);
+  line-height: 1.5;
+  color: var(--mut);
+}
+
+.sv-a-b-signin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  margin-top: var(--sp-5);
+}
+
+.sv-a-b-signin-pending {
+  margin-top: var(--sp-5);
+  font: 400 9.5px var(--mono);
+  /* No text-transform: the quoted question keeps the user's own casing. */
+  letter-spacing: 0.06em;
+  color: var(--mut);
+}
+
+/* ── confirm ──────────────────────────────────────────────────────────── */
+
+.sv-a-b-confirm {
+  border-color: var(--line2);
+  padding: 0;
+}
+
+.sv-a-b-confirm-head {
+  padding: 12px 16px 10px;
+}
+
+.sv-a-b-confirm-title {
+  margin-top: 3px;
+  font: 700 15px var(--sans);
+  color: var(--text);
+}
+
+.sv-a-b-confirm-rows {
+  border-top: 1px solid var(--line);
+}
+
+.sv-a-b-confirm-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 9px 16px;
+}
+
+.sv-a-b-confirm-row + .sv-a-b-confirm-row {
+  border-top: 1px solid var(--line);
+}
+
+.sv-a-b-confirm-address {
+  font: 500 13px var(--mono);
+  color: var(--text);
+}
+
+.sv-a-b-confirm-chain {
+  font: 400 9.5px var(--mono);
+  letter-spacing: var(--tr-tag, 0.05em);
+  text-transform: uppercase;
+  color: var(--mut);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-full);
+  padding: 2px 7px;
+}
+
+.sv-a-b-confirm-outcome {
+  margin-left: auto;
+  text-align: right;
+  font: 400 10.5px var(--mono);
+}
+
+.sv-a-b-confirm-outcome[data-tone='up'] {
+  color: var(--up);
+}
+
+.sv-a-b-confirm-outcome[data-tone='down'] {
+  color: var(--down);
+}
+
+.sv-a-b-confirm-foot {
+  border-top: 1px solid var(--line);
+  padding: 12px 16px 14px;
+}
+
+.sv-a-b-confirm-foot[data-state='created'] {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sv-a-b-confirm-note {
+  font: 400 11px var(--mono);
+  color: var(--mut);
+}
+
+.sv-a-b-confirm-actions {
+  display: flex;
+  gap: var(--sp-4);
+  margin-top: 10px;
+}
+
+.sv-a-b-confirm-summary {
+  font: 400 11px var(--mono);
+  color: var(--mut);
+}
+
+.sv-a-b-confirm-link {
+  font: 500 11px var(--mono);
+  color: var(--acc-text);
+  text-decoration: none;
+}
+
+.sv-a-b-confirm-link:hover {
+  text-decoration: underline;
+}
+
+.sv-a-b-confirm-declined {
+  padding: 12px 16px;
+  font: 500 12.5px var(--sans);
+  color: var(--mut);
+}
