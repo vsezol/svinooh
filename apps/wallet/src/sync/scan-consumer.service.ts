@@ -8,6 +8,7 @@ import {
   type ScanJob,
   type ScanOutcome,
   setting,
+  worthRereading,
 } from '@svinooh/common';
 import type { Chain, ScanResult } from '@svinooh/shared';
 import { scanAddress } from '../scanners';
@@ -56,11 +57,11 @@ export class ScanConsumerService implements OnApplicationBootstrap {
         scanAddress(chain, job.address, job.tronResourcesAt),
       );
       // Same rule as the EVM scanner applies: read again while we are here, and
-      // let the writer decide which reading to believe
-      const suspicious =
-        job.previousTotal !== null &&
-        job.previousTotal > 10 &&
-        result.totalUsd < job.previousTotal * 0.75;
+      // let the writer decide which reading to believe. Both directions — a
+      // wallet that grows tenfold in one cycle is as much of a claim as one
+      // that empties, and the writer will not store either without a second
+      // reading that agrees.
+      const suspicious = worthRereading(job.previousTotal, result.totalUsd);
       const recheck: ScanResult | null = suspicious
         // A re-read is about the balance, and resources are not part of that
         // question — passing "now" keeps it from paying for them twice

@@ -1,6 +1,13 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import type { Wallet } from '@prisma/client';
-import { MetricsService, RabbitService, SCAN_RESULT_QUEUE, type ScanOutcome } from '@svinooh/common';
+import {
+  agree,
+  MetricsService,
+  moved,
+  RabbitService,
+  SCAN_RESULT_QUEUE,
+  type ScanOutcome,
+} from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import type { ScanResult } from '@svinooh/shared';
 import { config } from '../config';
@@ -80,7 +87,7 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
       // number instead of "sync failed". It goes stale on its own if this
       // persists, which is the honest signal. Only the count of how many times
       // we have now seen this is written down.
-      await this.sync.noteLowReading(wallet.id, verdict.lowReadings);
+      await this.sync.noteUnbelievedReading(wallet.id, verdict.unbelieved);
       this.metrics.scans.inc({ chain: outcome.chain, result: 'suppressed' });
       this.metrics.scanChecks.inc({ tier, result: 'suppressed' });
       return;
@@ -94,16 +101,17 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
   /**
    * What to store, and what to remember about having decided it.
    *
-   * Pure: it is handed the count of consecutive low readings and gives back the
-   * new one, so the same reasoning holds whether this is the first process to
-   * see the address or the fifth after a redeploy. It used to keep that count
-   * in a Map of its own, which is why it could only ever run in one place.
+   * Pure: it is handed the count of consecutive readings we did not believe and
+   * gives back the new one, so the same reasoning holds whether this is the
+   * first process to see the address or the fifth after a redeploy. It used to
+   * keep that count in a Map of its own, which is why it could only ever run in
+   * one place.
    */
   private judge(
     key: string,
     outcome: Extract<ScanOutcome, { ok: true }>,
     wallet: Wallet,
-  ): { believe: ScanResult | null; lowReadings: number } {
+  ): { believe: ScanResult | null; unbelieved: number } {
     const { result, recheck } = outcome;
     const previousTotal = wallet.lastTotalUsd;
 
@@ -114,40 +122,69 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
     // wiped every stored position of a five-figure wallet while its total
     // sailed through this gate untouched.
     if (result.totalUsd > 10 && result.positions.length === 0) {
-      const streak = wallet.lowReadings + 1;
+      const streak = wallet.unbelievedReadings + 1;
       if (streak < config.dropConfirmCycles) {
         this.logger.warn(
           `Positionless total ${key}: $${result.totalUsd.toFixed(2)} with 0 positions (${streak}/${config.dropConfirmCycles}), keeping last known`,
         );
-        return { believe: null, lowReadings: streak };
+        return { believe: null, unbelieved: streak };
       }
-      return { believe: result, lowReadings: 0 };
+      return { believe: result, unbelieved: 0 };
     }
 
-    // nothing to compare against (first successful scan, or a nearly empty wallet)
-    if (previousTotal === null || previousTotal <= 10) {
-      return { believe: result, lowReadings: 0 };
+    // Nothing to compare against: the first successful scan of an address has no
+    // previous level, so there is no move to doubt and the reading stands.
+    //
+    // A near-empty wallet used to be let through here too, on the reasoning that
+    // a few dollars is not worth arbitrating. That was the door $449,833 walked
+    // through onto a $7 address on 2026-09-08 — a wallet with nothing in it is
+    // precisely where somebody else's balance is least believable, not most.
+    if (previousTotal === null) {
+      return { believe: result, unbelieved: 0 };
     }
 
-    const floor = previousTotal * 0.75; // a fall of more than 25% in one cycle is suspicious
-    if (result.totalUsd >= floor) {
-      return { believe: result, lowReadings: 0 }; // normal, or up
-    }
-    if (recheck && recheck.totalUsd >= floor) {
-      // the first reading was a glitch, the second is normal
-      return { believe: recheck, lowReadings: 0 };
+    if (!moved(previousTotal, result.totalUsd)) {
+      return { believe: result, unbelieved: 0 }; // still about where it was
     }
 
-    // both readings are low: either a real withdrawal or a source that keeps failing
-    const streak = wallet.lowReadings + 1;
+    /**
+     * The move has to be corroborated.
+     *
+     * The scanner re-reads the address when it sees one, so there are usually
+     * two readings taken seconds apart. Two readings that AGREE are evidence;
+     * one reading on its own is not, whichever direction it points.
+     *
+     * This used to accept `recheck` on the single test that it was not itself a
+     * drop — no upper bound at all. On 2026-09-08 a re-read of a $7 wallet came
+     * back $1,166,714 and that line stored it, whereupon the drop confirmation
+     * spent the next twenty-five minutes protecting it and rejecting the truth.
+     * A re-read exists to confirm or deny a move, and a third, different number
+     * does neither.
+     */
+    if (recheck && agree(result.totalUsd, recheck.totalUsd)) {
+      // Of two readings that agree, the lower: they differ by definition, and
+      // understating for one more cycle is the mistake that corrects itself
+      const believe = recheck.totalUsd < result.totalUsd ? recheck : result;
+      return { believe, unbelieved: 0 };
+    }
+
+    const streak = wallet.unbelievedReadings + 1;
+    const direction = result.totalUsd > previousTotal ? 'rise' : 'drop';
     if (streak >= config.dropConfirmCycles) {
-      // conservative: of two low readings, keep the larger
-      const believe = recheck && recheck.totalUsd > result.totalUsd ? recheck : result;
-      return { believe, lowReadings: 0 };
+      // Held long enough that the source is saying something, even if it cannot
+      // say it twice the same way. Take the most conservative reading on the
+      // table — the smallest — so a run of noise can never ratchet a wallet up.
+      const believe = recheck && recheck.totalUsd < result.totalUsd ? recheck : result;
+      this.logger.warn(
+        `Unconfirmed ${direction} ${key}: settling on $${believe.totalUsd.toFixed(2)} after ${streak} unconfirmed readings`,
+      );
+      return { believe, unbelieved: 0 };
     }
     this.logger.warn(
-      `Unconfirmed drop ${key}: $${previousTotal.toFixed(2)} → $${result.totalUsd.toFixed(2)} (${streak}/${config.dropConfirmCycles}), keeping last known`,
+      `Unconfirmed ${direction} ${key}: $${previousTotal.toFixed(2)} → $${result.totalUsd.toFixed(2)}` +
+        (recheck ? `, re-read $${recheck.totalUsd.toFixed(2)}` : ', not re-read') +
+        ` (${streak}/${config.dropConfirmCycles}), keeping last known`,
     );
-    return { believe: null, lowReadings: streak };
+    return { believe: null, unbelieved: streak };
   }
 }
