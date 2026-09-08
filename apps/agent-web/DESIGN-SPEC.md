@@ -1,5 +1,10 @@
 # Agent frontend — design contract (from the Claude Design canvas, 14 artboards)
 
+> **Superseded in places.** A second canvas (`Svinooh Agent v2.dc.html`, 5 artboards)
+> made the product chat-first: the header folds, the agent's replies lose their identity
+> row, the portfolio stops being the frame. Where the two disagree the v2 canvas wins —
+> see `ROADMAP.md`, which tracks what has been brought across and what has not.
+
 The canvas: `Svinooh Agent.dc.html` (14 artboards, one component set, svinooh tokens).
 This file is the extracted, implementable contract: components, exact styles, layouts,
 states. Implementers follow THIS, and reuse the kit classes/tokens wherever one exists.
