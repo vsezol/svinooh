@@ -121,7 +121,8 @@ def model_for(role: Role) -> BaseChatModel:
     """The client for one job, built from that job's own settings."""
     return init_chat_model(
         role.model,
-        max_tokens=role.max_tokens,
+        # langchain's own name for it; ours says what it caps.
+        max_tokens=role.answer_token_cap,
         timeout=settings.request_timeout_s,
         **_credentials(),
         **_reasoning(role.reasoning_effort, role.model),

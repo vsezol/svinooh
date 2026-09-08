@@ -32,33 +32,33 @@ def env(monkeypatch):
 class TestReadingARole:
     def test_a_role_without_a_model_of_its_own_uses_the_answering_one(self, env):
         env.setenv("AGENT_MODEL", "openai:answers")
-        critic = _role("critic", "CRITIC_", {}, remote_keys=("criticModel", "criticEffort", "criticMaxTokens"))
+        critic = _role("critic", "CRITIC_", {}, panel_keys=("criticModel", "criticEffort", "criticMaxTokens"))
         assert critic.model == "openai:answers", "a new role runs before it is configured"
 
     def test_a_role_can_be_pointed_at_its_own_model(self, env):
         env.setenv("AGENT_MODEL", "openai:answers")
         env.setenv("AGENT_CRITIC_MODEL", "openai:critic")
-        critic = _role("critic", "CRITIC_", {}, remote_keys=("criticModel", "criticEffort", "criticMaxTokens"))
+        critic = _role("critic", "CRITIC_", {}, panel_keys=("criticModel", "criticEffort", "criticMaxTokens"))
         assert critic.model == "openai:critic"
 
     def test_each_role_carries_its_own_thinking_and_writing_limits(self, env):
         env.setenv("AGENT_CRITIC_REASONING_EFFORT", "high")
         env.setenv("AGENT_CRITIC_MAX_TOKENS", "4096")
-        critic = _role("critic", "CRITIC_", {}, remote_keys=("criticModel", "criticEffort", "criticMaxTokens"), effort="low", max_tokens=200)
-        assert critic.reasoning_effort == "high" and critic.max_tokens == 4096
+        critic = _role("critic", "CRITIC_", {}, panel_keys=("criticModel", "criticEffort", "criticMaxTokens"), effort="low", answer_token_cap=200)
+        assert critic.reasoning_effort == "high" and critic.answer_token_cap == 4096
 
     def test_defaults_belong_to_the_role_not_to_the_service(self, env):
         keys = ("m", "e", "t")
-        cheap = _role("labels", "ROUTER_", {}, remote_keys=keys, effort="low", max_tokens=200)
-        thorough = _role("critic", "CRITIC_", {}, remote_keys=keys, effort="high", max_tokens=4096)
-        assert (cheap.reasoning_effort, cheap.max_tokens) == ("low", 200)
-        assert (thorough.reasoning_effort, thorough.max_tokens) == ("high", 4096)
+        cheap = _role("labels", "ROUTER_", {}, panel_keys=keys, effort="low", answer_token_cap=200)
+        thorough = _role("critic", "CRITIC_", {}, panel_keys=keys, effort="high", answer_token_cap=4096)
+        assert (cheap.reasoning_effort, cheap.answer_token_cap) == ("low", 200)
+        assert (thorough.reasoning_effort, thorough.answer_token_cap) == ("high", 4096)
 
     def test_the_older_unprefixed_effort_variable_still_configures_answering(self, env):
         # AGENT_REASONING_EFFORT named the only role there was; deployments
         # that set it must keep working.
         env.setenv("AGENT_REASONING_EFFORT", "medium")
-        role = _role("answering", "", {}, remote_keys=("model", "reasoningEffort", "maxTokens"), effort="minimal")
+        role = _role("answering", "", {}, panel_keys=("model", "reasoningEffort", "maxTokens"), effort="minimal")
         assert role.reasoning_effort == "medium"
 
     def test_a_role_is_frozen(self):
@@ -68,11 +68,11 @@ class TestReadingARole:
 
 class TestTheRolesWeHave:
     def test_answering_thinks_a_little_and_may_write_an_answer(self):
-        assert answering().name == "answering" and answering().max_tokens >= 1024
+        assert answering().name == "answering" and answering().answer_token_cap >= 1024
 
     def test_labelling_writes_almost_nothing(self):
         assert labelling().name == "labelling"
-        assert labelling().max_tokens <= 256, "a label is a word, not a paragraph"
+        assert labelling().answer_token_cap <= 256, "a label is a word, not a paragraph"
 
     def test_labelling_never_asks_for_no_thinking_at_all(self):
         # Some endpoints refuse to think less than they want to; "none" is the

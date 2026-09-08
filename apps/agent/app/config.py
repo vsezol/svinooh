@@ -124,48 +124,69 @@ class Role:
     account we call through, not about the job.
     """
 
+    #: What the job is called, for logs and for reading this code.
     name: str
+    #: "<provider>:<model>" — which model does it.
     model: str
+    #: How much it may think before writing: none/minimal/low/medium/high.
     reasoning_effort: str
-    max_tokens: int
+    #: The longest reply it may write, counted in model tokens. Nothing to do
+    #: with credentials — an answer is capped so it stays an answer, and a
+    #: label is capped because a label is one word.
+    answer_token_cap: int
 
 
 def _role(
     name: str,
-    prefix: str,
-    remote: dict,
+    env_prefix: str,
+    decided: dict,
     *,
-    remote_keys: tuple[str, str, str],
+    panel_keys: tuple[str, str, str],
     effort: str = "",
-    max_tokens: int = 1024,
+    answer_token_cap: int = 1024,
 ) -> Role:
-    """One role, resolved the way every knob in this product resolves.
+    """Assemble one role from the three places a knob can be set.
 
     Admin panel, then environment, then what the service shipped with — the
-    same order the TypeScript services use, for the same reason: an operator's
-    decision wins, the environment still works when nothing has been decided,
-    and the default is what runs before either exists.
+    same order every other knob in this product resolves in, for the same
+    reason: an operator's decision wins, the environment still works when
+    nothing has been decided, and the default runs before either exists.
+
+    `decided` is what the panel says right now; `panel_keys` names this role's
+    three knobs in it, and `env_prefix` names them in the environment
+    (AGENT_ROUTER_MODEL and its siblings for labelling, AGENT_MODEL for
+    answering, which has no prefix because it came first).
     """
-    model_key, effort_key, tokens_key = remote_keys
-    answering_model = str(remote.get("model") or "") or os.getenv(
+    model_key, effort_key, cap_key = panel_keys
+
+    def decided_or_env(panel_key: str, env_key: str, fallback: str) -> str:
+        # An empty value in the panel means "no opinion", not "set it to
+        # nothing", so it falls through to the environment like an absent one.
+        return str(decided.get(panel_key) or "") or os.getenv(f"AGENT_{env_key}", fallback)
+
+    answering_model = str(decided.get("model") or "") or os.getenv(
         "AGENT_MODEL", "anthropic:claude-haiku-4-5"
     )
+    # How long a reply may be, not any kind of credential: the panel carries a
+    # number of model tokens, and a value that is not a positive whole number
+    # is not a decision.
+    cap_from_panel = decided.get(cap_key)
+    cap_is_usable = isinstance(cap_from_panel, int) and not isinstance(cap_from_panel, bool)
 
-    def pick(remote_key: str, env_key: str, fallback: str) -> str:
-        return str(remote.get(remote_key) or "") or os.getenv(f"AGENT_{env_key}", fallback)
-
-    tokens = remote.get(tokens_key)
     return Role(
         name=name,
-        # A role with no model of its own does the job on the answering one.
-        model=pick(model_key, f"{prefix}MODEL", "") or answering_model,
-        # AGENT_REASONING_EFFORT has no role in its name because it named the
-        # only role there was; it still configures answering.
-        reasoning_effort=pick(
-            effort_key, f"{prefix}REASONING_EFFORT", os.getenv("AGENT_REASONING_EFFORT", effort)
+        # A role with no model of its own does its job on the answering one.
+        model=decided_or_env(model_key, f"{env_prefix}MODEL", "") or answering_model,
+        # AGENT_REASONING_EFFORT carries no role in its name because it named
+        # the only role there was; it still configures answering.
+        reasoning_effort=decided_or_env(
+            effort_key,
+            f"{env_prefix}REASONING_EFFORT",
+            os.getenv("AGENT_REASONING_EFFORT", effort),
         ),
-        max_tokens=int(tokens) if isinstance(tokens, int) and tokens > 0
-        else int(os.getenv(f"AGENT_{prefix}MAX_TOKENS", str(max_tokens))),
+        answer_token_cap=cap_from_panel
+        if cap_is_usable and cap_from_panel > 0
+        else int(os.getenv(f"AGENT_{env_prefix}MAX_TOKENS", str(answer_token_cap))),
     )
 
 
@@ -173,8 +194,8 @@ def answering() -> Role:
     """Answers — what the user reads. Thinks a little; somebody is watching a cursor."""
     return _role(
         "answering", "", remote_config.current(),
-        remote_keys=("model", "reasoningEffort", "maxTokens"),
-        effort="minimal", max_tokens=1024,
+        panel_keys=("model", "reasoningEffort", "maxTokens"),
+        effort="minimal", answer_token_cap=1024,
     )
 
 
@@ -188,8 +209,8 @@ def labelling() -> Role:
     """
     return _role(
         "labelling", "ROUTER_", remote_config.current(),
-        remote_keys=("routerModel", "routerReasoningEffort", "routerMaxTokens"),
-        effort="low", max_tokens=200,
+        panel_keys=("routerModel", "routerReasoningEffort", "routerMaxTokens"),
+        effort="low", answer_token_cap=200,
     )
 
 
