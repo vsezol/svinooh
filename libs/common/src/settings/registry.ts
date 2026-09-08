@@ -474,9 +474,9 @@ export const REGISTRY = {
     group: 'agent',
     label: 'Labelling model prefers',
     about:
-      'Which provider serves the labelling model. It writes about ten tokens, so almost none of its cost is writing — nearly all of it is the wait before the first one, which is the wait a person sits through before any answer starts. That is what "latency" sorts on; "throughput" sorts on a speed this job barely uses.',
+      'Which provider serves the labelling model. It writes about ten tokens, so almost none of its cost is writing and nearly all of it is the wait before the first one — which, now that answers stream, is the only wait left before anything appears. "latency" sorts on exactly that, and was tried here on exactly that reasoning: it did not help (median 5.2s against 4.6s over 8 and 4 samples, with the tail better and the middle worse). Left on throughput because that is where the evidence leaves it, and kept as a knob because the argument for latency is still a good one and the sample was small.',
     options: ['latency', 'throughput', 'price'],
-    default: 'latency',
+    default: 'throughput',
     env: 'AGENT_ROUTER_PROVIDER_SORT',
     readBy: ['agent'],
     live: true,
