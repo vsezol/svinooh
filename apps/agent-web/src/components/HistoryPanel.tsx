@@ -96,11 +96,27 @@ export function HistoryPanel({ conversations, currentId, onSelect, onNew, onClos
         </aside>
       );
     }
+    // The kit's rail furniture, the same classes the site's own sidebar uses.
+    // Two rails drawing one design is how they drifted apart the first time.
     return (
       <aside className="sv-a-c-hist" data-mode="rail">
-        {newChat(true)}
-        <div className="sv-a-c-eyebrow">History</div>
-        {list}
+        <button type="button" className="rail-new" onClick={onNew}>
+          {PLUS}
+          New chat
+        </button>
+        <div className="rail-eyebrow mono">HISTORY</div>
+        {conversations.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            className="rail-history"
+            data-active={c.id === currentId ? 'true' : undefined}
+            onClick={() => onSelect(c.id)}
+          >
+            <span className="rail-history-title">{c.title}</span>
+            <span className="rail-history-when mono">{relativeDate(c.at)}</span>
+          </button>
+        ))}
       </aside>
     );
   }

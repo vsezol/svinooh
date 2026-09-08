@@ -51,7 +51,7 @@
     flex: none;
     /* The drag writes this variable directly, so a resize costs a style
        recalculation instead of a React render. */
-    width: var(--sv-a-rail-width, 250px);
+    width: var(--sv-a-rail-width, 232px);
     min-height: 0;
     border-right: 1px solid var(--line);
   }
@@ -142,14 +142,6 @@
   .sv-a-topbar[data-variant='standalone'] {
     display: none;
   }
-}
-
-/* Pushed to the end rather than spaced against a sibling: embedded this row
-   holds nothing else, and space-between with one child leaves it on the left. */
-.sv-a-topbar-actions {
-  margin-left: auto;
-  display: flex;
-  gap: var(--sp-4);
 }
 
 .sv-a-log {

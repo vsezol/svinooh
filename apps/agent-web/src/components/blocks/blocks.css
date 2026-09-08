@@ -22,48 +22,14 @@
   margin: 0;
   /* 1.6 rather than 1.55: the extra is what a paragraph read on a phone in one
      column wants, and there is room for it now the identity row is gone. */
-  font: 500 var(--fs-read) / 1.6 var(--sans);
+  /* Regular. It was 500, which reads as a whole transcript set in semibold;
+     the design sets the answer at the same weight as any other paragraph. */
+  font: 400 var(--fs-read) / 1.6 var(--sans);
   text-wrap: pretty;
   color: var(--text);
   /* The wire sends paragraph breaks as blank lines inside one text block. */
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-/* ── stats ────────────────────────────────────────────────────────────── */
-
-.sv-a-b-stats {
-  display: grid;
-  /* 150px floor lands on two columns at a 375px viewport. */
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--sp-4);
-}
-
-.sv-a-b-stat {
-  min-width: 0;
-}
-
-.sv-a-b-stat-value {
-  margin-top: 5px;
-  font: 600 19px var(--mono);
-  color: var(--text);
-}
-
-.sv-a-b-stat-sub {
-  margin-top: 3px;
-  font: 400 10.5px var(--mono);
-}
-
-.sv-a-b-stat-sub[data-tone='up'] {
-  color: var(--up);
-}
-
-.sv-a-b-stat-sub[data-tone='down'] {
-  color: var(--down);
-}
-
-.sv-a-b-stat-sub[data-tone='mut'] {
-  color: var(--mut);
 }
 
 /* ── chart ──────────────────────────────────────────────────────────────
@@ -77,10 +43,11 @@
   gap: var(--sp-4);
 }
 
-
+/* The reading beside the chart's title, on the same baseline as it -- not a
+   headline. It was 19px, which made the card look like a stat with a drawing
+   under it rather than a chart with a label on it. */
 .sv-a-b-chart-delta {
-  margin-top: 4px;
-  font: 600 19px var(--mono);
+  font: 600 var(--fs-step) var(--mono);
   color: var(--text);
 }
 
@@ -373,9 +340,10 @@
 .sv-a-md > :first-child { margin-top: 0; }
 .sv-a-md > :last-child { margin-bottom: 0; }
 
+/* No line-height of its own: a markdown paragraph is the paragraph the block
+   above already sized, and 1.5 here quietly undid the 1.6 it argues for. */
 .sv-a-md-p {
   margin: 0 0 8px;
-  line-height: 1.5;
 }
 
 .sv-a-md-h {

@@ -82,6 +82,90 @@ body[data-theme='light'] .on-dark {
   margin-left: 0.05em;
 }
 
+/* ───────── the chat's half of the rail ─────────
+   The design puts New chat and the history list in the sidebar beside the
+   pages. Every number below is its own.
+
+   In the kit rather than in either app, because there are two rails drawing
+   this: the site's own sidebar, and the standalone chat's. They had drifted
+   -- 12px against 13, an 8px radius against 10, a highlight in the accent
+   against one in the surface -- which is the whole argument for the kit. */
+
+.rail-rule {
+  height: 1px;
+  background: var(--line);
+  margin: 12px 0;
+  flex-shrink: 0;
+}
+
+.rail-new {
+  height: 36px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--line2);
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-control);
+  font-weight: var(--fw-heavy);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s ease;
+}
+
+.rail-new:hover {
+  border-color: var(--mut);
+}
+
+.rail-eyebrow {
+  font-size: var(--fs-micro);
+  letter-spacing: 0.16em;
+  color: var(--mut);
+  padding: 16px 12px 6px;
+}
+
+/* A row is the question you asked and when — the title carries the meaning, so
+   it takes the width and the time takes what is left. */
+.rail-history {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.rail-history[data-active='true'] {
+  background: var(--surf2);
+}
+
+.rail-history:hover {
+  background: var(--surf2);
+}
+
+.rail-history-title {
+  display: block;
+  font-size: var(--fs-control);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rail-history-when {
+  display: block;
+  margin-top: 3px;
+  font-size: var(--fs-micro);
+  color: var(--mut);
+}
+
 /* ───────── the application header ─────────
    Two rows at rest, one when folded. Every number here is the design's, and
    the two states share a border so the fold does not move the line under it. */
@@ -153,6 +237,15 @@ body {
 
 .app-header[data-folded='true'] .top-tabs {
   height: 40px;
+}
+
+/* The fold is a phone behaviour: it trades the 48px wordmark row for 4px of
+   strip, on the screen that can least afford two rows. Above the breakpoint
+   there is no strip and nothing to trade, so the wordmark row stays. */
+@media (max-width: 719px) {
+  .app-header[data-folded='true'] .app-brand {
+    display: none;
+  }
 }
 
 .top-tabs-list {

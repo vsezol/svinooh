@@ -132,7 +132,7 @@ export function SideNav({ tab, onTab, isAdmin, chat }: Props) {
           // clear a taller one and sit inside a padded shell; now it is against
           // the window's own edge and the rule down its side has to start where
           // the header's does.
-          top: 'calc(57px + env(safe-area-inset-top))',
+          top: 'calc(var(--h-appbar) + env(safe-area-inset-top))',
           flexDirection: 'column',
           gap: 'var(--sp-2)',
         }}

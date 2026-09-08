@@ -5,7 +5,9 @@ const WIDTH_KEY = 'svinooh_agent_rail_width';
 const COLLAPSED_KEY = 'svinooh_agent_rail_collapsed';
 const MIN = 190;
 const MAX = 420;
-const DEFAULT = 250;
+/* The design's sidebar width. The rail is resizable from here, but it opens
+   on the number the design draws and the site's own rail keeps. */
+const DEFAULT = 232;
 /** Wide enough for an icon and its padding, and nothing else. */
 export const COLLAPSED_WIDTH = 56;
 
