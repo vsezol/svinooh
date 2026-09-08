@@ -24,10 +24,12 @@ from .config import Role, answering, labelling, provider_sort, settings
 logger = logging.getLogger("svinooh-ai")
 
 
-# Models whose endpoint insists on thinking. Some refuse a request that asks
-# them to think less or not at all, with a 400 that would otherwise kill every
-# classification for as long as our setting stood.
-_models_that_insist_on_thinking: set[str] = set()
+# Models we have stopped sending a thinking setting to, because their endpoint
+# would not take one. It refuses in either direction — some insist on thinking
+# and reject a request to do less of it, others have no thinking to do and are
+# filtered away for being asked — and either refusal would otherwise kill every
+# turn for as long as our setting stood.
+_models_we_no_longer_ask_to_think: set[str] = set()
 
 
 def _reasoning(effort: str, model: str) -> dict:
@@ -41,7 +43,7 @@ def _reasoning(effort: str, model: str) -> dict:
     if not _speaks_openai_wire(model):
         return {}
     body = _provider_policy()
-    if effort and model not in _models_that_insist_on_thinking:
+    if effort and model not in _models_we_no_longer_ask_to_think:
         body["reasoning"] = {"effort": effort}
     return {"extra_body": body} if body else {}
 
@@ -76,22 +78,46 @@ def _provider_policy() -> dict:
     return {"provider": policy} if policy else {}
 
 
-def is_thinking_mandatory_error(error: BaseException) -> bool:
-    """Whether a failure is the endpoint refusing to think less than it wants."""
-    return "reasoning" in str(error).lower()
+def is_thinking_setting_rejected(error: BaseException) -> bool:
+    """Whether a failure is the endpoint refusing the thinking setting we sent.
 
+    It comes back as two different failures that mean the same sentence.
 
-def let_it_think(model: str) -> bool:
-    """Stop asking this model to think less, and rebuild the clients.
+    A model that thinks, told to think less than it wants, answers 400 and says
+    so: "reasoning is mandatory for this endpoint".
 
-    Returns False when we had already stopped, which is what ends a retry
-    instead of looping: the second failure is a real one and belongs to the
-    caller.
+    A model that does not think at all is not asked — it is filtered. We tell
+    the aggregator a provider must support every parameter we send, because
+    tools are not optional for this agent; asking an instruct model to think
+    puts a parameter in that list which none of its providers has, so every
+    endpoint is filtered out and there is nothing left to route to. That
+    arrives as a 404 about the requested parameters, from the routing step that
+    filters by them.
     """
-    if model in _models_that_insist_on_thinking:
+    text = str(error).lower()
+    return "reasoning" in text or "no endpoints found that can handle the requested" in text
+
+
+def stop_asking_it_to_think(role: Role) -> bool:
+    """Drop this role's thinking setting for good, and rebuild the clients.
+
+    Returns False when there is nothing to drop — the role never sent one, or
+    we already stopped — which is what ends a retry instead of looping: the
+    failure is then a real one and belongs to the caller.
+
+    Gating on the role's own setting matters. "No endpoints" can also be said
+    about a parameter we are not willing to give up, and a wrong guess must not
+    quietly relax a role that was configured on purpose.
+    """
+    if not role.reasoning_effort or role.model in _models_we_no_longer_ask_to_think:
         return False
-    logger.warning("%s requires reasoning — no longer limiting it", model)
-    _models_that_insist_on_thinking.add(model)
+    logger.warning(
+        "%s will not take reasoning=%s — no longer sending one for the %s role",
+        role.model,
+        role.reasoning_effort,
+        role.name,
+    )
+    _models_we_no_longer_ask_to_think.add(role.model)
     model_for.cache_clear()
     return True
 
@@ -139,22 +165,14 @@ def get_router_model() -> BaseChatModel:
     return model_for(labelling())
 
 
-def answering_model() -> str:
-    return answering().model
-
-
-def labelling_model() -> str:
-    return labelling().model
-
-
-async def ask(build, messages, model: str, forget=None):
+async def ask(build, messages, role: Role, forget=None):
     """Send messages to a model, surviving the one failure worth surviving.
 
     Every call site had the same six lines around it, which is five lines more
-    than the idea is worth: try, and if the endpoint turned out to require
-    reasoning we had asked it to limit, stop asking and try once more. Any
-    other failure, and any second failure, belongs to the caller — there is no
-    loop here.
+    than the idea is worth: try, and if the endpoint turned out to refuse the
+    thinking setting we sent, stop sending it and try once more. Any other
+    failure, and any second failure, belongs to the caller — there is no loop
+    here.
 
     `build` returns the runnable rather than being one, because a caller's
     runnable is usually cached and the retry needs a freshly built one;
@@ -163,7 +181,7 @@ async def ask(build, messages, model: str, forget=None):
     try:
         return await build().ainvoke(messages)
     except Exception as error:  # noqa: BLE001 — one specific cause is recoverable
-        if not (is_thinking_mandatory_error(error) and let_it_think(model)):
+        if not (is_thinking_setting_rejected(error) and stop_asking_it_to_think(role)):
             raise
         if forget is not None:
             forget()

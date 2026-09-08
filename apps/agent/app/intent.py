@@ -17,7 +17,8 @@ from typing import Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from .llm import ask, get_router_model, labelling_model
+from .config import labelling
+from .llm import ask, get_router_model
 
 CLASSIFIER_PROMPT = (
     "You label questions asked to the assistant of svinooh, a DeFi portfolio "
@@ -45,4 +46,4 @@ def _labeler():
 
 async def classify(question: str) -> IntentLabel:
     messages = [SystemMessage(content=CLASSIFIER_PROMPT), HumanMessage(content=question)]
-    return await ask(_labeler, messages, labelling_model(), _labeler.cache_clear)
+    return await ask(_labeler, messages, labelling(), _labeler.cache_clear)

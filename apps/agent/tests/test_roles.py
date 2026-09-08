@@ -74,10 +74,27 @@ class TestTheRolesWeHave:
         assert labelling().name == "labelling"
         assert labelling().answer_token_cap <= 256, "a label is a word, not a paragraph"
 
-    def test_labelling_never_asks_for_no_thinking_at_all(self):
-        # Some endpoints refuse to think less than they want to; "none" is the
-        # value that produced a 400 on every classification in production.
-        assert labelling().reasoning_effort != "none"
+    def test_labelling_asks_for_no_thinking_at_all(self):
+        # Both production outages were a thinking setting an endpoint would not
+        # take: "none" drew a 400 from a model that must think, and a positive
+        # value drew a 404 from one that cannot. The empty setting sends
+        # nothing, and nothing is what neither can refuse.
+        assert labelling().reasoning_effort == ""
+
+    def test_the_panel_writes_that_empty_setting_as_a_word(self, env, monkeypatch):
+        # A select cannot offer "nothing", and a blank row would be read as
+        # unset and fall through to the environment — so the panel says
+        # "default" and it means the same as sending no instruction.
+        env.setenv("AGENT_ROUTER_REASONING_EFFORT", "high")
+        monkeypatch.setattr(remote_config, "_values", {"routerReasoningEffort": "default"})
+        assert labelling().reasoning_effort == ""
+
+    def test_one_role_thinking_is_not_another_role_thinking(self, env):
+        # AGENT_REASONING_EFFORT is the answering role's variable. It used to
+        # stand in for labelling's too, so turning one dial moved the other.
+        env.setenv("AGENT_REASONING_EFFORT", "high")
+        assert answering().reasoning_effort == "high"
+        assert labelling().reasoning_effort == ""
 
 
 class TestWhereTheDialsComeFrom:

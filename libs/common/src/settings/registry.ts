@@ -395,8 +395,8 @@ export const REGISTRY = {
     group: 'agent',
     label: 'Answering model thinks',
     about:
-      'How much the answering model may think before it writes. Thinking costs seconds a person spends watching a cursor, and buys care on a hard question.',
-    options: ['none', 'minimal', 'low', 'medium', 'high'],
+      'How much the answering model may think before it writes. Thinking costs seconds a person spends watching a cursor, and buys care on a hard question. "default" sends no instruction at all and is the safe choice for a model you have not read up on: every other value is a demand the endpoint has to be able to meet.',
+    options: ['default', 'none', 'minimal', 'low', 'medium', 'high'],
     default: 'minimal',
     env: 'AGENT_REASONING_EFFORT',
     readBy: ['agent'],
@@ -434,9 +434,9 @@ export const REGISTRY = {
     group: 'agent',
     label: 'Labelling model thinks',
     about:
-      'Picking one word out of two needs no deliberation. Avoid "none": some endpoints refuse to think less than they want to and answer 400, and while the agent recovers from that by itself, it should not have to.',
-    options: ['none', 'minimal', 'low', 'medium', 'high'],
-    default: 'low',
+      'Picking one word out of two needs no deliberation, so this wants "default" — say nothing and let the endpoint be whatever it is. The two named alternatives both bite: "none" is refused by models that insist on thinking, and any positive value is refused by models that cannot think at all, since a provider must support every parameter we send.',
+    options: ['default', 'none', 'minimal', 'low', 'medium', 'high'],
+    default: 'default',
     env: 'AGENT_ROUTER_REASONING_EFFORT',
     readBy: ['agent'],
     live: true,

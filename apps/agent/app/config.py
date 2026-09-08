@@ -128,7 +128,9 @@ class Role:
     name: str
     #: "<provider>:<model>" — which model does it.
     model: str
-    #: How much it may think before writing: none/minimal/low/medium/high.
+    #: How much it may think before writing: none/minimal/low/medium/high, or
+    #: empty for "we send no instruction and the endpoint is whatever it is".
+    #: Empty is the only value every model can honour.
     reasoning_effort: str
     #: The longest reply it may write, counted in model tokens. Nothing to do
     #: with credentials — an answer is capped so it stays an answer, and a
@@ -164,6 +166,16 @@ def _role(
         # nothing", so it falls through to the environment like an absent one.
         return str(decided.get(panel_key) or "") or os.getenv(f"AGENT_{env_key}", fallback)
 
+    def thinking(env_key: str, fallback: str) -> str:
+        # "default" is the panel's way of writing the empty string: a select
+        # cannot offer "nothing", and an empty row would be read as unset and
+        # fall through to the environment. It means we send no instruction —
+        # which is the only setting that is safe whatever model is behind the
+        # name, since a model that must think refuses being told to stop and a
+        # model that cannot think is filtered out for being asked.
+        value = decided_or_env(effort_key, env_key, fallback)
+        return "" if value == "default" else value
+
     answering_model = str(decided.get("model") or "") or os.getenv(
         "AGENT_MODEL", "anthropic:claude-haiku-4-5"
     )
@@ -178,12 +190,9 @@ def _role(
         # A role with no model of its own does its job on the answering one.
         model=decided_or_env(model_key, f"{env_prefix}MODEL", "") or answering_model,
         # AGENT_REASONING_EFFORT carries no role in its name because it named
-        # the only role there was; it still configures answering.
-        reasoning_effort=decided_or_env(
-            effort_key,
-            f"{env_prefix}REASONING_EFFORT",
-            os.getenv("AGENT_REASONING_EFFORT", effort),
-        ),
+        # the only role there was; with an empty prefix it is still the
+        # answering role's variable, and only that role's.
+        reasoning_effort=thinking(f"{env_prefix}REASONING_EFFORT", effort),
         answer_token_cap=cap_from_panel
         if cap_is_usable and cap_from_panel > 0
         else int(os.getenv(f"AGENT_{env_prefix}MAX_TOKENS", str(answer_token_cap))),
@@ -203,14 +212,18 @@ def labelling() -> Role:
     """Labels — the intent and confirmation classifiers.
 
     A dozen output tokens each, in front of every answer, so this is where a
-    cheaper and faster tier pays for itself. Not "none": some endpoints refuse
-    to think less than they want to (see app/llm.py), and the service recovers
-    but should not need to.
+    cheaper and faster tier pays for itself.
+
+    It ships asking for no thinking at all — the empty setting, not "none".
+    Choosing between two words is not deliberation, and every named value is a
+    demand some endpoint cannot meet: a model that must think refuses being
+    told to stop, and a model that cannot think is filtered away for being
+    asked (see app/llm.py). Saying nothing is the only setting that fits both.
     """
     return _role(
         "labelling", "ROUTER_", remote_config.current(),
         panel_keys=("routerModel", "routerReasoningEffort", "routerMaxTokens"),
-        effort="low", answer_token_cap=200,
+        effort="", answer_token_cap=200,
     )
 
 

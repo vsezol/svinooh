@@ -1,9 +1,14 @@
-"""How much a model may think, and what happens when it insists on more.
+"""How much a model may think, and what happens when the endpoint says no.
 
-Written after production caught it: the router asked for no reasoning, the
-endpoint mandates it, and every classification failed with a 400 for as long
-as the setting stood — invisibly, because the classifier's fail-safe swallowed
-it and routed everything to the portfolio branch.
+Both halves were written after production caught them, and they are the same
+mistake seen from two sides: a thinking setting is a demand, and an endpoint
+that cannot meet it fails the whole turn.
+
+The router asked for no reasoning and the endpoint mandated it — 400 on every
+classification. Then the router became a model that cannot reason at all, kept
+a positive setting, and asking for it filtered every provider away — 404 on
+every classification. Both were invisible, because the classifier's fail-safe
+swallows a failure and routes everything to the portfolio branch.
 """
 from dataclasses import replace
 
@@ -11,7 +16,19 @@ import pytest
 
 import app.intent as intent
 import app.llm as llm
+from app.config import Role
 from app.intent import IntentLabel
+
+NO_ENDPOINTS = (
+    "Error code: 404 - {'error': {'message': 'No endpoints found that can handle "
+    "the requested parameters.', 'code': 404, 'metadata': {'failed_routing_step': "
+    "'Filter by Parameters'}}}"
+)
+MANDATORY = 'Reasoning is mandatory for this endpoint and cannot be disabled'
+
+
+def role(model: str = "openai:m", effort: str = "low") -> Role:
+    return Role(name="labelling", model=model, reasoning_effort=effort, answer_token_cap=200)
 
 
 def on_wire(monkeypatch, base_url: str) -> None:
@@ -26,7 +43,7 @@ def on_wire(monkeypatch, base_url: str) -> None:
 
 @pytest.fixture(autouse=True)
 def on_the_aggregator(monkeypatch):
-    """Budgets and provider policies only exist on the OpenAI wire.
+    """Thinking settings and provider policies only exist on the OpenAI wire.
 
     Talking to a provider directly there is nothing to choose between and no
     extra_body to put it in, so every test about either has to say which wire
@@ -37,49 +54,57 @@ def on_the_aggregator(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def clean_caches():
-    llm._models_that_insist_on_thinking.clear()
+    llm._models_we_no_longer_ask_to_think.clear()
     llm.model_for.cache_clear()
     intent._labeler.cache_clear()
     yield
-    llm._models_that_insist_on_thinking.clear()
+    llm._models_we_no_longer_ask_to_think.clear()
 
 
-class TestThinkingLimit:
-    def test_the_limit_is_sent_as_the_aggregator_expects(self):
+class TestThinkingSetting:
+    def test_the_setting_is_sent_as_the_aggregator_expects(self):
         body = llm._reasoning("low", "m")["extra_body"]
         assert body["reasoning"] == {"effort": "low"}
 
-    def test_an_empty_setting_asks_for_no_budget(self):
+    def test_an_empty_setting_asks_for_nothing_at_all(self):
+        # The only setting every model can honour: one that must think is not
+        # told to stop, one that cannot think is not asked to start.
         assert "reasoning" not in llm._reasoning("", "m").get("extra_body", {})
 
-    def test_a_model_that_insists_is_never_asked_to_think_less_again(self):
-        llm.let_it_think("stubborn")
+    def test_a_refused_model_is_never_asked_again(self):
+        llm.stop_asking_it_to_think(role(model="stubborn"))
         assert "reasoning" not in llm._reasoning("low", "stubborn")["extra_body"]
         assert "reasoning" in llm._reasoning("low", "other")["extra_body"]
 
     def test_giving_up_twice_reports_that_we_already_had(self):
-        assert llm.let_it_think("m") is True
-        assert llm.let_it_think("m") is False, "the second failure belongs to the caller"
+        assert llm.stop_asking_it_to_think(role()) is True
+        assert llm.stop_asking_it_to_think(role()) is False, "the second failure is the caller's"
 
-    def test_the_refusal_is_recognised_by_what_it_says(self):
-        mandatory = Exception('400 — "Reasoning is mandatory for this endpoint '
-                              'and cannot be disabled"')
-        assert llm.is_thinking_mandatory_error(mandatory) is True
-        assert llm.is_thinking_mandatory_error(Exception("429 rate limited")) is False
+    def test_a_role_that_sends_no_setting_has_nothing_to_give_up(self):
+        # Otherwise a 404 about some other parameter would be "cured" by
+        # dropping a setting that was never in the request.
+        assert llm.stop_asking_it_to_think(role(effort="")) is False
+        assert "m" not in llm._models_we_no_longer_ask_to_think
+
+    def test_both_refusals_are_recognised_by_what_they_say(self):
+        assert llm.is_thinking_setting_rejected(Exception(MANDATORY)) is True
+        assert llm.is_thinking_setting_rejected(Exception(NO_ENDPOINTS)) is True
+        assert llm.is_thinking_setting_rejected(Exception("429 rate limited")) is False
 
 
 class Labeler:
-    """A structured-output runnable that refuses a budget the first time."""
+    """A structured-output runnable that refuses the setting the first time."""
 
-    def __init__(self, refusals=1):
+    def __init__(self, refusals=1, saying=MANDATORY):
         self.refusals = refusals
+        self.saying = saying
         self.attempts = 0
 
     async def ainvoke(self, _messages):
         self.attempts += 1
         if self.refusals > 0:
             self.refusals -= 1
-            raise Exception("Reasoning is mandatory for this endpoint and cannot be disabled")
+            raise Exception(self.saying)
         return IntentLabel(intent="general", reason="stubbed")
 
 
@@ -94,23 +119,37 @@ def cached(labeler):
     return factory
 
 
+@pytest.fixture
+def asking_for_thought(monkeypatch):
+    """A labelling role that does send a setting — the only kind that retries."""
+    monkeypatch.setattr(llm, "labelling", lambda: role(model="openai:router"))
+    monkeypatch.setattr(intent, "labelling", lambda: role(model="openai:router"))
+
+
 class TestClassifierRecovery:
-    async def test_a_model_that_insists_still_produces_a_label(self, monkeypatch):
-        labeler = Labeler(refusals=1)
+    @pytest.mark.parametrize("refusal", [MANDATORY, NO_ENDPOINTS], ids=["mandatory", "filtered"])
+    async def test_a_refused_setting_still_produces_a_label(
+        self, monkeypatch, asking_for_thought, refusal
+    ):
+        labeler = Labeler(refusals=1, saying=refusal)
         monkeypatch.setattr(intent, "_labeler", cached(labeler))
         label = await intent.classify("what is a health factor?")
         assert label.intent == "general"
         assert labeler.attempts == 2, "one retry, not a loop"
-        assert llm.labelling_model() in llm._models_that_insist_on_thinking
+        assert "openai:router" in llm._models_we_no_longer_ask_to_think
 
-    async def test_a_second_refusal_is_raised_rather_than_retried_forever(self, monkeypatch):
+    async def test_a_second_refusal_is_raised_rather_than_retried_forever(
+        self, monkeypatch, asking_for_thought
+    ):
         labeler = Labeler(refusals=99)
         monkeypatch.setattr(intent, "_labeler", cached(labeler))
         with pytest.raises(Exception, match="Reasoning is mandatory"):
             await intent.classify("q")
         assert labeler.attempts == 2
 
-    async def test_an_unrelated_failure_is_not_swallowed_by_the_retry(self, monkeypatch):
+    async def test_an_unrelated_failure_is_not_swallowed_by_the_retry(
+        self, monkeypatch, asking_for_thought
+    ):
         class Broken:
             attempts = 0
 
@@ -121,7 +160,18 @@ class TestClassifierRecovery:
         monkeypatch.setattr(intent, "_labeler", cached(Broken()))
         with pytest.raises(RuntimeError, match="429"):
             await intent.classify("q")
-        assert Broken.attempts == 1, "only a refused budget is worth a second try"
+        assert Broken.attempts == 1, "only a refused setting is worth a second try"
+
+    async def test_a_role_that_asks_for_nothing_does_not_retry(self, monkeypatch):
+        # The shipped labelling role. A 404 here is about something we are not
+        # willing to give up, so it goes to the caller on the first failure.
+        quiet = role(model="openai:instruct", effort="")
+        monkeypatch.setattr(intent, "labelling", lambda: quiet)
+        labeler = Labeler(refusals=99, saying=NO_ENDPOINTS)
+        monkeypatch.setattr(intent, "_labeler", cached(labeler))
+        with pytest.raises(Exception, match="No endpoints"):
+            await intent.classify("q")
+        assert labeler.attempts == 1
 
 
 class TestProviderPolicy:
@@ -140,7 +190,13 @@ class TestProviderPolicy:
         assert body["provider"]["sort"] == "throughput"
         assert body["reasoning"] == {"effort": "low"}
 
-    def test_letting_a_model_think_leaves_the_provider_policy_standing(self):
-        llm.let_it_think("openai:m")
+    def test_requiring_parameters_is_what_makes_a_thinking_setting_a_filter(self):
+        # The whole 404: require_parameters says a provider must support every
+        # parameter in the request, so asking a model that cannot think to
+        # think leaves nothing to route to. Dropping the ask is the cure, and
+        # it must not take the policy down with it.
         body = llm._reasoning("low", "openai:m")["extra_body"]
-        assert "reasoning" not in body and body["provider"]["sort"] == "throughput"
+        assert body["provider"]["require_parameters"] is True and "reasoning" in body
+        llm.stop_asking_it_to_think(role(model="openai:m"))
+        body = llm._reasoning("low", "openai:m")["extra_body"]
+        assert "reasoning" not in body and body["provider"]["require_parameters"] is True
