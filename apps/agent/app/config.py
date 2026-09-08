@@ -66,11 +66,22 @@ class Settings:
     # sends nothing and takes whoever answers.
     #   deny   : refuse providers that keep or train on the prompt. Ours carry
     #            somebody's wallet addresses and balances.
-    #   require: refuse providers that do not really support the parameters we
-    #            send — tools and structured outputs are not optional here.
+    #   require: refuse providers that do not advertise support for every
+    #            parameter in the request. OFF, and it is a trap — see below.
     #   sort   : which of the survivors to prefer — live, see provider_sort().
     provider_data_collection: str = os.getenv("AGENT_PROVIDER_DATA_COLLECTION", "deny")
-    provider_require_parameters: bool = os.getenv("AGENT_PROVIDER_REQUIRE_PARAMETERS", "1") == "1"
+    # It was on, to make sure whoever served us could really run tools. It does
+    # not mean that. It means every parameter, including ones we never chose:
+    # forcing a single tool call makes the client add parallel_tool_calls, and
+    # not one of the answering model's fifteen providers advertises that. So the
+    # requirement no provider could meet was one we did not know we were making,
+    # and it emptied the list on every classification for hours.
+    #
+    # Tools are still not optional here — they are just not this setting's job.
+    # The aggregator runs its own tool-compatibility filter when tools are in
+    # the request, which is visible in the routing funnel of a refusal and is
+    # the guarantee this was reached for.
+    provider_require_parameters: bool = os.getenv("AGENT_PROVIDER_REQUIRE_PARAMETERS", "0") == "1"
     system_prompt: str = os.getenv("AGENT_SYSTEM", DEFAULT_SYSTEM_PROMPT)
     request_timeout_s: int = int(os.getenv("AGENT_TIMEOUT_S", "60"))
     # Conversation memory: how many messages a session keeps, and for how long
