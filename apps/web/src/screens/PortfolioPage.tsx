@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import type { HistoryRange, PortfolioDto, WalletDto } from '@svinooh/shared';
 import { AppHeader, Button, Card, Checkbox, Eyebrow, Input, Segmented, Spinner, TagButton } from '../ui';
 import { AccountMenu } from '../components/AccountMenu';
+import type { AgentControl, ConversationRef } from '../components/agent/AgentEmbed';
 import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AlertSettings } from '../components/AlertSettings';
 import { AreaChart } from '../components/AreaChart';
@@ -221,9 +222,15 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
     },
     [],
   );
-  // Collapsed is the rail's own business and nobody else's — it survives a tab
-  // change and nothing else needs to know
-  const [sideCollapsed, setSideCollapsed] = useState(false);
+  /**
+   * The chat's conversations, as the widget reports them, and the handle that
+   * drives it.
+   *
+   * The rail draws them; the widget still owns them. Two copies of a list is
+   * two lists, so this is the one it publishes rather than one kept in step.
+   */
+  const [conversations, setConversations] = useState<ConversationRef[]>([]);
+  const agent = useRef<AgentControl | null>(null);
   const [scope, setScope] = useState<string>('all');
   const [period, setPeriod] = useState<HistoryRange>('24h');
   const [hideSmall, setHideSmall] = useState(false);
@@ -591,6 +598,22 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
         active={activeTab}
         onTab={(key: string) => setTab(key as Tab)}
         onLogo={() => router.push('/')}
+        // The phone has no rail, so the chat's action rides the tab strip,
+        // which is where the design puts it there.
+        tabActions={
+          activeTab === 'agent' ? (
+            <button
+              type="button"
+              className="tab-action"
+              aria-label="New chat"
+              onClick={() => agent.current?.newChat()}
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
+          ) : undefined
+        }
         brandActions={
           <>
             {/* Only when this account owns more than one — see the component */}
@@ -627,9 +650,16 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
           <SideNav
             tab={tab}
             onTab={setTab}
-            collapsed={sideCollapsed}
-            onCollapse={setSideCollapsed}
             isAdmin={isAdmin}
+            chat={
+              activeTab === 'agent'
+                ? {
+                    conversations,
+                    onNew: () => agent.current?.newChat(),
+                    onOpen: (id) => agent.current?.openConversation(id),
+                  }
+                : undefined
+            }
           />
         ) : null}
 
@@ -830,6 +860,8 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
                     slug={slug}
                     token={tokenStore.get() ?? undefined}
                     portfolios={me?.portfolios}
+                    onConversations={setConversations}
+                    control={agent}
                   />
                 ) : null}
               </div>

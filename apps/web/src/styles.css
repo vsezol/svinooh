@@ -345,13 +345,9 @@ button {
      overflow here becomes a scrolling page, which is the one thing the chat
      cannot share a screen with.
 
-     --visible-h is what the browser says is on screen right now, which on iOS
-     is the page minus the keyboard (see AgentEmbed). Falling back to 100dvh
-     covers the first frame and any browser without a visual viewport to ask.
-
      49px is the header above the breakpoint — its 48px wordmark row plus the
      hairline. The tab strip is not there; a desktop has the rail instead. */
-  height: calc(var(--visible-h, 100dvh) - 49px - env(safe-area-inset-top));
+  height: calc(100dvh - 49px - env(safe-area-inset-top));
   margin: calc(-1 * clamp(20px, 4vw, 36px)) 0 0;
   padding: 14px 0 0;
   overflow: hidden;
@@ -382,7 +378,7 @@ html.agent-open body {
     /* 85px: the wordmark row (48) and the tab strip (36) and the hairline.
        The header folds to 41 while you read, which gives the chat 44px back
        rather than taking any — so this is sized to the header at rest. */
-    height: calc(var(--visible-h, 100dvh) - 85px - env(safe-area-inset-top));
+    height: calc(100dvh - 85px - env(safe-area-inset-top));
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
@@ -692,4 +688,102 @@ html.agent-open body {
     border-right: 1px solid var(--line);
     padding: 16px 12px;
   }
+}
+
+/* ───────── the chat's half of the rail ─────────
+   The design puts New chat and the history list in the sidebar beside the
+   pages. Every number below is its own. */
+
+.rail-rule {
+  height: 1px;
+  background: var(--line);
+  margin: 12px 0;
+  flex-shrink: 0;
+}
+
+.rail-new {
+  height: 36px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--line2);
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-control);
+  font-weight: var(--fw-heavy);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s ease;
+}
+
+.rail-new:hover {
+  border-color: var(--mut);
+}
+
+.rail-eyebrow {
+  font-size: var(--fs-micro);
+  letter-spacing: 0.16em;
+  color: var(--mut);
+  padding: 16px 12px 6px;
+}
+
+/* A row is the question you asked and when — the title carries the meaning, so
+   it takes the width and the time takes what is left. */
+.rail-history {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.rail-history[data-active='true'] {
+  background: var(--surf2);
+}
+
+.rail-history:hover {
+  background: var(--surf2);
+}
+
+.rail-history-title {
+  display: block;
+  font-size: var(--fs-control);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rail-history-when {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-eyebrow);
+  color: var(--mut);
+}
+
+/* A mark at the end of the tab strip, not a button: the tab beside it is the
+   loud thing on that row. */
+.tab-action {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tab-action:hover {
+  color: var(--text);
 }

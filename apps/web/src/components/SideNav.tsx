@@ -40,12 +40,12 @@ function SparkIcon({ size }: { size: number }) {
   );
 }
 
-const navItem = (active: boolean, disabled: boolean, collapsed: boolean): CSSProperties => ({
+const navItem = (active: boolean, disabled: boolean): CSSProperties => ({
   display: 'flex',
   alignItems: 'center',
-  justifyContent: collapsed ? 'center' : 'flex-start',
-  gap: collapsed ? 0 : 10,
-  padding: collapsed ? '11px 0' : '10px 13px',
+  justifyContent: 'flex-start',
+  gap: 10,
+  padding: '10px 13px',
   borderRadius: 10,
   fontWeight: 'var(--fw-bold)',
   // The strip's size, because this is the same list of pages said the other
@@ -57,6 +57,25 @@ const navItem = (active: boolean, disabled: boolean, collapsed: boolean): CSSPro
   background: active ? 'var(--acc-soft)' : 'transparent',
   opacity: disabled ? 0.55 : 1,
 });
+
+function PlusIcon({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...ICON} style={{ flexShrink: 0 }}>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+/** How long ago, in as few words as say it. */
+function ago(at: number): string {
+  const mins = Math.max(0, Math.round((Date.now() - at) / 60000));
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? 'Yesterday' : `${days}d ago`;
+}
 
 function SlidersIcon({ size }: { size: number }) {
   return (
@@ -72,10 +91,17 @@ function SlidersIcon({ size }: { size: number }) {
 interface Props {
   tab: Tab;
   onTab: (tab: Tab) => void;
-  collapsed: boolean;
-  onCollapse: (collapsed: boolean) => void;
   /** Only an admin is shown the admin rail entry — see MeDto.isAdmin */
   isAdmin: boolean;
+  /**
+   * The chat, when it is the open tab: its conversations and the two things
+   * you can do about them. Absent on every other tab.
+   */
+  chat?: {
+    conversations: { id: string; title: string; at: number; active: boolean }[];
+    onNew: () => void;
+    onOpen: (id: string) => void;
+  };
 }
 
 /**
@@ -90,9 +116,8 @@ interface Props {
  * pointed at — and a rail listing somebody else's settings alongside it is a
  * door with nothing behind it.
  */
-export function SideNav({ tab, onTab, collapsed, onCollapse, isAdmin }: Props) {
-  const label = (text: string): ReactNode =>
-    collapsed ? null : <span style={{ whiteSpace: 'nowrap' }}>{text}</span>;
+export function SideNav({ tab, onTab, isAdmin, chat }: Props) {
+  const label = (text: string): ReactNode => <span style={{ whiteSpace: 'nowrap' }}>{text}</span>;
 
   return (
     <>
@@ -100,7 +125,7 @@ export function SideNav({ tab, onTab, collapsed, onCollapse, isAdmin }: Props) {
       <div
         className="side-rail"
         style={{
-          width: collapsed ? 46 : 232,
+          width: 232,
           flexShrink: 0,
           position: 'sticky',
           // Directly under the header, which is 56px and a hairline. It used to
@@ -110,7 +135,6 @@ export function SideNav({ tab, onTab, collapsed, onCollapse, isAdmin }: Props) {
           top: 'calc(57px + env(safe-area-inset-top))',
           flexDirection: 'column',
           gap: 'var(--sp-2)',
-          transition: 'width 0.2s ease',
         }}
       >
         {/* Same order as the strip, which is the same list of pages. They are
@@ -120,7 +144,7 @@ export function SideNav({ tab, onTab, collapsed, onCollapse, isAdmin }: Props) {
           className="nav-item"
           onClick={() => onTab('portfolio')}
           title="Portfolio"
-          style={navItem(tab === 'portfolio', false, collapsed)}
+          style={navItem(tab === 'portfolio', false)}
         >
           <ChartIcon size={16} />
           {label('Portfolio')}
@@ -129,31 +153,16 @@ export function SideNav({ tab, onTab, collapsed, onCollapse, isAdmin }: Props) {
           {...(AGENT_ENABLED
             ? { className: 'nav-item', onClick: () => onTab('agent'), title: 'AI agent' }
             : { title: 'AI agent — soon' })}
-          style={navItem(AGENT_ENABLED && tab === 'agent', !AGENT_ENABLED, collapsed)}
+          style={navItem(AGENT_ENABLED && tab === 'agent', !AGENT_ENABLED)}
         >
           <SparkIcon size={16} />
           {label('AI agent')}
-          {collapsed ? null : (
-            <span
-              className="mono"
-              style={{
-                marginLeft: 'auto',
-                fontSize: 'var(--fs-micro)',
-                letterSpacing: 'var(--tr-tag)',
-                border: '1px solid var(--line2)',
-                borderRadius: 'var(--r-full)',
-                padding: '2px 7px',
-              }}
-            >
-              {AGENT_ENABLED ? 'BETA' : 'SOON'}
-            </span>
-          )}
         </div>
         <div
           className="nav-item"
           onClick={() => onTab('notifications')}
           title="Alerts"
-          style={navItem(tab === 'notifications', false, collapsed)}
+          style={navItem(tab === 'notifications', false)}
         >
           <BellIcon size={16} />
           {label('Alerts')}
@@ -163,40 +172,44 @@ export function SideNav({ tab, onTab, collapsed, onCollapse, isAdmin }: Props) {
             className="nav-item"
             onClick={() => onTab('admin')}
             title="Admin"
-            style={navItem(tab === 'admin', false, collapsed)}
+            style={navItem(tab === 'admin', false)}
           >
             <SlidersIcon size={16} />
             {label('Admin')}
           </div>
         ) : null}
-        <div
-          className="nav-collapse"
-          onClick={() => onCollapse(!collapsed)}
-          title={collapsed ? 'Expand' : 'Collapse'}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: 'var(--h-sm)',
-            borderRadius: 'var(--r-sm)',
-            border: '1px solid var(--line)',
-            color: 'var(--mut)',
-            cursor: 'pointer',
-            userSelect: 'none',
-            marginTop: 6,
-          }}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            {...ICON}
-            style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}
-          >
-            <path d="M11 17l-5-5 5-5" />
-            <path d="M18 17l-5-5 5-5" />
-          </svg>
-        </div>
+
+        {/* The chat's own navigation, in the rail beside the pages — which is
+            where the design puts it, and where it stops being two pills
+            floating over a transcript. Only while the chat is the open tab:
+            a New chat button on the alerts page is a button about somewhere
+            else. */}
+        {chat ? (
+          <>
+            <div className="rail-rule" />
+            <button type="button" className="rail-new" onClick={chat.onNew}>
+              <PlusIcon size={15} />
+              New chat
+            </button>
+            {chat.conversations.length > 0 ? (
+              <>
+                <div className="rail-eyebrow mono">HISTORY</div>
+                {chat.conversations.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="rail-history ph-mask"
+                    data-active={c.active}
+                    onClick={() => chat.onOpen(c.id)}
+                  >
+                    <span className="rail-history-title">{c.title}</span>
+                    <span className="rail-history-when mono">{ago(c.at)}</span>
+                  </button>
+                ))}
+              </>
+            ) : null}
+          </>
+        ) : null}
       </div>
     </>
   );

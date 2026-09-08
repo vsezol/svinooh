@@ -553,7 +553,7 @@
   background: none;
   color: var(--text);
   font-family: inherit;
-  font-size: var(--fs-note);
+  font-size: var(--fs-control);
   font-weight: var(--fw-bold);
   cursor: pointer;
   transition: border-color 0.15s ease;

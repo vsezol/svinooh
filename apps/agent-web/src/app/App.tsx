@@ -115,6 +115,8 @@ export function App(props: AppProps) {
     signedIn = false,
     demoConversation,
     demoHistoryList,
+    onConversations,
+    control,
     onToggleTheme,
   } = props;
   const demo = demoConversation != null;
@@ -296,6 +298,20 @@ export function App(props: AppProps) {
     setHistoryOpen(false);
   }, []);
 
+  // What the host's rail draws, whenever it changes. Published rather than
+  // handed over: the conversations are still this component's, and a rail that
+  // owned them would be a second copy of the same list.
+  useEffect(() => {
+    onConversations?.(
+      conversations.map((c) => ({
+        id: c.id,
+        title: c.title,
+        at: c.at,
+        active: c.id === active.id,
+      })),
+    );
+  }, [conversations, active.id, onConversations]);
+
   const selectConversation = useCallback(
     (id: string) => {
       const found = conversations.find((c) => c.id === id);
@@ -307,6 +323,14 @@ export function App(props: AppProps) {
     },
     [conversations],
   );
+
+  // The handle the host holds. Assigned rather than returned, because mount()
+  // has already returned by the time this component exists.
+  useEffect(() => {
+    if (!control) return;
+    control.newChat = newChat;
+    control.openConversation = selectConversation;
+  });
 
   const pickPortfolio = useCallback((nextSlug: string) => {
     setSlug(nextSlug);
@@ -442,32 +466,12 @@ export function App(props: AppProps) {
           </Rail>
         ) : null}
         <div className="sv-a-main">
-          {variant === 'embedded' || portfolio ? (
-            // Embedded, the host's header already says which portfolio this is
-            // — and says it for the whole app, not just this tab. A second
-            // switcher under it was one more thing to keep in step and a row of
-            // screen spent restating the row above. Standalone has no such
-            // header, so the chip is the only place that says it.
+          {/* Standalone only. Embedded, the host draws the portfolio in its
+              header and New chat and History in its rail — see the mount
+              handle — so a row here would be the third place saying it. */}
+          {variant === 'standalone' && portfolio ? (
             <div className="sv-a-topbar" data-variant={variant}>
-              {variant === 'embedded' ? null : (
-                <GroundingChip portfolio={portfolio} onClick={() => setSwitcherOpen(true)} />
-              )}
-              {variant === 'embedded' ? (
-                <div className="sv-a-topbar-actions">
-                  <button type="button" className="ui-btn" data-variant="soft" data-size="sm" onClick={newChat}>
-                    New chat
-                  </button>
-                  <button
-                    type="button"
-                    className="ui-btn"
-                    data-variant="soft"
-                    data-size="sm"
-                    onClick={() => setHistoryOpen(true)}
-                  >
-                    History
-                  </button>
-                </div>
-              ) : null}
+              <GroundingChip portfolio={portfolio} onClick={() => setSwitcherOpen(true)} />
             </div>
           ) : null}
           <div className="sv-a-log" ref={logRef}>
