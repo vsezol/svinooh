@@ -74,13 +74,13 @@ class TestTheRolesWeHave:
         assert labelling().name == "labelling"
         assert labelling().answer_token_cap <= 256, "a label is a word, not a paragraph"
 
-    def test_the_two_roles_want_opposite_providers(self):
-        # Streaming made the reason visible: the reader now waits through the
-        # labelling call and nothing else before the first word appears. A
-        # label is ten tokens, so that wait is almost entirely the provider
-        # getting going — the thing "latency" sorts on and "throughput" does
-        # not. An answer is paragraphs, where it is the other way round.
-        assert labelling().provider_sort == "latency"
+    def test_each_role_carries_a_provider_preference_of_its_own(self):
+        # They agree today. That is a measurement rather than a coincidence:
+        # sorting the labelling model by latency is the obvious idea once
+        # streaming shows its call is the whole wait before the first word,
+        # and it was tried on production and did not help. The dial is per
+        # role so the next attempt is a dropdown rather than a deploy.
+        assert labelling().provider_sort == "throughput"
         assert answering().provider_sort == "throughput"
 
     def test_labelling_asks_for_no_thinking_at_all(self):

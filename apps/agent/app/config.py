@@ -287,10 +287,13 @@ def labelling() -> Role:
     A dozen output tokens each, in front of every answer, so this is where a
     cheaper and faster tier pays for itself.
 
-    It also ships preferring the provider that answers soonest rather than the
-    one that writes fastest. A label is ten tokens: almost none of its cost is
-    writing, so sorting by how quickly a provider gets going is sorting by the
-    only part of it a person waits through.
+    Its provider preference is its own, though it currently matches the
+    answering role's. Sorting by latency instead was the obvious idea once
+    streaming showed that this call is the whole wait before the first word --
+    a label is ten tokens, so almost none of its cost is writing -- and it was
+    measured on production and did not help. The dial stays because the
+    argument survives the measurement; the value stays where the evidence left
+    it.
 
     It ships asking for no thinking at all — the empty setting, not "none".
     Choosing between two words is not deliberation, and every named value is a
@@ -301,7 +304,7 @@ def labelling() -> Role:
     return _role(
         "labelling", "ROUTER_", remote_config.current(),
         panel_keys=("routerModel", "routerReasoningEffort", "routerMaxTokens", "routerProviderSort"),
-        effort="", answer_token_cap=200, provider_sort="latency",
+        effort="", answer_token_cap=200, provider_sort="throughput",
     )
 
 
