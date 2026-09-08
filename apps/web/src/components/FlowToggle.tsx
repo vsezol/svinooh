@@ -19,14 +19,16 @@ import { InfoTip, Switch, Tag } from '../ui';
 export function FlowToggle({
   basis,
   onChange,
-  /** When transfer coverage starts; null — none, and the switch cannot help yet */
+  /**
+   * When transfer coverage starts. Never null in practice — the page does not
+   * render this at all until every wallet in scope has been read, because a
+   * switch that cannot change anything is worse than no switch.
+   */
   from,
-  disabled,
 }: {
   basis: PerformanceBasis;
   onChange: (basis: PerformanceBasis) => void;
   from: string | null;
-  disabled?: boolean;
 }) {
   const since = from
     ? new Date(from).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -36,7 +38,6 @@ export function FlowToggle({
     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
       <Switch
         on={basis === 'net-flows'}
-        disabled={disabled}
         onChange={(on) => onChange(on ? 'net-flows' : 'raw')}
         label="Account for deposits and withdrawals"
       />
@@ -44,7 +45,7 @@ export function FlowToggle({
         style={{
           fontSize: 'var(--fs-note)',
           fontWeight: 'var(--fw-medium)',
-          color: disabled ? 'var(--mut)' : 'var(--text)',
+          color: 'var(--text)',
           whiteSpace: 'nowrap',
         }}
       >

@@ -326,8 +326,13 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
 
   /**
    * Whether the corrected basis is on the table at all: the feature is built,
-   * the server has read this portfolio's transfers, and there is a chart to
-   * apply it to. Without coverage the switch would silently change nothing.
+   * and the server has read the transfers of EVERY wallet in scope.
+   *
+   * Nothing about it is shown until then — not a disabled switch, not a note.
+   * One wallet short and the corrected total would be wrong by whatever that
+   * wallet moved, so there is nothing to offer; a control that cannot act is
+   * furniture, and a greyed-out one is furniture that looks broken. It appears
+   * when it works.
    */
   const canNetFlows = FLOWS_ENABLED && (history?.data.flowsFrom ?? null) !== null;
   /**
@@ -805,14 +810,14 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
 
                 {/* The experimental switch, under the chart it changes rather
                     than crowded onto the row with the period buttons — it is a
-                    sentence long, and a phone has no width to spare up there */}
-                {FLOWS_ENABLED ? (
+                    sentence long, and a phone has no width to spare up there.
+                    Absent entirely until it can actually do something. */}
+                {canNetFlows ? (
                   <div style={{ marginTop: 12 }}>
                     <FlowToggle
                       basis={shownBasis}
                       onChange={chooseBasis}
                       from={history?.data.flowsFrom ?? null}
-                      disabled={!canNetFlows}
                     />
                   </div>
                 ) : null}
