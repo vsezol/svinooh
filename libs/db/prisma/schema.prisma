@@ -274,18 +274,30 @@ model Wallet {
   ///               portfolio does not wait out a slow interval to see it move
   nextScanAt      DateTime          @default(now())
   lastError       String?
-  /// How many scans in a row have come back suspiciously low without being
-  /// believed. A drop of more than a quarter has to survive a re-read and then
-  /// hold for several cycles before it is written, because sources return
+  /// How many scans in a row have said something we would not store.
+  ///
+  /// A move of more than a quarter in EITHER direction has to be corroborated
+  /// by a second reading that agrees with the first, because sources return
   /// partial data — TronGrid without staking, a page that rendered before its
   /// chains resolved — and on a chart that looks like a cliff that heals itself
-  /// an hour later.
+  /// an hour later. Until two readings agree, this counts the arguing.
+  ///
+  /// It counted falls alone until 2026-09-08, because rises were not doubted at
+  /// all — which let three other people's balances be written onto a $7
+  /// address, each accepted for pointing upwards, and then defended by the fall
+  /// side of this very counter.
+  ///
+  /// The COLUMN is still called lowReadings, and that is deliberate. Migrations
+  /// run in the api container at boot while the wallet service is already up on
+  /// the previous image, so renaming it would take that service down for the
+  /// length of a rollout — every query it makes names this column. The field is
+  /// what the code reads, so the field is what was corrected.
   ///
   /// Here rather than in the writer's memory, where it used to live. In memory
   /// it pinned that consumer to one process forever, and every redeploy silently
-  /// reset the count for every address — so a real fall could be argued about
+  /// reset the count for every address — so a real move could be argued about
   /// from scratch each time we shipped.
-  lowReadings     Int               @default(0)
+  unbelievedReadings Int            @default(0) @map("lowReadings")
   breakdown       Json?
   unpriced        Json?
   /// TRON only: the wallet's energy, bandwidth and outgoing delegations, as the

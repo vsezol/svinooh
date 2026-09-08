@@ -57,6 +57,8 @@ const INTERCEPT_SCRIPT = String.raw`(() => {
     // are dropped: the tab is reused between wallets, and one wallet's
     // positions filed under another's address would be a silent, serious lie.
     expect: null,
+    // The address the stored payloads were actually fetched for — see save()
+    forAddress: null,
     project_list: null,
     app_list: null,
     cache_balance_list: null,
@@ -66,6 +68,7 @@ const INTERCEPT_SCRIPT = String.raw`(() => {
   });
   window.__svinoohExpect = (address) => {
     state.expect = String(address || '').toLowerCase();
+    state.forAddress = null;
     state.project_list = state.app_list = state.cache_balance_list = null;
     state.lastApiAt = Date.now();
   };
@@ -82,7 +85,16 @@ const INTERCEPT_SCRIPT = String.raw`(() => {
     if (state.expect && String(url).toLowerCase().indexOf(state.expect) === -1) return;
     try {
       const body = JSON.parse(text);
-      if (body && body.error_code === 0 && 'data' in body) state[key] = body.data;
+      if (body && body.error_code === 0 && 'data' in body) {
+        state[key] = body.data;
+        // Whose payload this actually was, read out of the URL that fetched it
+        // rather than out of what we were hoping for. state.expect is null for
+        // the moment between a navigation committing and us setting it again,
+        // and in that window the check above waves everything through — so the
+        // scan verifies afterwards instead of trusting it was set in time.
+        const found = String(url).toLowerCase().match(/0x[0-9a-f]{40}/);
+        if (found) state.forAddress = found[0];
+      }
     } catch (e) {}
   };
 
@@ -116,7 +128,25 @@ interface Capture {
   project_list: DebankProject[] | null;
   app_list: AppListResponse | null;
   cache_balance_list: DebankToken[] | null;
+  /** Whose payloads these are, off the URL that fetched them — see save() */
+  forAddress: string | null;
 }
+
+/**
+ * Empties the header before we move to another profile.
+ *
+ * The tab is reused, and DeBank leaves the previous wallet's total in the
+ * header until its own render replaces it. `settledTotal` waits for the number
+ * to stop moving — and a number left over from the last wallet is not moving at
+ * all, so it reads as settled instantly and is returned as this address's.
+ *
+ * Blanking it turns that silence back into the "page has not started" case the
+ * settle loop already knows how to wait through: it never settles on zero.
+ */
+const CLEAR_TOTAL_SCRIPT = String.raw`(() => {
+  for (const el of document.querySelectorAll('[class*="HeaderInfo_totalAssetInner"]')) el.textContent = '';
+  return true;
+})()`;
 
 /**
  * Positions from the intercepted API payloads. Returns null when the page
@@ -397,6 +427,9 @@ async function scanEvmBrowserLocked(address: string, patient: boolean): Promise<
     await page.evaluate(`window.__svinoohExpect && window.__svinoohExpect(${JSON.stringify(address)})`);
 
     const hardLoad = async () => {
+      // Same reason as the soft path: until the new document commits, the old
+      // one is still what a selector finds and what the header reads
+      await page.evaluate(CLEAR_TOTAL_SCRIPT).catch(() => {});
       await page.goto(`https://debank.com/profile/${address}`, {
         waitUntil: 'domcontentloaded',
         timeout: gotoTimeoutMs,
@@ -411,6 +444,10 @@ async function scanEvmBrowserLocked(address: string, patient: boolean): Promise<
     if (firstLoad) {
       await hardLoad();
     } else {
+      // Before anything else: the header still holds the last wallet's total,
+      // and leaving it there is how one address's balance ends up filed under
+      // another's — see CLEAR_TOTAL_SCRIPT
+      await page.evaluate(CLEAR_TOTAL_SCRIPT).catch(() => {});
       // The same move a click makes: the app re-fetches for the new profile,
       // signing the requests itself, and the interceptor keeps the answers
       await page.evaluate(
@@ -447,10 +484,13 @@ async function scanEvmBrowserLocked(address: string, patient: boolean): Promise<
     // why there is no longer a fallback when it does not arrive.
     let captured: ScanPosition[] | null = null;
     let breakdown: Record<string, number> | undefined;
+    let capturedFor: string | null = null;
     try {
       await page.evaluate(UNFOLD_CHAINS_SCRIPT);
       await sleep(500);
-      captured = positionsFromCapture((await page.evaluate(READ_CAPTURE_SCRIPT)) as Capture | null);
+      const capture = (await page.evaluate(READ_CAPTURE_SCRIPT)) as Capture | null;
+      capturedFor = capture?.forAddress ?? null;
+      captured = positionsFromCapture(capture);
       const data = (await page.evaluate(EXTRACT_SCRIPT)) as ExtractedData;
       if (data.chains.length) {
         breakdown = {};
@@ -490,6 +530,26 @@ async function scanEvmBrowserLocked(address: string, patient: boolean): Promise<
     if (!captured && totalUsd > 0) {
       throw new ScanHold(
         `${address}: DeBank showed $${totalUsd.toFixed(2)} and never said what it is`,
+      );
+    }
+
+    /**
+     * Somebody else's wallet, read off the URL that fetched it.
+     *
+     * The interceptor drops payloads for the wrong address while it knows which
+     * address to want — but it does not know between a navigation committing
+     * and the scan telling it again, and anything landing in that window is
+     * kept unfiltered. This is the check that does not depend on the timing:
+     * whatever is about to be returned has to have been fetched for the address
+     * we were asked about.
+     *
+     * A hold, not a failure: the wallet keeps its last known value, and the
+     * next scan gets a fresh browser. On 2026-09-08 there was no such check and
+     * a $7 address was stored at $1,166,714.
+     */
+    if (capturedFor && capturedFor !== address.toLowerCase()) {
+      throw new ScanHold(
+        `${address}: the page answered for ${capturedFor} — refusing to file it here`,
       );
     }
 

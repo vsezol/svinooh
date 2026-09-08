@@ -7,6 +7,7 @@ export * from './slug';
 export * from './range';
 export * from './defi-facts';
 export * from './scan-hold';
+export * from './believe';
 export * from './semaphore';
 export * from './auth.guard';
 export * from './loki-logger';

@@ -176,7 +176,7 @@ export class SyncService {
           lastSyncedAt: now,
           nextScanAt,
           lastError: null,
-          lowReadings: 0,
+          unbelievedReadings: 0,
           breakdown: result.breakdown ?? {},
           unpriced: result.unpriced ?? [],
           // Only when this scan actually read them. A scan that skipped the
@@ -260,8 +260,8 @@ export class SyncService {
    * the backoff this case wanted anyway — a source arguing with itself is not
    * worth re-asking immediately.
    */
-  async noteLowReading(walletId: string, lowReadings: number): Promise<void> {
-    await this.prisma.wallet.update({ where: { id: walletId }, data: { lowReadings } });
+  async noteUnbelievedReading(walletId: string, unbelievedReadings: number): Promise<void> {
+    await this.prisma.wallet.update({ where: { id: walletId }, data: { unbelievedReadings } });
   }
 
   /**
