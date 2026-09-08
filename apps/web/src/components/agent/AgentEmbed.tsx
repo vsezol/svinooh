@@ -83,6 +83,23 @@ export function AgentEmbed({ widgetUrl, agentUrl, slug, token, portfolios }: Pro
   // which is what puts the field in the middle of nowhere. So while this tab
   // is mounted — it is mounted only while it is the open tab — the page is not
   // a scroller at all.
+  //
+  // That is necessary and not sufficient, and the sufficient part is not
+  // available. A keyboard on iOS does not shrink the page: the layout viewport
+  // keeps its height, only the visible part gets smaller, and Safari slides
+  // that window down to keep the focused field in it. Everything measured
+  // against the page slides off the top with it.
+  //
+  // `interactive-widget=resizes-content` is the declarative answer and Safari
+  // does not implement it. Measuring `visualViewport.height` and building the
+  // chat to that is the usual workaround, and it was tried here and made
+  // things worse: the number arrives late on Safari, so the chat resizes a
+  // beat after the keyboard and lands somewhere neither size fits. Same reason
+  // YouTube and VK let the page move.
+  //
+  // So the page is allowed to move, and only kept from scrolling twice. Safari
+  // lifts it to put the composer above the keyboard and puts it back on blur,
+  // which is at least a whole movement that reverses itself.
   useEffect(() => {
     const root = document.documentElement;
     root.classList.add('agent-open');

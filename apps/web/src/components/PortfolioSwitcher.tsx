@@ -51,7 +51,7 @@ export function PortfolioSwitcher({
     <Select
       // ph-mask: portfolio names are the owner's own words about their money —
       // session replay stores asterisks instead (see instrumentation-client.ts)
-      className="ph-mask"
+      className="ph-mask portfolio-switcher"
       label="Switch portfolio"
       value={currentSlug}
       onChange={(slug) => router.push(`/p/${slug}`)}
@@ -65,7 +65,10 @@ export function PortfolioSwitcher({
         background: 'transparent',
         fontSize: 'var(--fs-note)',
         fontWeight: 'var(--fw-bold)',
-        maxWidth: 180,
+        // Capped by the stylesheet instead: on a phone the header has to fit a
+        // wordmark, a toggle and an avatar beside this, and 180px of somebody's
+        // portfolio name is more than the row can spare.
+        minWidth: 0,
       }}
       footer={
         <MenuItem onClick={() => void createPortfolio()} disabled={creating}>
