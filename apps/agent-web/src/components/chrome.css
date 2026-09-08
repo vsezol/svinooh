@@ -28,13 +28,6 @@
   margin-left: auto;
 }
 
-.sv-a-c-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-
 .sv-a-c-logo {
   display: inline-flex;
   align-items: baseline;
@@ -64,18 +57,6 @@
   margin-left: 0.05em;
 }
 
-.sv-a-c-agent-pill {
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: var(--fw-medium);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--acc-text);
-  background: var(--acc-soft);
-  border-radius: var(--r-full);
-  padding: 3px 7px;
-}
-
 /* Which theme icon shows is decided in CSS off data-theme, not in JS: the
    attribute is set before first paint, a JS choice would flash on hydration.
    Dark is the themeless default, matching the host convention. */
@@ -100,9 +81,6 @@ body[data-theme='light'] .sv-a-c-on-light {
 /* At >=1024 the standalone screen shows the history rail; the header icon is
    the mobile way into history. */
 @media (min-width: 1024px) {
-  .sv-a-c-hide-desktop {
-    display: none;
-  }
 }
 
 /* ── shared small print ──────────────────────────────────────────────────── */
@@ -249,10 +227,26 @@ body[data-theme='light'] .sv-a-c-on-light {
 
 /* ── chips ───────────────────────────────────────────────────────────────── */
 
+/* One row that scrolls, not a block that wraps. Four openers wrapping to two
+   rows is a paragraph of suggestions above the box you are meant to type in;
+   one row says "here are some, swipe for more" and gives the rest back to the
+   conversation. */
 .sv-a-c-chips {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--sp-3);
+  overflow-x: auto;
+  padding: 0 14px 8px;
+  flex-shrink: 0;
+  scrollbar-width: none;
+}
+
+.sv-a-c-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.sv-a-c-chips .sv-a-c-chip {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .sv-a-c-chip {
@@ -651,11 +645,6 @@ body[data-theme='light'] .sv-a-c-on-light {
   max-width: 420px;
 }
 
-.sv-a-c-empty .sv-a-c-chips {
-  justify-content: center;
-  margin-top: 8px;
-  max-width: 460px;
-}
 
 .sv-a-c-pills {
   display: flex;
@@ -683,10 +672,64 @@ body[data-theme='light'] .sv-a-c-on-light {
   background: none;
 }
 
-.sv-a-c-header-inner {
+/* ───────── what a new chat opens with ───────── */
+
+.sv-a-c-intro {
+  text-align: center;
+  padding: 0 10px;
+}
+
+.sv-a-c-intro-head {
+  margin: 18px 0 0;
+  font-size: var(--fs-hero-sm);
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.sv-a-c-intro-sub {
+  /* Capped rather than full width: two short lines under a two-line heading
+     read as one thought, and a single long line reads as a disclaimer. */
+  max-width: 280px;
+  margin: 10px auto 0;
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  color: var(--mut);
+  text-wrap: pretty;
+}
+
+/* ───────── what the header carries here ───────── */
+
+/* The two chat actions, at the end of the tab strip: 30px targets that read as
+   marks rather than buttons, because the tab beside them is the loud thing. */
+.sv-a-c-tab-action {
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  height: 58px;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.sv-a-c-tab-action:hover {
+  color: var(--text);
+}
+
+/* Signed in, the account is a mark rather than a name: whose account it is has
+   never been in doubt for the person looking at it. */
+.sv-a-c-account {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--acc-soft);
+  border: 1px solid color-mix(in srgb, var(--acc) 40%, transparent);
+  color: var(--acc-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }

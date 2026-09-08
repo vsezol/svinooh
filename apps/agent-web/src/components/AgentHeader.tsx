@@ -1,12 +1,23 @@
-// The wordmark by its own path, not through the kit's barrel: the barrel
-// re-exports ButtonLink, which imports next/link — a dependency this app
-// does not have and does not need.
-import { Logo } from '@svinooh/ui/Logo';
+// By its own path, not through the kit's barrel: the barrel re-exports
+// ButtonLink, which imports next/link — a dependency this app does not have
+// and does not need.
+import { AppHeader } from '@svinooh/ui/AppHeader';
 
 import './chrome.css';
 
+/** The product's own address, which the other two tabs are pages of. */
+const PRODUCT = 'https://svinooh.com';
+
+const TABS = [
+  { key: 'ai', label: 'AI' },
+  { key: 'portfolio', label: 'Portfolio' },
+  { key: 'alerts', label: 'Alerts' },
+];
+
 interface Props {
   variant: 'embedded' | 'standalone';
+  /** True once the transcript has been scrolled — see AppHeader. */
+  collapsed?: boolean;
   signedIn: boolean;
   onToggleTheme?: () => void;
   onHistory: () => void;
@@ -27,6 +38,19 @@ const MOON = (
   </svg>
 );
 
+const PLUS = (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
+
+const ACCOUNT = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="8" r="4" />
+    <path d="M4 21a8 8 0 0 1 16 0" />
+  </svg>
+);
+
 const HISTORY = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M3.5 12a8.5 8.5 0 1 0 2.5-6L3.5 8.5" />
@@ -40,7 +64,15 @@ const HISTORY = (
  * sign-in); embedded contributes only the New chat / History button pair to a
  * bar the host App composes (the App renders the GroundingChip beside it).
  */
-export function AgentHeader({ variant, signedIn, onToggleTheme, onHistory, onNewChat, onSignIn }: Props) {
+export function AgentHeader({
+  variant,
+  collapsed,
+  signedIn,
+  onToggleTheme,
+  onHistory,
+  onNewChat,
+  onSignIn,
+}: Props) {
   if (variant === 'embedded') {
     return (
       <header className="sv-a-c-header" data-variant="embedded">
@@ -54,46 +86,57 @@ export function AgentHeader({ variant, signedIn, onToggleTheme, onHistory, onNew
     );
   }
 
+  // Standalone is the same app at another address, so it wears the same
+  // header the portfolio does: the kit's, with the same tabs, the same fold,
+  // the same everything. The other two tabs are pages on the product's own
+  // domain; this one is here.
   return (
-    <header className="app-header sv-a-c-header" data-variant="standalone">
-      <div className="shell sv-a-c-header-inner">
-      <Logo size={21} onClick={() => window.location.assign('/')} />
-      <span className="sv-a-c-agent-pill">Agent</span>
-        <div className="sv-a-c-header-actions">
-        {onToggleTheme ? (
-          <button
-            type="button"
-            className="ui-icon-btn"
-            data-variant="outline"
-            data-size="sm"
-            aria-label="Switch theme"
-            onClick={onToggleTheme}
-          >
-            {/* Both icons render; CSS shows one off data-theme so the first paint agrees with the theme. */}
-            <span className="sv-a-c-on-dark">{SUN}</span>
-            <span className="sv-a-c-on-light">{MOON}</span>
+    <AppHeader
+      tabs={TABS}
+      active="ai"
+      collapsed={collapsed}
+      onTab={(key) => {
+        if (key !== 'ai') window.location.assign(`${PRODUCT}/${key === 'portfolio' ? '' : 'alerts'}`);
+      }}
+      onLogo={() => window.location.assign(PRODUCT)}
+      brandActions={
+        <>
+          {onToggleTheme ? (
+            <button
+              type="button"
+              className="ui-icon-btn"
+              data-variant="outline"
+              data-size="sm"
+              aria-label="Switch theme"
+              onClick={onToggleTheme}
+            >
+              {/* Both render; CSS shows one off data-theme so the first paint
+                  agrees with the theme rather than correcting itself. */}
+              <span className="sv-a-c-on-dark">{SUN}</span>
+              <span className="sv-a-c-on-light">{MOON}</span>
+            </button>
+          ) : null}
+          {signedIn ? (
+            <span className="sv-a-c-account" aria-hidden="true">
+              {ACCOUNT}
+            </span>
+          ) : (
+            <button type="button" className="ui-btn" data-variant="accent" data-size="sm" onClick={onSignIn}>
+              Sign in
+            </button>
+          )}
+        </>
+      }
+      tabActions={
+        <>
+          <button type="button" className="sv-a-c-tab-action" aria-label="New chat" onClick={onNewChat}>
+            {PLUS}
           </button>
-        ) : null}
-        <button
-          type="button"
-          className="ui-icon-btn sv-a-c-hide-desktop"
-          data-variant="outline"
-          data-size="sm"
-          aria-label="History"
-          onClick={onHistory}
-        >
-          {HISTORY}
-        </button>
-        <button type="button" className="ui-btn" data-variant="soft" data-size="sm" onClick={onNewChat}>
-          New chat
-        </button>
-        {!signedIn ? (
-          <button type="button" className="ui-btn" data-variant="accent" data-size="sm" onClick={onSignIn}>
-            Sign in
+          <button type="button" className="sv-a-c-tab-action" aria-label="History" onClick={onHistory}>
+            {HISTORY}
           </button>
-        ) : null}
-        </div>
-      </div>
-    </header>
+        </>
+      }
+    />
   );
 }

@@ -1,31 +1,17 @@
-import type { PortfolioRef } from '../app/types';
-import { OpenerChips } from './OpenerChips';
+import { AgentIntro } from './AgentIntro';
 
-interface Props {
-  portfolio?: PortfolioRef;
-  meta?: string;
-  chips: string[];
-  onPick: (text: string) => void;
-}
-
-/** The empty log of a grounded chat: what to ask, about what. */
-export function EmptyGrounded({ portfolio, meta, chips, onPick }: Props) {
-  // The host may know sync freshness the ref does not carry; its meta wins.
-  const derived = portfolio
-    ? [
-        portfolio.wallets != null ? `${portfolio.wallets} wallets` : null,
-        portfolio.totalUsd != null ? '$' + Math.round(portfolio.totalUsd).toLocaleString('en-US') : null,
-      ]
-        .filter(Boolean)
-        .join(' · ')
-    : '';
-  const line = meta ?? (derived || undefined);
-
-  return (
-    <div className="sv-a-c-empty">
-      <h2 className="sv-a-c-empty-title">Ask about {portfolio ? portfolio.name : 'your portfolio'}</h2>
-      {line ? <div className="sv-a-c-eyebrow">{line}</div> : null}
-      <OpenerChips chips={chips} onPick={onPick} />
-    </div>
-  );
+/**
+ * The empty log of a signed-in chat.
+ *
+ * The same opening as everybody else's. It used to name the portfolio and read
+ * out its wallet count and total — a header, a subtitle and a figure, before a
+ * word had been typed, restating what the portfolio tab already shows and
+ * framing the assistant as a thing that talks about one page.
+ *
+ * The openers moved out of here and up against the composer, where the design
+ * puts them: they are the fastest way to start typing, and they belong next to
+ * the place you type.
+ */
+export function EmptyGrounded() {
+  return <AgentIntro />;
 }

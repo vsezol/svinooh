@@ -56,6 +56,10 @@ body {
   /* The name of a page */
   --fs-display: 22px;
   /* The one figure a screen is actually about */
+  /* A heading that has to carry a screen on a phone without becoming the
+     screen. Between display and hero because 22px does not open anything and
+     30px on 375 leaves room for about three words. */
+  --fs-hero-sm: 24px;
   --fs-hero: 30px;
 
   /* ── Tracking ──────────────────────────────────────────────────────────
