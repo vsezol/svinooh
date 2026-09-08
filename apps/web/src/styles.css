@@ -647,3 +647,49 @@ html.agent-open body {
     max-width: 260px;
   }
 }
+
+/* ───────── the desktop frame ─────────
+   Header, then a rail against the left edge and the page beside it. On a phone
+   there is no rail and the page is the whole width, which is what it already
+   was — every number here is inside the breakpoint. */
+
+.app-body {
+  display: flex;
+  align-items: flex-start;
+}
+
+/* The page beside the rail. It carries the gutters the shell used to, and caps
+   its own content, because a chat wants 760px and a portfolio wants everything
+   it can get — one number here would be wrong for one of them. */
+.app-main {
+  flex: 1;
+  min-width: 0;
+  padding-top: clamp(20px, 4vw, 36px);
+  padding-bottom: 60px;
+  padding-left: calc(clamp(14px, 3.5vw, 28px) + env(safe-area-inset-left));
+  padding-right: calc(clamp(14px, 3.5vw, 28px) + env(safe-area-inset-right));
+}
+
+@media (min-width: 720px) {
+  .app-main {
+    padding-left: 32px;
+    padding-right: 32px;
+    /* Capped and centred in whatever the rail leaves, the way the design
+       centres its column inside its own main. Full-bleed reads as a mistake
+       on a wide monitor: a table stretched to 1900px is a table nobody can
+       follow across. */
+    max-width: 1120px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Everything the rail does that is about being a rail rather than a list of
+     links: the edge it sits against, the rule beside it, and the height that
+     rule has to run down. */
+  .side-rail {
+    align-self: stretch;
+    min-height: calc(100dvh - 57px - env(safe-area-inset-top));
+    border-right: 1px solid var(--line);
+    padding: 16px 12px;
+  }
+}
