@@ -11,6 +11,7 @@ import type {
   AddressLookupDto,
   AlertSettingsDto,
   Chain,
+  FlowDto,
   HistoryDto,
   HistoryPointDto,
   HistoryRange,
@@ -34,8 +35,10 @@ import { config } from '../config';
 import { PrismaService } from '@svinooh/db';
 import { detectChain, normalizeAddress } from '../scanners/detect';
 import { CacheService } from '../cache/cache.service';
-import { RESERVED_SLUGS, setting, slugifyName, wordSlug } from '@svinooh/common';
+import { option, RESERVED_SLUGS, setting, slugifyName, wordSlug } from '@svinooh/common';
 import { PremiumService } from '../billing/premium.service';
+import { classify, toSignedFlows } from './flows';
+import { BASES, windowOf } from './performance';
 
 /**
  * A wallet as a portfolio holds it: the address and its readings, plus the
@@ -237,13 +240,55 @@ function toTimeGrid(points: Sample[], stepMs: number): Sample[] {
   return out;
 }
 
-const toPoints = (samples: Sample[]): HistoryPointDto[] =>
-  samples.map((s) => ({
+/**
+ * The readings, the corrected line beside them, and what the window did on
+ * either basis — one answer, so the toggle on the page is a choice between two
+ * things already in hand rather than a second request.
+ *
+ * `flowsFrom` is where the corrected line may begin. Before it there is no
+ * transfer coverage, so `adjustedUsd` is null there and the chart simply draws
+ * a shorter line — the same rule claimable and debt have always followed.
+ */
+function assemble(
+  range: HistoryRange,
+  samples: Sample[],
+  flows: FlowDto[],
+  flowsFrom: Date | null,
+): HistoryDto {
+  const signed = toSignedFlows(flows);
+  const adjusted = BASES['net-flows'].line(samples, signed);
+  const covered = flowsFrom?.getTime() ?? null;
+
+  const points: HistoryPointDto[] = samples.map((s, i) => ({
     t: new Date(s.t).toISOString(),
     usd: s.usd,
+    adjustedUsd: covered !== null && s.t >= covered ? round2(adjusted[i] ?? s.usd) : null,
     claimableUsd: s.claimable,
     debtUsd: s.debt,
   }));
+
+  // The headline figure answers the BUTTON, not the whole series: the series
+  // reaches back several windows so the chart has somewhere to scroll to, and
+  // "+0.42% · 24H" has to keep meaning the last 24 hours wherever the reader
+  // has scrolled off to.
+  const window = windowOf(samples, RANGES[range].windowMs);
+  const inWindow =
+    covered === null ? [] : signed.filter((f) => f.t >= covered);
+
+  return {
+    range,
+    points,
+    flows,
+    flowsFrom: flowsFrom?.toISOString() ?? null,
+    // With no coverage the corrected basis has nothing to correct, so it
+    // answers exactly what the raw one does rather than pretending to a
+    // precision it does not have
+    change: {
+      raw: BASES.raw.measure(window, []),
+      'net-flows': BASES['net-flows'].measure(window, inWindow),
+    },
+  };
+}
 
 /**
  * What a wallet is watched for until its owner says otherwise. The client shows
@@ -954,17 +999,86 @@ export class PortfolioService {
 
   async history(slug: string, range: HistoryRange, userId: string | null): Promise<HistoryDto> {
     const notBefore = await this.historyFloor(range, userId);
+    const held = await this.heldAddresses(slug);
+    const since = laterOf(windowStart(range), notBefore);
+    const [samples, moved] = await Promise.all([
+      this.reconstructPortfolioSeries(held, range, notBefore),
+      this.externalFlows(held, since),
+    ]);
+    return assemble(range, samples, moved.flows, moved.from);
+  }
+
+  /**
+   * Every address a portfolio holds, with the membership that holds it.
+   *
+   * The membership id rides along because a flow is drawn beside the wallet it
+   * moved through, and the page already knows wallets by that id — the address
+   * itself is what the transfers are keyed by, and the two have to be joined
+   * somewhere.
+   */
+  private async heldAddresses(
+    slug: string,
+  ): Promise<Array<{ chain: string; address: string; walletId: string }>> {
     const portfolio = await this.prisma.portfolio.findUnique({
       where: { slug },
-      include: { wallets: { select: { wallet: { select: { chain: true, address: true } } } } },
+      include: { wallets: { select: { id: true, wallet: { select: { chain: true, address: true } } } } },
     });
     if (!portfolio) throw new NotFoundException('Portfolio not found');
-    const points = await this.reconstructPortfolioSeries(
-      portfolio.wallets.map((m) => m.wallet),
-      range,
-      notBefore,
-    );
-    return { range, points };
+    return portfolio.wallets.map((m) => ({
+      chain: m.wallet.chain,
+      address: m.wallet.address,
+      walletId: m.id,
+    }));
+  }
+
+  /**
+   * Money that crossed this portfolio's edge, and since when we would know.
+   *
+   * The perimeter is the whole set of held addresses, which is what makes a
+   * move between two of somebody's own wallets internal here and a flow on
+   * either wallet's own chart — see walletHistory. Two portfolios holding the
+   * same address get different answers from the same rows, which is the reason
+   * none of this is stored.
+   *
+   * `from` is where coverage begins for the portfolio as a WHOLE: the latest of
+   * its addresses' own coverage, because a corrected total is only as complete
+   * as its least complete member. An address with no cursor row at all has no
+   * coverage, and that makes the portfolio's none.
+   */
+  private async externalFlows(
+    held: Array<{ chain: string; address: string; walletId: string }>,
+    since: Date | null,
+  ): Promise<{ flows: FlowDto[]; from: Date | null }> {
+    if (!held.length || option('flows.enabled') !== 'on') return { flows: [], from: null };
+
+    const where = held.map((h) => ({ chain: h.chain, address: h.address }));
+    const [transfers, cursors] = await Promise.all([
+      this.prisma.addressTransfer.findMany({
+        where: { OR: where, ...(since ? { minedAt: { gte: since } } : {}) },
+        orderBy: { minedAt: 'asc' },
+      }),
+      this.prisma.addressTransferCursor.findMany({
+        where: { OR: where },
+        select: { chain: true, address: true, coveredFrom: true },
+      }),
+    ]);
+
+    // One address without coverage leaves the whole portfolio without it: a
+    // total corrected for three wallets out of four is wrong by whatever the
+    // fourth moved, and silently so
+    let from: Date | null = null;
+    for (const h of held) {
+      const row = cursors.find((c) => c.chain === h.chain && c.address === h.address);
+      if (!row?.coveredFrom) return { flows: [], from: null };
+      if (from === null || row.coveredFrom > from) from = row.coveredFrom;
+    }
+
+    const perimeter = {
+      addresses: new Set(held.map((h) => `${h.chain}:${h.address.toLowerCase()}`)),
+      walletOf: new Map(held.map((h) => [`${h.chain}:${h.address.toLowerCase()}`, h.walletId])),
+    };
+    const flows = classify(transfers, perimeter, setting('flows.bridgeWindowMin') * 60_000);
+    return { flows, from };
   }
 
   /**
@@ -1001,7 +1115,7 @@ export class PortfolioService {
     pairs: Array<{ chain: string; address: string }>,
     range: HistoryRange,
     notBefore: Date | null,
-  ): Promise<HistoryPointDto[]> {
+  ): Promise<Sample[]> {
     if (!pairs.length) return [];
     const since = laterOf(windowStart(range), notBefore);
     const snaps = await this.prisma.addressSnapshot.findMany({
@@ -1115,7 +1229,7 @@ export class PortfolioService {
     // points.
     const grid = toTimeGrid(raw, GRID_STEP_MS[range]);
     const cap = RANGES[range].windowMs === null ? 220 : POINTS_PER_WINDOW * SCREENS;
-    return toPoints(downsample(grid, cap));
+    return downsample(grid, cap);
   }
 
   /**
@@ -1170,8 +1284,17 @@ export class PortfolioService {
     if (!held) throw new NotFoundException('Wallet not found');
     // By (chain, address): a wallet's own history shows the address's full past,
     // including the stretch recorded while it lived in another portfolio.
-    const points = await this.addressSeries(held.wallet.chain, held.wallet.address, range, notBefore);
-    return { range, points };
+    const { chain, address } = held.wallet;
+    const since = laterOf(windowStart(range), notBefore);
+    // The perimeter of one wallet's chart is that wallet. Money sent to another
+    // of the same portfolio's addresses did leave THIS one, so it is a flow
+    // here and not on the portfolio total — the two charts are about different
+    // things and are each right about their own.
+    const [samples, moved] = await Promise.all([
+      this.addressSeries(chain, address, range, notBefore),
+      this.externalFlows([{ chain, address, walletId }], since),
+    ]);
+    return assemble(range, samples, moved.flows, moved.from);
   }
 
   /**
@@ -1244,7 +1367,7 @@ export class PortfolioService {
     address: string,
     range: HistoryRange,
     notBefore: Date | null,
-  ): Promise<HistoryPointDto[]> {
+  ): Promise<Sample[]> {
     const { bucket } = RANGES[range];
     const since = laterOf(windowStart(range), notBefore);
 
@@ -1292,7 +1415,7 @@ export class PortfolioService {
     // spacing reads true.
     const grid = toTimeGrid(raw, GRID_STEP_MS[range]);
     const cap = RANGES[range].windowMs === null ? 220 : POINTS_PER_WINDOW * SCREENS;
-    return toPoints(downsample(grid, cap));
+    return downsample(grid, cap);
   }
 
   /**

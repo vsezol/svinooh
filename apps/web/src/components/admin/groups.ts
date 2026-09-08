@@ -15,6 +15,7 @@ export interface SettingGroup {
 const NAMED = [
   { key: 'source', label: 'Where balances come from' },
   { key: 'sync', label: 'How often wallet data is refreshed' },
+  { key: 'flows', label: 'Deposits and withdrawals (experimental)' },
   { key: 'billing', label: 'Svinooh.Pro: prices and the free plan' },
 ];
 
