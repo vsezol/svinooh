@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import type { HistoryRange, PerformanceBasis, PortfolioDto, WalletDto } from '@svinooh/shared';
+import type { HistoryRange, PortfolioDto, WalletDto } from '@svinooh/shared';
 import { Button, Card, Checkbox, Eyebrow, Input, Segmented, Spinner, TagButton } from '../ui';
 import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AlertSettings } from '../components/AlertSettings';
@@ -16,8 +16,6 @@ import { MetricCards } from '../components/MetricCards';
 import { GoPublicModal, VisibilityCard } from '../components/PortfolioVisibility';
 import { PortfolioName } from '../components/PortfolioName';
 import { PortfolioSwitcher } from '../components/PortfolioSwitcher';
-import { FlowToggle } from '../components/FlowToggle';
-import { Transactions } from '../components/Transactions';
 import { ScopeSelect } from '../components/ScopeSelect';
 import { ShareButton } from '../components/ShareButton';
 import { MobileTabs, tabsFor, tabIndex, usePager } from '../components/MobileTabs';
@@ -33,7 +31,6 @@ import { useAuth } from '../lib/auth';
 import { isPaywall } from '../lib/billing';
 import { pendingClaim } from '../lib/claim';
 import { debtTotals, rewardsTotals } from '../lib/blocks';
-import { changeLabel, FLOWS_ENABLED, legLabel, readBasis, writeBasis } from '../lib/flows';
 import { fmtUsd, portfolioLabel, walletName } from '../lib/format';
 import {
   cachedHistory,
@@ -43,7 +40,7 @@ import {
   type History,
 } from '../lib/history';
 import { AGENT_ENABLED, AGENT_URL, AGENT_WIDGET_URL } from '../lib/agent';
-import { PERIODS } from '../lib/ranges';
+import { PERIODS, WINDOW_MS } from '../lib/ranges';
 
 /**
  * The admin panel, fetched only when an admin opens its tab.
@@ -62,6 +59,21 @@ const AdminPanel = dynamic(() => import('../components/admin/AdminPanel'), {
     </div>
   ),
 });
+
+/** What the window moved by, in money and in percent: "+$432 (+0.51%)" */
+interface Change {
+  chg: number;
+  pct: number;
+  up: boolean;
+}
+
+const changeLabel = (change: Change): string =>
+  (change.up ? '+' : '−') +
+  fmtUsd(Math.abs(change.chg), 0) +
+  ' (' +
+  (change.up ? '+' : '') +
+  change.pct.toFixed(2) +
+  '%)';
 
 /**
  * `viewerId` is not used in the request — it's a reload trigger. The bot's
@@ -189,16 +201,6 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   const [sideCollapsed, setSideCollapsed] = useState(false);
   const [scope, setScope] = useState<string>('all');
   const [period, setPeriod] = useState<HistoryRange>('24h');
-  /**
-   * Which question the headline figure and the chart are answering — see
-   * FlowToggle. Remembered per portfolio in this browser, and seeded once per
-   * portfolio for the same reason hideSmall is: a choice made just now must not
-   * be undone by a load that was already in the air.
-   */
-  const [basis, setBasis] = useState<PerformanceBasis>('raw');
-  const basisSeeded = useRef<string | null>(null);
-  /** What is shown UNDER the chart: the wallets, or the money that moved */
-  const [pane, setPane] = useState<'holdings' | 'transactions'>('holdings');
   const [hideSmall, setHideSmall] = useState(false);
   // The saved preference, applied once per portfolio load. Seeding rather than
   // deriving keeps a toggle made just now from being undone by a reload that
@@ -264,23 +266,6 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
     }
   }, [data, slug]);
 
-  useEffect(() => {
-    if (basisSeeded.current === slug) return;
-    basisSeeded.current = slug;
-    setBasis(FLOWS_ENABLED ? readBasis(slug) : 'raw');
-    // A portfolio's transactions are not the one just left behind
-    setPane('holdings');
-  }, [slug]);
-
-  const chooseBasis = useCallback(
-    (next: PerformanceBasis) => {
-      setBasis(next);
-      writeBasis(slug, next);
-      track('flow_basis_changed', { basis: next });
-    },
-    [slug],
-  );
-
   /**
    * A share link doing its job: somebody who does not own this portfolio is
    * looking at it. Counted once per page, and only three seconds in — an owner
@@ -314,68 +299,23 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   const rewards = useMemo(() => rewardsTotals(scoped), [scoped]);
   const debt = useMemo(() => debtTotals(scoped), [scoped]);
 
-  /**
-   * What to call the wallet a flow moved through. The owner's own label where
-   * there is one, and the network default otherwise — exactly what the wallet
-   * rows show, because the API only ever sends a label to the owner.
-   */
-  const walletLabels = useMemo(
-    () => new Map(wallets.map((w) => [w.id, walletName(w.label, w.chain)])),
-    [wallets],
-  );
-
-  /**
-   * Whether the corrected basis is on the table at all: the feature is built,
-   * the server has read this portfolio's transfers, and there is a chart to
-   * apply it to. Without coverage the switch would silently change nothing.
-   */
-  const canNetFlows = FLOWS_ENABLED && (history?.data.flowsFrom ?? null) !== null;
-  /**
-   * The basis actually in force. Falls back to raw whenever the corrected one
-   * has nothing behind it — a toggle left on from a portfolio that had coverage
-   * must not leave a second one drawing a line it does not have.
-   */
-  const shownBasis: PerformanceBasis = canNetFlows && basis === 'net-flows' ? 'net-flows' : 'raw';
-
-  /**
-   * The line under the headline figure: the readings, or the readings with the
-   * money that was moved in and out taken back out of them.
-   *
-   * The corrected series is shorter wherever transfer coverage starts later
-   * than the readings do — `seriesOf` cuts it to where it begins rather than
-   * drawing zeroes through a stretch nobody looked at.
-   */
-  const line = shownBasis === 'net-flows' ? history?.data.adjusted : history?.data.total;
-
-  // What the window did, as the server measured it on the basis in force. It
-  // answers the BUTTON, not the whole series: "+0.42% · 24H" means the last 24
-  // hours wherever the chart has been scrolled to.
-  const change = history?.data.change?.[shownBasis] ?? null;
-
-  /**
-   * The flows drawn on the chart. Only on the corrected basis: on the raw one
-   * the line already contains the steps these would be pointing at, and marking
-   * them there would be annotating a chart that has not been corrected.
-   */
-  const marks = useMemo(() => {
-    if (shownBasis !== 'net-flows' || !history) return [];
-    return history.data.flows.map((flow) => ({
-      t: Date.parse(flow.t),
-      direction: flow.direction,
-      lines: [
-        (flow.direction === 'in' ? 'Deposit ' : 'Withdrawal ') +
-          (flow.usd === null ? '(unpriced)' : fmtUsd(flow.usd, 0)),
-        flow.legs.map(legLabel).join(' + '),
-        new Date(flow.t).toLocaleString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-        }),
-      ],
-    }));
-  }, [history, shownBasis]);
+  // The series reaches back several windows so the chart has somewhere to
+  // scroll to, but this line answers the button: it starts at the first reading
+  // inside the chosen window, not at the oldest one that came with it. Scrolling
+  // the chart does not move it — "+0.42% · 24H" means the last 24 hours wherever
+  // you have wandered off to.
+  const change = useMemo(() => {
+    if (!history || history.data.total.values.length < 2) return null;
+    const { values, times } = history.data.total;
+    const window = WINDOW_MS[history.period];
+    const opens = window === null ? -Infinity : times[times.length - 1] - window;
+    const at = times.findIndex((t) => t >= opens);
+    const first = values[at < 0 || at > values.length - 2 ? 0 : at];
+    const last = values[values.length - 1];
+    const chg = last - first;
+    const pct = first ? (chg / first) * 100 : 0;
+    return { chg, pct, up: chg >= 0 };
+  }, [history]);
 
   // Above the loading states, where the hooks all have to be: the strip only
   // needs which tab is open, which is state rather than anything fetched
@@ -731,14 +671,8 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
                       style={{ fontWeight: 'var(--fw-medium)', fontSize: 'clamp(var(--fs-hero),6vw,44px)', letterSpacing: '-0.02em', lineHeight: 1 }}
                     />
                     {change ? (
-                      <div className="mono ph-mask" style={{ fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-medium)', color: change.usd >= 0 ? 'var(--up)' : 'var(--down)' }}>
+                      <div className="mono ph-mask" style={{ fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-medium)', color: change.up ? 'var(--up)' : 'var(--down)' }}>
                         {`${changeLabel(change)} · ${drawn.toUpperCase()}`}
-                        {/* Which question this figure is answering. Only when
-                            it is the unusual one — the raw basis is what the
-                            page has always shown and needs no caption. */}
-                        {shownBasis === 'net-flows' ? (
-                          <span style={{ color: 'var(--mut)' }}> · NET OF FLOWS</span>
-                        ) : null}
                       </div>
                     ) : null}
                   </div>
@@ -795,27 +729,12 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
 
                 <div style={{ marginTop: 14 }}>
                   <AreaChart
-                    values={line?.values ?? []}
-                    times={line?.times ?? []}
+                    values={history?.data.total.values ?? []}
+                    times={history?.data.total.times ?? []}
                     period={drawn}
                     height="clamp(160px,26vw,240px)"
-                    marks={marks}
                   />
                 </div>
-
-                {/* The experimental switch, under the chart it changes rather
-                    than crowded onto the row with the period buttons — it is a
-                    sentence long, and a phone has no width to spare up there */}
-                {FLOWS_ENABLED ? (
-                  <div style={{ marginTop: 12 }}>
-                    <FlowToggle
-                      basis={shownBasis}
-                      onChange={chooseBasis}
-                      from={history?.data.flowsFrom ?? null}
-                      disabled={!canNetFlows}
-                    />
-                  </div>
-                ) : null}
               </>
             ) : null}
 
@@ -827,38 +746,6 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
               period={drawn}
             />
 
-            {/* What is under the chart: the wallets, or the money that moved.
-                Sub-tabs rather than a fifth entry in the rail, so the headline
-                figure and the chart the transactions explain stay on screen
-                while you read them. The period buttons above drive both — the
-                list is the same movements the chart marks. */}
-            {FLOWS_ENABLED && canNetFlows ? (
-              <div style={{ marginTop: 26 }}>
-                <Segmented
-                  label="What to show under the chart"
-                  items={[
-                    { key: 'holdings', label: 'Portfolio' },
-                    { key: 'transactions', label: 'Transactions' },
-                  ]}
-                  value={pane}
-                  onChange={(next) => {
-                    setPane(next);
-                    if (next === 'transactions') track('transactions_opened', {});
-                  }}
-                />
-              </div>
-            ) : null}
-
-            {pane === 'transactions' && FLOWS_ENABLED && canNetFlows ? (
-              <Transactions
-                flows={history?.data.flows ?? []}
-                from={history?.data.flowsFrom ?? null}
-                period={drawn}
-                loading={history === null}
-                labels={walletLabels}
-              />
-            ) : (
-            <>
             {/* add wallet */}
             {canAdd ? (
               <div style={{ marginTop: 26 }}>
@@ -928,8 +815,6 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
             {isOwner && me && me.portfolios.length > 1 ? (
               <DeletePortfolio slug={slug} portfolios={me.portfolios} />
             ) : null}
-            </>
-            )}
             </div>
 
             {isOwner ? (

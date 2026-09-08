@@ -1,11 +1,4 @@
-import type {
-  ChangeDto,
-  FlowDto,
-  HistoryDto,
-  HistoryPointDto,
-  HistoryRange,
-  PerformanceBasis,
-} from '@svinooh/shared';
+import type { HistoryDto, HistoryPointDto, HistoryRange } from '@svinooh/shared';
 import { api, whenNetworkIdle } from './api';
 
 /** A line ready to be drawn: values and the moments they were read at */
@@ -45,39 +38,14 @@ export function seriesOf(
   return { values, times };
 }
 
-/** What one request answers with, for one scope and one period */
+/** The three lines one request answers with, for one scope and one period */
 export interface History {
   total: Series;
-  /**
-   * The total with deposits and withdrawals netted off. Shorter than `total`
-   * where transfer coverage starts later than the readings do — `seriesOf`
-   * already draws these from where they begin rather than from a null.
-   */
-  adjusted: Series;
   claimable: Series;
   debt: Series;
-  /** The movements the marks on the chart are, inside the fetched span */
-  flows: FlowDto[];
-  /** When transfer coverage starts; null — none, and `adjusted` is empty */
-  flowsFrom: string | null;
-  /**
-   * What the window did on each basis. Answered by the server, so the toggle
-   * is a choice between two things already in hand.
-   */
-  change: Record<PerformanceBasis, ChangeDto>;
 }
 
-const NO_CHANGE: ChangeDto = { usd: 0, pct: null };
-
-export const EMPTY_HISTORY: History = {
-  total: EMPTY_SERIES,
-  adjusted: EMPTY_SERIES,
-  claimable: EMPTY_SERIES,
-  debt: EMPTY_SERIES,
-  flows: [],
-  flowsFrom: null,
-  change: { raw: NO_CHANGE, 'net-flows': NO_CHANGE },
-};
+export const EMPTY_HISTORY: History = { total: EMPTY_SERIES, claimable: EMPTY_SERIES, debt: EMPTY_SERIES };
 
 /**
  * Every period that has been fetched, for as long as the tab is open.
@@ -163,15 +131,8 @@ export function loadHistory(
     .then((h) => {
       const data: History = {
         total: seriesOf(h.points, (p) => p.usd),
-        adjusted: seriesOf(h.points, (p) => p.adjustedUsd),
         claimable: seriesOf(h.points, (p) => p.claimableUsd),
         debt: seriesOf(h.points, (p) => p.debtUsd),
-        flows: h.flows ?? [],
-        flowsFrom: h.flowsFrom ?? null,
-        // An API that predates the two bases sends neither, and during a
-        // rollout that is every answer for a while — the page then reads
-        // exactly as it did before, on the raw basis with nothing to switch to
-        change: h.change ?? { raw: NO_CHANGE, 'net-flows': NO_CHANGE },
       };
       keep(key, { stamp, data });
       return data;
