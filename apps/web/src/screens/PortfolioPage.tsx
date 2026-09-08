@@ -19,7 +19,7 @@ import { PortfolioName } from '../components/PortfolioName';
 import { PortfolioSwitcher } from '../components/PortfolioSwitcher';
 import { ScopeSelect } from '../components/ScopeSelect';
 import { ShareButton } from '../components/ShareButton';
-import { homeTab, tabsFor, tabIndex, usePager } from '../components/tabs';
+import { TAB_PARAM, homeTab, tabFromUrl, tabsFor, tabIndex, usePager } from '../components/tabs';
 import { usePaywall } from '../components/Paywall';
 import { AgentEmbed } from '../components/agent/AgentEmbed';
 import { SideNav, type Tab } from '../components/SideNav';
@@ -196,10 +196,31 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   useEffect(() => setSlug(routeSlug), [routeSlug]);
   const { data, error, reload, patch } = usePortfolio(slug, me?.id ?? null);
 
-  // The assistant is where a visit starts now: it answers the question a
-  // portfolio page makes you go and look up, and it can reach the rest of the
-  // app on your behalf. The portfolio is what it talks about.
-  const [tab, setTab] = useState<Tab>(homeTab);
+  const [tab, setTabState] = useState<Tab>(homeTab);
+
+  /**
+   * The open tab, in the address bar.
+   *
+   * A tab used to be state and nothing else: reload and you were back on the
+   * portfolio, and there was no way to send somebody the alerts page or to go
+   * back to it. It is a `?tab=` rather than a path segment because the page is
+   * still the portfolio — these are its sections, and a link to one should
+   * still be a link to this portfolio.
+   *
+   * Replaced rather than pushed: flicking across three tabs should not put
+   * three entries behind the back button, which on a phone is a swipe people
+   * make by accident.
+   */
+  const setTab = useCallback(
+    (next: Tab) => {
+      setTabState(next);
+      const url = new URL(window.location.href);
+      if (next === homeTab()) url.searchParams.delete(TAB_PARAM);
+      else url.searchParams.set(TAB_PARAM, next);
+      window.history.replaceState(null, '', url);
+    },
+    [],
+  );
   // Collapsed is the rail's own business and nobody else's — it survives a tab
   // change and nothing else needs to know
   const [sideCollapsed, setSideCollapsed] = useState(false);
@@ -327,6 +348,18 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   // admin page and gains it a moment later — which is the same thing that
   // happens to the whole owner view, and for the same reason
   const isAdmin = me?.isAdmin === true;
+
+  /**
+   * A link that names a tab opens it.
+   *
+   * After the account has loaded, not before: whether Admin is a tab at all
+   * depends on who is asking, and a link naming one you may not have should
+   * leave you where you were rather than on a page that is not there.
+   */
+  useEffect(() => {
+    const asked = tabFromUrl(new URLSearchParams(window.location.search).get(TAB_PARAM), isAdmin);
+    if (asked) setTabState(asked);
+  }, [isAdmin]);
   const tabs = tabsFor(isAdmin);
   const pager = usePager(tabIndex(tab, isAdmin), (index) => setTab(tabs[index].key), tabs.length);
 
@@ -584,16 +617,12 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
       />
 
 
-      <div
-        className="shell"
-        style={{
-          paddingTop: 'clamp(20px,4vw,36px)',
-          paddingBottom: 60,
-          display: 'flex',
-          gap: 'clamp(18px,3vw,30px)',
-          alignItems: 'flex-start',
-        }}
-      >
+      {/* The frame: a rail against the left edge and the page beside it, both
+          starting under the header. Not a centred column with a rail floating
+          inside it — the design draws the rail as part of the window's own
+          chrome, with a rule down its right side, and a rule that stops short
+          of the edges is a box rather than a boundary. */}
+      <div className="app-body">
         {isOwner ? (
           <SideNav
             tab={tab}
@@ -607,7 +636,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
         {/* On a phone both pages ride one strip the finger drags between them;
             above the breakpoint the strip flattens and only the open one is
             rendered — see .pager */}
-        <div className="pager-window" style={{ flex: 1, minWidth: 0 }} {...pager.handlers}>
+        <div className="app-main pager-window" {...pager.handlers}>
           <div className="pager" style={pager.style} data-moving={pager.moving}>
             {/* ORDER IS THE CONTRACT. These panes ride one strip that the pager
                 slides by index, so pane N must be tabsFor()[N] — the strip
@@ -619,20 +648,6 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
 
                 One pane per entry, too: a page the strip does not list is a
                 page nothing can reach. See AGENT_ENABLED and isAdmin. */}
-            {isOwner && AGENT_ENABLED ? (
-              <div className="pane" data-active={activeTab === 'agent'}>
-                {activeTab === 'agent' ? (
-                  <AgentEmbed
-                    widgetUrl={AGENT_WIDGET_URL}
-                    agentUrl={AGENT_URL}
-                    slug={slug}
-                    token={tokenStore.get() ?? undefined}
-                    portfolios={me?.portfolios}
-                  />
-                ) : null}
-              </div>
-            ) : null}
-
             <div className="pane" data-active={activeTab === 'portfolio'}>
             {/* total */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
@@ -805,6 +820,20 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
               <DeletePortfolio slug={slug} portfolios={me.portfolios} />
             ) : null}
             </div>
+
+            {isOwner && AGENT_ENABLED ? (
+              <div className="pane" data-active={activeTab === 'agent'}>
+                {activeTab === 'agent' ? (
+                  <AgentEmbed
+                    widgetUrl={AGENT_WIDGET_URL}
+                    agentUrl={AGENT_URL}
+                    slug={slug}
+                    token={tokenStore.get() ?? undefined}
+                    portfolios={me?.portfolios}
+                  />
+                ) : null}
+              </div>
+            ) : null}
 
             {isOwner ? (
               <div className="pane" data-active={activeTab === 'notifications'}>

@@ -103,15 +103,28 @@ export function SideNav({ tab, onTab, collapsed, onCollapse, isAdmin }: Props) {
           width: collapsed ? 46 : 232,
           flexShrink: 0,
           position: 'sticky',
-          top: 78,
+          // Directly under the header, which is 56px and a hairline. It used to
+          // clear a taller one and sit inside a padded shell; now it is against
+          // the window's own edge and the rule down its side has to start where
+          // the header's does.
+          top: 'calc(57px + env(safe-area-inset-top))',
           flexDirection: 'column',
           gap: 'var(--sp-2)',
           transition: 'width 0.2s ease',
         }}
       >
         {/* Same order as the strip, which is the same list of pages. They are
-            two drawings of one navigation and a reader moving between a phone
+            two drawings of one navigation, and a reader moving between a phone
             and a desktop should not have to re-learn where things are. */}
+        <div
+          className="nav-item"
+          onClick={() => onTab('portfolio')}
+          title="Portfolio"
+          style={navItem(tab === 'portfolio', false, collapsed)}
+        >
+          <ChartIcon size={16} />
+          {label('Portfolio')}
+        </div>
         <div
           {...(AGENT_ENABLED
             ? { className: 'nav-item', onClick: () => onTab('agent'), title: 'AI agent' }
@@ -135,15 +148,6 @@ export function SideNav({ tab, onTab, collapsed, onCollapse, isAdmin }: Props) {
               {AGENT_ENABLED ? 'BETA' : 'SOON'}
             </span>
           )}
-        </div>
-        <div
-          className="nav-item"
-          onClick={() => onTab('portfolio')}
-          title="Portfolio"
-          style={navItem(tab === 'portfolio', false, collapsed)}
-        >
-          <ChartIcon size={16} />
-          {label('Portfolio')}
         </div>
         <div
           className="nav-item"
