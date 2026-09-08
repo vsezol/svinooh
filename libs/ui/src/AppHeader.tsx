@@ -104,7 +104,8 @@ export function AppHeader({
       {/* Folded, the wordmark row is gone and its mark rides in the strip. */}
       {folded ? null : (
         <div className="app-brand">
-          <Logo size={19} onClick={onLogo} />
+          {/* Sized by the stylesheet: 19px on a phone, 21 where there is room. */}
+          <Logo size={null} onClick={onLogo} />
           {brandActions ? <div className="app-brand-actions">{brandActions}</div> : null}
         </div>
       )}

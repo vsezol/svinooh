@@ -44,11 +44,13 @@ const navItem = (active: boolean, disabled: boolean, collapsed: boolean): CSSPro
   display: 'flex',
   alignItems: 'center',
   justifyContent: collapsed ? 'center' : 'flex-start',
-  gap: collapsed ? 0 : 'var(--sp-4)',
+  gap: collapsed ? 0 : 10,
   padding: collapsed ? '11px 0' : '10px 13px',
-  borderRadius: 'var(--r-sm)',
+  borderRadius: 10,
   fontWeight: 'var(--fw-bold)',
-  fontSize: 'var(--fs-body)',
+  // The strip's size, because this is the same list of pages said the other
+  // way round — the phone reads it across the top, the desktop down the side.
+  fontSize: 'var(--fs-nav)',
   cursor: disabled ? 'default' : 'pointer',
   userSelect: 'none',
   color: active ? 'var(--acc-text)' : 'var(--mut)',
@@ -98,7 +100,7 @@ export function SideNav({ tab, onTab, collapsed, onCollapse, isAdmin }: Props) {
       <div
         className="side-rail"
         style={{
-          width: collapsed ? 46 : 188,
+          width: collapsed ? 46 : 232,
           flexShrink: 0,
           position: 'sticky',
           top: 78,
@@ -107,24 +109,9 @@ export function SideNav({ tab, onTab, collapsed, onCollapse, isAdmin }: Props) {
           transition: 'width 0.2s ease',
         }}
       >
-        <div
-          className="nav-item"
-          onClick={() => onTab('portfolio')}
-          title="Portfolio"
-          style={navItem(tab === 'portfolio', false, collapsed)}
-        >
-          <ChartIcon size={16} />
-          {label('Portfolio')}
-        </div>
-        <div
-          className="nav-item"
-          onClick={() => onTab('notifications')}
-          title="Notifications"
-          style={navItem(tab === 'notifications', false, collapsed)}
-        >
-          <BellIcon size={16} />
-          {label('Notifications')}
-        </div>
+        {/* Same order as the strip, which is the same list of pages. They are
+            two drawings of one navigation and a reader moving between a phone
+            and a desktop should not have to re-learn where things are. */}
         <div
           {...(AGENT_ENABLED
             ? { className: 'nav-item', onClick: () => onTab('agent'), title: 'AI agent' }
@@ -148,6 +135,24 @@ export function SideNav({ tab, onTab, collapsed, onCollapse, isAdmin }: Props) {
               {AGENT_ENABLED ? 'BETA' : 'SOON'}
             </span>
           )}
+        </div>
+        <div
+          className="nav-item"
+          onClick={() => onTab('portfolio')}
+          title="Portfolio"
+          style={navItem(tab === 'portfolio', false, collapsed)}
+        >
+          <ChartIcon size={16} />
+          {label('Portfolio')}
+        </div>
+        <div
+          className="nav-item"
+          onClick={() => onTab('notifications')}
+          title="Alerts"
+          style={navItem(tab === 'notifications', false, collapsed)}
+        >
+          <BellIcon size={16} />
+          {label('Alerts')}
         </div>
         {isAdmin ? (
           <div
