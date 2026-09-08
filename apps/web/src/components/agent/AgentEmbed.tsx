@@ -83,10 +83,48 @@ export function AgentEmbed({ widgetUrl, agentUrl, slug, token, portfolios }: Pro
   // which is what puts the field in the middle of nowhere. So while this tab
   // is mounted — it is mounted only while it is the open tab — the page is not
   // a scroller at all.
+  //
+  // That is necessary and not sufficient, which is the whole iOS problem. A
+  // keyboard there does not shrink the page: the layout viewport keeps its
+  // full height and only the *visual* viewport — the part you can actually see
+  // — gets smaller. Safari then slides that window down the page to keep the
+  // focused field in it, and everything measured against the layout viewport,
+  // the sticky header included, slides off the top. Nothing has scrolled; the
+  // page is simply being looked at through a smaller hole, lower down.
+  //
+  // `interactive-widget=resizes-content` is the declarative answer and Safari
+  // does not implement it. So the visible height is measured and handed to the
+  // stylesheet, and the chat is built to that instead of to the page.
+  //
+  // That treats the cause rather than the symptom, which matters here. The
+  // tempting fix is to translate the app back up by the offset Safari slid it
+  // — but a transform makes an element the containing block for every fixed
+  // thing inside it, and the account menu is a fixed portal. Sizing the chat
+  // to what is visible means the composer is already in the visible part, so
+  // Safari never slides anything and there is no offset to undo.
   useEffect(() => {
     const root = document.documentElement;
     root.classList.add('agent-open');
-    return () => root.classList.remove('agent-open');
+
+    const vv = window.visualViewport;
+    const measure = () => {
+      if (!vv) return;
+      // How much of the page is actually on screen right now. With the page
+      // itself unable to scroll, the visible part starts at the top, so this
+      // one number is the whole of what the chat has to fit inside.
+      root.style.setProperty('--visible-h', `${Math.round(vv.height)}px`);
+    };
+
+    measure();
+    vv?.addEventListener('resize', measure);
+    vv?.addEventListener('scroll', measure);
+
+    return () => {
+      root.classList.remove('agent-open');
+      vv?.removeEventListener('resize', measure);
+      vv?.removeEventListener('scroll', measure);
+      root.style.removeProperty('--visible-h');
+    };
   }, []);
 
   useEffect(() => {

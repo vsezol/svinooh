@@ -77,7 +77,10 @@
   padding: var(--sp-4) var(--sp-5);
 }
 
+/* Pushed to the end rather than spaced against a sibling: embedded this row
+   holds nothing else, and space-between with one child leaves it on the left. */
 .sv-a-topbar-actions {
+  margin-left: auto;
   display: flex;
   gap: var(--sp-4);
 }

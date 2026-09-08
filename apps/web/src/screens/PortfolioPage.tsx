@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import type { HistoryRange, PortfolioDto, WalletDto } from '@svinooh/shared';
 import { AppHeader, Button, Card, Checkbox, Eyebrow, Input, Segmented, Spinner, TagButton } from '../ui';
+import { AccountMenu } from '../components/AccountMenu';
 import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AlertSettings } from '../components/AlertSettings';
 import { AreaChart } from '../components/AreaChart';
@@ -561,51 +562,18 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
           <>
             {/* Only when this account owns more than one — see the component */}
             {isOwner && me ? <PortfolioSwitcher portfolios={me.portfolios} currentSlug={slug} /> : null}
-            {/* The door to the offer — the page it opens knows whether Pro is on */}
-            {me ? (
-              <TagButton variant="outline" onClick={() => router.push('/pro')}>
-                PRO
-              </TagButton>
-            ) : null}
             <ThemeToggle />
             {isOwner && me ? (
-              /* ph-mask / ph-no-capture: who this is never reaches session replay */
-              <div className="ph-mask" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {me.photoUrl ? (
-                  <img src={me.photoUrl} alt="" className="ph-no-capture" style={{ width: 32, height: 32, borderRadius: '50%' }} />
-                ) : (
-                  <div
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: '50%',
-                      background: 'var(--acc-soft)',
-                      border: '1px solid color-mix(in srgb, var(--acc) 40%, transparent)',
-                      color: 'var(--acc-text)',
-                      fontSize: 'var(--fs-tag)',
-                      fontWeight: 'var(--fw-heavy)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {(me.name || '?').slice(0, 2).toUpperCase()}
-                  </div>
-                )}
-                {/* the viewer's own handle, shown only to them */}
-                <span className="mono hide-mobile" style={{ fontSize: 'var(--fs-note)', color: 'var(--mut)' }}>
-                  {me.username ? `@${me.username}` : me.name}
-                </span>
-                <TagButton
-                  variant="bare"
-                  onClick={() => {
-                    logout();
-                    router.push('/');
-                  }}
-                >
-                  EXIT
-                </TagButton>
-              </div>
+              <AccountMenu
+                name={me.name}
+                username={me.username}
+                photoUrl={me.photoUrl}
+                onPro={() => router.push('/pro')}
+                onExit={() => {
+                  logout();
+                  router.push('/');
+                }}
+              />
             ) : (
               <Button size="sm" onClick={() => setAuthOpen(true)}>
                 Sign in

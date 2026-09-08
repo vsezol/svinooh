@@ -345,9 +345,13 @@ button {
      overflow here becomes a scrolling page, which is the one thing the chat
      cannot share a screen with.
 
+     --visible-h is what the browser says is on screen right now, which on iOS
+     is the page minus the keyboard (see AgentEmbed). Falling back to 100dvh
+     covers the first frame and any browser without a visual viewport to ask.
+
      49px is the header above the breakpoint — its 48px wordmark row plus the
      hairline. The tab strip is not there; a desktop has the rail instead. */
-  height: calc(100dvh - 49px - env(safe-area-inset-top));
+  height: calc(var(--visible-h, 100dvh) - 49px - env(safe-area-inset-top));
   margin: calc(-1 * clamp(20px, 4vw, 36px)) 0 0;
   padding: 14px 0 0;
   overflow: hidden;
@@ -361,6 +365,7 @@ html.agent-open body {
   overflow: hidden;
   overscroll-behavior: none;
 }
+
 
 .agent-embed-note {
   padding: 40px 0;
@@ -377,7 +382,7 @@ html.agent-open body {
     /* 85px: the wordmark row (48) and the tab strip (36) and the hairline.
        The header folds to 41 while you read, which gives the chat 44px back
        rather than taking any — so this is sized to the header at rest. */
-    height: calc(100dvh - 85px - env(safe-area-inset-top));
+    height: calc(var(--visible-h, 100dvh) - 85px - env(safe-area-inset-top));
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
@@ -582,5 +587,63 @@ html.agent-open body {
     background: color-mix(in srgb, var(--bg) 88%, transparent);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
+  }
+}
+
+/* ───────── the account, and what is behind it ───────── */
+
+.account-mark {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--acc-soft);
+  border: 1px solid color-mix(in srgb, var(--acc) 40%, transparent);
+  color: var(--acc-text);
+  font-size: var(--fs-tag);
+  font-weight: var(--fw-heavy);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.account-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media (min-width: 720px) {
+  .account-mark {
+    width: 34px;
+    height: 34px;
+  }
+}
+
+/* Whose menu this is, above the things it can do. */
+.account-menu-who {
+  padding: 9px 12px 7px;
+  font-size: var(--fs-tag);
+  color: var(--mut);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The switcher is the one thing in the header whose width is somebody's
+   portfolio name, so it is the one thing that has to be told to stop. */
+.app-brand .portfolio-switcher {
+  min-width: 0;
+  max-width: 42vw;
+}
+
+@media (min-width: 720px) {
+  .app-brand .portfolio-switcher {
+    max-width: 260px;
   }
 }

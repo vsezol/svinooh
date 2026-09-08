@@ -349,12 +349,15 @@ export function App(props: AppProps) {
         ) : null}
         <div className="sv-a-main">
           {variant === 'embedded' || portfolio ? (
-            // The grounding chip belongs to both hosts (the canvas shows it on
-            // the standalone boards too); the New chat / History buttons only
-            // to the embedded bar — standalone carries them in its header and
-            // rail.
+            // Embedded, the host's header already says which portfolio this is
+            // — and says it for the whole app, not just this tab. A second
+            // switcher under it was one more thing to keep in step and a row of
+            // screen spent restating the row above. Standalone has no such
+            // header, so the chip is the only place that says it.
             <div className="sv-a-topbar">
-              <GroundingChip portfolio={portfolio} onClick={() => setSwitcherOpen(true)} />
+              {variant === 'embedded' ? null : (
+                <GroundingChip portfolio={portfolio} onClick={() => setSwitcherOpen(true)} />
+              )}
               {variant === 'embedded' ? (
                 <div className="sv-a-topbar-actions">
                   <button type="button" className="ui-btn" data-variant="soft" data-size="sm" onClick={newChat}>
