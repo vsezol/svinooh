@@ -8,7 +8,7 @@ import { AgentMessage } from '../components/AgentMessage';
 import { Composer } from '../components/Composer';
 import { Door } from '../components/Door';
 import { EmptyGrounded } from '../components/EmptyGrounded';
-import { EmptyNoPortfolio } from '../components/EmptyNoPortfolio';
+import { OpenerChips } from '../components/OpenerChips';
 import { GroundingChip } from '../components/GroundingChip';
 import { HistoryPanel } from '../components/HistoryPanel';
 import { Rail } from '../components/Rail';
@@ -20,11 +20,19 @@ import { ThinkingPulse } from '../components/ThinkingPulse';
 import { UserBubble } from '../components/UserBubble';
 import BlockView from '../components/blocks';
 
+/**
+ * Four ways in, and they are not all about a portfolio on purpose.
+ *
+ * One reads what you hold, one asks it to do something with idle money, one is
+ * a judgement call and one is a plain question with no account behind it. Four
+ * openers that were all "what does my portfolio say" taught the first-time
+ * reader that this is a portfolio viewer with a text box.
+ */
 const OPENERS = [
   'What changed this week?',
+  'Put my idle USDC to work',
   'My riskiest position?',
-  'Explain my health factor',
-  'Where is my money by chain?',
+  'Explain impermanent loss',
 ];
 
 const SIGNIN_TITLE = 'Sign in to see your portfolio';
@@ -139,6 +147,8 @@ export function App(props: AppProps) {
   const stepsRef = useRef<StepEvent[]>([]);
   /** Which finished answers have their receipt open. Folded is the default. */
   const [openTraces, setOpenTraces] = useState<ReadonlySet<string>>(() => new Set());
+  /** Whether the transcript has been scrolled — what folds the header. */
+  const [logScrolled, setLogScrolled] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const lastQuestion = useRef<string | null>(null);
@@ -313,6 +323,17 @@ export function App(props: AppProps) {
     return () => cancelAnimationFrame(frame);
   }, [active, busy, statusText, streamed]);
 
+  useEffect(() => {
+    const el = logRef.current;
+    if (!el) return;
+    // The same threshold the kit uses on a page: small, because the fold is
+    // what the gesture is for.
+    const read = () => setLogScrolled(el.scrollTop > 24);
+    read();
+    el.addEventListener('scroll', read, { passive: true });
+    return () => el.removeEventListener('scroll', read);
+  }, []);
+
   const empty = active.items.length === 0;
   const lastRole = active.items[active.items.length - 1]?.role;
   // Demo conversations end on status lines and hold the thinking state open.
@@ -329,22 +350,18 @@ export function App(props: AppProps) {
       ? `${portfolio.wallets} WALLETS · $${Math.round(portfolio.totalUsd).toLocaleString('en-US')}`
       : undefined;
 
-  const placeholder = !signedIn
-    ? 'Ask about DeFi…'
-    : noPortfolio
-      ? 'Paste wallet addresses…'
-      : `Ask about ${portfolio?.name ?? 'your portfolio'}…`;
+  // One placeholder, and it says both halves of what this is: a thing you ask,
+  // and a thing you set going. Three of them that changed with your account
+  // state were three different promises about the same box.
+  const placeholder = 'Ask or give a task…';
 
-  let emptyView = null;
-  if (empty) {
-    if (!signedIn && variant === 'standalone') {
-      emptyView = <Door onSignIn={onSignIn} />;
-    } else if (noPortfolio) {
-      emptyView = <EmptyNoPortfolio />;
-    } else if (signedIn) {
-      emptyView = <EmptyGrounded portfolio={portfolio} meta={meta} chips={OPENERS} onPick={send} />;
-    }
-  }
+  // One opening, plus a way in for somebody who has not got one. Having no
+  // portfolio is not a different screen any more — the assistant answers
+  // without one and can make one for you, so a chat that opens by saying you
+  // are missing something was starting on the wrong foot.
+  const emptyView = !empty ? null : !signedIn && variant === 'standalone'
+    ? <Door onSignIn={onSignIn} />
+    : <EmptyGrounded />;
 
   const toggleTrace = useCallback((id: string) => {
     setOpenTraces((open) => {
@@ -399,6 +416,9 @@ export function App(props: AppProps) {
       {variant === 'standalone' ? (
         <AgentHeader
           variant={variant}
+          // The page does not scroll here — the transcript does — so the fold
+          // is this screen's to report rather than the header's to detect.
+          collapsed={logScrolled}
           signedIn={signedIn}
           onToggleTheme={onToggleTheme}
           onHistory={() => setHistoryOpen(true)}
@@ -482,6 +502,10 @@ export function App(props: AppProps) {
               </div>
             )}
           </div>
+          {/* Against the composer, where the design puts them: they are the
+              fastest way to start typing, so they belong next to where you
+              type rather than centred in the space above it. */}
+          {empty ? <OpenerChips chips={OPENERS} onPick={send} /> : null}
           <div className="sv-a-composer">
             {locked ? <ProLock /> : <Composer placeholder={placeholder} disabled={demo} onSend={send} />}
           </div>
