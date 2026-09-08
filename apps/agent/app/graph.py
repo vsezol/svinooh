@@ -44,7 +44,7 @@ from typing import TypedDict
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
-from .config import settings, tool_hops
+from .config import answering, settings, tool_hops
 from .context import (
     cancelled_prompt,
     confirmation_request_prompt,
@@ -56,7 +56,7 @@ from .context import (
 )
 from .datasources import PortfolioApiSource
 from .intent import classify
-from .llm import answering_model, ask, extract_text, get_model
+from .llm import ask, extract_text, get_model
 from .tools import portfolio_tools, run_tools
 from .onboarding import (
     ProposePortfolio,
@@ -176,7 +176,7 @@ async def _answer(system: str, state: AgentState) -> AgentState:
         *state.get("history", []),
         HumanMessage(content=state["question"]),
     ]
-    reply = await ask(get_model, messages, answering_model())
+    reply = await ask(get_model, messages, answering())
     return {"answer": extract_text(reply)}
 
 
@@ -233,7 +233,7 @@ async def grounded_node(state: AgentState) -> AgentState:
         bound = get_model().bind_tools(tools)
 
     for _ in range(tool_hops()):
-        reply = await ask(lambda: bound, messages, answering_model(), rebind)
+        reply = await ask(lambda: bound, messages, answering(), rebind)
         calls = getattr(reply, "tool_calls", None) or []
         if not calls:
             return {"answer": extract_text(reply)}

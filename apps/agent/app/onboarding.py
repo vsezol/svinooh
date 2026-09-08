@@ -21,7 +21,8 @@ from typing import Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from .llm import ask, get_router_model, labelling_model
+from .config import labelling
+from .llm import ask, get_router_model
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -84,7 +85,7 @@ def _confirmation_labeler():
 async def classify_confirmation(reply: str) -> ConfirmationDecision:
     messages = [SystemMessage(content=CONFIRMATION_PROMPT), HumanMessage(content=reply)]
     return await ask(
-        _confirmation_labeler, messages, labelling_model(), _confirmation_labeler.cache_clear
+        _confirmation_labeler, messages, labelling(), _confirmation_labeler.cache_clear
     )
 
 
