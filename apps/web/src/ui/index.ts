@@ -3,6 +3,7 @@
  * keep the app's historical import paths working. New code imports the package.
  */
 export {
+  AppHeader,
   Button,
   ButtonLink,
   IconButton,

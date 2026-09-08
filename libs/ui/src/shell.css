@@ -19,16 +19,6 @@
   padding-right: calc(clamp(14px, 3.5vw, 28px) + env(safe-area-inset-right));
 }
 
-/* The strip of screen the page is handed but cannot use: the notch or the
-   Dynamic Island lives there, and installed to a home screen the page runs
-   right under it. How deep it goes is the device's to say — 59pt on an Island
-   phone, ~47 on a notch, 20 on a flat top — so the header takes the number
-   from the device rather than picking one. In a browser tab the inset reads 0,
-   because the browser's own chrome is already holding that space. */
-.app-header {
-  padding-top: env(safe-area-inset-top);
-}
-
 /* svin[oo]h logo */
 .logo {
   display: inline-flex;
@@ -66,6 +56,12 @@ body[data-theme='light'] .on-dark {
 
 
 
+/* The mark on its own sits on the text baseline of nothing, so it centres
+   like an icon instead. */
+.logo-mark {
+  align-items: center;
+}
+
 .logo .eye {
   display: inline-block;
   width: 0.56em;
@@ -84,4 +80,124 @@ body[data-theme='light'] .on-dark {
 
 .logo .h {
   margin-left: 0.05em;
+}
+
+/* ───────── the application header ─────────
+   Two rows at rest, one when folded. Every number here is the design's, and
+   the two states share a border so the fold does not move the line under it. */
+
+.app-header {
+  /* The strip of screen the page is handed but cannot use: the notch or the
+     Dynamic Island lives there, and installed to a home screen the page runs
+     right under it. How deep it goes is the device's to say. */
+  padding-top: env(safe-area-inset-top);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-bottom: 1px solid var(--line);
+  /* Not opaque: the page scrolling under a header you can half see through is
+     what tells you it is still there and you are moving past it. */
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* The wordmark and what belongs to the app rather than to the open tab. */
+.app-brand {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+}
+
+.app-brand-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The tab strip. 36px under the wordmark, 40px once it is carrying the mark
+   too — the fold trades a 48px row for 4px of strip. */
+.top-tabs {
+  height: 36px;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  padding: 0 14px;
+}
+
+.app-header[data-folded='true'] .top-tabs {
+  height: 40px;
+}
+
+.top-tabs-list {
+  display: flex;
+  align-items: stretch;
+  gap: 22px;
+  min-width: 0;
+}
+
+.top-tabs-list[data-folded='true'] {
+  gap: 18px;
+}
+
+/* The mark sits in the row rather than on the text baseline, and keeps a
+   little air between itself and the first tab. */
+.top-tabs-list .logo-mark {
+  margin-right: 2px;
+}
+
+.top-tab {
+  display: flex;
+  align-items: center;
+  font-family: inherit;
+  font-size: var(--fs-nav);
+  font-weight: var(--fw-bold);
+  color: var(--mut);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  /* The underline lands ON the header's own border rather than above it, so
+     the open tab reads as continuous with the page under it. */
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s ease;
+}
+
+.top-tabs-list[data-folded='true'] .top-tab {
+  font-size: var(--fs-nav-tight);
+}
+
+.top-tab[data-active='true'] {
+  font-weight: var(--fw-heavy);
+  color: var(--acc-text);
+  border-bottom-color: var(--acc);
+}
+
+.top-tab:hover {
+  color: var(--text);
+}
+
+.top-tab[data-active='true']:hover {
+  color: var(--acc-text);
+}
+
+.top-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--mut);
+  flex-shrink: 0;
+}
+
+/* A desktop has a rail showing the same list, so the strip goes and the
+   wordmark row stays — one header, two shapes, no second component. */
+@media (min-width: 720px) {
+  .top-tabs {
+    display: none;
+  }
 }

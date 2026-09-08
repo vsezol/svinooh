@@ -81,7 +81,7 @@ interface Props {
  * then. See AGENT_ENABLED.
  *
  * The rail beside the page on a desktop. A phone gets tabs across the top
- * instead — see MobileTabs — and the stylesheet is what picks between them, so
+ * instead — see AppHeader in the kit — and the stylesheet picks between them, so
  * the server never has to guess which one the visitor is about to need.
  *
  * A visitor gets neither. There is one page for them — the portfolio the link
