@@ -12,6 +12,7 @@ still pending degrades to "chat errors" instead of a crash loop. One client
 instance is then reused for every request: what is per-request is the API
 *call*, not the client.
 """
+import logging
 from functools import cache
 
 from langchain.chat_models import init_chat_model
@@ -20,15 +21,54 @@ from langchain_core.messages import BaseMessage
 
 from .config import settings
 
+logger = logging.getLogger("svinooh-ai")
 
-def _reasoning(effort: str) -> dict:
+
+# Endpoints that turned out to refuse a thinking budget. Some mandate
+# reasoning and reject a request that lowers or disables it — a 400 that would
+# otherwise kill every classification for as long as the setting stands.
+_refuses_budget: set[str] = set()
+
+
+def _reasoning(effort: str, model: str) -> dict:
     """Thinking budget, expressed the way an OpenAI-compatible aggregator wants.
 
     It rides in extra_body because it is not an OpenAI parameter: the client
     passes the field through untouched, and a provider that does not know it
-    ignores it. Empty leaves the model's own default in place.
+    ignores it. Empty — or an endpoint that has already refused one — leaves
+    the model's own default in place.
     """
-    return {"extra_body": {"reasoning": {"effort": effort}}} if effort else {}
+    if not effort or model in _refuses_budget:
+        return {}
+    return {"extra_body": {"reasoning": {"effort": effort}}}
+
+
+def budget_was_refused(error: BaseException) -> bool:
+    """Whether a failure is the endpoint objecting to the thinking budget."""
+    return "reasoning" in str(error).lower()
+
+
+def drop_budget(model: str) -> bool:
+    """Stop sending a budget to this model, and rebuild the clients.
+
+    Returns False when it was already dropped, which is what stops a retry
+    loop: the second failure is a real one and belongs to the caller.
+    """
+    if model in _refuses_budget:
+        return False
+    logger.warning("%s refuses a reasoning budget — sending none from now on", model)
+    _refuses_budget.add(model)
+    get_model.cache_clear()
+    get_router_model.cache_clear()
+    return True
+
+
+def answering_model() -> str:
+    return settings.model
+
+
+def labelling_model() -> str:
+    return settings.router_model or settings.model
 
 
 def _credentials() -> dict:
@@ -58,7 +98,7 @@ def get_model() -> BaseChatModel:
         max_tokens=settings.max_tokens,
         timeout=settings.request_timeout_s,
         **_credentials(),
-        **_reasoning(settings.reasoning_effort),
+        **_reasoning(settings.reasoning_effort, answering_model()),
     )
 
 
@@ -76,7 +116,7 @@ def get_router_model() -> BaseChatModel:
         max_tokens=200,
         timeout=settings.request_timeout_s,
         **_credentials(),
-        **_reasoning(settings.router_reasoning_effort),
+        **_reasoning(settings.router_reasoning_effort, labelling_model()),
     )
 
 

@@ -17,7 +17,7 @@ from typing import Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from .llm import get_router_model
+from .llm import budget_was_refused, drop_budget, get_router_model, labelling_model
 
 CLASSIFIER_PROMPT = (
     "You label questions asked to the assistant of svinooh, a DeFi portfolio "
@@ -44,6 +44,14 @@ def _labeler():
 
 
 async def classify(question: str) -> IntentLabel:
-    return await _labeler().ainvoke(
-        [SystemMessage(content=CLASSIFIER_PROMPT), HumanMessage(content=question)]
-    )
+    messages = [SystemMessage(content=CLASSIFIER_PROMPT), HumanMessage(content=question)]
+    try:
+        return await _labeler().ainvoke(messages)
+    except Exception as error:  # noqa: BLE001 — one specific cause is recoverable
+        # An endpoint that mandates reasoning rejects the budget we asked for,
+        # and every classification fails for as long as the setting stands.
+        # Drop the budget once and try again; a second failure is a real one.
+        if not (budget_was_refused(error) and drop_budget(labelling_model())):
+            raise
+        _labeler.cache_clear()
+        return await _labeler().ainvoke(messages)

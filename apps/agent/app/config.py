@@ -81,9 +81,12 @@ class Settings:
     # values an OpenAI-compatible aggregator accepts are none/minimal/low/
     # medium/high.
     reasoning_effort: str = os.getenv("AGENT_REASONING_EFFORT", "low")
-    # The classifiers never think: they pick one of two labels from one
+    # The classifiers barely think: they pick one of two labels from one
     # sentence, and they sit on the critical path in front of every answer.
-    router_reasoning_effort: str = os.getenv("AGENT_ROUTER_REASONING_EFFORT", "none")
+    # Not "none": some endpoints mandate reasoning and reject a request that
+    # switches it off, which is a 400 on every turn (the service now drops the
+    # budget by itself when that happens, but the default should not need it).
+    router_reasoning_effort: str = os.getenv("AGENT_ROUTER_REASONING_EFFORT", "low")
     system_prompt: str = os.getenv("AGENT_SYSTEM", DEFAULT_SYSTEM_PROMPT)
     max_tokens: int = int(os.getenv("AGENT_MAX_TOKENS", "1024"))
     request_timeout_s: int = int(os.getenv("AGENT_TIMEOUT_S", "60"))
