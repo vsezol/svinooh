@@ -343,8 +343,11 @@ button {
 .agent-embed {
   /* Exactly the room under the sticky header, and not a pixel more: any
      overflow here becomes a scrolling page, which is the one thing the chat
-     cannot share a screen with. */
-  height: calc(100dvh - 59px - env(safe-area-inset-top));
+     cannot share a screen with.
+
+     49px is the header above the breakpoint — its 48px wordmark row plus the
+     hairline. The tab strip is not there; a desktop has the rail instead. */
+  height: calc(100dvh - 49px - env(safe-area-inset-top));
   margin: calc(-1 * clamp(20px, 4vw, 36px)) 0 0;
   padding: 14px 0 0;
   overflow: hidden;
@@ -371,8 +374,10 @@ html.agent-open body {
    chips reads as a second thing to operate. */
 @media (max-width: 719px) {
   .agent-embed {
-    /* the tabs across the top take their share of the screen too */
-    height: calc(100dvh - 59px - 47px - env(safe-area-inset-top));
+    /* 85px: the wordmark row (48) and the tab strip (36) and the hairline.
+       The header folds to 41 while you read, which gives the chat 44px back
+       rather than taking any — so this is sized to the header at rest. */
+    height: calc(100dvh - 85px - env(safe-area-inset-top));
     padding-bottom: env(safe-area-inset-bottom);
   }
 }

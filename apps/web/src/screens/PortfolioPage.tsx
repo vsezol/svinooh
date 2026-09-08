@@ -641,6 +641,30 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
             rendered — see .pager */}
         <div className="pager-window" style={{ flex: 1, minWidth: 0 }} {...pager.handlers}>
           <div className="pager" style={pager.style} data-moving={pager.moving}>
+            {/* ORDER IS THE CONTRACT. These panes ride one strip that the pager
+                slides by index, so pane N must be tabsFor()[N] — the strip
+                names the pages, this names them again, and the two are only
+                joined by sitting in the same order. Getting that wrong shows
+                nothing at all: the pager slides to the right index and finds
+                the wrong pane, which on a phone is collapsed to no height
+                because it is not the open one.
+
+                One pane per entry, too: a page the strip does not list is a
+                page nothing can reach. See AGENT_ENABLED and isAdmin. */}
+            {isOwner && AGENT_ENABLED ? (
+              <div className="pane" data-active={activeTab === 'agent'}>
+                {activeTab === 'agent' ? (
+                  <AgentEmbed
+                    widgetUrl={AGENT_WIDGET_URL}
+                    agentUrl={AGENT_URL}
+                    slug={slug}
+                    token={tokenStore.get() ?? undefined}
+                    portfolios={me?.portfolios}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="pane" data-active={activeTab === 'portfolio'}>
             {/* total */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
@@ -820,22 +844,6 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
               </div>
             ) : null}
 
-            {/* One pane per entry in tabsFor() — a page in the strip that the
-                strip does not list is a page nothing can reach and one more
-                thing to keep in step. See AGENT_ENABLED and isAdmin. */}
-            {isOwner && AGENT_ENABLED ? (
-              <div className="pane" data-active={activeTab === 'agent'}>
-                {activeTab === 'agent' ? (
-                  <AgentEmbed
-                    widgetUrl={AGENT_WIDGET_URL}
-                    agentUrl={AGENT_URL}
-                    slug={slug}
-                    token={tokenStore.get() ?? undefined}
-                    portfolios={me?.portfolios}
-                  />
-                ) : null}
-              </div>
-            ) : null}
 
             {isOwner && isAdmin ? (
               <div className="pane" data-active={activeTab === 'admin'}>
