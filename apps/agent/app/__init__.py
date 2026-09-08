@@ -11,6 +11,7 @@ has a home before it grows: config.py (settings, later fetched remotely),
 llm.py (the provider-neutral model seam), sessions.py (conversation memory),
 routes.py (the HTTP surface), schemas.py (the wire types).
 """
+import logging
 from collections.abc import Sequence
 
 from fastapi import FastAPI
@@ -21,7 +22,27 @@ from .config import settings
 from .routes import router
 
 
+def _configure_logging() -> None:
+    """Make this service's own log lines reach the platform.
+
+    Nothing configures logging under uvicorn except uvicorn's own loggers, so
+    a message from `svinooh-ai` falls through to logging's last-resort
+    handler — which prints WARNING and above and drops everything below.
+    That is why the routing decisions, the tool calls and the created
+    portfolios were invisible while their failures were not: the evidence
+    every one of these logs exists to provide was being discarded one level
+    below the line that mattered.
+    """
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s %(name)s %(message)s",
+        force=True,
+    )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
 def create_app(cors_origins: Sequence[str] | None = None) -> FastAPI:
+    _configure_logging()
     app = FastAPI(title="svinooh-ai")
     # The browser door: which origins may call this service directly. An
     # explicit allowlist, never "*" — the wildcard forbids credentialed
