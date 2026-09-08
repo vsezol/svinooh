@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import type { HistoryRange, PortfolioDto, WalletDto } from '@svinooh/shared';
-import { Button, Card, Checkbox, Eyebrow, Input, Segmented, Spinner, TagButton } from '../ui';
+import { AppHeader, Button, Card, Checkbox, Eyebrow, Input, Segmented, Spinner, TagButton } from '../ui';
 import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AlertSettings } from '../components/AlertSettings';
 import { AreaChart } from '../components/AreaChart';
@@ -18,7 +18,7 @@ import { PortfolioName } from '../components/PortfolioName';
 import { PortfolioSwitcher } from '../components/PortfolioSwitcher';
 import { ScopeSelect } from '../components/ScopeSelect';
 import { ShareButton } from '../components/ShareButton';
-import { MobileTabs, tabsFor, tabIndex, usePager } from '../components/MobileTabs';
+import { homeTab, tabsFor, tabIndex, usePager } from '../components/tabs';
 import { usePaywall } from '../components/Paywall';
 import { AgentEmbed } from '../components/agent/AgentEmbed';
 import { SideNav, type Tab } from '../components/SideNav';
@@ -195,7 +195,10 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   useEffect(() => setSlug(routeSlug), [routeSlug]);
   const { data, error, reload, patch } = usePortfolio(slug, me?.id ?? null);
 
-  const [tab, setTab] = useState<Tab>('portfolio');
+  // The assistant is where a visit starts now: it answers the question a
+  // portfolio page makes you go and look up, and it can reach the rest of the
+  // app on your behalf. The portfolio is what it talks about.
+  const [tab, setTab] = useState<Tab>(homeTab);
   // Collapsed is the rail's own business and nobody else's — it survives a tab
   // change and nothing else needs to know
   const [sideCollapsed, setSideCollapsed] = useState(false);
@@ -545,22 +548,17 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
         </div>
       ) : null}
 
-      {/* header */}
-      <div
-        className="app-header"
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 50,
-          background: 'color-mix(in srgb, var(--bg) 82%, transparent)',
-          backdropFilter: 'blur(14px)',
-          WebkitBackdropFilter: 'blur(14px)',
-          borderBottom: '1px solid var(--line)',
-        }}
-      >
-        <div className="shell" style={{ height: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <Logo size={21} onClick={() => router.push('/')} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {/* One header for every surface — the kit's, so the portfolio and the
+          assistant cannot drift apart. Everything specific to this screen goes
+          in through the two slots: what belongs to the app beside the
+          wordmark, what belongs to the open tab beside the tabs. */}
+      <AppHeader
+        tabs={isOwner ? tabsFor(isAdmin) : []}
+        active={activeTab}
+        onTab={(key: string) => setTab(key as Tab)}
+        onLogo={() => router.push('/')}
+        brandActions={
+          <>
             {/* Only when this account owns more than one — see the component */}
             {isOwner && me ? <PortfolioSwitcher portfolios={me.portfolios} currentSlug={slug} /> : null}
             {/* The door to the offer — the page it opens knows whether Pro is on */}
@@ -572,14 +570,14 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
             <ThemeToggle />
             {isOwner && me ? (
               /* ph-mask / ph-no-capture: who this is never reaches session replay */
-              <div className="ph-mask" style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 4 }}>
+              <div className="ph-mask" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {me.photoUrl ? (
-                  <img src={me.photoUrl} alt="" className="ph-no-capture" style={{ width: 30, height: 30, borderRadius: '50%' }} />
+                  <img src={me.photoUrl} alt="" className="ph-no-capture" style={{ width: 32, height: 32, borderRadius: '50%' }} />
                 ) : (
                   <div
                     style={{
-                      width: 30,
-                      height: 30,
+                      width: 32,
+                      height: 32,
                       borderRadius: '50%',
                       background: 'var(--acc-soft)',
                       border: '1px solid color-mix(in srgb, var(--acc) 40%, transparent)',
@@ -613,11 +611,10 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
                 Sign in
               </Button>
             )}
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
-      {isOwner ? <MobileTabs tab={tab} onTab={setTab} isAdmin={isAdmin} /> : null}
 
       <div
         className="shell"
