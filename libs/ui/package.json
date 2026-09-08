@@ -9,7 +9,10 @@
     "./tokens.css": "./src/tokens.css",
     "./ui.css": "./src/ui.css",
     "./shell.css": "./src/shell.css",
-    "./Logo": "./src/Logo.tsx"
+    "./Logo": "./src/Logo.tsx",
+    "./Stat": "./src/Stat.tsx",
+    "./Sparkline": "./src/Sparkline.tsx",
+    "./AppHeader": "./src/AppHeader.tsx"
   },
   "peerDependencies": {
     "react": "^19.2.0"

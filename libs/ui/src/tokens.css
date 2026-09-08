@@ -23,11 +23,19 @@ body {
      do, so they cannot. */
 
   /* Column headers, eyebrows, the smallest labels there are */
+  /* Smaller than micro, and only ever for a label set wide: the eyebrow over
+     a figure, the name of a column. Never for anything anybody reads in a
+     line. */
+  --fs-eyebrow: 9.5px;
   --fs-micro: 10px;
   /* Pills, chips, period switches — mono, tracked, standing beside body text */
   --fs-tag: 11px;
   /* Small print: notes under a setting, menu items, tooltips */
   --fs-note: 12px;
+  /* A line of machinery rather than a line of prose: a step in a trace, a
+     status under a card. Between note and body because it is set in mono,
+     which reads a size smaller than the same number in the UI face. */
+  --fs-step: 11.5px;
   /* The navigation strip, at its two densities. It is the one thing on screen
      that changes size rather than moving: the header folds from two rows to
      one as you read, and the tabs come down with it. Off the main scale on
@@ -38,6 +46,10 @@ body {
   /* The default. Body copy, inputs, buttons, navigation */
   --fs-body: 14px;
   /* Emphasis within a card — a wallet's total, a landing lede */
+  /* What a chat is set in. A shade above body because an answer is read a
+     paragraph at a time, where the app's 14px is scanned a figure at a time —
+     the same size does not do both jobs. */
+  --fs-read: 15px;
   --fs-lead: 16px;
   /* The top of a dialog or a section */
   --fs-title: 18px;

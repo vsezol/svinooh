@@ -20,9 +20,10 @@ export function kitchenSink(): Conversation {
       id: 'd02',
       role: 'agent',
       blocks: [
+        { kind: 'trace', collapsed: true, summary: '3 steps · 1.6s', steps: [] },
         {
           kind: 'text',
-          text: 'Up $7,522 (+6.05%) over 7 days. Almost all of it is ETH price — your positions themselves barely moved.',
+          text: 'Up `$7,522` (`+6.05%`) this week — nearly all of it ETH price. Your positions barely moved.',
         },
         {
           kind: 'stats',
@@ -49,7 +50,7 @@ export function kitchenSink(): Conversation {
           ],
           xTicks: ['Aug 31', 'Sep 3', 'Sep 7'],
         },
-        { kind: 'note', text: 'Prices as of 14:32 UTC · refreshed every 5 minutes' },
+        { kind: 'links', links: [{ label: 'Open portfolio', href: '/portfolio' }] },
       ],
     },
     { id: 'd03', role: 'user', text: 'My riskiest position?' },
@@ -58,8 +59,18 @@ export function kitchenSink(): Conversation {
       role: 'agent',
       blocks: [
         {
+          kind: 'trace',
+          collapsed: false,
+          summary: '3 steps · 1.9s',
+          steps: [
+            { label: 'Reading Main portfolio', state: 'done', time: '0.5s' },
+            { label: 'Fetching positions · 4 wallets', state: 'running', time: '0.8s' },
+            { label: 'Checking Aave V3 health factor', state: 'waiting' },
+          ],
+        },
+        {
           kind: 'text',
-          text: 'Aave V3 on Ethereum — your only leveraged position of size. Health factor 2.14; ETH would need to fall about 53% to $1,940 before liquidation.',
+          text: 'Aave V3 on Ethereum — your only leveraged position of size. Health factor `2.14`: ETH would have to fall about 53% to `$1,940` before liquidation. Everything else is unlevered.',
         },
         {
           kind: 'table',
@@ -75,7 +86,13 @@ export function kitchenSink(): Conversation {
             { position: 'Kamino', supplied: '$3,800', borrowed: '−$2,600', health: '3.05', liq: '$96.20' },
           ],
         },
-        { kind: 'note', text: 'Health factors from on-chain data · 5-min refresh' },
+        {
+          kind: 'links',
+          links: [
+            { label: 'Open Aave V3 position', href: '/portfolio#aave' },
+            { label: 'Set a health-factor alert', href: '/alerts/new' },
+          ],
+        },
       ],
     },
     { id: 'd05', role: 'user', text: 'Where is my money by chain?' },

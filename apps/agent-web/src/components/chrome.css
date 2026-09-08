@@ -136,34 +136,13 @@ body[data-theme='light'] .sv-a-c-on-light {
   overflow-wrap: anywhere;
 }
 
+/* The blocks of one answer, stacked. 12px between them because a chart under
+   a paragraph needs more air than two paragraphs do. */
 .sv-a-c-msg {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 10px;
-}
-
-.sv-a-c-msg-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.sv-a-c-msg-avatar {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--acc-soft);
-  color: var(--acc);
-  display: grid;
-  place-items: center;
-}
-
-.sv-a-c-msg-name {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
-  color: var(--mut);
+  gap: 12px;
 }
 
 .sv-a-c-status {
