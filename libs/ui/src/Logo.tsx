@@ -1,5 +1,10 @@
 interface Props {
-  size?: number;
+  /**
+   * In pixels. `null` leaves it to the stylesheet, which is what a mark that
+   * changes size with the viewport needs — an inline font-size cannot be
+   * overridden by a media query.
+   */
+  size?: number | null;
   onClick?: () => void;
   /**
    * Just the eyes, without the word.
@@ -14,7 +19,11 @@ interface Props {
 /** svin[oo]h logo — the two "o"s as outlined circle eyes */
 export function Logo({ size = 21, onClick, mark = false }: Props) {
   return (
-    <div className={mark ? 'logo logo-mark' : 'logo'} style={{ fontSize: size }} onClick={onClick}>
+    <div
+      className={mark ? 'logo logo-mark' : 'logo'}
+      style={size === null ? undefined : { fontSize: size }}
+      onClick={onClick}
+    >
       {mark ? null : <span>svin</span>}
       <span className="eye eye-1" />
       <span className="eye eye-2" />

@@ -112,6 +112,10 @@ body[data-theme='light'] .on-dark {
   padding: 0 14px;
 }
 
+.app-brand .logo {
+  font-size: 19px;
+}
+
 .app-brand-actions {
   display: flex;
   align-items: center;
@@ -195,9 +199,26 @@ body[data-theme='light'] .on-dark {
 }
 
 /* A desktop has a rail showing the same list, so the strip goes and the
-   wordmark row stays — one header, two shapes, no second component. */
+   wordmark row stays — one header, two shapes, no second component.
+
+   With the strip gone the row can breathe: it takes the height the two rows
+   used to share, the gutters widen to the page's own, and the wordmark grows
+   the two points a header of that height wants. */
 @media (min-width: 720px) {
   .top-tabs {
     display: none;
+  }
+
+  .app-brand {
+    height: 56px;
+    padding: 0 24px;
+  }
+
+  .app-brand .logo {
+    font-size: 21px;
+  }
+
+  .app-brand-actions {
+    gap: 8px;
   }
 }
