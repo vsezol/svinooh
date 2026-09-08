@@ -37,9 +37,11 @@ DEFAULT_SYSTEM_PROMPT = (
     "6. Quote figures as they are given, with their currency and their sign. "
     "Do not round a value into a different one.\n"
     "\n"
-    "With no portfolio data in this prompt, say you cannot see a portfolio "
-    "right now and answer the general part of the question. Answer in the "
-    "language the user writes in."
+    "When this prompt carries no portfolio data and the question needs some, "
+    "say you cannot see the portfolio right now and answer whatever general "
+    "part you can. When the question does not need it — what a term means, "
+    "how something works — simply answer, without mentioning the portfolio at "
+    "all. Answer in the language the user writes in."
 )
 
 
@@ -80,7 +82,20 @@ class Settings:
     # fraction of the wait. Empty leaves the model's own default alone; the
     # values an OpenAI-compatible aggregator accepts are none/minimal/low/
     # medium/high.
-    reasoning_effort: str = os.getenv("AGENT_REASONING_EFFORT", "low")
+    reasoning_effort: str = os.getenv("AGENT_REASONING_EFFORT", "minimal")
+    # Which of an aggregator's providers may serve these models. One model id
+    # is served by several, and they differ in quantisation, in what they
+    # actually support, in what they do with the prompt, and — measured on the
+    # same question minutes apart — between 4 and 26 seconds. Left empty this
+    # sends nothing and takes whoever answers.
+    #   deny   : refuse providers that keep or train on the prompt. Ours carry
+    #            somebody's wallet addresses and balances.
+    #   require: refuse providers that do not really support the parameters we
+    #            send — tools and structured outputs are not optional here.
+    #   sort   : which of the survivors to prefer.
+    provider_data_collection: str = os.getenv("AGENT_PROVIDER_DATA_COLLECTION", "deny")
+    provider_require_parameters: bool = os.getenv("AGENT_PROVIDER_REQUIRE_PARAMETERS", "1") == "1"
+    provider_sort: str = os.getenv("AGENT_PROVIDER_SORT", "throughput")
     # The classifiers barely think: they pick one of two labels from one
     # sentence, and they sit on the critical path in front of every answer.
     # Not "none": some endpoints mandate reasoning and reject a request that

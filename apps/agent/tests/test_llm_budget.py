@@ -5,11 +5,34 @@ endpoint mandates it, and every classification failed with a 400 for as long
 as the setting stood — invisibly, because the classifier's fail-safe swallowed
 it and routed everything to the portfolio branch.
 """
+from dataclasses import replace
+
 import pytest
 
 import app.intent as intent
 import app.llm as llm
 from app.intent import IntentLabel
+
+
+def on_wire(monkeypatch, base_url: str) -> None:
+    """Point the module at an aggregator, or at a provider directly.
+
+    Settings is a frozen dataclass on purpose — configuration does not change
+    under a running service — so a test swaps the whole object rather than one
+    field of it.
+    """
+    monkeypatch.setattr(llm, "settings", replace(llm.settings, model_base_url=base_url))
+
+
+@pytest.fixture(autouse=True)
+def on_the_aggregator(monkeypatch):
+    """Budgets and provider policies only exist on the OpenAI wire.
+
+    Talking to a provider directly there is nothing to choose between and no
+    extra_body to put it in, so every test about either has to say which wire
+    it is on.
+    """
+    on_wire(monkeypatch, "https://openrouter.ai/api/v1")
 
 
 @pytest.fixture(autouse=True)
@@ -24,15 +47,16 @@ def clean_caches():
 
 class TestBudget:
     def test_a_budget_is_sent_as_the_aggregator_expects(self):
-        assert llm._reasoning("low", "m") == {"extra_body": {"reasoning": {"effort": "low"}}}
+        body = llm._reasoning("low", "m")["extra_body"]
+        assert body["reasoning"] == {"effort": "low"}
 
-    def test_an_empty_setting_leaves_the_model_alone(self):
-        assert llm._reasoning("", "m") == {}
+    def test_an_empty_setting_asks_for_no_budget(self):
+        assert "reasoning" not in llm._reasoning("", "m").get("extra_body", {})
 
     def test_a_refusing_endpoint_is_never_asked_again(self):
         llm.drop_budget("stubborn")
-        assert llm._reasoning("low", "stubborn") == {}
-        assert llm._reasoning("low", "other") != {}
+        assert "reasoning" not in llm._reasoning("low", "stubborn")["extra_body"]
+        assert "reasoning" in llm._reasoning("low", "other")["extra_body"]
 
     def test_dropping_twice_reports_that_it_was_already_dropped(self):
         assert llm.drop_budget("m") is True
@@ -99,3 +123,25 @@ class TestClassifierRecovery:
         with pytest.raises(RuntimeError, match="429"):
             await intent.classify("q")
         assert Broken.attempts == 1, "only a refused budget is worth a second try"
+
+
+class TestProviderPolicy:
+    """Which of an aggregator's providers may serve our prompts."""
+
+    def test_nothing_is_sent_to_a_provider_we_talk_to_directly(self, monkeypatch):
+        # extra_body is an OpenAI-client field; on the Anthropic client it is
+        # not a parameter at all.
+        on_wire(monkeypatch, "")
+        assert llm._reasoning("low", "anthropic:claude-haiku-4-5") == {}
+
+    def test_an_aggregator_gets_the_whole_policy(self):
+        body = llm._reasoning("low", "openai:deepseek/deepseek-v4-flash")["extra_body"]
+        assert body["provider"]["data_collection"] == "deny", "our prompts carry wallet balances"
+        assert body["provider"]["require_parameters"] is True, "tools are not optional here"
+        assert body["provider"]["sort"] == "throughput"
+        assert body["reasoning"] == {"effort": "low"}
+
+    def test_a_refused_budget_leaves_the_provider_policy_standing(self):
+        llm.drop_budget("openai:m")
+        body = llm._reasoning("low", "openai:m")["extra_body"]
+        assert "reasoning" not in body and body["provider"]["sort"] == "throughput"

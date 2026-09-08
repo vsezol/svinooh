@@ -38,9 +38,42 @@ def _reasoning(effort: str, model: str) -> dict:
     ignores it. Empty — or an endpoint that has already refused one — leaves
     the model's own default in place.
     """
-    if not effort or model in _refuses_budget:
+    if not _speaks_openai_wire(model):
         return {}
-    return {"extra_body": {"reasoning": {"effort": effort}}}
+    body = _provider_policy()
+    if effort and model not in _refuses_budget:
+        body["reasoning"] = {"effort": effort}
+    return {"extra_body": body} if body else {}
+
+
+def _speaks_openai_wire(model: str) -> bool:
+    """Whether extra_body means anything for this model.
+
+    It is an OpenAI-client field: on the Anthropic client it is not a
+    parameter at all, and langchain quietly moves it to model_kwargs while
+    warning that nobody meant this. Reasoning budgets and provider policies
+    both ride in it, so both are for the OpenAI wire only — which is the wire
+    an aggregator speaks for every vendor anyway.
+    """
+    return bool(settings.model_base_url) or model.startswith("openai:")
+
+
+def _provider_policy() -> dict:
+    """Which providers behind an aggregator may serve our prompts.
+
+    Only meaningful when a base URL is set: without an aggregator there is one
+    provider and nothing to choose between.
+    """
+    if not settings.model_base_url:
+        return {}
+    policy: dict = {}
+    if settings.provider_data_collection:
+        policy["data_collection"] = settings.provider_data_collection
+    if settings.provider_require_parameters:
+        policy["require_parameters"] = True
+    if settings.provider_sort:
+        policy["sort"] = settings.provider_sort
+    return {"provider": policy} if policy else {}
 
 
 def budget_was_refused(error: BaseException) -> bool:
