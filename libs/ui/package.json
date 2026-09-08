@@ -12,12 +12,15 @@
     "./Logo": "./src/Logo.tsx",
     "./Stat": "./src/Stat.tsx",
     "./Sparkline": "./src/Sparkline.tsx",
-    "./AppHeader": "./src/AppHeader.tsx"
+    "./AppHeader": "./src/AppHeader.tsx",
+    "./money": "./src/money.ts",
+    "./AreaChart": "./src/AreaChart.tsx"
   },
   "peerDependencies": {
     "react": "^19.2.0"
   },
   "dependencies": {
-    "@web3icons/react": "^4.1.21"
+    "@web3icons/react": "^4.1.21",
+    "lightweight-charts": "^5.2.1"
   }
 }
