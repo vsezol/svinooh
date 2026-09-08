@@ -126,6 +126,7 @@ export function itemPositions(project: DebankProject): ScanPosition[] {
     const detail = item.detail || {};
     const tokens = itemTokens(detail);
     const kind = item.name || item.detail_types?.[0] || null;
+    const ref = item.position_index !== undefined ? String(item.position_index) : null;
     positions.push({
       symbol: project.name || project.id || 'DeFi',
       name: kind,
@@ -139,9 +140,27 @@ export function itemPositions(project: DebankProject): ScanPosition[] {
       // Which position this is — for Uniswap V3 the NFT's token id, which is
       // what the on-chain reader knows its facts by. DeBank puts it on plenty
       // of things that are not pools, so it identifies and nothing more.
-      ref: item.position_index !== undefined ? String(item.position_index) : null,
-      // The KIND decides whether a range is a question worth answering
-      range: hasRange(kind) ? rangeFromLegs(tokens) : null,
+      ref: ref,
+      /**
+       * A range is a question only a concentrated position can be asked, and
+       * the kind alone cannot tell you which those are.
+       *
+       * DeBank calls a GMX V2 GM market a "Liquidity Pool", exactly as it calls
+       * a Uniswap V3 position one. A GM market has no band — you deposit into
+       * it and there is nothing to be inside or outside of — so a wallet
+       * holding one asset in one read as OUT OF RANGE, in red, which is a
+       * sentence about liquidation risk said where none exists.
+       *
+       * What separates them is the id: DeBank gives a Uniswap V3 position its
+       * NFT token id and gives a GM market nothing. Measured on production
+       * wallets, every GMX V2 item came back with no id and every Uniswap V3
+       * one with a number. So the range is asked only where there is both a
+       * pool-shaped kind AND an id to hang it on.
+       *
+       * The cost of being wrong the other way is a concentrated position whose
+       * badge goes missing, which is a thing not said rather than a false one.
+       */
+      range: hasRange(kind) && ref !== null ? rangeFromLegs(tokens) : null,
       tokens,
     });
   }

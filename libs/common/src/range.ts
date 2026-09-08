@@ -11,9 +11,12 @@ import type { ScanPositionToken } from '@svinooh/shared';
  * position is therefore out of range by definition, which is also exactly how a
  * one-sided "limit order" position behaves.
  *
- * Only ever call this for positions that actually have a range (see the callers:
- * DeBank marks them with `position_index`, Jupiter names them DLMM/CLMM/
- * Whirlpool). On a full-range V2-style pool the answer would always be "in",
+ * Only ever call this for positions that actually have a range. The callers are
+ * what enforce it, and a name is not enough to decide: DeBank calls a GMX V2 GM
+ * market a "Liquidity Pool" in the same words it uses for a Uniswap V3
+ * position, so the DeBank adapter also requires the position id that only the
+ * concentrated one carries. Jupiter is easier — it names them DLMM, CLMM or
+ * Whirlpool. On a full-range V2-style pool the answer would always be "in",
  * which is true but meaningless — and a meaningless badge is worse than none.
  */
 const EMPTY_SIDE = 0.005; // a side under 0.5% of the position has effectively been converted away
