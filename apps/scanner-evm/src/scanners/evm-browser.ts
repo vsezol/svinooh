@@ -12,6 +12,7 @@ import {
 } from './debank-portfolio';
 import { Semaphore } from '@svinooh/common';
 import type { ScanPosition, ScanResult } from '@svinooh/shared';
+import { answeredForSomebodyElse, unexplainedTotal } from './trust';
 
 /**
  * EVM balance: a headless browser reads the rendered debank.com page — exactly
@@ -547,9 +548,38 @@ async function scanEvmBrowserLocked(address: string, patient: boolean): Promise<
      * next scan gets a fresh browser. On 2026-09-08 there was no such check and
      * a $7 address was stored at $1,166,714.
      */
-    if (capturedFor && capturedFor !== address.toLowerCase()) {
+    if (answeredForSomebodyElse(capturedFor, address)) {
       throw new ScanHold(
         `${address}: the page answered for ${capturedFor} — refusing to file it here`,
+      );
+    }
+
+    /**
+     * The total has to be explained by the positions.
+     *
+     * Everything above proves whose POSITIONS these are — they arrive over URLs
+     * that name the address, and a payload fetched for anybody else is refused.
+     * The total has no such proof available: it is text scraped out of the
+     * header, and a number in the DOM carries no address at all. Blanking it
+     * before every navigation stops the commonest way it goes stale, but it
+     * cannot make the number self-identifying.
+     *
+     * So it is checked against the one thing here that IS identified. The
+     * positions are what the total is made of, so a header claiming several
+     * times more money than everything under it accounts for is not a total for
+     * this wallet, whatever produced it.
+     *
+     * The tolerance is deliberately loose — threefold, and a thousand dollars.
+     * DeBank drops sub-cent items from the list while keeping them in the sum,
+     * and the point here is not to audit its arithmetic; it is to catch a
+     * header belonging to a different address, which is never a few percent
+     * out. On 2026-09-08 the gap would have been sixty-eight thousandfold.
+     */
+    if (unexplainedTotal(totalUsd, captured ?? [])) {
+      const accounted = (captured ?? []).reduce((sum, p) => sum + p.valueUsd, 0);
+      throw new ScanHold(
+        `${address}: header says $${totalUsd.toFixed(2)} but the positions account for ` +
+          `$${accounted.toFixed(2)} — refusing a total nothing under it explains`,
       );
     }
 
