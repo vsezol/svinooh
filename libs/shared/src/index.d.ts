@@ -255,6 +255,16 @@ export interface AgentConfigDto {
   toolHops: number;
   contextMaxPositions: number;
   providerSort: string;
+  /**
+   * What the product says about itself — the same sentences the FAQ page
+   * shows, so the assistant cannot answer a question about svinooh differently
+   * from the page that answers it.
+   *
+   * Not a setting anybody turns; it rides here because this is already the one
+   * channel the agent has to the rest of the system, and a fact it is not
+   * given is a fact it will invent.
+   */
+  product: { q: string; a: string }[];
 }
 
 export interface AuthConfigDto {

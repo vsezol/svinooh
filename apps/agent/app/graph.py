@@ -44,7 +44,7 @@ from typing import TypedDict
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
-from .config import answering, settings, tool_hops
+from .config import answering, settings, system_prompt, tool_hops
 from .context import (
     cancelled_prompt,
     confirmation_request_prompt,
@@ -186,7 +186,7 @@ async def general_node(state: AgentState) -> AgentState:
     This branch is the graph's first dividend: before the router, every 'what
     is a health factor' paid a portfolio round trip it never used.
     """
-    return await _answer(settings.system_prompt, state)
+    return await _answer(system_prompt(), state)
 
 
 async def grounded_node(state: AgentState) -> AgentState:
@@ -203,7 +203,7 @@ async def grounded_node(state: AgentState) -> AgentState:
     makes the answer general, not absent — and with no data there are no
     tools, so the model cannot drill into what could not be fetched.
     """
-    system = settings.system_prompt
+    system = system_prompt()
     tools = []
     try:
         data = await portfolio_source.portfolio(state["target_portfolio"], state.get("authorization"))
@@ -253,7 +253,7 @@ async def onboard_node(state: AgentState) -> AgentState:
     write waits for the gate on a later turn.
     """
     signed_in = bool(state.get("authorization"))
-    system = onboarding_prompt(settings.system_prompt, signed_in)
+    system = onboarding_prompt(system_prompt(), signed_in)
     if not signed_in:
         return await _answer(system, state)
 
@@ -277,7 +277,7 @@ async def onboard_node(state: AgentState) -> AgentState:
 
     logger.info("onboarding: proposing %d wallet(s)", len(addresses))
     confirmation = await _answer(
-        confirmation_request_prompt(settings.system_prompt, addresses), state
+        confirmation_request_prompt(system_prompt(), addresses), state
     )
     return {**confirmation, "pending_set": addresses}
 
@@ -296,24 +296,24 @@ async def create_portfolio_node(state: AgentState) -> AgentState:
         )
     except Exception as error:  # noqa: BLE001 — nothing was created; say so
         logger.warning("portfolio creation failed: %r", error)
-        return await _answer(creation_failed_prompt(settings.system_prompt), state)
+        return await _answer(creation_failed_prompt(system_prompt()), state)
     logger.info(
         "onboarding: created %s (+%d wallets, %d refused)",
         result.get("slug"), len(result.get("added", [])), len(result.get("failed", [])),
     )
-    answered = await _answer(created_prompt(settings.system_prompt, result), state)
+    answered = await _answer(created_prompt(system_prompt(), result), state)
     return {**answered, "pending_clear": True}
 
 
 async def cancel_creation_node(state: AgentState) -> AgentState:
     """A declined proposal: drop it and say so — nothing was created."""
-    answered = await _answer(cancelled_prompt(settings.system_prompt), state)
+    answered = await _answer(cancelled_prompt(system_prompt()), state)
     return {**answered, "pending_clear": True}
 
 
 async def unavailable_node(state: AgentState) -> AgentState:
     """Identity could not be resolved: answer, and say the numbers are out of reach."""
-    return await _answer(degraded_prompt(settings.system_prompt), state)
+    return await _answer(degraded_prompt(system_prompt()), state)
 
 
 @cache  # built and compiled once per process, like the model clients

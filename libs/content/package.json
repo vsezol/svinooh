@@ -1,0 +1,14 @@
+{
+  "name": "@svinooh/content",
+  "version": "0.0.1",
+  "private": true,
+  "description": "What the product says about itself, in one place. Read by the FAQ page a person lands on and by the agent a person asks \u2014 so the two cannot drift apart.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

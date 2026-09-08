@@ -15,7 +15,8 @@ from . import remote_config
 # prompt itself is code and code is English.
 DEFAULT_SYSTEM_PROMPT = (
     "You are the assistant inside svinooh, a DeFi portfolio tracker. Be brief "
-    "and concrete.\n"
+    "and concrete. Write in the language the user wrote in — every reply, "
+    "including one that is mostly a number or a term.\n"
     "\n"
     "Rules about the portfolio data below, in order of importance:\n"
     "1. Every figure you state must come from the data given to you or from a "
@@ -39,11 +40,22 @@ DEFAULT_SYSTEM_PROMPT = (
     "6. Quote figures as they are given, with their currency and their sign. "
     "Do not round a value into a different one.\n"
     "\n"
+    "Rules about svinooh itself — what it does, what it costs, which chains it "
+    "covers, where a button is, what the Telegram bot can do:\n"
+    "7. Answer only from the product facts given below. You have seen a "
+    "thousand portfolio trackers and this is not those: a settings screen, a "
+    "bot command, a supported network or a plan limit that sounds right is a "
+    "thing you are inventing. Naming one that does not exist sends somebody "
+    "looking for it.\n"
+    "8. When the facts do not cover it, say you are not sure and point at "
+    "svinooh.com/faq or the site itself. An unsure answer costs a click; a "
+    "confident wrong one costs trust.\n"
+    "\n"
     "When this prompt carries no portfolio data and the question needs some, "
     "say you cannot see the portfolio right now and answer whatever general "
     "part you can. When the question does not need it — what a term means, "
     "how something works — simply answer, without mentioning the portfolio at "
-    "all. Answer in the language the user writes in."
+    "all."
 )
 
 
@@ -208,6 +220,39 @@ def _role(
         if cap_is_usable and cap_from_panel > 0
         else int(os.getenv(f"AGENT_{env_prefix}MAX_TOKENS", str(answer_token_cap))),
     )
+
+
+def product_facts() -> str:
+    """What svinooh says about itself, as the model is given it.
+
+    The same sentences the FAQ page shows a person, fetched with the rest of
+    the config, because the agent has no shared libraries and this is the one
+    channel it has (app/remote_config.py). Two consequences worth stating:
+    what the page says and what the assistant says cannot drift, and a fact
+    that changes changes for both in one commit.
+
+    Empty when the config has not arrived. That is the honest state and rule 8
+    is written for it — an assistant that does not know says so, rather than
+    describing the product it imagines this is.
+    """
+    entries = remote_config.current().get("product")
+    if not isinstance(entries, list) or not entries:
+        return ""
+    said = "\n".join(
+        f"- {entry.get('q', '')} {entry.get('a', '')}".strip()
+        for entry in entries
+        if isinstance(entry, dict) and entry.get("a")
+    )
+    return f"\n\nProduct facts — these, and nothing beyond them:\n{said}" if said else ""
+
+
+def system_prompt() -> str:
+    """The instructions, plus what the product currently says about itself.
+
+    A function rather than a field because the second half is live: it arrives
+    over HTTP and can change without a deploy, like every other knob here.
+    """
+    return settings.system_prompt + product_facts()
 
 
 def answering() -> Role:

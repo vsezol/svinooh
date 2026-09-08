@@ -128,7 +128,7 @@ export function CheckedNote({ children }: { children: React.ReactNode }) {
  * FAQPage transcript for machines — one source array, so the schema can
  * never drift from what the page actually says.
  */
-export function Faq({ items }: { items: { q: string; a: string }[] }) {
+export function Faq({ items }: { items: readonly { q: string; a: string }[] }) {
   const jsonLd = JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
