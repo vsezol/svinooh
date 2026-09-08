@@ -199,17 +199,20 @@ class TestProviderPolicy:
     def test_an_aggregator_gets_the_whole_policy(self):
         body = llm._reasoning("low", "openai:deepseek/deepseek-v4-flash")["extra_body"]
         assert body["provider"]["data_collection"] == "deny", "our prompts carry wallet balances"
-        assert body["provider"]["require_parameters"] is True, "tools are not optional here"
         assert body["provider"]["sort"] == "throughput"
         assert body["reasoning"] == {"effort": "low"}
 
-    def test_requiring_parameters_is_what_makes_a_thinking_setting_a_filter(self):
-        # The whole 404: require_parameters says a provider must support every
-        # parameter in the request, so asking a model that cannot think to
-        # think leaves nothing to route to. Dropping the ask is the cure, and
-        # it must not take the policy down with it.
+    def test_we_do_not_demand_a_provider_advertise_every_parameter(self):
+        # It reads like "make sure they can really run tools" and is not that:
+        # it covers every parameter in the request, and forcing a single tool
+        # call makes the client add parallel_tool_calls, which none of the
+        # answering model's fifteen providers advertises. On, this policy could
+        # not be served by anybody, for any model, on any classification.
+        assert "require_parameters" not in llm._reasoning("low", "openai:m")["extra_body"]["provider"]
+
+    def test_dropping_a_thinking_setting_leaves_the_rest_of_the_policy_standing(self):
         body = llm._reasoning("low", "openai:m")["extra_body"]
-        assert body["provider"]["require_parameters"] is True and "reasoning" in body
+        assert "reasoning" in body and body["provider"]["data_collection"] == "deny"
         llm.stop_asking_it_to_think(role(model="openai:m"))
         body = llm._reasoning("low", "openai:m")["extra_body"]
-        assert "reasoning" not in body and body["provider"]["require_parameters"] is True
+        assert "reasoning" not in body and body["provider"]["data_collection"] == "deny"
