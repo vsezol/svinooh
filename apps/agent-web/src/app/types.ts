@@ -6,6 +6,7 @@
  * `text` are not emitted by the service yet; the renderer implements the full
  * vocabulary now (DESIGN-SPEC.md), the wire grows into it additively.
  */
+import type { HistoryRange } from '@svinooh/shared';
 
 // ── the wire ────────────────────────────────────────────────────────────────
 
@@ -26,9 +27,15 @@ export interface ChartBlock {
   title: string;
   delta?: string;
   deltaTone?: 'up' | 'down';
-  points: { t: string; v: number }[];
-  /** Tick labels for the x axis (subset of points' t). */
-  xTicks?: string[];
+  /**
+   * The readings, in time order. `t` is a real timestamp in milliseconds, not
+   * a label: the chart the app draws is the chart the assistant draws, and
+   * that one scrolls, measures a span between two points and reads a value
+   * under the pointer — none of which is possible against pretty strings.
+   */
+  points: { t: number; v: number }[];
+  /** Which window the readings cover, which is what sets the chart's scale. */
+  period: HistoryRange;
 }
 
 export interface TableBlock {

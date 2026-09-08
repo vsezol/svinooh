@@ -1,91 +1,61 @@
+import { lazy, Suspense } from 'react';
+import { useDesktop } from '../../app/useDesktop';
 import type { ChartBlock } from '../../app/types';
 
-const VIEW_W = 100;
-const VIEW_H = 100;
-/* Inset in viewBox units: under preserveAspectRatio="none" the non-scaling
-   2px stroke would otherwise clip in half at the min/max extremes. */
-const PAD_Y = 4;
+/**
+ * Tall enough to drag across and read something off. Below about 120px the
+ * line is a decoration and the measuring gesture has nowhere to land.
+ */
+const HEIGHT = { phone: '120px', desktop: '140px' };
 
-/* Axis labels follow the canvas style: $134.8k, not full figures. */
-function compact(v: number): string {
-  const sign = v < 0 ? '−' : '';
-  const a = Math.abs(v);
-  if (a >= 1e9) return `${sign}$${(a / 1e9).toFixed(1)}b`;
-  if (a >= 1e6) return `${sign}$${(a / 1e6).toFixed(1)}m`;
-  if (a >= 1e3) return `${sign}$${(a / 1e3).toFixed(1)}k`;
-  return `${sign}$${Math.round(a)}`;
-}
-
-interface Plot {
-  line: string;
-  area: string;
-  min: number;
-  max: number;
-}
-
-function buildPlot(values: number[]): Plot | null {
-  if (values.length === 0) return null;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  /* A single point still reads as a flat line across the full width. */
-  const plotted = values.length === 1 ? [values[0], values[0]] : values;
-  const step = VIEW_W / (plotted.length - 1);
-  const pts = plotted.map((v, i) => {
-    const x = (i * step).toFixed(2);
-    const y = (VIEW_H - PAD_Y - ((v - min) / range) * (VIEW_H - PAD_Y * 2)).toFixed(2);
-    return `${x},${y}`;
-  });
-  const line = `M${pts.join(' L')}`;
-  return { line, area: `${line} L${VIEW_W},${VIEW_H} L0,${VIEW_H} Z`, min, max };
-}
+/**
+ * A chart in an answer — the product's own chart, not a picture of one.
+ *
+ * It used to be a static SVG: a line, two axis labels, nothing to do. Which
+ * raised the fair question of why bother. A chart you cannot drag, measure or
+ * read a value off is a screenshot, and the assistant putting a screenshot of
+ * the portfolio's chart next to a sentence about it is worse than putting
+ * nothing, because it looks like the real one.
+ *
+ * So it is the real one. Same component, same gestures: drag to scroll through
+ * the history, shift-drag or two fingers to measure a span, hover to read the
+ * value under the pointer. The assistant decides which readings to show and
+ * what to say about them; how a chart behaves is not its business and never
+ * was.
+ *
+ * Loaded on demand because the charting library is the largest thing in this
+ * bundle and most turns are a paragraph of text. It arrives when an answer
+ * actually has a chart in it.
+ */
+const AreaChart = lazy(() =>
+  import('@svinooh/ui/AreaChart').then((m) => ({ default: m.AreaChart })),
+);
 
 export default function ChartBlockView({ block }: { block: ChartBlock }) {
-  const plot = buildPlot(block.points.map((p) => p.v));
+  const desktop = useDesktop();
+  const height = desktop ? HEIGHT.desktop : HEIGHT.phone;
+  const values = block.points.map((p) => p.v);
+  const times = block.points.map((p) => p.t);
+
   return (
     <div className="sv-a-b-card sv-a-b-chart">
-      <div className="sv-a-b-eyebrow">{block.title}</div>
-      {block.delta ? (
-        <div className="sv-a-b-chart-delta" data-tone={block.deltaTone}>
-          {block.delta}
+      <div className="sv-a-b-chart-head">
+        <span className="sv-a-b-eyebrow">{block.title}</span>
+        {block.delta ? (
+          <span className="sv-a-b-chart-delta mono" data-tone={block.deltaTone ?? 'mut'}>
+            {block.delta}
+          </span>
+        ) : null}
+      </div>
+      {/* The placeholder holds the height the chart will take, so an answer
+          does not jump when the library lands. A number rather than a
+          percentage: the chart sizes its canvas from this box, and a box that
+          resolves against a parent with no height resolves to nothing. */}
+      <Suspense fallback={<div style={{ height, marginTop: 10 }} />}>
+        <div style={{ marginTop: 10 }}>
+          <AreaChart values={values} times={times} period={block.period} height={height} framed={false} />
         </div>
-      ) : null}
-      {plot ? (
-        <div className="sv-a-b-chart-plot">
-          <div className="sv-a-b-chart-main">
-            <svg
-              className="sv-a-b-chart-svg"
-              viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
-              preserveAspectRatio="none"
-              role="img"
-              aria-label={block.title}
-            >
-              <path d={plot.area} fill="currentColor" fillOpacity={0.13} stroke="none" />
-              <path
-                d={plot.line}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
-              />
-            </svg>
-            {block.xTicks?.length ? (
-              <div className="sv-a-b-chart-x">
-                {block.xTicks.map((t, i) => (
-                  <span key={i}>{t}</span>
-                ))}
-              </div>
-            ) : null}
-          </div>
-          <div className="sv-a-b-chart-y">
-            <span>{compact(plot.max)}</span>
-            <span>{compact((plot.min + plot.max) / 2)}</span>
-            <span>{compact(plot.min)}</span>
-          </div>
-        </div>
-      ) : null}
+      </Suspense>
     </div>
   );
 }
