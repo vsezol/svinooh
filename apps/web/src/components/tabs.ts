@@ -22,19 +22,26 @@ import type { Tab } from './SideNav';
  * is no way for the phone to reach a page the rail does not offer.
  */
 export const tabsFor = (isAdmin: boolean): Array<{ key: Tab; label: string }> => [
-  // AI comes first because it is the way in now: the assistant answers the
-  // question a portfolio page makes you go and look up, and it can reach
-  // everything else on your behalf. The portfolio is what it talks about.
-  ...(AGENT_ENABLED ? ([{ key: 'agent', label: 'AI' }] as const) : []),
+  // The portfolio stays first while the assistant is still growing into the
+  // job. It will lead when it can carry a first visit on its own; today the
+  // page is what somebody came for.
   { key: 'portfolio', label: 'Portfolio' },
+  ...(AGENT_ENABLED ? ([{ key: 'agent', label: 'AI' }] as const) : []),
   { key: 'notifications', label: 'Alerts' },
   // Admin comes last and only for an admin, so everybody else's strip is
   // exactly what it was and there is no page for a phone to swipe to
   ...(isAdmin ? ([{ key: 'admin', label: 'Admin' }] as const) : []),
 ];
 
-/** Where a fresh visit lands: the assistant when there is one, else the portfolio. */
-export const homeTab = (): Tab => (AGENT_ENABLED ? 'agent' : 'portfolio');
+/** Where a visit lands when the URL does not say. */
+export const homeTab = (): Tab => 'portfolio';
+
+/** The name a tab goes by in a link. */
+export const TAB_PARAM = 'tab';
+
+/** The tab a URL is asking for, or null when it names none we have. */
+export const tabFromUrl = (value: string | null, isAdmin: boolean): Tab | null =>
+  tabsFor(isAdmin).find((t) => t.key === value)?.key ?? null;
 
 /** Where a tab sits on the strip. The rail and the pager both count from here. */
 export const tabIndex = (tab: Tab, isAdmin: boolean): number =>
