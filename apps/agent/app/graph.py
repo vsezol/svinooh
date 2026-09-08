@@ -56,6 +56,7 @@ from .context import (
 )
 from .datasources import PortfolioApiSource
 from .intent import classify
+from .steps import step
 from .llm import ask, extract_text, get_model
 from .tools import portfolio_tools, run_tools
 from .onboarding import (
@@ -123,7 +124,8 @@ async def pending_gate(state: AgentState) -> AgentState:
 async def classify_intent_node(state: AgentState) -> AgentState:
     """Label the turn; on any failure, route where money questions are safe."""
     try:
-        label = await classify(state["question"])
+        async with step("route", "Reading the question"):
+            label = await classify(state["question"])
         logger.info("intent: %s (%s) q=%.80s", label.intent, label.reason, state["question"])
         return {"intent": label.intent}
     except Exception as error:  # noqa: BLE001 — the fail-safe IS the handling
@@ -154,7 +156,8 @@ async def identity_node(state: AgentState) -> AgentState:
         return {"route": "onboard"}
 
     try:
-        me = await portfolio_source.me(auth)
+        async with step("account", "Checking your account"):
+            me = await portfolio_source.me(auth)
     except Exception as error:  # noqa: BLE001 — an error is NOT an empty list
         logger.warning("identity lookup failed: %r", error)
         return {"route": "unavailable"}
@@ -205,12 +208,12 @@ async def grounded_node(state: AgentState) -> AgentState:
     """
     system = system_prompt()
     tools = []
+    target = state["target_portfolio"]
     try:
-        data = await portfolio_source.portfolio(state["target_portfolio"], state.get("authorization"))
+        async with step("portfolio", f"Reading portfolio · {target}"):
+            data = await portfolio_source.portfolio(target, state.get("authorization"))
         system = grounded_prompt(system, data)
-        tools = portfolio_tools(
-            portfolio_source, state["target_portfolio"], state.get("authorization"), data
-        )
+        tools = portfolio_tools(portfolio_source, target, state.get("authorization"), data)
     except Exception as error:  # noqa: BLE001 — any fetch failure degrades the same way
         logger.warning(
             "portfolio context fetch failed for %s: %r", state.get("target_portfolio"), error

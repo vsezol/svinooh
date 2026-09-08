@@ -29,8 +29,9 @@ logger = logging.getLogger("svinooh-ai")
 async def turn_events(state: dict) -> AsyncIterator[tuple[str, dict]]:
     """Run one turn, reporting it as it happens.
 
-    Yields `("token", {"text": ...})` as the answer is written, then exactly
-    one `("done", final_state)`, or one `("error", ...)` if the turn failed.
+    Yields `("step", ...)` as each operation starts and finishes and
+    `("token", {"text": ...})` as the answer is written, then exactly one
+    `("done", final_state)`, or one `("error", ...)` if the turn failed.
     Nothing after either — a caller can treat the first of those as the end.
 
     Two things are deliberately not the same. Tokens are what the model is
@@ -43,10 +44,17 @@ async def turn_events(state: dict) -> AsyncIterator[tuple[str, dict]]:
     final: dict[str, Any] = {}
     try:
         async for mode, chunk in agent_graph().astream(
-            state, stream_mode=["messages", "values"]
+            state, stream_mode=["custom", "messages", "values"]
         ):
             if mode == "values":
                 final = chunk if isinstance(chunk, dict) else final
+                continue
+            if mode == "custom":
+                # A node saying what it is doing. Passed through untouched:
+                # this layer has no idea what the work was and is not the place
+                # to start describing it (app/steps.py).
+                if isinstance(chunk, dict):
+                    yield "step", chunk
                 continue
             message, meta = chunk
             # Labelling a question and checking a reply for a yes both run

@@ -119,8 +119,9 @@ async def chat_stream(
     """The same turn, reported while it happens.
 
     `start` goes out before any model is called, which is what lets a chat show
-    it heard the question rather than guessing from a timer. `done` carries the
-    finished answer — the very body /chat would have returned, schema stamp
+    it heard the question rather than guessing from a timer. `step` is the work
+    reporting itself as it happens — every line is an operation that ran, said
+    by the code that ran it (app/steps.py). `done` carries the finished answer — the very body /chat would have returned, schema stamp
     included — and is what a client should render: the tokens before it are a
     preview of the work, and a branch that answers from a fixed sentence
     produces no tokens at all.
