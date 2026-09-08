@@ -61,4 +61,11 @@ export const config = {
   httpTimeoutMs: int(process.env.HTTP_TIMEOUT_MS, 15_000),
   // Concurrency of the BTC/SOL/TRON HTTP scanners.
   httpConcurrency: int(process.env.SCAN_HTTP_CONCURRENCY, 4),
+  // Zerion API key, for reading EVM and SOL TRANSFERS (flows/). The same key
+  // scanner-evm uses for balances, and it has to be set on both: the two
+  // services read different endpoints of the same account and neither can ask
+  // the other. A secret, so it lives here and not in the settings registry —
+  // that file is public and the admin panel shows every value in it.
+  zerionApiKey: process.env.ZERION_API_KEY ?? '',
+  zerionTimeoutMs: int(process.env.ZERION_TIMEOUT_MS, 20_000),
 };

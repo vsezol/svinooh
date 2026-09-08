@@ -221,6 +221,18 @@ export interface HistoryPointDto {
   t: string;
   usd: number;
   /**
+   * The same reading with the money that was put in or taken out netted off —
+   * see PerformanceBasis. A step where somebody deposited disappears; what the
+   * holdings themselves did remains.
+   *
+   * `null` where there is no transfer coverage to net against, which is
+   * everything before `flowsFrom` and everything on a chain whose transfers we
+   * do not read. Drawn from where the coverage begins rather than pretending
+   * nothing moved before we were looking — the same rule the two readings
+   * below have always followed.
+   */
+  adjustedUsd: number | null;
+  /**
    * What could have been collected, and what was owed, at that moment.
    *
    * `null` for a reading taken before either was recorded — which is every
@@ -232,9 +244,84 @@ export interface HistoryPointDto {
   debtUsd: number | null;
 }
 
+/**
+ * How a period's result is measured. Two answers to one question, and the
+ * difference between them is money the owner moved rather than money the
+ * portfolio made.
+ *
+ *  - `raw` — what the balance did. Depositing $5k into a $100k portfolio reads
+ *    as +5%, because the balance did rise by 5%.
+ *  - `net-flows` — what the HOLDINGS did. Deposits and withdrawals across the
+ *    portfolio's edge are netted off, so the same $5k deposit reads as 0%.
+ *
+ * Neither is wrong; they answer different questions. `raw` is the default
+ * because it is the one that needs no data we might be missing.
+ */
+export type PerformanceBasis = 'raw' | 'net-flows';
+
+/** What a window did: in money, and as a rate */
+export interface ChangeDto {
+  usd: number;
+  /**
+   * `null` — there is no honest rate to quote. Happens when the capital the
+   * return would be measured against comes to zero or less: a portfolio that
+   * started empty and was emptied again has a dollar result and no percentage.
+   */
+  pct: number | null;
+}
+
+/** One asset moving inside a flow — what left or arrived, and what it was worth then */
+export interface FlowLegDto {
+  symbol: string;
+  amount: number;
+  /** The asset's price AT the time of the transaction, not now */
+  priceUsd: number | null;
+  usd: number | null;
+}
+
+/**
+ * Money crossing the portfolio's edge: a deposit from outside, or a withdrawal
+ * to it. A swap, a move between two wallets of the same portfolio and a deposit
+ * into a DeFi protocol are all NOT flows — the value never left.
+ *
+ * Everything here is public chain data: addresses, hashes and amounts anyone
+ * can read off the chain. No label and no owner.
+ */
+export interface FlowDto {
+  t: string;
+  /** `in` — arrived from outside; `out` — left the portfolio */
+  direction: 'in' | 'out';
+  /** Always positive; `direction` carries the sign. Null — nothing could price it. */
+  usd: number | null;
+  legs: FlowLegDto[];
+  chain: Chain;
+  /** The network it happened on: eth, arb, base, sol, tron, btc */
+  network: string | null;
+  txHash: string;
+  /** The other side, where there is a single one to name */
+  counterparty: string | null;
+  /** Which wallet of the portfolio it moved through */
+  walletId: string | null;
+}
+
 export interface HistoryDto {
   range: HistoryRange;
   points: HistoryPointDto[];
+  /** The flows inside the fetched span — what the marks on the chart are */
+  flows: FlowDto[];
+  /**
+   * Where transfer coverage begins, as an ISO timestamp. `null` — there is
+   * none, and every `adjustedUsd` is null. Shown to the reader rather than
+   * hidden: a corrected line that silently starts halfway is worse than one
+   * that says where it starts.
+   */
+  flowsFrom: string | null;
+  /**
+   * What the window did on each basis, computed here rather than on the client
+   * so the toggle is a choice between two answers already in hand — no second
+   * request, and one place where the arithmetic lives.
+   */
+  change: Record<PerformanceBasis, ChangeDto>;
 }
 
 /**
