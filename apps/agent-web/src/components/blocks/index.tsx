@@ -3,20 +3,24 @@ import type {
   BarsBlock,
   ChartBlock,
   ConfirmBlock,
+  LinksBlock,
   NoteBlock,
   SignInBlock,
   StatsBlock,
   TableBlock,
   TextBlock,
+  TraceBlock,
 } from '../../app/types';
 import BarsBlockView from './BarsBlock';
 import ChartBlockView from './ChartBlock';
 import ConfirmBlockView, { type ConfirmAction } from './ConfirmBlock';
+import LinksBlockView from './LinksBlock';
 import NoteBlockView from './NoteBlock';
 import SignInBlockView, { type SignInProvider } from './SignInBlock';
 import StatsBlockView from './StatsBlock';
 import TableBlockView from './TableBlock';
 import TextBlockView from './TextBlock';
+import TraceBlockView from './TraceBlock';
 import UnsupportedBlock from './UnsupportedBlock';
 import './blocks.css';
 
@@ -30,9 +34,13 @@ export interface BlockViewProps {
   onAction?: (action: ConfirmAction) => void;
   /** A confirm action is in flight — locks the create button until it lands. */
   busy?: boolean;
+  /** Opens or folds the step-by-step trace above a finished answer. */
+  onToggleTrace?: () => void;
+  /** Follows one of the places an answer leads. */
+  onFollow?: (href: string) => void;
 }
 
-export default function BlockView({ block, onSignIn, onAction, busy }: BlockViewProps) {
+export default function BlockView({ block, onSignIn, onAction, busy, onToggleTrace, onFollow }: BlockViewProps) {
   // UnknownBlock widens `kind` to string, so the switch cannot narrow the
   // union on its own — each case asserts the member it matched.
   switch (block.kind) {
@@ -48,6 +56,10 @@ export default function BlockView({ block, onSignIn, onAction, busy }: BlockView
       return <BarsBlockView block={block as BarsBlock} />;
     case 'note':
       return <NoteBlockView block={block as NoteBlock} />;
+    case 'trace':
+      return <TraceBlockView block={block as TraceBlock} onToggle={onToggleTrace} />;
+    case 'links':
+      return <LinksBlockView block={block as LinksBlock} onFollow={onFollow} />;
     case 'signin':
       return <SignInBlockView block={block as SignInBlock} onSignIn={onSignIn} />;
     case 'confirm':

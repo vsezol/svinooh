@@ -1,24 +1,17 @@
 import type { ReactNode } from 'react';
 
-const RING = (
-  <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth={1.6} aria-hidden="true">
-    <circle cx="4" cy="4" r="3" />
-  </svg>
-);
-
 /**
- * An agent turn: no bubble, a bare left-aligned stack of blocks under a small
- * identity row. Children are the rendered blocks; this component knows nothing
- * about their kinds.
+ * An agent turn: a bare left-aligned stack of blocks, and nothing else.
+ *
+ * No bubble, no avatar, no name. There used to be a small "○ agent" row over
+ * every answer, which on a phone cost a line of vertical room and a slice of
+ * width to say the one thing the reader already knew — the other side of the
+ * conversation is the only side that gets a bubble, so anything without one is
+ * the agent by construction.
+ *
+ * What that buys is the full column for the answer, which is the whole point:
+ * this is a reading surface before it is a chat.
  */
 export function AgentMessage({ children }: { children: ReactNode }) {
-  return (
-    <div className="sv-a-c-msg">
-      <div className="sv-a-c-msg-head">
-        <span className="sv-a-c-msg-avatar">{RING}</span>
-        <span className="sv-a-c-msg-name">agent</span>
-      </div>
-      {children}
-    </div>
-  );
+  return <div className="sv-a-c-msg">{children}</div>;
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatItem, Conversation, MountOptions, PortfolioRef, SignInBlock } from './types';
+import { useDesktop } from './useDesktop';
 import { WireError, streamChat } from './wire';
 import * as history from './history';
 import { AgentHeader } from '../components/AgentHeader';
@@ -74,19 +75,6 @@ function notesFor(err: unknown, question: string): ChatItem[] {
   // Covers network failure (status 0) and every unexpected status: the
   // question already sits in the log and is persisted with it.
   return [{ id: uid(), role: 'note', text: 'The agent is unavailable right now. Your question is saved.' }];
-}
-
-function useDesktop(): boolean {
-  const [desktop, setDesktop] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches,
-  );
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)');
-    const onChange = () => setDesktop(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
-  return desktop;
 }
 
 export function App(props: AppProps) {

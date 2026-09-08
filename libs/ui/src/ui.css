@@ -719,3 +719,44 @@ button.ui-tag[data-variant='soft']:not(:disabled):hover {
      rotated off */
   transform: rotate(225deg) translate(-2px, -2px);
 }
+
+/* ───────── a reading ─────────
+   The label is set small and wide because it is a name, not prose: at 9.5px
+   the letter-spacing is what keeps it readable, and cramming it would only
+   make it look like a mistake. */
+
+.ui-stat-grid {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.ui-stat {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surf);
+  padding: 12px 14px;
+  min-width: 0;
+}
+
+.ui-stat-label {
+  font-size: var(--fs-eyebrow);
+  letter-spacing: 0.14em;
+  color: var(--mut);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ui-stat-value {
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-title);
+  letter-spacing: -0.01em;
+  margin-top: 6px;
+  white-space: nowrap;
+}
+
+.ui-stat-delta {
+  font-size: var(--fs-tag);
+  margin-top: 5px;
+  white-space: nowrap;
+}

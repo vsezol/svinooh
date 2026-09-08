@@ -65,9 +65,13 @@
 }
 
 /* Embedded top bar: grounding chip left, chat controls right. */
+/* A strip that says which portfolio is being talked about, and offers the two
+   chat actions. It is a desktop thing now: on a phone it was a whole row spent
+   restating what the answers already say, on the screen with the least room to
+   spend. The switcher moved into the header's own actions there. */
 .sv-a-topbar {
+  display: none;
   flex: none;
-  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-4);
@@ -75,6 +79,12 @@
   max-width: 720px;
   margin: 0 auto;
   padding: var(--sp-4) var(--sp-5);
+}
+
+@media (min-width: 720px) {
+  .sv-a-topbar {
+    display: flex;
+  }
 }
 
 .sv-a-topbar-actions {
