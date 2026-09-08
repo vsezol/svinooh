@@ -26,6 +26,7 @@ from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
 
 from .context import position_line, short_address, usd
+from .steps import step, tool_label
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -194,7 +195,10 @@ async def run_tools(calls: list[dict], tools: list) -> list[ToolMessage]:
             handler = by_name.get(name)
             if handler is None:
                 raise KeyError(f"unknown tool: {name}")
-            result = await handler.ainvoke(args)
+            # Reported by its own name and its own argument, so the line on
+            # screen cannot describe something other than the call that ran.
+            async with step(call.get("id") or name, tool_label(name, args)):
+                result = await handler.ainvoke(args)
             logger.info("tool %s(%s) -> %d chars", name, args, len(str(result)))
         except Exception as error:  # noqa: BLE001 — the model handles tool failures
             logger.warning("tool %s failed: %r", name, error)

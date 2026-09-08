@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ChatItem, Conversation, MountOptions, PortfolioRef, SignInBlock } from './types';
+import type { ChatItem, Conversation, MountOptions, PortfolioRef, SignInBlock, TraceBlock } from './types';
 import { useDesktop } from './useDesktop';
-import { WireError, streamChat } from './wire';
+import { WireError, streamChat, type StepEvent } from './wire';
 import * as history from './history';
 import { AgentHeader } from '../components/AgentHeader';
 import { AgentMessage } from '../components/AgentMessage';
@@ -42,6 +42,27 @@ function uid(): string {
 
 function blank(): Conversation {
   return { id: uid(), title: 'New chat', at: Date.now(), items: [] };
+}
+
+/**
+ * The steps a turn reported, as a block.
+ *
+ * Every row here is an operation that ran: the id is the one the service used,
+ * the label is what that operation said about itself, and the time is what it
+ * actually took. Nothing is added to make the list look busier.
+ */
+function traceOf(steps: StepEvent[], collapsed: boolean): TraceBlock {
+  const ms = steps.reduce((sum, step) => sum + (step.ms ?? 0), 0);
+  return {
+    kind: 'trace',
+    collapsed,
+    summary: `${steps.length} ${steps.length === 1 ? 'step' : 'steps'} · ${(ms / 1000).toFixed(1)}s`,
+    steps: steps.map((step) => ({
+      label: step.label ?? step.id,
+      state: step.state === 'running' ? 'running' : 'done',
+      time: step.ms === undefined ? undefined : `${(step.ms / 1000).toFixed(1)}s`,
+    })),
+  };
 }
 
 function notesFor(err: unknown, question: string): ChatItem[] {
@@ -110,6 +131,14 @@ export function App(props: AppProps) {
   // purpose: nothing is committed to the log — or to storage — until the turn
   // has finished, so a stream that dies halfway leaves the chat as it was.
   const [streamed, setStreamed] = useState<string | null>(null);
+  // What the turn is doing, as it reports itself. Held beside the log like the
+  // streaming text: it belongs to the turn in flight, not to the conversation.
+  const [steps, setSteps] = useState<StepEvent[]>([]);
+  const [traceOpen, setTraceOpen] = useState(true);
+  /** The same list, readable when the turn ends without waiting for a render. */
+  const stepsRef = useRef<StepEvent[]>([]);
+  /** Which finished answers have their receipt open. Folded is the default. */
+  const [openTraces, setOpenTraces] = useState<ReadonlySet<string>>(() => new Set());
   const [historyOpen, setHistoryOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const lastQuestion = useRef<string | null>(null);
@@ -140,6 +169,9 @@ export function App(props: AppProps) {
       lastQuestion.current = text;
       setBusy(true);
       setStreamed(null);
+      setSteps([]);
+      stepsRef.current = [];
+      setTraceOpen(true);
       // Which conversation asked. An answer that arrives after the user has
       // started a new chat — or opened an older one — belongs to neither of
       // them, and appending it there is how a fresh chat ends up replying to
@@ -155,9 +187,24 @@ export function App(props: AppProps) {
             sessionId: activeRef.current.sessionId,
             message: text,
           },
-          (piece) => {
-            if (activeRef.current.id !== asked) return;
-            setStreamed((sofar) => (sofar ?? '') + piece);
+          {
+            onToken: (piece) => {
+              if (activeRef.current.id !== asked) return;
+              setStreamed((sofar) => (sofar ?? '') + piece);
+            },
+            // Every one of these is an operation that ran, reported by the code
+            // that ran it. A line closing carries how long it took; a line
+            // opening is a line that has not finished yet.
+            onStep: (event) => {
+              if (activeRef.current.id !== asked) return;
+              setSteps((sofar) => {
+                const at = sofar.findIndex((s) => s.id === event.id);
+                const next = at === -1 ? [...sofar, event] : sofar.slice();
+                if (at !== -1) next[at] = { ...next[at], ...event };
+                stepsRef.current = next;
+                return next;
+              });
+            },
           },
         );
         if (activeRef.current.id !== asked) return;
@@ -166,13 +213,26 @@ export function App(props: AppProps) {
         // than the text being kept: what arrived as pieces was a preview, and
         // an answer can be more than the words in it — a sign-in prompt, a
         // confirmation to press.
-        push([{ id: uid(), role: 'agent', blocks: res.blocks }]);
+        //
+        // The receipt rides with them, folded. It belongs to this turn rather
+        // than to the screen, so scrolling back to an old answer still shows
+        // what that answer was built from.
+        const receipt = stepsRef.current;
+        push([
+          {
+            id: uid(),
+            role: 'agent',
+            blocks: receipt.length > 0 ? [traceOf(receipt, true), ...res.blocks] : res.blocks,
+          },
+        ]);
       } catch (err) {
         if (activeRef.current.id !== asked) return;
         push(notesFor(err, text));
       } finally {
         setBusy(false);
         setStreamed(null);
+        // The receipt is on the message now; the floating copy goes.
+        setSteps([]);
         setStatusText(null);
       }
     },
@@ -260,6 +320,10 @@ export function App(props: AppProps) {
   // they are the better answer to "is anything happening".
   const thinking = (busy && streamed === null) || lastRole === 'status';
 
+  // The live trace, built from what the turn reported about itself. It folds
+  // as soon as the answer starts: the steps mattered while they ran.
+  const traceBlock = traceOf(steps, !traceOpen || streamed !== null);
+
   const meta =
     portfolio && portfolio.wallets != null && portfolio.totalUsd != null
       ? `${portfolio.wallets} WALLETS · $${Math.round(portfolio.totalUsd).toLocaleString('en-US')}`
@@ -282,6 +346,14 @@ export function App(props: AppProps) {
     }
   }
 
+  const toggleTrace = useCallback((id: string) => {
+    setOpenTraces((open) => {
+      const next = new Set(open);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
+
   const renderItem = (item: ChatItem) => {
     switch (item.role) {
       case 'user':
@@ -290,7 +362,21 @@ export function App(props: AppProps) {
         return (
           <AgentMessage key={item.id}>
             {item.blocks.map((block, i) => (
-              <BlockView key={i} block={block} onSignIn={onSignIn} onAction={onAction} busy={busy} />
+              <BlockView
+                key={i}
+                // A receipt opens per answer rather than for all of them: two
+                // turns' worth of steps unfolding together is not what anybody
+                // clicked for.
+                block={
+                  block.kind === 'trace'
+                    ? { ...(block as TraceBlock), collapsed: !openTraces.has(item.id) }
+                    : block
+                }
+                onSignIn={onSignIn}
+                onAction={onAction}
+                onToggleTrace={() => toggleTrace(item.id)}
+                busy={busy}
+              />
             ))}
           </AgentMessage>
         );
@@ -370,6 +456,18 @@ export function App(props: AppProps) {
             ) : (
               <div className="sv-a-items">
                 {active.items.map(renderItem)}
+                {/* The turn in flight: what it is doing, then what it is
+                    saying. The trace folds itself once words start arriving —
+                    the steps were the answer to "is anything happening", and
+                    the words are a better one. */}
+                {steps.length > 0 ? (
+                  <AgentMessage>
+                    <BlockView
+                      block={traceBlock}
+                      onToggleTrace={() => setTraceOpen((open) => !open)}
+                    />
+                  </AgentMessage>
+                ) : null}
                 {streamed === null ? null : (
                   <AgentMessage>
                     <BlockView
@@ -381,7 +479,9 @@ export function App(props: AppProps) {
                   </AgentMessage>
                 )}
                 {statusText ? <StatusLine text={statusText} /> : null}
-                {thinking ? <ThinkingPulse /> : null}
+                {/* Only before the first step lands: after that the trace is
+                    the better spinner, because it says what it is waiting on. */}
+                {thinking && steps.length === 0 ? <ThinkingPulse /> : null}
               </div>
             )}
           </div>

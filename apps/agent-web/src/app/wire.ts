@@ -82,8 +82,9 @@ function parseRetryAfter(value: string | null): number | undefined {
 /**
  * The same turn, read as it is written.
  *
- * `onToken` is called with each piece as it lands; the promise resolves with
- * the finished answer, which is what the caller should render. The two are not
+ * `onToken` is called with each piece as it lands and `onStep` with each
+ * operation as it starts and finishes; the promise resolves with the finished
+ * answer, which is what the caller should render. The two are not
  * quite the same thing on purpose — the service says so too. Tokens are what
  * the model is typing, and a branch that answers from a fixed sentence types
  * nothing at all, so the last event carries the answer and the pieces before
@@ -93,9 +94,24 @@ function parseRetryAfter(value: string | null): number | undefined {
  * service looks like for the minute a deploy takes. Nobody should watch a
  * chat break because two services rolled over in the wrong order.
  */
+/** One operation the service reported, as it started or as it finished. */
+export interface StepEvent {
+  id: string;
+  label?: string;
+  state: 'running' | 'done' | 'failed';
+  ms?: number;
+}
+
+export interface StreamHandlers {
+  /** A piece of the answer as it is written. */
+  onToken: (text: string) => void;
+  /** An operation starting or finishing. Every one of these actually ran. */
+  onStep?: (step: StepEvent) => void;
+}
+
 export async function streamChat(
   input: SendChatInput,
-  onToken: (text: string) => void,
+  handlers: StreamHandlers,
 ): Promise<SendChatResult> {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (input.token) headers.authorization = `Bearer ${input.token}`;
@@ -126,7 +142,9 @@ export async function streamChat(
 
   for await (const [event, data] of readEvents(res.body)) {
     if (event === 'token' && typeof data.text === 'string') {
-      onToken(data.text);
+      handlers.onToken(data.text);
+    } else if (event === 'step' && typeof data.id === 'string') {
+      handlers.onStep?.(data as unknown as StepEvent);
     } else if (event === 'error') {
       failed = typeof data.message === 'string' ? data.message : 'the answer stopped partway';
     } else if (event === 'done') {
