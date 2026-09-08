@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatItem, Conversation, MountOptions, PortfolioRef, SignInBlock } from './types';
-import { WireError, sendChat } from './wire';
+import { WireError, streamChat } from './wire';
 import * as history from './history';
 import { AgentHeader } from '../components/AgentHeader';
 import { AgentMessage } from '../components/AgentMessage';
@@ -118,6 +118,10 @@ export function App(props: AppProps) {
   const activeRef = useRef(active);
   const [busy, setBusy] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
+  // The answer as it is being written. Held apart from the conversation on
+  // purpose: nothing is committed to the log — or to storage — until the turn
+  // has finished, so a stream that dies halfway leaves the chat as it was.
+  const [streamed, setStreamed] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const lastQuestion = useRef<string | null>(null);
@@ -147,27 +151,40 @@ export function App(props: AppProps) {
     async (text: string) => {
       lastQuestion.current = text;
       setBusy(true);
+      setStreamed(null);
       // Which conversation asked. An answer that arrives after the user has
       // started a new chat — or opened an older one — belongs to neither of
       // them, and appending it there is how a fresh chat ends up replying to
-      // a question it never saw.
+      // a question it never saw. Streaming makes this matter more, not less:
+      // now it is every piece that has to be checked, not one arrival.
       const asked = activeRef.current.id;
       try {
-        const res = await sendChat({
-          agentUrl,
-          token,
-          portfolio: slug,
-          sessionId: activeRef.current.sessionId,
-          message: text,
-        });
+        const res = await streamChat(
+          {
+            agentUrl,
+            token,
+            portfolio: slug,
+            sessionId: activeRef.current.sessionId,
+            message: text,
+          },
+          (piece) => {
+            if (activeRef.current.id !== asked) return;
+            setStreamed((sofar) => (sofar ?? '') + piece);
+          },
+        );
         if (activeRef.current.id !== asked) return;
         activeRef.current = { ...activeRef.current, sessionId: res.sessionId };
+        // The finished blocks replace the text that was being watched, rather
+        // than the text being kept: what arrived as pieces was a preview, and
+        // an answer can be more than the words in it — a sign-in prompt, a
+        // confirmation to press.
         push([{ id: uid(), role: 'agent', blocks: res.blocks }]);
       } catch (err) {
         if (activeRef.current.id !== asked) return;
         push(notesFor(err, text));
       } finally {
         setBusy(false);
+        setStreamed(null);
         setStatusText(null);
       }
     },
@@ -246,12 +263,14 @@ export function App(props: AppProps) {
       if (el) el.scrollTop = el.scrollHeight;
     });
     return () => cancelAnimationFrame(frame);
-  }, [active, busy, statusText]);
+  }, [active, busy, statusText, streamed]);
 
   const empty = active.items.length === 0;
   const lastRole = active.items[active.items.length - 1]?.role;
   // Demo conversations end on status lines and hold the thinking state open.
-  const thinking = busy || lastRole === 'status';
+  // The pulse is for the wait before the first word. Once words are arriving
+  // they are the better answer to "is anything happening".
+  const thinking = (busy && streamed === null) || lastRole === 'status';
 
   const meta =
     portfolio && portfolio.wallets != null && portfolio.totalUsd != null
@@ -360,6 +379,16 @@ export function App(props: AppProps) {
             ) : (
               <div className="sv-a-items">
                 {active.items.map(renderItem)}
+                {streamed === null ? null : (
+                  <AgentMessage>
+                    <BlockView
+                      block={{ kind: 'text', text: streamed }}
+                      onSignIn={onSignIn}
+                      onAction={onAction}
+                      busy
+                    />
+                  </AgentMessage>
+                )}
                 {statusText ? <StatusLine text={statusText} /> : null}
                 {thinking ? <ThinkingPulse /> : null}
               </div>
