@@ -15,3 +15,7 @@ limits>=3.13
 # The provider plugin behind the default AGENT_MODEL. Another provider is
 # another line here (e.g. langchain-google-genai) plus a new AGENT_MODEL value.
 langchain-anthropic>=0.3
+
+# The test suite (tests/) — fixtures of our own DTO shape, no network
+pytest>=8.3
+pytest-asyncio>=0.24

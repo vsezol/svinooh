@@ -56,7 +56,7 @@ from .context import (
 )
 from .datasources import PortfolioApiSource
 from .intent import classify
-from .llm import extract_text, get_model
+from .llm import answering_model, budget_was_refused, drop_budget, extract_text, get_model
 from .tools import portfolio_tools, run_tools
 from .onboarding import (
     ProposePortfolio,
@@ -176,7 +176,12 @@ async def _answer(system: str, state: AgentState) -> AgentState:
         *state.get("history", []),
         HumanMessage(content=state["question"]),
     ]
-    reply = await get_model().ainvoke(messages)
+    try:
+        reply = await get_model().ainvoke(messages)
+    except Exception as error:  # noqa: BLE001 — see app/intent.py
+        if not (budget_was_refused(error) and drop_budget(answering_model())):
+            raise
+        reply = await get_model().ainvoke(messages)
     return {"answer": extract_text(reply)}
 
 
