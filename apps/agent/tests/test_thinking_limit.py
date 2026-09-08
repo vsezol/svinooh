@@ -126,6 +126,18 @@ def asking_for_thought(monkeypatch):
     monkeypatch.setattr(intent, "labelling", lambda: role(model="openai:router"))
 
 
+@pytest.fixture
+def no_understudy(monkeypatch):
+    """Take the answering model away, so a refusal has nowhere left to go.
+
+    classify() falls back to the answering model when the labelling one cannot
+    be reached (see app/intent.py). These tests are about what the retry does,
+    not about that fallback, so they need the fallback to be unavailable —
+    which is what a deployment where both roles run one model looks like.
+    """
+    monkeypatch.setattr(intent, "answering", lambda: role(model="openai:router"))
+
+
 class TestClassifierRecovery:
     @pytest.mark.parametrize("refusal", [MANDATORY, NO_ENDPOINTS], ids=["mandatory", "filtered"])
     async def test_a_refused_setting_still_produces_a_label(
@@ -139,7 +151,7 @@ class TestClassifierRecovery:
         assert "openai:router" in llm._models_we_no_longer_ask_to_think
 
     async def test_a_second_refusal_is_raised_rather_than_retried_forever(
-        self, monkeypatch, asking_for_thought
+        self, monkeypatch, asking_for_thought, no_understudy
     ):
         labeler = Labeler(refusals=99)
         monkeypatch.setattr(intent, "_labeler", cached(labeler))
@@ -148,7 +160,7 @@ class TestClassifierRecovery:
         assert labeler.attempts == 2
 
     async def test_an_unrelated_failure_is_not_swallowed_by_the_retry(
-        self, monkeypatch, asking_for_thought
+        self, monkeypatch, asking_for_thought, no_understudy
     ):
         class Broken:
             attempts = 0
@@ -162,11 +174,12 @@ class TestClassifierRecovery:
             await intent.classify("q")
         assert Broken.attempts == 1, "only a refused setting is worth a second try"
 
-    async def test_a_role_that_asks_for_nothing_does_not_retry(self, monkeypatch):
+    async def test_a_role_that_asks_for_nothing_does_not_retry(self, monkeypatch, no_understudy):
         # The shipped labelling role. A 404 here is about something we are not
         # willing to give up, so it goes to the caller on the first failure.
         quiet = role(model="openai:instruct", effort="")
         monkeypatch.setattr(intent, "labelling", lambda: quiet)
+        monkeypatch.setattr(intent, "answering", lambda: quiet)
         labeler = Labeler(refusals=99, saying=NO_ENDPOINTS)
         monkeypatch.setattr(intent, "_labeler", cached(labeler))
         with pytest.raises(Exception, match="No endpoints"):

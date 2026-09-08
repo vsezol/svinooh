@@ -420,14 +420,14 @@ export const REGISTRY = {
     group: 'agent',
     label: 'Labelling model',
     about:
-      'The model that decides what a question is about, and whether a reply means yes. It writes a dozen tokens in front of every answer, so it should be the cheapest one that labels reliably. Empty — the answering model does it too.',
-    default: 'openai:qwen/qwen3-30b-a3b-instruct-2507',
+      'The model that decides what a question is about, and whether a reply means yes. It writes a dozen tokens in front of every answer, so it should be the cheapest one that labels reliably. Empty — the answering model does it too, which is what it ships as: correct before cheap, and a cheaper one is a change you can watch.',
+    default: '',
     maxLength: 120,
     placeholder: 'openai:qwen/qwen3-30b-a3b-instruct-2507',
     env: 'AGENT_ROUTER_MODEL',
     readBy: ['agent'],
     live: true,
-    note: 'It sits on the critical path: a model that thinks before labelling makes every answer wait for it.',
+    note: 'It sits on the critical path twice over: a model that thinks before labelling makes every answer wait, and a model whose providers cannot serve us makes every answer pay for a failed call first. Cheap models have fewer providers, and ours must also refuse to train on what we send them.',
   },
   'agent.routerReasoningEffort': {
     kind: 'choice',
