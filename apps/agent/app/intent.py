@@ -1,10 +1,11 @@
 """Intent classification — the router's eyes, live on the request path.
 
 Structured output is the whole trick: instead of parsing prose, the model is
-handed a schema (the pydantic class below) and must fill it — under the hood
-LangChain turns the schema into a tool the model is forced to call, so what
-comes back is a validated object, never a string to regex. This is the same
-mechanism agent tools will use later; the classifier is its smallest lesson.
+handed a schema (the pydantic class below) and must fill it, so what comes back
+is a validated object and never a string to regex. We ask for that as a tool
+call the model must make — see llm.structured for why that particular way, and
+why leaving the choice to the library cost us the classifier. It is the same
+mechanism the agent's own tools use; the classifier is its smallest lesson.
 
 classify() raises only when there is no way left to get a label. The caller
 (the graph's classify node) owns that failure policy — "route to the portfolio
@@ -20,7 +21,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from .config import answering, labelling
-from .llm import ask, get_model, get_router_model
+from .llm import ask, get_model, get_router_model, structured
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -43,15 +44,15 @@ class IntentLabel(BaseModel):
 
 @cache  # lazy singleton: built on the first call, reused ever after
 def _labeler():
-    # The model is forced to answer in the schema's shape; .with_structured_output
-    # returns a runnable that yields IntentLabel instances directly.
-    return get_router_model().with_structured_output(IntentLabel)
+    # The model is forced to answer in the schema's shape, as a tool call it
+    # must make; the runnable yields IntentLabel instances directly.
+    return structured(get_router_model(), IntentLabel)
 
 
 @cache
 def _understudy():
     """The same job on the model that answers — the one we know is reachable."""
-    return get_model().with_structured_output(IntentLabel)
+    return structured(get_model(), IntentLabel)
 
 
 async def classify(question: str) -> IntentLabel:
