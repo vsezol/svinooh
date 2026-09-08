@@ -316,6 +316,24 @@ async def unavailable_node(state: AgentState) -> AgentState:
     return await _answer(degraded_prompt(system_prompt()), state)
 
 
+#: The nodes a turn can end on — and therefore the only nodes whose tokens are
+#: the answer somebody is reading.
+#:
+#: The two facts are the same fact. A leaf is where the turn stops, which is
+#: where the reply gets written; everything upstream also talks to a model
+#: (labelling a question, checking a reply for a yes) and none of that is for
+#: the reader. One tuple rather than two lists, so a branch added below is
+#: streamed without anybody remembering to say so.
+ANSWERING_NODES = (
+    "general",
+    "grounded",
+    "onboard",
+    "create_portfolio",
+    "cancel_creation",
+    "unavailable",
+)
+
+
 @cache  # built and compiled once per process, like the model clients
 def agent_graph():
     builder = StateGraph(AgentState)
@@ -357,6 +375,6 @@ def agent_graph():
         lambda state: state["route"],
         {"grounded": "grounded", "onboard": "onboard", "unavailable": "unavailable"},
     )
-    for leaf in ("general", "grounded", "onboard", "create_portfolio", "cancel_creation", "unavailable"):
+    for leaf in ANSWERING_NODES:
         builder.add_edge(leaf, END)
     return builder.compile()

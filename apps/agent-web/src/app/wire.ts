@@ -3,8 +3,9 @@ import type { AgentBlock, ChatWire } from './types';
 
 /**
  * Status semantics: the HTTP status for server answers, 0 when the request
- * never reached the service, -2 when the response arrived but this build
- * cannot read it (unparseable body or an unknown wire schema).
+ * never reached the service, -1 when a stream opened and then failed partway,
+ * -2 when the response arrived but this build cannot read it (unparseable body
+ * or an unknown wire schema).
  */
 export class WireError extends Error {
   readonly status: number;
@@ -76,4 +77,121 @@ function parseRetryAfter(value: string | null): number | undefined {
   if (!value) return undefined;
   const seconds = Number.parseInt(value, 10);
   return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined;
+}
+
+/**
+ * The same turn, read as it is written.
+ *
+ * `onToken` is called with each piece as it lands; the promise resolves with
+ * the finished answer, which is what the caller should render. The two are not
+ * quite the same thing on purpose — the service says so too. Tokens are what
+ * the model is typing, and a branch that answers from a fixed sentence types
+ * nothing at all, so the last event carries the answer and the pieces before
+ * it are a preview.
+ *
+ * Falls back to the whole-answer endpoint on a 404, which is what an older
+ * service looks like for the minute a deploy takes. Nobody should watch a
+ * chat break because two services rolled over in the wrong order.
+ */
+export async function streamChat(
+  input: SendChatInput,
+  onToken: (text: string) => void,
+): Promise<SendChatResult> {
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (input.token) headers.authorization = `Bearer ${input.token}`;
+
+  let res: Response;
+  try {
+    res = await fetch(`${input.agentUrl}/chat/stream`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        message: input.message,
+        session_id: input.sessionId,
+        portfolio: input.portfolio,
+      }),
+    });
+  } catch {
+    throw new WireError(0, 'the agent service is unreachable');
+  }
+
+  if (res.status === 404) return sendChat(input);
+  if (!res.ok || !res.body) {
+    const retryAfterS = res.status === 429 ? parseRetryAfter(res.headers.get('retry-after')) : undefined;
+    throw new WireError(res.status, `agent answered ${res.status}`, retryAfterS);
+  }
+
+  let finished: SendChatResult | null = null;
+  let failed: string | null = null;
+
+  for await (const [event, data] of readEvents(res.body)) {
+    if (event === 'token' && typeof data.text === 'string') {
+      onToken(data.text);
+    } else if (event === 'error') {
+      failed = typeof data.message === 'string' ? data.message : 'the answer stopped partway';
+    } else if (event === 'done') {
+      const wire = data as unknown as ChatWire;
+      if (wire.schema !== WIRE_SCHEMA) throw new WireError(-2, `unknown wire schema ${String(wire.schema)}`);
+      finished = { blocks: wire.blocks, sessionId: wire.session_id };
+    }
+  }
+
+  if (finished) return finished;
+  // A stream that ends without either is a connection dropped mid-answer,
+  // which reads to the person exactly like one that said so.
+  throw new WireError(-1, failed ?? 'the answer stopped partway');
+}
+
+/**
+ * Server-sent events out of a byte stream.
+ *
+ * Small enough to write, and the alternative is not EventSource: that one is
+ * GET-only, so it cannot carry a question in a body or a token in a header.
+ * A chunk boundary falls wherever the network puts it, so blocks are cut on
+ * the blank line that separates events and whatever trails it stays buffered.
+ */
+async function* readEvents(
+  body: ReadableStream<Uint8Array>,
+): AsyncGenerator<[string, Record<string, unknown>]> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffered = '';
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffered += decoder.decode(value, { stream: true });
+
+      let split = buffered.indexOf('\n\n');
+      while (split !== -1) {
+        const block = buffered.slice(0, split);
+        buffered = buffered.slice(split + 2);
+        const parsed = parseEvent(block);
+        if (parsed) yield parsed;
+        split = buffered.indexOf('\n\n');
+      }
+    }
+  } finally {
+    // Leaving a reader open holds the connection after the caller has stopped
+    // caring — on an error, or when the conversation was switched away from.
+    reader.cancel().catch(() => undefined);
+  }
+}
+
+function parseEvent(block: string): [string, Record<string, unknown>] | null {
+  let event = '';
+  let data = '';
+  for (const line of block.split('\n')) {
+    if (line.startsWith('event:')) event = line.slice(6).trim();
+    // Multiple data lines concatenate, per the format; ours sends one.
+    else if (line.startsWith('data:')) data += line.slice(5).trim();
+  }
+  if (!event) return null;
+  try {
+    return [event, data ? (JSON.parse(data) as Record<string, unknown>) : {}];
+  } catch {
+    // One unreadable event is not a reason to drop an answer in progress.
+    return null;
+  }
 }
