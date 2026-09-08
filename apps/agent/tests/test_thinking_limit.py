@@ -27,8 +27,19 @@ NO_ENDPOINTS = (
 MANDATORY = 'Reasoning is mandatory for this endpoint and cannot be disabled'
 
 
-def role(model: str = "openai:m", effort: str = "low") -> Role:
-    return Role(name="labelling", model=model, reasoning_effort=effort, answer_token_cap=200)
+def role(model: str = "openai:m", effort: str = "low", sort: str = "throughput") -> Role:
+    return Role(
+        name="labelling",
+        model=model,
+        reasoning_effort=effort,
+        answer_token_cap=200,
+        provider_sort=sort,
+    )
+
+
+def body_for(effort: str = "low", model: str = "openai:m", sort: str = "throughput") -> dict:
+    """What actually goes on the wire for a role shaped like this."""
+    return llm._wire_options(role(model=model, effort=effort, sort=sort)).get("extra_body", {})
 
 
 def on_wire(monkeypatch, base_url: str) -> None:
@@ -63,18 +74,17 @@ def clean_caches():
 
 class TestThinkingSetting:
     def test_the_setting_is_sent_as_the_aggregator_expects(self):
-        body = llm._reasoning("low", "m")["extra_body"]
-        assert body["reasoning"] == {"effort": "low"}
+        assert body_for(model="m")["reasoning"] == {"effort": "low"}
 
     def test_an_empty_setting_asks_for_nothing_at_all(self):
         # The only setting every model can honour: one that must think is not
         # told to stop, one that cannot think is not asked to start.
-        assert "reasoning" not in llm._reasoning("", "m").get("extra_body", {})
+        assert "reasoning" not in body_for(effort="", model="m")
 
     def test_a_refused_model_is_never_asked_again(self):
         llm.stop_asking_it_to_think(role(model="stubborn"))
-        assert "reasoning" not in llm._reasoning("low", "stubborn")["extra_body"]
-        assert "reasoning" in llm._reasoning("low", "other")["extra_body"]
+        assert "reasoning" not in body_for(model="stubborn")
+        assert "reasoning" in body_for(model="other")
 
     def test_giving_up_twice_reports_that_we_already_had(self):
         assert llm.stop_asking_it_to_think(role()) is True
@@ -194,10 +204,10 @@ class TestProviderPolicy:
         # extra_body is an OpenAI-client field; on the Anthropic client it is
         # not a parameter at all.
         on_wire(monkeypatch, "")
-        assert llm._reasoning("low", "anthropic:claude-haiku-4-5") == {}
+        assert llm._wire_options(role(model="anthropic:claude-haiku-4-5")) == {}
 
     def test_an_aggregator_gets_the_whole_policy(self):
-        body = llm._reasoning("low", "openai:deepseek/deepseek-v4-flash")["extra_body"]
+        body = body_for(model="openai:deepseek/deepseek-v4-flash")
         assert body["provider"]["data_collection"] == "deny", "our prompts carry wallet balances"
         assert body["provider"]["sort"] == "throughput"
         assert body["reasoning"] == {"effort": "low"}
@@ -208,11 +218,18 @@ class TestProviderPolicy:
         # call makes the client add parallel_tool_calls, which none of the
         # answering model's fifteen providers advertises. On, this policy could
         # not be served by anybody, for any model, on any classification.
-        assert "require_parameters" not in llm._reasoning("low", "openai:m")["extra_body"]["provider"]
+        assert "require_parameters" not in body_for()["provider"]
 
     def test_dropping_a_thinking_setting_leaves_the_rest_of_the_policy_standing(self):
-        body = llm._reasoning("low", "openai:m")["extra_body"]
+        body = body_for()
         assert "reasoning" in body and body["provider"]["data_collection"] == "deny"
         llm.stop_asking_it_to_think(role(model="openai:m"))
-        body = llm._reasoning("low", "openai:m")["extra_body"]
+        body = body_for()
         assert "reasoning" not in body and body["provider"]["data_collection"] == "deny"
+
+    def test_each_role_asks_for_the_provider_its_own_job_wants(self):
+        # A label is ten tokens and an answer is paragraphs, so "the best
+        # provider" is a different provider for each. One shared sort made one
+        # of them wrong by construction.
+        assert body_for(sort="latency")["provider"]["sort"] == "latency"
+        assert body_for(sort="throughput")["provider"]["sort"] == "throughput"

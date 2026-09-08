@@ -31,6 +31,7 @@ export class AgentConfigController {
       toolHops: setting('agent.toolHops'),
       contextMaxPositions: setting('agent.contextMaxPositions'),
       providerSort: option('agent.providerSort'),
+      routerProviderSort: option('agent.routerProviderSort'),
       // Copied rather than referenced: the agent has no shared libraries, and
       // this is the channel it already has.
       product: PRODUCT_FAQ.map((entry) => ({ ...entry })),
