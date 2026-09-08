@@ -255,6 +255,7 @@ export interface AgentConfigDto {
   toolHops: number;
   contextMaxPositions: number;
   providerSort: string;
+  routerProviderSort: string;
   /**
    * What the product says about itself — the same sentences the FAQ page
    * shows, so the assistant cannot answer a question about svinooh differently

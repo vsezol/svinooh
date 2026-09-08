@@ -469,12 +469,24 @@ export const REGISTRY = {
     readBy: ['agent'],
     live: true,
   },
+  'agent.routerProviderSort': {
+    kind: 'choice',
+    group: 'agent',
+    label: 'Labelling model prefers',
+    about:
+      'Which provider serves the labelling model. It writes about ten tokens, so almost none of its cost is writing — nearly all of it is the wait before the first one, which is the wait a person sits through before any answer starts. That is what "latency" sorts on; "throughput" sorts on a speed this job barely uses.',
+    options: ['latency', 'throughput', 'price'],
+    default: 'latency',
+    env: 'AGENT_ROUTER_PROVIDER_SORT',
+    readBy: ['agent'],
+    live: true,
+  },
   'agent.providerSort': {
     kind: 'choice',
     group: 'agent',
-    label: 'Prefer providers by',
+    label: 'Answering model prefers',
     about:
-      'One model identifier is served by several providers behind an aggregator, and they differ. Throughput picks the fastest to answer; price the cheapest; latency the quickest to start.',
+      'Which provider serves the answering model. One model identifier is served by several providers behind an aggregator and they differ: throughput picks the one that writes fastest, latency the one that starts soonest, price the cheapest. An answer is paragraphs, so writing speed is most of it.',
     options: ['throughput', 'price', 'latency'],
     default: 'throughput',
     env: 'AGENT_PROVIDER_SORT',

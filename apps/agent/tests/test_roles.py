@@ -32,23 +32,23 @@ def env(monkeypatch):
 class TestReadingARole:
     def test_a_role_without_a_model_of_its_own_uses_the_answering_one(self, env):
         env.setenv("AGENT_MODEL", "openai:answers")
-        critic = _role("critic", "CRITIC_", {}, panel_keys=("criticModel", "criticEffort", "criticMaxTokens"))
+        critic = _role("critic", "CRITIC_", {}, panel_keys=("criticModel", "criticEffort", "criticMaxTokens", "criticSort"))
         assert critic.model == "openai:answers", "a new role runs before it is configured"
 
     def test_a_role_can_be_pointed_at_its_own_model(self, env):
         env.setenv("AGENT_MODEL", "openai:answers")
         env.setenv("AGENT_CRITIC_MODEL", "openai:critic")
-        critic = _role("critic", "CRITIC_", {}, panel_keys=("criticModel", "criticEffort", "criticMaxTokens"))
+        critic = _role("critic", "CRITIC_", {}, panel_keys=("criticModel", "criticEffort", "criticMaxTokens", "criticSort"))
         assert critic.model == "openai:critic"
 
     def test_each_role_carries_its_own_thinking_and_writing_limits(self, env):
         env.setenv("AGENT_CRITIC_REASONING_EFFORT", "high")
         env.setenv("AGENT_CRITIC_MAX_TOKENS", "4096")
-        critic = _role("critic", "CRITIC_", {}, panel_keys=("criticModel", "criticEffort", "criticMaxTokens"), effort="low", answer_token_cap=200)
+        critic = _role("critic", "CRITIC_", {}, panel_keys=("criticModel", "criticEffort", "criticMaxTokens", "criticSort"), effort="low", answer_token_cap=200)
         assert critic.reasoning_effort == "high" and critic.answer_token_cap == 4096
 
     def test_defaults_belong_to_the_role_not_to_the_service(self, env):
-        keys = ("m", "e", "t")
+        keys = ("m", "e", "t", "s")
         cheap = _role("labels", "ROUTER_", {}, panel_keys=keys, effort="low", answer_token_cap=200)
         thorough = _role("critic", "CRITIC_", {}, panel_keys=keys, effort="high", answer_token_cap=4096)
         assert (cheap.reasoning_effort, cheap.answer_token_cap) == ("low", 200)
@@ -58,7 +58,7 @@ class TestReadingARole:
         # AGENT_REASONING_EFFORT named the only role there was; deployments
         # that set it must keep working.
         env.setenv("AGENT_REASONING_EFFORT", "medium")
-        role = _role("answering", "", {}, panel_keys=("model", "reasoningEffort", "maxTokens"), effort="minimal")
+        role = _role("answering", "", {}, panel_keys=("model", "reasoningEffort", "maxTokens", "providerSort"), effort="minimal")
         assert role.reasoning_effort == "medium"
 
     def test_a_role_is_frozen(self):
@@ -73,6 +73,15 @@ class TestTheRolesWeHave:
     def test_labelling_writes_almost_nothing(self):
         assert labelling().name == "labelling"
         assert labelling().answer_token_cap <= 256, "a label is a word, not a paragraph"
+
+    def test_the_two_roles_want_opposite_providers(self):
+        # Streaming made the reason visible: the reader now waits through the
+        # labelling call and nothing else before the first word appears. A
+        # label is ten tokens, so that wait is almost entirely the provider
+        # getting going — the thing "latency" sorts on and "throughput" does
+        # not. An answer is paragraphs, where it is the other way round.
+        assert labelling().provider_sort == "latency"
+        assert answering().provider_sort == "throughput"
 
     def test_labelling_asks_for_no_thinking_at_all(self):
         # Both production outages were a thinking setting an endpoint would not

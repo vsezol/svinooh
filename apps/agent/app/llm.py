@@ -19,7 +19,7 @@ from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 
-from .config import Role, answering, labelling, provider_sort, settings
+from .config import Role, answering, labelling, settings
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -32,19 +32,22 @@ logger = logging.getLogger("svinooh-ai")
 _models_we_no_longer_ask_to_think: set[str] = set()
 
 
-def _reasoning(effort: str, model: str) -> dict:
-    """Thinking budget, expressed the way an OpenAI-compatible aggregator wants.
+def _wire_options(role: Role) -> dict:
+    """Everything this role wants that is not an OpenAI parameter.
 
-    It rides in extra_body because it is not an OpenAI parameter: the client
-    passes the field through untouched, and a provider that does not know it
-    ignores it. Empty — or an endpoint that has already refused one — leaves
-    the model's own default in place.
+    All of it rides in extra_body: the client passes those fields through
+    untouched, and a provider that does not know one ignores it. That covers
+    both the thinking setting and the provider policy, which is why they are
+    assembled together and why both are for the OpenAI wire only.
+
+    An empty thinking setting — or an endpoint that has already refused one —
+    leaves the model's own default in place.
     """
-    if not _speaks_openai_wire(model):
+    if not _speaks_openai_wire(role.model):
         return {}
-    body = _provider_policy()
-    if effort and model not in _models_we_no_longer_ask_to_think:
-        body["reasoning"] = {"effort": effort}
+    body = _provider_policy(role.provider_sort)
+    if role.reasoning_effort and role.model not in _models_we_no_longer_ask_to_think:
+        body["reasoning"] = {"effort": role.reasoning_effort}
     return {"extra_body": body} if body else {}
 
 
@@ -60,11 +63,16 @@ def _speaks_openai_wire(model: str) -> bool:
     return bool(settings.model_base_url) or model.startswith("openai:")
 
 
-def _provider_policy() -> dict:
+def _provider_policy(sort: str) -> dict:
     """Which providers behind an aggregator may serve our prompts.
 
     Only meaningful when a base URL is set: without an aggregator there is one
     provider and nothing to choose between.
+
+    The privacy half is the service's and applies to every role — these prompts
+    carry wallet addresses whoever is reading them. The sort is the role's,
+    because "best provider" means different things to a job that writes
+    paragraphs and a job that writes one word.
     """
     if not settings.model_base_url:
         return {}
@@ -73,8 +81,8 @@ def _provider_policy() -> dict:
         policy["data_collection"] = settings.provider_data_collection
     if settings.provider_require_parameters:
         policy["require_parameters"] = True
-    if provider_sort():
-        policy["sort"] = provider_sort()
+    if sort:
+        policy["sort"] = sort
     return {"provider": policy} if policy else {}
 
 
@@ -151,7 +159,7 @@ def model_for(role: Role) -> BaseChatModel:
         max_tokens=role.answer_token_cap,
         timeout=settings.request_timeout_s,
         **_credentials(),
-        **_reasoning(role.reasoning_effort, role.model),
+        **_wire_options(role),
     )
 
 

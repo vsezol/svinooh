@@ -88,7 +88,8 @@ class Settings:
     #            somebody's wallet addresses and balances.
     #   require: refuse providers that do not advertise support for every
     #            parameter in the request. OFF, and it is a trap — see below.
-    #   sort   : which of the survivors to prefer — live, see provider_sort().
+    #   sort   : which of the survivors to prefer — per role, because the
+    #            jobs want opposite things; see Role.provider_sort.
     provider_data_collection: str = os.getenv("AGENT_PROVIDER_DATA_COLLECTION", "deny")
     # It was on, to make sure whoever served us could really run tools. It does
     # not mean that. It means every parameter, including ones we never chose:
@@ -167,6 +168,12 @@ class Role:
     #: with credentials — an answer is capped so it stays an answer, and a
     #: label is capped because a label is one word.
     answer_token_cap: int
+    #: Which of an aggregator's providers to prefer for this job: "throughput"
+    #: for one that writes a lot, "latency" for one whose whole cost is the
+    #: wait before the first word. The two roles want opposite things, which is
+    #: why this is here and not in the settings they share.
+    provider_sort: str = "throughput"
+
 
 
 def _role(
@@ -174,9 +181,10 @@ def _role(
     env_prefix: str,
     decided: dict,
     *,
-    panel_keys: tuple[str, str, str],
+    panel_keys: tuple[str, str, str, str],
     effort: str = "",
     answer_token_cap: int = 1024,
+    provider_sort: str = "throughput",
 ) -> Role:
     """Assemble one role from the three places a knob can be set.
 
@@ -186,11 +194,11 @@ def _role(
     nothing has been decided, and the default runs before either exists.
 
     `decided` is what the panel says right now; `panel_keys` names this role's
-    three knobs in it, and `env_prefix` names them in the environment
+    knobs in it, and `env_prefix` names them in the environment
     (AGENT_ROUTER_MODEL and its siblings for labelling, AGENT_MODEL for
     answering, which has no prefix because it came first).
     """
-    model_key, effort_key, cap_key = panel_keys
+    model_key, effort_key, cap_key, sort_key = panel_keys
 
     def decided_or_env(panel_key: str, env_key: str, fallback: str) -> str:
         # An empty value in the panel means "no opinion", not "set it to
@@ -227,6 +235,7 @@ def _role(
         answer_token_cap=cap_from_panel
         if cap_is_usable and cap_from_panel > 0
         else int(os.getenv(f"AGENT_{env_prefix}MAX_TOKENS", str(answer_token_cap))),
+        provider_sort=decided_or_env(sort_key, f"{env_prefix}PROVIDER_SORT", provider_sort),
     )
 
 
@@ -267,8 +276,8 @@ def answering() -> Role:
     """Answers — what the user reads. Thinks a little; somebody is watching a cursor."""
     return _role(
         "answering", "", remote_config.current(),
-        panel_keys=("model", "reasoningEffort", "maxTokens"),
-        effort="minimal", answer_token_cap=1024,
+        panel_keys=("model", "reasoningEffort", "maxTokens", "providerSort"),
+        effort="minimal", answer_token_cap=1024, provider_sort="throughput",
     )
 
 
@@ -278,6 +287,11 @@ def labelling() -> Role:
     A dozen output tokens each, in front of every answer, so this is where a
     cheaper and faster tier pays for itself.
 
+    It also ships preferring the provider that answers soonest rather than the
+    one that writes fastest. A label is ten tokens: almost none of its cost is
+    writing, so sorting by how quickly a provider gets going is sorting by the
+    only part of it a person waits through.
+
     It ships asking for no thinking at all — the empty setting, not "none".
     Choosing between two words is not deliberation, and every named value is a
     demand some endpoint cannot meet: a model that must think refuses being
@@ -286,8 +300,8 @@ def labelling() -> Role:
     """
     return _role(
         "labelling", "ROUTER_", remote_config.current(),
-        panel_keys=("routerModel", "routerReasoningEffort", "routerMaxTokens"),
-        effort="", answer_token_cap=200,
+        panel_keys=("routerModel", "routerReasoningEffort", "routerMaxTokens", "routerProviderSort"),
+        effort="", answer_token_cap=200, provider_sort="latency",
     )
 
 
@@ -314,13 +328,6 @@ def tool_hops() -> int:
 def context_max_positions() -> int:
     """How many positions per wallet the model is shown, largest first."""
     return _live_number("contextMaxPositions", "AGENT_CONTEXT_MAX_POSITIONS", 12)
-
-
-def provider_sort() -> str:
-    """Which of an aggregator's providers to prefer."""
-    return str(remote_config.current().get("providerSort") or "") or os.getenv(
-        "AGENT_PROVIDER_SORT", "throughput"
-    )
 
 
 settings = Settings()
