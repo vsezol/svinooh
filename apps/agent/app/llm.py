@@ -188,6 +188,29 @@ async def ask(build, messages, role: Role, forget=None):
         return await build().ainvoke(messages)
 
 
+def structured(model: BaseChatModel, schema):
+    """Make a model answer in a schema's shape, the way most providers can.
+
+    There are two ways to ask, and they are not equally available. The library
+    now defaults to `json_schema`, which sends `response_format` and needs a
+    provider advertising `structured_outputs`. `function_calling` describes the
+    schema as a tool the model must call, and needs `tools`.
+
+    Every provider of our models supports tools; four of the answering model's
+    fifteen do not support structured outputs. That gap is invisible until it
+    meets `require_parameters` — which we send because tools are not optional
+    here — and then it is not a gap, it is a filter: the narrower ask, crossed
+    with our refusal of providers that train on what we send, left nothing to
+    route to and the classifier failed on every request.
+
+    So we ask the wide way, on purpose, rather than taking whichever way the
+    library currently prefers. `tools` is the parameter we already insist on;
+    asking for a second one buys a guarantee we do not need and costs a
+    quarter of the providers.
+    """
+    return model.with_structured_output(schema, method="function_calling")
+
+
 def extract_text(reply: BaseMessage) -> str:
     """The reply's text, whatever shape it arrived in.
 

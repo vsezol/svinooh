@@ -22,7 +22,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from .config import labelling
-from .llm import ask, get_router_model
+from .llm import ask, get_router_model, structured
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -79,7 +79,7 @@ class ConfirmationDecision(BaseModel):
 
 @cache
 def _confirmation_labeler():
-    return get_router_model().with_structured_output(ConfirmationDecision)
+    return structured(get_router_model(), ConfirmationDecision)
 
 
 async def classify_confirmation(reply: str) -> ConfirmationDecision:
