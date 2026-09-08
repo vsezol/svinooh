@@ -65,6 +65,17 @@
 }
 
 /* Embedded top bar: grounding chip left, chat controls right. */
+/* A strip that says which portfolio is being talked about, and offers the two
+   chat actions.
+
+   Standalone it is a desktop thing: what it holds there is the chip, and on a
+   phone that was a whole row spent restating what the answers already say, on
+   the screen with the least room to spend.
+
+   Embedded it stays, because what it holds there is New chat and History and
+   there is nowhere else to reach them yet. When those move into the header's
+   own actions -- which is where the design puts them -- this row goes on a
+   phone too. */
 .sv-a-topbar {
   flex: none;
   display: flex;
@@ -75,6 +86,12 @@
   max-width: 720px;
   margin: 0 auto;
   padding: var(--sp-4) var(--sp-5);
+}
+
+@media (max-width: 719px) {
+  .sv-a-topbar[data-variant='standalone'] {
+    display: none;
+  }
 }
 
 /* Pushed to the end rather than spaced against a sibling: embedded this row

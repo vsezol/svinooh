@@ -49,6 +49,26 @@ export interface NoteBlock {
   text: string;
 }
 
+/**
+ * The work behind an answer, step by step.
+ *
+ * Live while it runs and folded once it is done — the same block in two
+ * states, because it is the same thing: a receipt for the wait.
+ */
+export interface TraceBlock {
+  kind: 'trace';
+  steps: { label: string; state: 'waiting' | 'running' | 'done'; time?: string }[];
+  /** Once folded: "3 steps · 1.9s" */
+  summary: string;
+  collapsed: boolean;
+}
+
+/** Where an answer leads — the position it described, the alert it suggested. */
+export interface LinksBlock {
+  kind: 'links';
+  links: { label: string; href: string }[];
+}
+
 export interface SignInBlock {
   kind: 'signin';
   title: string;
@@ -88,6 +108,8 @@ export type AgentBlock =
   | TableBlock
   | BarsBlock
   | NoteBlock
+  | TraceBlock
+  | LinksBlock
   | SignInBlock
   | ConfirmBlock
   | UnknownBlock;
