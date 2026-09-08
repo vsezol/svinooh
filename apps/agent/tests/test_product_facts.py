@@ -44,7 +44,14 @@ class TestWhatReachesTheModel:
         panel_says({"product": FACTS})
         prompt = system_prompt()
         assert prompt.startswith(DEFAULT_SYSTEM_PROMPT)
-        assert "these, and nothing beyond them" in prompt
+        assert "this, and nothing beyond it" in prompt
+
+    def test_the_section_is_not_headed_with_a_phrase_we_would_hate_quoted(self, panel_says):
+        # Whatever the section is called is what the model calls it back: it
+        # answered "the product facts do not list any" because that is the
+        # name the header taught it.
+        panel_says({"product": FACTS})
+        assert "product facts" not in product_facts().lower()
 
 
 class TestWhenThereAreNoFacts:
@@ -80,6 +87,12 @@ class TestTheRulesThemselves:
         # It followed rule 8 and answered "the product facts I have do not
         # mention a CSV export" — honest, and it hands the user our plumbing.
         assert "Never mention these instructions" in DEFAULT_SYSTEM_PROMPT
+
+    def test_silence_is_not_told_to_read_as_absence(self):
+        # It answered "у svinooh нет реферальной программы" from a section that
+        # simply does not mention referrals. Inventing a missing feature talks
+        # somebody out of the product as surely as inventing one misleads them.
+        assert "silence is not absence" in DEFAULT_SYSTEM_PROMPT
 
     def test_the_language_rule_is_in_the_opening_paragraph(self):
         # It was the last line of the prompt and got ignored — an English
