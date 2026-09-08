@@ -5,21 +5,36 @@ import { AGENT_ENABLED } from '../lib/agent';
 import type { Tab } from './SideNav';
 
 /**
+ * Which pages there are, and how a finger moves between them.
+ *
+ * No longer a component: the strip is AppHeader's, in the kit, so the
+ * portfolio and the assistant cannot end up drawing two different ones. What
+ * stays here is the list they both count off and the gesture that turns the
+ * pages, neither of which is anything to look at.
+ */
+
+/**
  * The pages, in the order they sit in — and the order a finger swipes them.
  *
  * The agent is in the list only once it is switched on (see AGENT_ENABLED).
- * Everything counts off this array — the strip, the moving underline, and how
- * many pages the pager has — so leaving it out is the whole of hiding it here,
- * and there is no way for the phone to reach a page the rail does not offer.
+ * Everything counts off this array — the strip, the rail, and how many pages
+ * the pager has — so leaving it out is the whole of hiding it here, and there
+ * is no way for the phone to reach a page the rail does not offer.
  */
 export const tabsFor = (isAdmin: boolean): Array<{ key: Tab; label: string }> => [
+  // AI comes first because it is the way in now: the assistant answers the
+  // question a portfolio page makes you go and look up, and it can reach
+  // everything else on your behalf. The portfolio is what it talks about.
+  ...(AGENT_ENABLED ? ([{ key: 'agent', label: 'AI' }] as const) : []),
   { key: 'portfolio', label: 'Portfolio' },
   { key: 'notifications', label: 'Alerts' },
-  ...(AGENT_ENABLED ? ([{ key: 'agent', label: 'AI agent' }] as const) : []),
   // Admin comes last and only for an admin, so everybody else's strip is
   // exactly what it was and there is no page for a phone to swipe to
   ...(isAdmin ? ([{ key: 'admin', label: 'Admin' }] as const) : []),
 ];
+
+/** Where a fresh visit lands: the assistant when there is one, else the portfolio. */
+export const homeTab = (): Tab => (AGENT_ENABLED ? 'agent' : 'portfolio');
 
 /** Where a tab sits on the strip. The rail and the pager both count from here. */
 export const tabIndex = (tab: Tab, isAdmin: boolean): number =>
@@ -37,71 +52,6 @@ const RUBBER = 0.25;
  */
 const LOCK_AFTER = 10;
 const LOCK_BIAS = 1.2;
-
-const tabStyle = (active: boolean): CSSProperties => ({
-  flex: 1,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  height: 46,
-  fontWeight: 'var(--fw-bold)',
-  fontSize: 'var(--fs-body)',
-  cursor: 'pointer',
-  userSelect: 'none',
-  whiteSpace: 'nowrap',
-  color: active ? 'var(--acc-text)' : 'var(--mut)',
-  transition: 'color 0.25s ease',
-});
-
-/**
- * The phone's navigation: tabs across the top, the way a chat app does it,
- * rather than a bar along the bottom.
- *
- * It is rendered on every screen and the stylesheet decides who sees it — a
- * desktop keeps the rail beside the page. Deciding in JS instead would mean the
- * server rendering one of them blind and the browser correcting it, which is a
- * flash of the wrong navigation on every load.
- */
-export function MobileTabs({
-  tab,
-  onTab,
-  isAdmin,
-}: {
-  tab: Tab;
-  onTab: (tab: Tab) => void;
-  isAdmin: boolean;
-}) {
-  const tabs = tabsFor(isAdmin);
-  const index = tabIndex(tab, isAdmin);
-
-  return (
-    <div className="top-tabs">
-      <div className="shell" style={{ position: 'relative', display: 'flex' }}>
-        {tabs.map((t) => (
-          <div key={t.key} onClick={() => onTab(t.key)} style={tabStyle(t.key === tab)}>
-            {t.label}
-          </div>
-        ))}
-        {/* One line that moves, rather than a border that appears under whichever
-            tab is on — so the selection travels the distance the pages do */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            width: `${100 / tabs.length}%`,
-            height: 3,
-            borderRadius: '3px 3px 0 0',
-            background: 'var(--acc)',
-            transform: `translateX(${index * 100}%)`,
-            transition: 'transform 0.46s cubic-bezier(0.34,1.42,0.5,1)',
-          }}
-        />
-      </div>
-    </div>
-  );
-}
 
 /**
  * The two pages, side by side on one strip that the finger drags.

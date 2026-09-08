@@ -28,6 +28,13 @@ body {
   --fs-tag: 11px;
   /* Small print: notes under a setting, menu items, tooltips */
   --fs-note: 12px;
+  /* The navigation strip, at its two densities. It is the one thing on screen
+     that changes size rather than moving: the header folds from two rows to
+     one as you read, and the tabs come down with it. Off the main scale on
+     purpose — these are not text, they are a control that has to stay legible
+     while shrinking. */
+  --fs-nav: 13.5px;
+  --fs-nav-tight: 12.5px;
   /* The default. Body copy, inputs, buttons, navigation */
   --fs-body: 14px;
   /* Emphasis within a card — a wallet's total, a landing lede */

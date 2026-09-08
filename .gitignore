@@ -16,3 +16,4 @@ apps/scanner-evm/bin/
 # merge for no gain. Nothing under here is ever committed — not the JSONL
 # exports, not the backup directory, not the dolt store. Do not run `bd sync`.
 .beads/
+.design-preview/
