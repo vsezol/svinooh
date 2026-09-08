@@ -21,7 +21,7 @@ from typing import Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from .llm import budget_was_refused, drop_budget, get_router_model, labelling_model
+from .llm import ask, get_router_model, labelling_model
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -83,13 +83,9 @@ def _confirmation_labeler():
 
 async def classify_confirmation(reply: str) -> ConfirmationDecision:
     messages = [SystemMessage(content=CONFIRMATION_PROMPT), HumanMessage(content=reply)]
-    try:
-        return await _confirmation_labeler().ainvoke(messages)
-    except Exception as error:  # noqa: BLE001 — see app/intent.py
-        if not (budget_was_refused(error) and drop_budget(labelling_model())):
-            raise
-        _confirmation_labeler.cache_clear()
-        return await _confirmation_labeler().ainvoke(messages)
+    return await ask(
+        _confirmation_labeler, messages, labelling_model(), _confirmation_labeler.cache_clear
+    )
 
 
 # ── phase 3: the execution — what actually hits the API, after the yes ─────

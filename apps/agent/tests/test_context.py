@@ -44,10 +44,13 @@ def test_the_hidden_tail_carries_its_value():
 
 
 def test_positions_are_printed_largest_first():
+    # Asserted on the symbols, whose order the fixtures fix, rather than by
+    # parsing dollars back out of a sentence: a test that re-implements the
+    # formatter to check the formatter passes when both are wrong together.
     block = portfolio_context(fx.rich_portfolio(tail=5))
-    lines = [l for l in block.splitlines() if l.startswith("  - ") and "smaller positions" not in l]
-    values = [float(l.split("$")[1].split(",")[0].replace(" ", "")) for l in lines[:3]]
-    assert values == sorted(values, reverse=True)
+    printed = [line for line in block.splitlines() if line.startswith("  - ")]
+    symbols = [line.removeprefix("  - ").split(":")[0].split(" ")[0] for line in printed]
+    assert symbols[:4] == ["ETH", "MICRO", "TRUE", "AAVE-V3"]
 
 
 def test_every_wallet_appears_with_its_chain_and_status():

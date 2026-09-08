@@ -24,10 +24,10 @@ from .config import settings
 logger = logging.getLogger("svinooh-ai")
 
 
-# Endpoints that turned out to refuse a thinking budget. Some mandate
-# reasoning and reject a request that lowers or disables it — a 400 that would
-# otherwise kill every classification for as long as the setting stands.
-_refuses_budget: set[str] = set()
+# Models whose endpoint insists on thinking. Some refuse a request that asks
+# them to think less or not at all, with a 400 that would otherwise kill every
+# classification for as long as our setting stood.
+_models_that_insist_on_thinking: set[str] = set()
 
 
 def _reasoning(effort: str, model: str) -> dict:
@@ -41,7 +41,7 @@ def _reasoning(effort: str, model: str) -> dict:
     if not _speaks_openai_wire(model):
         return {}
     body = _provider_policy()
-    if effort and model not in _refuses_budget:
+    if effort and model not in _models_that_insist_on_thinking:
         body["reasoning"] = {"effort": effort}
     return {"extra_body": body} if body else {}
 
@@ -76,21 +76,22 @@ def _provider_policy() -> dict:
     return {"provider": policy} if policy else {}
 
 
-def budget_was_refused(error: BaseException) -> bool:
-    """Whether a failure is the endpoint objecting to the thinking budget."""
+def is_thinking_mandatory_error(error: BaseException) -> bool:
+    """Whether a failure is the endpoint refusing to think less than it wants."""
     return "reasoning" in str(error).lower()
 
 
-def drop_budget(model: str) -> bool:
-    """Stop sending a budget to this model, and rebuild the clients.
+def let_it_think(model: str) -> bool:
+    """Stop asking this model to think less, and rebuild the clients.
 
-    Returns False when it was already dropped, which is what stops a retry
-    loop: the second failure is a real one and belongs to the caller.
+    Returns False when we had already stopped, which is what ends a retry
+    instead of looping: the second failure is a real one and belongs to the
+    caller.
     """
-    if model in _refuses_budget:
+    if model in _models_that_insist_on_thinking:
         return False
-    logger.warning("%s refuses a reasoning budget — sending none from now on", model)
-    _refuses_budget.add(model)
+    logger.warning("%s requires reasoning — no longer limiting it", model)
+    _models_that_insist_on_thinking.add(model)
     get_model.cache_clear()
     get_router_model.cache_clear()
     return True
@@ -151,6 +152,29 @@ def get_router_model() -> BaseChatModel:
         **_credentials(),
         **_reasoning(settings.router_reasoning_effort, labelling_model()),
     )
+
+
+async def ask(build, messages, model: str, forget=None):
+    """Send messages to a model, surviving the one failure worth surviving.
+
+    Every call site had the same six lines around it, which is five lines more
+    than the idea is worth: try, and if the endpoint turned out to require
+    reasoning we had asked it to limit, stop asking and try once more. Any
+    other failure, and any second failure, belongs to the caller — there is no
+    loop here.
+
+    `build` returns the runnable rather than being one, because a caller's
+    runnable is usually cached and the retry needs a freshly built one;
+    `forget` clears that cache.
+    """
+    try:
+        return await build().ainvoke(messages)
+    except Exception as error:  # noqa: BLE001 — one specific cause is recoverable
+        if not (is_thinking_mandatory_error(error) and let_it_think(model)):
+            raise
+        if forget is not None:
+            forget()
+        return await build().ainvoke(messages)
 
 
 def extract_text(reply: BaseMessage) -> str:

@@ -1,4 +1,4 @@
-"""The thinking budget, and what happens when an endpoint refuses one.
+"""How much a model may think, and what happens when it insists on more.
 
 Written after production caught it: the router asked for no reasoning, the
 endpoint mandates it, and every classification failed with a 400 for as long
@@ -37,36 +37,36 @@ def on_the_aggregator(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def clean_caches():
-    llm._refuses_budget.clear()
+    llm._models_that_insist_on_thinking.clear()
     llm.get_model.cache_clear()
     llm.get_router_model.cache_clear()
     intent._labeler.cache_clear()
     yield
-    llm._refuses_budget.clear()
+    llm._models_that_insist_on_thinking.clear()
 
 
-class TestBudget:
-    def test_a_budget_is_sent_as_the_aggregator_expects(self):
+class TestThinkingLimit:
+    def test_the_limit_is_sent_as_the_aggregator_expects(self):
         body = llm._reasoning("low", "m")["extra_body"]
         assert body["reasoning"] == {"effort": "low"}
 
     def test_an_empty_setting_asks_for_no_budget(self):
         assert "reasoning" not in llm._reasoning("", "m").get("extra_body", {})
 
-    def test_a_refusing_endpoint_is_never_asked_again(self):
-        llm.drop_budget("stubborn")
+    def test_a_model_that_insists_is_never_asked_to_think_less_again(self):
+        llm.let_it_think("stubborn")
         assert "reasoning" not in llm._reasoning("low", "stubborn")["extra_body"]
         assert "reasoning" in llm._reasoning("low", "other")["extra_body"]
 
-    def test_dropping_twice_reports_that_it_was_already_dropped(self):
-        assert llm.drop_budget("m") is True
-        assert llm.drop_budget("m") is False, "the second failure belongs to the caller"
+    def test_giving_up_twice_reports_that_we_already_had(self):
+        assert llm.let_it_think("m") is True
+        assert llm.let_it_think("m") is False, "the second failure belongs to the caller"
 
     def test_the_refusal_is_recognised_by_what_it_says(self):
         mandatory = Exception('400 — "Reasoning is mandatory for this endpoint '
                               'and cannot be disabled"')
-        assert llm.budget_was_refused(mandatory) is True
-        assert llm.budget_was_refused(Exception("429 rate limited")) is False
+        assert llm.is_thinking_mandatory_error(mandatory) is True
+        assert llm.is_thinking_mandatory_error(Exception("429 rate limited")) is False
 
 
 class Labeler:
@@ -96,13 +96,13 @@ def cached(labeler):
 
 
 class TestClassifierRecovery:
-    async def test_a_refused_budget_is_dropped_and_the_turn_still_gets_a_label(self, monkeypatch):
+    async def test_a_model_that_insists_still_produces_a_label(self, monkeypatch):
         labeler = Labeler(refusals=1)
         monkeypatch.setattr(intent, "_labeler", cached(labeler))
         label = await intent.classify("what is a health factor?")
         assert label.intent == "general"
         assert labeler.attempts == 2, "one retry, not a loop"
-        assert llm.labelling_model() in llm._refuses_budget
+        assert llm.labelling_model() in llm._models_that_insist_on_thinking
 
     async def test_a_second_refusal_is_raised_rather_than_retried_forever(self, monkeypatch):
         labeler = Labeler(refusals=99)
@@ -141,7 +141,7 @@ class TestProviderPolicy:
         assert body["provider"]["sort"] == "throughput"
         assert body["reasoning"] == {"effort": "low"}
 
-    def test_a_refused_budget_leaves_the_provider_policy_standing(self):
-        llm.drop_budget("openai:m")
+    def test_letting_a_model_think_leaves_the_provider_policy_standing(self):
+        llm.let_it_think("openai:m")
         body = llm._reasoning("low", "openai:m")["extra_body"]
         assert "reasoning" not in body and body["provider"]["sort"] == "throughput"
