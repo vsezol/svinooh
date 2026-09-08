@@ -1,28 +1,16 @@
 import type { Chain } from '@svinooh/shared';
 
-/**
- * $12,345.60 — as in the design (_fmt$). A negative amount reads "-$2,013.36":
- * the sign belongs in front of the currency, not between it and the digits.
- */
-export function fmtUsd(value: number | null | undefined, dec = 2): string {
-  if (value === null || value === undefined) return '—';
-  const sign = value < 0 ? '-' : '';
-  return (
-    sign +
-    '$' +
-    Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })
-  );
-}
+// Money moved to the kit, because the assistant's charts write the same
+// figures as the portfolio's and there must not be two answers to how. Imported
+// as well as re-exported: the formatters below build on it.
+import { fmtUsd, fmtUsdShort } from '@svinooh/ui/money';
+
+export { fmtUsd, fmtUsdShort };
 
 /** Price: small values with 7 decimals, otherwise normal (_fmtPrice) */
 export function fmtPrice(p: number | null | undefined): string {
   if (p === null || p === undefined) return '—';
   return p < 0.01 && p > 0 ? '$' + p.toFixed(7) : fmtUsd(p);
-}
-
-/** "$1,234" / "-$1,234" — compact, for the summary strips */
-export function fmtUsdShort(value: number): string {
-  return (value < 0 ? '-$' : '$') + Math.round(Math.abs(value)).toLocaleString('en-US');
 }
 
 /** Token amount (_fmtAmt) */

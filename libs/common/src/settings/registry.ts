@@ -423,7 +423,10 @@ export const REGISTRY = {
       'The model that decides what a question is about, and whether a reply means yes. It writes a dozen tokens in front of every answer, so it should be the cheapest one that labels reliably. Empty — the answering model does it too, which is what it ships as: correct before cheap, and a cheaper one is a change you can watch.',
     default: '',
     maxLength: 120,
-    placeholder: 'openai:qwen/qwen3-30b-a3b-instruct-2507',
+    // The shape, not a suggestion. It used to show the instruct model that
+    // could not be routed to at all, which read as "try this" for the one
+    // value we had proved does not work.
+    placeholder: 'provider:vendor/model',
     env: 'AGENT_ROUTER_MODEL',
     readBy: ['agent'],
     live: true,

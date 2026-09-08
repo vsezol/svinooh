@@ -14,6 +14,7 @@ const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 
 export function kitchenSink(): Conversation {
+  const now = Date.now();
   const items: ChatItem[] = [
     { id: 'd01', role: 'user', text: 'What changed this week?' },
     {
@@ -39,16 +40,19 @@ export function kitchenSink(): Conversation {
           title: 'TOTAL VALUE · 7D',
           delta: '+$7,522',
           deltaTone: 'up',
-          points: [
-            { t: 'Aug 31', v: 123400 },
-            { t: 'Sep 1', v: 125900 },
-            { t: 'Sep 2', v: 128200 },
-            { t: 'Sep 3', v: 126400 },
-            { t: 'Sep 4', v: 129300 },
-            { t: 'Sep 5', v: 130800 },
-            { t: 'Sep 7', v: 131902 },
-          ],
-          xTicks: ['Aug 31', 'Sep 3', 'Sep 7'],
+          period: '7d',
+          // Real timestamps, hourly across the week, because the chart these
+          // feed is the app's and it scrolls, measures and reads values off
+          // them. Seven pretty labels are not something you can drag.
+          points: Array.from({ length: 7 * 24 }, (_, i) => ({
+            t: now - DAY_MS * 7 + i * HOUR_MS,
+            v: Math.round(
+              123400 +
+                (131902 - 123400) * (i / (7 * 24 - 1)) +
+                Math.sin(i / 9) * 1600 +
+                Math.sin(i / 3.1) * 500,
+            ),
+          })),
         },
         { kind: 'links', links: [{ label: 'Open portfolio', href: '/portfolio' }] },
       ],
