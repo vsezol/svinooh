@@ -100,21 +100,50 @@ def summarize_history(series: dict, period: str) -> str:
 
 
 def find_positions(data: dict, query: str) -> str:
-    """Every position matching the query, uncapped by the context block's limit."""
+    """Every position matching the query, uncapped by the context block's limit.
+
+    Matches on what a person names a position by: its symbol, its full name,
+    the protocol it sits in and the network it lives on. Searching the symbol
+    alone was why "uniswap" found nothing in a portfolio holding three Uniswap
+    pools — the protocol is in `platform`, and nobody asks about a pool by its
+    LP token symbol.
+    """
     needle = query.strip().lower()
     if not needle:
         return "Empty query."
-    lines = []
+    matches = []
     for wallet in data.get("wallets") or []:
+        address = short_address(wallet.get("address") or "?")
         for position in wallet.get("positions") or []:
-            haystack = f"{position.get('symbol') or ''} {position.get('name') or ''}".lower()
+            haystack = " ".join(
+                str(position.get(field) or "")
+                for field in ("symbol", "name", "platform", "network", "category")
+            ).lower()
             if needle in haystack:
-                lines.append(
-                    f"{short_address(wallet.get('address') or '?')}: {position_line(position)}"
-                )
-    if not lines:
-        return f'No position matches "{query}" in this portfolio.'
-    return "\n".join(lines[:MAX_MATCHES])
+                matches.append((position.get("valueUsd") or 0, address, position))
+    if not matches:
+        return (
+            f'No position matches "{query}". The portfolio holds: '
+            + ", ".join(sorted({
+                str(p.get("platform"))
+                for w in (data.get("wallets") or [])
+                for p in (w.get("positions") or [])
+                if p.get("platform") and p.get("platform") != "wallet"
+            }) or ["no protocol positions"])
+            + " — and plain token holdings."
+        )
+    matches.sort(key=lambda row: -row[0])
+    total = sum(value for value, _, _ in matches)
+    head = (
+        f'{len(matches)} position(s) match "{query}", {usd(total)} in total'
+        + (f" (showing the largest {MAX_MATCHES})" if len(matches) > MAX_MATCHES else "")
+        + ":"
+    )
+    lines = [
+        f"{address}: {position_line(position, detail=True)}"
+        for _, address, position in matches[:MAX_MATCHES]
+    ]
+    return "\n".join([head, *lines])
 
 
 def portfolio_tools(source, slug: str, token: str, data: dict) -> list:

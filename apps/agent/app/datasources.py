@@ -18,7 +18,7 @@ from .config import settings
 
 
 class DataSource(Protocol):
-    async def portfolio(self, ref: str, token: str) -> dict: ...
+    async def portfolio(self, ref: str, token: str | None) -> dict: ...
 
     async def history(self, ref: str, range_: str, token: str) -> dict: ...
 
@@ -29,19 +29,26 @@ class PortfolioApiSource:
     def __init__(self, base_url: str):
         self._base = base_url.rstrip("/")
 
-    async def _get(self, path: str, token: str) -> dict:
+    @staticmethod
+    def _headers(token: str | None) -> dict:
+        # An absent token is an absent header, not a header with nothing in it:
+        # the caller is simply anonymous, and the API answers what anonymous
+        # callers may see.
+        return {"authorization": token} if token else {}
+
+    async def _get(self, path: str, token: str | None) -> dict:
         # A client per call is deliberate at this traffic (one fetch per chat
         # turn); a pooled client is an optimization to make when it shows up in
         # a profile, not before.
         async with httpx.AsyncClient(timeout=settings.context_timeout_s) as client:
-            response = await client.get(f"{self._base}{path}", headers={"authorization": token})
+            response = await client.get(f"{self._base}{path}", headers=self._headers(token))
             response.raise_for_status()
             return response.json()
 
-    async def _post(self, path: str, token: str, body: dict) -> dict:
+    async def _post(self, path: str, token: str | None, body: dict) -> dict:
         async with httpx.AsyncClient(timeout=settings.context_timeout_s) as client:
             response = await client.post(
-                f"{self._base}{path}", headers={"authorization": token}, json=body
+                f"{self._base}{path}", headers=self._headers(token), json=body
             )
             response.raise_for_status()
             return response.json()
@@ -66,7 +73,7 @@ class PortfolioApiSource:
     async def add_wallet(self, slug: str, address: str, token: str) -> dict:
         return await self._post(f"/api/portfolios/{slug}/wallets", token, {"address": address})
 
-    async def portfolio(self, ref: str, token: str) -> dict:
+    async def portfolio(self, ref: str, token: str | None) -> dict:
         return await self._get(f"/api/portfolios/{ref}", token)
 
     async def history(self, ref: str, range_: str, token: str) -> dict:
