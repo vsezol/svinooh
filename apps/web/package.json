@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@module-federation/runtime": "^2.9.0",
+    "@svinooh/content": "*",
     "@svinooh/shared": "*",
     "@svinooh/ui": "*",
     "@web3icons/react": "^4.1.21",

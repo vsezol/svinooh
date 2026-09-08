@@ -24,16 +24,22 @@ ENV NEXT_PUBLIC_AGENT_WIDGET_URL=$NEXT_PUBLIC_AGENT_WIDGET_URL
 COPY package.json package-lock.json nx.json tsconfig.base.json ./
 COPY apps/web/package.json apps/web/
 COPY libs/shared/package.json libs/shared/
+COPY libs/content/package.json libs/content/
 COPY libs/ui/package.json libs/ui/
-RUN npm ci -w apps/web --no-audit --no-fund
+RUN npm ci -w apps/web -w @svinooh/content --no-audit --no-fund
 
 COPY libs/shared libs/shared
+COPY libs/content libs/content
 # The design system the app is built from (@svinooh/ui, transpiled by Next):
 # a workspace dependency, so its source has to be in the image like any other
 # part of the app.
 COPY libs/ui libs/ui
 COPY apps/web apps/web
-RUN npm run -w apps/web build
+# What the product says about itself, compiled: the FAQ page reads it, and
+# so does the api, so it ships as a built package rather than as source Next
+# happens to transpile.
+RUN npm run -w @svinooh/content build \
+  && npm run -w apps/web build
 
 FROM node:22-alpine
 WORKDIR /app

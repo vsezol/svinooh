@@ -51,7 +51,10 @@ async def _fetch() -> None:
         if not isinstance(incoming, dict):
             raise ValueError(f"expected an object, got {type(incoming).__name__}")
         if incoming != _values:
-            logger.info("agent config changed: %s", incoming)
+            # The product facts are a page of prose and never a surprise; the
+            # knobs are what somebody just turned and wants to see land.
+            knobs = {key: value for key, value in incoming.items() if key != "product"}
+            logger.info("agent config changed: %s", knobs)
         _values = incoming
         _fetched_at = time.time()
     except Exception as error:  # noqa: BLE001 — settings must not break chatting

@@ -7,16 +7,20 @@ WORKDIR /app
 COPY package.json package-lock.json nx.json tsconfig.base.json ./
 COPY apps/api/package.json apps/api/
 COPY libs/shared/package.json libs/shared/
+COPY libs/content/package.json libs/content/
 COPY libs/db/package.json libs/db/
 COPY libs/common/package.json libs/common/
-RUN npm ci -w apps/api -w @svinooh/db -w @svinooh/common --no-audit --no-fund
+RUN npm ci -w apps/api -w @svinooh/db -w @svinooh/common -w @svinooh/content --no-audit --no-fund
 
 COPY libs/shared libs/shared
+COPY libs/content libs/content
 COPY libs/db libs/db
 COPY libs/common libs/common
 COPY apps/api apps/api
-# Build the shared libs first (db: prisma generate + tsc; common: tsc), then the api
-RUN npm run -w @svinooh/db build \
+# Build the shared libs first (content: tsc; db: prisma generate + tsc;
+# common: tsc), then the api
+RUN npm run -w @svinooh/content build \
+  && npm run -w @svinooh/db build \
   && npm run -w @svinooh/common build \
   && npm run -w apps/api build
 

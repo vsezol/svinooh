@@ -1,5 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { option, setting, text } from '@svinooh/common';
+import { PRODUCT_FAQ } from '@svinooh/content';
 import type { AgentConfigDto } from '@svinooh/shared';
 
 /**
@@ -12,10 +13,10 @@ import type { AgentConfigDto } from '@svinooh/shared';
  * environment whenever the answer does not arrive.
  *
  * Unauthenticated on purpose. Nothing here is a secret: it is which model
- * answers and how hard it may think, every bit of which a conversation with
- * the agent reveals anyway. Putting a credential on it would buy nothing and
- * cost the agent its independence, which is the one property the whole design
- * is built on.
+ * answers, how hard it may think, and the sentences already published on the
+ * FAQ page — every bit of which a conversation with the agent reveals anyway.
+ * Putting a credential on it would buy nothing and cost the agent its
+ * independence, which is the one property the whole design is built on.
  */
 @Controller('agent')
 export class AgentConfigController {
@@ -30,6 +31,9 @@ export class AgentConfigController {
       toolHops: setting('agent.toolHops'),
       contextMaxPositions: setting('agent.contextMaxPositions'),
       providerSort: option('agent.providerSort'),
+      // Copied rather than referenced: the agent has no shared libraries, and
+      // this is the channel it already has.
+      product: PRODUCT_FAQ.map((entry) => ({ ...entry })),
     };
   }
 }
