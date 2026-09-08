@@ -22,7 +22,7 @@ import { useSettings } from './useSettings';
  * SettingRow, and the controls are in fields.
  */
 export function AdminPanel() {
-  const { specs, draft, changed, problems, saved, busy, denied, set, save } = useSettings();
+  const { specs, models, draft, changed, problems, saved, busy, denied, set, save } = useSettings();
   const groups = useMemo(() => (specs ? groupSettings(specs) : []), [specs]);
   const dirty = Object.keys(changed).length > 0;
 
@@ -70,6 +70,12 @@ export function AdminPanel() {
                     key={spec.key}
                     spec={spec}
                     value={draft[spec.key] ?? String(spec.value)}
+                    models={models}
+                    // A model knob is judged against the thinking knob beside
+                    // it, and against what is in the box right now rather than
+                    // what was last saved — the clash is worth seeing before
+                    // pressing Save, not after being refused.
+                    effort={spec.role ? draft[spec.role.effort] : undefined}
                     onChange={(value) => set(spec.key, value)}
                   />
                 ))}

@@ -339,6 +339,16 @@ export interface SettingDto {
   /** text knobs */
   maxLength?: number;
   placeholder?: string;
+  /**
+   * Text knobs that name a model: the rest of the role this model belongs to.
+   *
+   * `effort` is the key of the thinking knob turned beside it, and `noThinking`
+   * is the value of that knob which sends no reasoning parameter at all. Both
+   * are declared server-side, in the settings registry, so the panel can say
+   * whether a model can do what the knob beside it is asking without keeping
+   * its own copy of how roles are put together.
+   */
+  role?: { effort: string; noThinking: string };
   /** False — whoever reads this knob picks the change up on its next deploy */
   live: boolean;
   note?: string;
@@ -346,8 +356,31 @@ export interface SettingDto {
   readBy: string[];
 }
 
+/**
+ * One model the agent could be pointed at, and the one fact about it that a
+ * name cannot tell you.
+ *
+ * `thinks` is whether the model accepts a reasoning parameter. It decides
+ * whether a thinking setting is a preference or a request that no provider can
+ * serve — see the labelling role in apps/agent/app/config.py.
+ */
+export interface ModelChoiceDto {
+  /** As a setting spells it, aggregator prefix included */
+  id: string;
+  name: string;
+  thinks: boolean;
+}
+
 export interface SettingsDto {
   settings: SettingDto[];
+  /**
+   * What the `agent.model` and `agent.routerModel` fields may be set to.
+   *
+   * Empty means the catalogue could not be read, not that there are no models:
+   * the panel falls back to a plain text field rather than locking an operator
+   * out of a knob because a third party is having a bad minute.
+   */
+  models?: ModelChoiceDto[];
 }
 
 /**

@@ -538,6 +538,34 @@ export interface SettingRule {
   atLeast: readonly NumberKey[];
 }
 
+/**
+ * The thinking setting that asks for nothing.
+ *
+ * A select cannot offer "no value", and a blank row would be read as unset and
+ * fall through to the environment — so the choice that means "send no reasoning
+ * parameter at all" has to be a word. The agent maps it back to nothing
+ * (apps/agent/app/config.py).
+ */
+export const NO_THINKING = 'default';
+
+/**
+ * Which thinking knob belongs to which model knob.
+ *
+ * A role is a model plus the dials that job wants, and the two have to agree:
+ * asking a model that cannot reason to reason is not a preference the endpoint
+ * ignores, it is a request no provider can serve. Declared here so a new role
+ * is a line rather than a check somebody remembers to write.
+ */
+export interface RolePair {
+  model: TextKey;
+  effort: ChoiceKey;
+}
+
+export const ROLE_PAIRS: readonly RolePair[] = [
+  { model: 'agent.model', effort: 'agent.reasoningEffort' },
+  { model: 'agent.routerModel', effort: 'agent.routerReasoningEffort' },
+];
+
 export const RULES: readonly SettingRule[] = [
   {
     id: 'lease-outlasts-scan',

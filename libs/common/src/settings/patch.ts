@@ -1,5 +1,7 @@
 import {
+  NO_THINKING,
   REGISTRY,
+  ROLE_PAIRS,
   RULES,
   type SettingKey,
   type SettingRule,
@@ -7,6 +9,18 @@ import {
   type SettingValues,
   type SettingsPatch,
 } from './registry';
+
+/**
+ * One model the panel may offer, and whether it can reason.
+ *
+ * Structural rather than imported from @svinooh/shared: this library is what
+ * shared types are built from, and a check that needs to know what a model can
+ * do should not turn that around.
+ */
+export interface ModelFacts {
+  id: string;
+  thinks: boolean;
+}
 
 /**
  * Turning what somebody submitted into a change the system will accept.
@@ -58,6 +72,43 @@ function read(spec: SettingSpec, raw: unknown): { value: number | string } | { p
   return { value: Math.round(n) };
 }
 
+/**
+ * Whether each role's model can do what its thinking setting asks of it.
+ *
+ * The check bounds cannot make and a list of allowed values cannot make either.
+ * Every value involved is valid on its own: the model id exists and is spelled
+ * correctly, the effort is one of the options. Only together are they wrong,
+ * and only because of a fact about the model that its name does not carry.
+ *
+ * An instruct model has no thinking mode. Asking it for one is at best a
+ * setting that does nothing, and it has already been worse than that: while we
+ * demanded providers advertise every parameter we send, the ask was a filter
+ * that emptied the routing list and failed every call. We no longer make that
+ * demand, so this is a refusal about intent rather than about breakage — a
+ * value whose only outcomes are nothing and harm is not one to save quietly.
+ *
+ * Without a catalogue there is nothing to check against and this passes. That
+ * is deliberate: a third party being unreachable must not stop an operator
+ * changing a setting.
+ */
+function thinkingFits(values: SettingValues, models: readonly ModelFacts[]): string[] {
+  if (models.length === 0) return [];
+  const thinks = new Map(models.map((model) => [model.id, model.thinks]));
+  return ROLE_PAIRS.flatMap(({ model, effort }) => {
+    const chosen = String(values[model] ?? '');
+    // Unset means the role runs on the answering model, which this same loop
+    // has already checked; unknown means the catalogue does not list it, and we
+    // do not refuse a value on a catalogue's silence.
+    if (!chosen || thinks.get(chosen) !== false) return [];
+    if (values[effort] === NO_THINKING) return [];
+    return [
+      `${REGISTRY[effort].label}: ${chosen} has no thinking mode, so this has ` +
+        `to be "${NO_THINKING}". Any other value asks it for something it does ` +
+        `not have.`,
+    ];
+  });
+}
+
 /** Whether a rule still holds once the patch is applied */
 function holds(rule: SettingRule, values: SettingValues): boolean {
   const left = values[rule.left] * rule.scale;
@@ -65,7 +116,11 @@ function holds(rule: SettingRule, values: SettingValues): boolean {
   return left >= right;
 }
 
-export function parseSettingsPatch(input: unknown, current: SettingValues): PatchResult {
+export function parseSettingsPatch(
+  input: unknown,
+  current: SettingValues,
+  models: readonly ModelFacts[] = [],
+): PatchResult {
   const problems: string[] = [];
   const patch: Record<string, number | string> = {};
 
@@ -84,6 +139,7 @@ export function parseSettingsPatch(input: unknown, current: SettingValues): Patc
   if (problems.length === 0) {
     const next = { ...current, ...patch } as SettingValues;
     problems.push(...RULES.filter((rule) => !holds(rule, next)).map((rule) => rule.about));
+    problems.push(...thinkingFits(next, models));
   }
 
   return problems.length ? { ok: false, problems } : { ok: true, patch: patch as SettingsPatch };

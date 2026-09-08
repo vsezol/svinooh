@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { SettingDto, SettingsDto, UpdateSettingsDto } from '@svinooh/shared';
+import type { ModelChoiceDto, SettingDto, SettingsDto, UpdateSettingsDto } from '@svinooh/shared';
 import { api, ApiError } from '../../lib/api';
 
 /**
@@ -13,6 +13,11 @@ import { api, ApiError } from '../../lib/api';
  */
 export interface SettingsForm {
   specs: SettingDto[] | null;
+  /**
+   * What the model fields may be set to. Empty when the catalogue could not be
+   * read, and those fields fall back to being typed by hand.
+   */
+  models: ModelChoiceDto[];
   /** What is in the inputs, as text — the value the browser actually holds */
   draft: Record<string, string>;
   /** Only what differs from what the server returned, which is what gets sent */
@@ -28,6 +33,7 @@ export interface SettingsForm {
 
 export function useSettings(): SettingsForm {
   const [specs, setSpecs] = useState<SettingDto[] | null>(null);
+  const [models, setModels] = useState<ModelChoiceDto[]>([]);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [problems, setProblems] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
@@ -36,6 +42,7 @@ export function useSettings(): SettingsForm {
 
   const load = useCallback((data: SettingsDto) => {
     setSpecs(data.settings);
+    setModels(data.models ?? []);
     setDraft(Object.fromEntries(data.settings.map((s) => [s.key, String(s.value)])));
   }, []);
 
@@ -82,5 +89,5 @@ export function useSettings(): SettingsForm {
     })();
   }, [changed, load]);
 
-  return { specs, draft, changed, problems, saved, busy, denied, set, save };
+  return { specs, models, draft, changed, problems, saved, busy, denied, set, save };
 }
