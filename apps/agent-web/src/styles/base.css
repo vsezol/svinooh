@@ -226,43 +226,6 @@
   opacity: 0.5;
 }
 
-.sv-a-rail-toggle {
-  position: absolute;
-  right: 10px;
-  bottom: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--line2);
-  border-radius: var(--r-sm);
-  background: var(--surf);
-  color: var(--mut);
-  cursor: pointer;
-  transition: color var(--ease-quick), border-color var(--ease-quick);
-}
-
-.sv-a-rail-toggle:hover {
-  color: var(--text);
-  border-color: var(--acc);
-}
-
-.sv-a-rail[data-collapsed] .sv-a-rail-toggle {
-  right: 50%;
-  transform: translateX(50%);
-}
-
-/* The chevrons point the way the click goes. */
-.sv-a-rail[data-collapsed] .sv-a-rail-toggle svg {
-  transform: scaleX(-1);
-}
-
-.sv-a-c-hist[data-collapsed] {
-  align-items: center;
-  padding: 22px 0;
-}
-
 /* Nothing inside the chat may be wider than the chat. Long unbroken strings —
    wallet addresses, transaction hashes — are the usual culprit, and they break
    anywhere rather than pushing a sideways scroll onto the page. */

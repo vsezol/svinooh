@@ -9,8 +9,6 @@ interface Props {
   onNew: () => void;
   onClose?: () => void;
   mode: 'rail' | 'popover' | 'sheet';
-  /** Rail only: the icon-sized state. */
-  collapsed?: boolean;
 }
 
 const PLUS = (
@@ -41,7 +39,7 @@ function relativeDate(at: number, now: number = Date.now()): string {
 }
 
 /** Past conversations: a static rail on desktop, popover or sheet elsewhere. */
-export function HistoryPanel({ conversations, currentId, onSelect, onNew, onClose, mode, collapsed }: Props) {
+export function HistoryPanel({ conversations, currentId, onSelect, onNew, onClose, mode }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   useDismiss(mode === 'popover', onClose, ref);
 
@@ -77,25 +75,6 @@ export function HistoryPanel({ conversations, currentId, onSelect, onNew, onClos
   );
 
   if (mode === 'rail') {
-    // Collapsed, the rail keeps only the one action that still makes sense at
-    // icon size; the list needs width to say anything at all.
-    if (collapsed) {
-      return (
-        <aside className="sv-a-c-hist" data-mode="rail" data-collapsed="true">
-          <button
-            type="button"
-            className="ui-icon-btn"
-            data-variant="soft"
-            data-size="sm"
-            onClick={onNew}
-            aria-label="New chat"
-            title="New chat"
-          >
-            {PLUS}
-          </button>
-        </aside>
-      );
-    }
     // The kit's rail furniture, the same classes the site's own sidebar uses.
     // Two rails drawing one design is how they drifted apart the first time.
     return (

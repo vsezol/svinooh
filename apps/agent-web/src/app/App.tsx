@@ -453,16 +453,13 @@ export function App(props: AppProps) {
       <div className="sv-a-body">
         {variant === 'standalone' ? (
           <Rail>
-            {(collapsed) => (
-              <HistoryPanel
-                mode="rail"
-                collapsed={collapsed}
-                conversations={conversations}
-                currentId={active.id}
-                onSelect={selectConversation}
-                onNew={newChat}
-              />
-            )}
+            <HistoryPanel
+              mode="rail"
+              conversations={conversations}
+              currentId={active.id}
+              onSelect={selectConversation}
+              onNew={newChat}
+            />
           </Rail>
         ) : null}
         <div className="sv-a-main">
