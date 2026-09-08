@@ -138,6 +138,16 @@ def two_wallet_portfolio() -> dict:
 
 
 def history(points: list[tuple[str, float]], range_: str = "7d") -> dict:
-    """A HistoryDto: ISO timestamps and totals, oldest first."""
-    return {"range": range_, "points": [{"t": t, "usd": usd, "claimable": None, "debt": None}
-                                        for t, usd in points]}
+    """A HistoryDto: ISO timestamps and totals, oldest first.
+
+    The names are the API's own — claimableUsd and debtUsd, not claimable and
+    debt. The contract test caught that the moment it first ran, which is the
+    entire reason it exists.
+    """
+    return {
+        "range": range_,
+        "points": [
+            {"t": stamp, "usd": total, "claimableUsd": None, "debtUsd": None}
+            for stamp, total in points
+        ],
+    }

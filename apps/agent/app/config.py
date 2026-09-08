@@ -8,6 +8,8 @@ this module would learn how.
 import os
 from dataclasses import dataclass
 
+from . import remote_config
+
 # English on purpose, like every prompt in this repo: users write in any
 # language and the closing instruction makes the agent answer in kind, but the
 # prompt itself is code and code is English.
@@ -37,58 +39,39 @@ DEFAULT_SYSTEM_PROMPT = (
     "6. Quote figures as they are given, with their currency and their sign. "
     "Do not round a value into a different one.\n"
     "\n"
-    "With no portfolio data in this prompt, say you cannot see a portfolio "
-    "right now and answer the general part of the question. Answer in the "
-    "language the user writes in."
+    "When this prompt carries no portfolio data and the question needs some, "
+    "say you cannot see the portfolio right now and answer whatever general "
+    "part you can. When the question does not need it — what a term means, "
+    "how something works — simply answer, without mentioning the portfolio at "
+    "all. Answer in the language the user writes in."
 )
 
 
 @dataclass(frozen=True)
 class Settings:
     # ── the models ──────────────────────────────────────────────────────────
-    # Two models do two jobs, and both are named here rather than in the code
-    # that calls them:
-    #
-    #   AGENT_MODEL         answers — the one the user reads
-    #   AGENT_ROUTER_MODEL  labels — intent and confirmation classifiers, a
-    #                       dozen output tokens each, so this is where a
-    #                       cheaper tier pays off. Empty: the same model
-    #                       answers and labels.
-    #
-    # Both are "<provider>:<model>", resolved by langchain's init_chat_model,
-    # so changing vendor is a new value here plus that provider's package —
-    # never a code change. Haiku while we iterate: fast, cheap, and every
-    # experiment is billed.
-    model: str = os.getenv("AGENT_MODEL", "anthropic:claude-haiku-4-5")
-    router_model: str = os.getenv("AGENT_ROUTER_MODEL", "")
-    # The credentials both models use. Named for this service's own config
-    # rather than for whichever vendor is behind it today: the provider SDKs
-    # would each read their own variable (ANTHROPIC_API_KEY, OPENAI_API_KEY,
-    # GOOGLE_API_KEY...), which turns "switch the model" into "also learn what
-    # this vendor calls its key". Passed explicitly to the client instead, so
-    # one pair of names covers every provider. Empty key — the provider plugin
-    # falls back to its own variable, which keeps existing deployments working.
+    # Which model does which job lives in the Role objects below this class,
+    # one per job. What stays here is what the jobs share: the account we
+    # reach them through, and the policy for choosing a provider behind it.
     model_api_key: str = os.getenv("AGENT_MODEL_API_KEY", "")
     # One endpoint for many vendors (OpenRouter and the like): when set, model
     # calls go to this OpenAI-compatible base URL instead of the provider's own
     # — one key, any vendor's model, chosen by AGENT_MODEL alone
     # (e.g. AGENT_MODEL=openai:google/gemini-2.5-flash). Empty — direct.
     model_base_url: str = os.getenv("AGENT_MODEL_BASE_URL", "")
-    # How hard the answering model may think before it starts writing.
-    # Reasoning models spend real seconds here, and a chat is a place where a
-    # person is watching a cursor — "low" buys most of the quality for a
-    # fraction of the wait. Empty leaves the model's own default alone; the
-    # values an OpenAI-compatible aggregator accepts are none/minimal/low/
-    # medium/high.
-    reasoning_effort: str = os.getenv("AGENT_REASONING_EFFORT", "low")
-    # The classifiers barely think: they pick one of two labels from one
-    # sentence, and they sit on the critical path in front of every answer.
-    # Not "none": some endpoints mandate reasoning and reject a request that
-    # switches it off, which is a 400 on every turn (the service now drops the
-    # budget by itself when that happens, but the default should not need it).
-    router_reasoning_effort: str = os.getenv("AGENT_ROUTER_REASONING_EFFORT", "low")
+    # Which of an aggregator's providers may serve these models. One model id
+    # is served by several, and they differ in quantisation, in what they
+    # actually support, in what they do with the prompt, and — measured on the
+    # same question minutes apart — between 4 and 26 seconds. Left empty this
+    # sends nothing and takes whoever answers.
+    #   deny   : refuse providers that keep or train on the prompt. Ours carry
+    #            somebody's wallet addresses and balances.
+    #   require: refuse providers that do not really support the parameters we
+    #            send — tools and structured outputs are not optional here.
+    #   sort   : which of the survivors to prefer — live, see provider_sort().
+    provider_data_collection: str = os.getenv("AGENT_PROVIDER_DATA_COLLECTION", "deny")
+    provider_require_parameters: bool = os.getenv("AGENT_PROVIDER_REQUIRE_PARAMETERS", "1") == "1"
     system_prompt: str = os.getenv("AGENT_SYSTEM", DEFAULT_SYSTEM_PROMPT)
-    max_tokens: int = int(os.getenv("AGENT_MAX_TOKENS", "1024"))
     request_timeout_s: int = int(os.getenv("AGENT_TIMEOUT_S", "60"))
     # Conversation memory: how many messages a session keeps, and for how long
     # a silent session survives before it is forgotten.
@@ -118,16 +101,149 @@ class Settings:
     # turn is at least one paid model call, several when tools run.
     rate_limit_requests: int = int(os.getenv("AGENT_RATE_LIMIT_REQUESTS", "20"))
     rate_limit_window_s: int = int(os.getenv("AGENT_RATE_LIMIT_WINDOW_S", "300"))
-    # How many rounds of tool calls one grounded turn may take before the
-    # model is asked to answer with what it has. A cap, not a target: most
-    # turns take zero or one.
-    tool_hops: int = int(os.getenv("AGENT_TOOL_HOPS", "3"))
-    # How many positions per wallet the context block carries (largest first,
-    # so what falls off the end is dust by construction). A knob, not gospel:
-    # the whole context is billed on every turn of a conversation, and the
-    # planned complement is a drill-down tool the model calls for specifics
-    # rather than an ever-fatter static block.
-    context_max_positions: int = int(os.getenv("AGENT_CONTEXT_MAX_POSITIONS", "12"))
+
+
+@dataclass(frozen=True)
+class Role:
+    """A job the service gives a model, and the dials that job wants.
+
+    Roles differ in what they are for, so they differ in what to spend: the
+    model that answers is read by a person and can afford to think; the model
+    that labels picks one word out of two and must not keep anyone waiting.
+    Giving each its own settings is what lets those choices move apart.
+
+    Adding a role — a critic, a summariser — is one line at the bottom of this
+    module plus the variables it reads, and it runs on the answering model
+    until somebody configures it:
+
+        AGENT_<ROLE>_MODEL             which model does this job
+        AGENT_<ROLE>_REASONING_EFFORT  how much it may think first
+        AGENT_<ROLE>_MAX_TOKENS        how much it may write
+
+    The credentials and the provider policy stay shared: they are about the
+    account we call through, not about the job.
+    """
+
+    #: What the job is called, for logs and for reading this code.
+    name: str
+    #: "<provider>:<model>" — which model does it.
+    model: str
+    #: How much it may think before writing: none/minimal/low/medium/high.
+    reasoning_effort: str
+    #: The longest reply it may write, counted in model tokens. Nothing to do
+    #: with credentials — an answer is capped so it stays an answer, and a
+    #: label is capped because a label is one word.
+    answer_token_cap: int
+
+
+def _role(
+    name: str,
+    env_prefix: str,
+    decided: dict,
+    *,
+    panel_keys: tuple[str, str, str],
+    effort: str = "",
+    answer_token_cap: int = 1024,
+) -> Role:
+    """Assemble one role from the three places a knob can be set.
+
+    Admin panel, then environment, then what the service shipped with — the
+    same order every other knob in this product resolves in, for the same
+    reason: an operator's decision wins, the environment still works when
+    nothing has been decided, and the default runs before either exists.
+
+    `decided` is what the panel says right now; `panel_keys` names this role's
+    three knobs in it, and `env_prefix` names them in the environment
+    (AGENT_ROUTER_MODEL and its siblings for labelling, AGENT_MODEL for
+    answering, which has no prefix because it came first).
+    """
+    model_key, effort_key, cap_key = panel_keys
+
+    def decided_or_env(panel_key: str, env_key: str, fallback: str) -> str:
+        # An empty value in the panel means "no opinion", not "set it to
+        # nothing", so it falls through to the environment like an absent one.
+        return str(decided.get(panel_key) or "") or os.getenv(f"AGENT_{env_key}", fallback)
+
+    answering_model = str(decided.get("model") or "") or os.getenv(
+        "AGENT_MODEL", "anthropic:claude-haiku-4-5"
+    )
+    # How long a reply may be, not any kind of credential: the panel carries a
+    # number of model tokens, and a value that is not a positive whole number
+    # is not a decision.
+    cap_from_panel = decided.get(cap_key)
+    cap_is_usable = isinstance(cap_from_panel, int) and not isinstance(cap_from_panel, bool)
+
+    return Role(
+        name=name,
+        # A role with no model of its own does its job on the answering one.
+        model=decided_or_env(model_key, f"{env_prefix}MODEL", "") or answering_model,
+        # AGENT_REASONING_EFFORT carries no role in its name because it named
+        # the only role there was; it still configures answering.
+        reasoning_effort=decided_or_env(
+            effort_key,
+            f"{env_prefix}REASONING_EFFORT",
+            os.getenv("AGENT_REASONING_EFFORT", effort),
+        ),
+        answer_token_cap=cap_from_panel
+        if cap_is_usable and cap_from_panel > 0
+        else int(os.getenv(f"AGENT_{env_prefix}MAX_TOKENS", str(answer_token_cap))),
+    )
+
+
+def answering() -> Role:
+    """Answers — what the user reads. Thinks a little; somebody is watching a cursor."""
+    return _role(
+        "answering", "", remote_config.current(),
+        panel_keys=("model", "reasoningEffort", "maxTokens"),
+        effort="minimal", answer_token_cap=1024,
+    )
+
+
+def labelling() -> Role:
+    """Labels — the intent and confirmation classifiers.
+
+    A dozen output tokens each, in front of every answer, so this is where a
+    cheaper and faster tier pays for itself. Not "none": some endpoints refuse
+    to think less than they want to (see app/llm.py), and the service recovers
+    but should not need to.
+    """
+    return _role(
+        "labelling", "ROUTER_", remote_config.current(),
+        panel_keys=("routerModel", "routerReasoningEffort", "routerMaxTokens"),
+        effort="low", answer_token_cap=200,
+    )
+
+
+def _live_number(remote_key: str, env_key: str, default: int) -> int:
+    """A number the panel may set: panel, then environment, then the default.
+
+    Read at the point of use, like every other live knob in this product —
+    which is also what makes it settable without a restart.
+    """
+    remote = remote_config.current().get(remote_key)
+    if isinstance(remote, int) and not isinstance(remote, bool) and remote >= 0:
+        return remote
+    try:
+        return int(os.getenv(env_key, str(default)))
+    except ValueError:
+        return default
+
+
+def tool_hops() -> int:
+    """How many rounds of looking things up one answer may take."""
+    return _live_number("toolHops", "AGENT_TOOL_HOPS", 3)
+
+
+def context_max_positions() -> int:
+    """How many positions per wallet the model is shown, largest first."""
+    return _live_number("contextMaxPositions", "AGENT_CONTEXT_MAX_POSITIONS", 12)
+
+
+def provider_sort() -> str:
+    """Which of an aggregator's providers to prefer."""
+    return str(remote_config.current().get("providerSort") or "") or os.getenv(
+        "AGENT_PROVIDER_SORT", "throughput"
+    )
 
 
 settings = Settings()

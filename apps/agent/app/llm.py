@@ -19,15 +19,15 @@ from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 
-from .config import settings
+from .config import Role, answering, labelling, provider_sort, settings
 
 logger = logging.getLogger("svinooh-ai")
 
 
-# Endpoints that turned out to refuse a thinking budget. Some mandate
-# reasoning and reject a request that lowers or disables it — a 400 that would
-# otherwise kill every classification for as long as the setting stands.
-_refuses_budget: set[str] = set()
+# Models whose endpoint insists on thinking. Some refuse a request that asks
+# them to think less or not at all, with a 400 that would otherwise kill every
+# classification for as long as our setting stood.
+_models_that_insist_on_thinking: set[str] = set()
 
 
 def _reasoning(effort: str, model: str) -> dict:
@@ -38,37 +38,62 @@ def _reasoning(effort: str, model: str) -> dict:
     ignores it. Empty — or an endpoint that has already refused one — leaves
     the model's own default in place.
     """
-    if not effort or model in _refuses_budget:
+    if not _speaks_openai_wire(model):
         return {}
-    return {"extra_body": {"reasoning": {"effort": effort}}}
+    body = _provider_policy()
+    if effort and model not in _models_that_insist_on_thinking:
+        body["reasoning"] = {"effort": effort}
+    return {"extra_body": body} if body else {}
 
 
-def budget_was_refused(error: BaseException) -> bool:
-    """Whether a failure is the endpoint objecting to the thinking budget."""
+def _speaks_openai_wire(model: str) -> bool:
+    """Whether extra_body means anything for this model.
+
+    It is an OpenAI-client field: on the Anthropic client it is not a
+    parameter at all, and langchain quietly moves it to model_kwargs while
+    warning that nobody meant this. Reasoning budgets and provider policies
+    both ride in it, so both are for the OpenAI wire only — which is the wire
+    an aggregator speaks for every vendor anyway.
+    """
+    return bool(settings.model_base_url) or model.startswith("openai:")
+
+
+def _provider_policy() -> dict:
+    """Which providers behind an aggregator may serve our prompts.
+
+    Only meaningful when a base URL is set: without an aggregator there is one
+    provider and nothing to choose between.
+    """
+    if not settings.model_base_url:
+        return {}
+    policy: dict = {}
+    if settings.provider_data_collection:
+        policy["data_collection"] = settings.provider_data_collection
+    if settings.provider_require_parameters:
+        policy["require_parameters"] = True
+    if provider_sort():
+        policy["sort"] = provider_sort()
+    return {"provider": policy} if policy else {}
+
+
+def is_thinking_mandatory_error(error: BaseException) -> bool:
+    """Whether a failure is the endpoint refusing to think less than it wants."""
     return "reasoning" in str(error).lower()
 
 
-def drop_budget(model: str) -> bool:
-    """Stop sending a budget to this model, and rebuild the clients.
+def let_it_think(model: str) -> bool:
+    """Stop asking this model to think less, and rebuild the clients.
 
-    Returns False when it was already dropped, which is what stops a retry
-    loop: the second failure is a real one and belongs to the caller.
+    Returns False when we had already stopped, which is what ends a retry
+    instead of looping: the second failure is a real one and belongs to the
+    caller.
     """
-    if model in _refuses_budget:
+    if model in _models_that_insist_on_thinking:
         return False
-    logger.warning("%s refuses a reasoning budget — sending none from now on", model)
-    _refuses_budget.add(model)
-    get_model.cache_clear()
-    get_router_model.cache_clear()
+    logger.warning("%s requires reasoning — no longer limiting it", model)
+    _models_that_insist_on_thinking.add(model)
+    model_for.cache_clear()
     return True
-
-
-def answering_model() -> str:
-    return settings.model
-
-
-def labelling_model() -> str:
-    return settings.router_model or settings.model
 
 
 def _credentials() -> dict:
@@ -91,33 +116,58 @@ def _credentials() -> dict:
     return credentials
 
 
-@cache  # lazy singleton: the client is built once and reused by every request
+@cache  # lazy singleton per role: a client is built once and reused
+def model_for(role: Role) -> BaseChatModel:
+    """The client for one job, built from that job's own settings."""
+    return init_chat_model(
+        role.model,
+        # langchain's own name for it; ours says what it caps.
+        max_tokens=role.answer_token_cap,
+        timeout=settings.request_timeout_s,
+        **_credentials(),
+        **_reasoning(role.reasoning_effort, role.model),
+    )
+
+
 def get_model() -> BaseChatModel:
-    return init_chat_model(
-        settings.model,
-        max_tokens=settings.max_tokens,
-        timeout=settings.request_timeout_s,
-        **_credentials(),
-        **_reasoning(settings.reasoning_effort, answering_model()),
-    )
+    """The model that answers — what the user reads."""
+    return model_for(answering())
 
 
-@cache
 def get_router_model() -> BaseChatModel:
-    """The model that labels turns (app/intent.py).
+    """The model that labels — the intent and confirmation classifiers."""
+    return model_for(labelling())
 
-    Routers ride the cheapest model that labels reliably — their output is a
-    dozen tokens, so intelligence is bought where it matters and pennies are
-    spent where it does not. Defaults to the main model (already the cheap
-    tier); AGENT_ROUTER_MODEL overrides it independently.
+
+def answering_model() -> str:
+    return answering().model
+
+
+def labelling_model() -> str:
+    return labelling().model
+
+
+async def ask(build, messages, model: str, forget=None):
+    """Send messages to a model, surviving the one failure worth surviving.
+
+    Every call site had the same six lines around it, which is five lines more
+    than the idea is worth: try, and if the endpoint turned out to require
+    reasoning we had asked it to limit, stop asking and try once more. Any
+    other failure, and any second failure, belongs to the caller — there is no
+    loop here.
+
+    `build` returns the runnable rather than being one, because a caller's
+    runnable is usually cached and the retry needs a freshly built one;
+    `forget` clears that cache.
     """
-    return init_chat_model(
-        settings.router_model or settings.model,
-        max_tokens=200,
-        timeout=settings.request_timeout_s,
-        **_credentials(),
-        **_reasoning(settings.router_reasoning_effort, labelling_model()),
-    )
+    try:
+        return await build().ainvoke(messages)
+    except Exception as error:  # noqa: BLE001 — one specific cause is recoverable
+        if not (is_thinking_mandatory_error(error) and let_it_think(model)):
+            raise
+        if forget is not None:
+            forget()
+        return await build().ainvoke(messages)
 
 
 def extract_text(reply: BaseMessage) -> str:

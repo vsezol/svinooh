@@ -16,6 +16,7 @@ from collections.abc import Sequence
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import remote_config
 from .config import settings
 from .routes import router
 
@@ -34,6 +35,12 @@ def create_app(cors_origins: Sequence[str] | None = None) -> FastAPI:
             allow_headers=["authorization", "content-type"],
             max_age=3600,
         )
+    @app.on_event("startup")
+    async def _load_settings() -> None:
+        # So the first turn already runs on what the panel says rather than on
+        # the environment the container booted with.
+        await remote_config.prime()
+
     app.include_router(router)
 
     return app

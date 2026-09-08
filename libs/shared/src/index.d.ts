@@ -237,6 +237,26 @@ export interface HistoryDto {
   points: HistoryPointDto[];
 }
 
+/**
+ * The agent's own settings, as the agent reads them.
+ *
+ * The agent has no database and no shared libraries — it is an API client like
+ * any other (see apps/agent/DESIGN.md) — so the knobs an operator turns in the
+ * admin panel reach it the only way anything reaches it: over HTTP. Nothing
+ * here is a secret; it is which model answers and how hard it may think, all
+ * of it inferable from a conversation anyway.
+ */
+export interface AgentConfigDto {
+  model: string;
+  reasoningEffort: string;
+  maxTokens: number;
+  routerModel: string;
+  routerReasoningEffort: string;
+  toolHops: number;
+  contextMaxPositions: number;
+  providerSort: string;
+}
+
 export interface AuthConfigDto {
   botUsername: string | null;
   /** Numeric bot id (public, the token prefix) — for Telegram.Login.auth */
@@ -308,14 +328,17 @@ export interface SettingDto {
   group: string;
   label: string;
   about: string;
-  /** `number` — between min and max; `choice` — one of `options` */
-  kind: 'number' | 'choice';
+  /** `number` — between min and max; `choice` — one of `options`; `text` — free */
+  kind: 'number' | 'choice' | 'text';
   value: number | string;
   default: number | string;
   unit?: string;
   min?: number;
   max?: number;
   options?: string[];
+  /** text knobs */
+  maxLength?: number;
+  placeholder?: string;
   /** False — whoever reads this knob picks the change up on its next deploy */
   live: boolean;
   note?: string;

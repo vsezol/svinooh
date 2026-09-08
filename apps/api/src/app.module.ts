@@ -5,6 +5,7 @@ import { AuthProxyModule } from './auth-proxy/auth-proxy.module';
 import { BillingModule } from './billing/billing.module';
 import { CacheModule } from './cache/cache.module';
 import { config } from './config';
+import { AgentConfigController } from './agent-config.controller';
 import { HealthController } from './health.controller';
 import { MetricsModule, RabbitModule } from '@svinooh/common';
 import { PortfolioModule } from './portfolio/portfolio.module';
@@ -28,6 +29,6 @@ import { PrismaModule } from '@svinooh/db';
     BillingModule,
     AdminProxyModule,
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, AgentConfigController],
 })
 export class AppModule {}

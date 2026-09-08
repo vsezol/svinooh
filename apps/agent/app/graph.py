@@ -44,7 +44,7 @@ from typing import TypedDict
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
-from .config import settings
+from .config import settings, tool_hops
 from .context import (
     cancelled_prompt,
     confirmation_request_prompt,
@@ -56,7 +56,7 @@ from .context import (
 )
 from .datasources import PortfolioApiSource
 from .intent import classify
-from .llm import answering_model, budget_was_refused, drop_budget, extract_text, get_model
+from .llm import answering_model, ask, extract_text, get_model
 from .tools import portfolio_tools, run_tools
 from .onboarding import (
     ProposePortfolio,
@@ -176,12 +176,7 @@ async def _answer(system: str, state: AgentState) -> AgentState:
         *state.get("history", []),
         HumanMessage(content=state["question"]),
     ]
-    try:
-        reply = await get_model().ainvoke(messages)
-    except Exception as error:  # noqa: BLE001 — see app/intent.py
-        if not (budget_was_refused(error) and drop_budget(answering_model())):
-            raise
-        reply = await get_model().ainvoke(messages)
+    reply = await ask(get_model, messages, answering_model())
     return {"answer": extract_text(reply)}
 
 
@@ -229,9 +224,16 @@ async def grounded_node(state: AgentState) -> AgentState:
         *state.get("history", []),
         HumanMessage(content=state["question"]),
     ]
-    model = get_model().bind_tools(tools)
-    for _ in range(settings.tool_hops):
-        reply = await model.ainvoke(messages)
+    # Bound once for the turn, not once per hop. The retry path rebinds,
+    # because letting a model think again builds a new client underneath it.
+    bound = get_model().bind_tools(tools)
+
+    def rebind() -> None:
+        nonlocal bound
+        bound = get_model().bind_tools(tools)
+
+    for _ in range(tool_hops()):
+        reply = await ask(lambda: bound, messages, answering_model(), rebind)
         calls = getattr(reply, "tool_calls", None) or []
         if not calls:
             return {"answer": extract_text(reply)}

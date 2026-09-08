@@ -4,6 +4,7 @@ import {
   type ChoiceKey,
   type ChoiceOf,
   type NumberKey,
+  type TextKey,
   type SettingKey,
   type SettingSpec,
   type SettingValues,
@@ -56,6 +57,10 @@ function accept(spec: SettingSpec, raw: unknown): SettingValue | null {
   if (spec.kind === 'choice') {
     const value = String(raw);
     return spec.options.includes(value) ? value : null;
+  }
+  if (spec.kind === 'text') {
+    const value = String(raw).trim();
+    return value && value.length <= spec.maxLength ? value : null;
   }
   const n = Number(raw);
   if (!Number.isFinite(n)) return null;
@@ -124,6 +129,14 @@ export const option = <K extends ChoiceKey>(key: K): ChoiceOf<K> =>
   inForce[key] as ChoiceOf<K>;
 
 /**
+ * A free-text knob — a model identifier and its like.
+ *
+ * Returns the empty string when the value is meant to be absent, which is a
+ * value in itself: the labelling model falls back to the answering one.
+ */
+export const text = (key: TextKey): string => String(inForce[key] ?? '');
+
+/**
  * A knob and what it is worth, as the panel renders it.
  *
  * Written out rather than derived from SettingSpec with Omit: SettingSpec is a
@@ -136,7 +149,7 @@ export interface SettingView {
   group: string;
   label: string;
   about: string;
-  kind: 'number' | 'choice';
+  kind: 'number' | 'choice' | 'text';
   value: SettingValue;
   default: SettingValue;
   /** number knobs */
@@ -145,6 +158,9 @@ export interface SettingView {
   max?: number;
   /** choice knobs */
   options?: string[];
+  /** text knobs */
+  maxLength?: number;
+  placeholder?: string;
   live: boolean;
   note?: string;
   readBy: string[];
@@ -165,7 +181,9 @@ export const settingsView = (values: SettingValues): SettingView[] =>
       note: spec.note,
       readBy: [...spec.readBy],
     };
-    return spec.kind === 'choice'
-      ? { ...common, options: [...spec.options] }
-      : { ...common, unit: spec.unit, min: spec.min, max: spec.max };
+    if (spec.kind === 'choice') return { ...common, options: [...spec.options] };
+    if (spec.kind === 'text') {
+      return { ...common, maxLength: spec.maxLength, placeholder: spec.placeholder };
+    }
+    return { ...common, unit: spec.unit, min: spec.min, max: spec.max };
   });

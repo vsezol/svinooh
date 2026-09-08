@@ -7,6 +7,7 @@ branches land there without this file changing again.
 """
 from fastapi import APIRouter, Header, HTTPException
 
+from . import remote_config
 from .auth import authenticate
 from .config import settings
 from .graph import agent_graph
@@ -32,6 +33,10 @@ async def chat(
     text = body.message.strip()
     if not text:
         raise HTTPException(status_code=400, detail="empty message")
+
+    # Never awaited: a person waiting for an answer must not also wait for a
+    # settings poll. This turn runs on what is already in hand.
+    remote_config.refresh_soon()
 
     # The lock on the door: name the caller (401 only when the host rejects
     # the token outright), then charge the turn against their budget. The
