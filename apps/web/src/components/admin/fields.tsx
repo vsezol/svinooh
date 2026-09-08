@@ -41,6 +41,35 @@ export function SettingNumber({ value, min, max, label, onChange }: SettingNumbe
   );
 }
 
+export interface SettingTextProps {
+  value: string;
+  maxLength?: number;
+  placeholder?: string;
+  label: string;
+  onChange: (value: string) => void;
+}
+
+/**
+ * Wide, and mono, because what goes in it is an identifier rather than prose —
+ * "openai:qwen/qwen3-30b-a3b-instruct-2507" is read character by character
+ * when something is wrong with it.
+ */
+export function SettingText({ value, maxLength, placeholder, label, onChange }: SettingTextProps) {
+  return (
+    <Input
+      mono
+      size="md"
+      shape="box"
+      aria-label={label}
+      value={value}
+      maxLength={maxLength}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ width: 300 }}
+    />
+  );
+}
+
 export interface ChoiceFieldProps {
   value: string;
   options: string[];

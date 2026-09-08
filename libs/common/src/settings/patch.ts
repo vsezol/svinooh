@@ -39,6 +39,16 @@ function read(spec: SettingSpec, raw: unknown): { value: number | string } | { p
       : { problem: `${spec.label}: "${value}" is not one of ${spec.options.join(', ')}` };
   }
 
+  if (spec.kind === 'text') {
+    const value = String(raw ?? '').trim();
+    if (value.length > spec.maxLength) {
+      return { problem: `${spec.label}: longer than ${spec.maxLength} characters` };
+    }
+    // Empty is a legitimate value here: it means "fall back to what this knob
+    // falls back to", which for the labelling model is the answering one.
+    return { value };
+  }
+
   const n = Number(raw);
   if (!Number.isFinite(n)) return { problem: `${spec.label}: "${String(raw)}" is not a number` };
   if (n < spec.min || n > spec.max) {

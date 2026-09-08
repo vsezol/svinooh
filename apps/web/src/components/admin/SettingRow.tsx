@@ -1,7 +1,7 @@
 'use client';
 
 import type { SettingDto } from '@svinooh/shared';
-import { ChoiceField, InfoMark, SettingNumber } from './fields';
+import { ChoiceField, InfoMark, SettingNumber, SettingText } from './fields';
 
 /**
  * The same number said the way a person would say it, or null when the raw
@@ -60,6 +60,14 @@ export function SettingRow({ spec, value, onChange }: SettingRowProps) {
 
       {spec.kind === 'choice' ? (
         <ChoiceField value={value} options={spec.options ?? []} label={spec.label} onChange={onChange} />
+      ) : spec.kind === 'text' ? (
+        <SettingText
+          value={value}
+          maxLength={spec.maxLength}
+          placeholder={spec.placeholder}
+          label={spec.label}
+          onChange={onChange}
+        />
       ) : (
         <>
           <span className="mono" style={{ fontSize: 'var(--fs-tag)', color: 'var(--mut)' }}>

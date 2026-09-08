@@ -45,7 +45,22 @@ interface ChoiceSpec extends Declared {
   default: string;
 }
 
-export type SettingSpec = NumberSpec | ChoiceSpec;
+/**
+ * A value with no small set to pick from — a model identifier, for instance.
+ *
+ * Deliberately rare: a choice is safer, because a list cannot be mistyped. It
+ * earns its place only where the possibilities are somebody else's to define
+ * and change, which is exactly true of the models an aggregator offers.
+ */
+interface TextSpec extends Declared {
+  kind: 'text';
+  default: string;
+  maxLength: number;
+  /** Shown in the field when it is empty — a real example, not a description */
+  placeholder?: string;
+}
+
+export type SettingSpec = NumberSpec | ChoiceSpec | TextSpec;
 
 export const REGISTRY = {
   'scan.evmSource': {
@@ -361,6 +376,111 @@ export const REGISTRY = {
     readBy: ['api'],
     live: true,
   },
+  'agent.model': {
+    kind: 'text',
+    group: 'agent',
+    label: 'Answering model',
+    about:
+      'The model whose words the user reads. "<provider>:<model>" — through an aggregator the provider is openai, because that is the wire it speaks for every vendor: openai:deepseek/deepseek-v4-flash.',
+    default: 'openai:deepseek/deepseek-v4-flash',
+    maxLength: 120,
+    placeholder: 'openai:deepseek/deepseek-v4-flash',
+    env: 'AGENT_MODEL',
+    readBy: ['agent'],
+    live: true,
+    note: 'Changing this changes what every answer costs and how long it takes. The agent re-reads within a minute — no deploy, and no restart.',
+  },
+  'agent.reasoningEffort': {
+    kind: 'choice',
+    group: 'agent',
+    label: 'Answering model thinks',
+    about:
+      'How much the answering model may think before it writes. Thinking costs seconds a person spends watching a cursor, and buys care on a hard question.',
+    options: ['none', 'minimal', 'low', 'medium', 'high'],
+    default: 'minimal',
+    env: 'AGENT_REASONING_EFFORT',
+    readBy: ['agent'],
+    live: true,
+  },
+  'agent.maxTokens': {
+    kind: 'number',
+    group: 'agent',
+    label: 'Answer length cap',
+    about: 'The longest answer the model may write, in tokens. A chat answer that runs past a screen is rarely a better answer.',
+    unit: 'tokens',
+    default: 1024,
+    min: 128,
+    max: 8192,
+    env: 'AGENT_MAX_TOKENS',
+    readBy: ['agent'],
+    live: true,
+  },
+  'agent.routerModel': {
+    kind: 'text',
+    group: 'agent',
+    label: 'Labelling model',
+    about:
+      'The model that decides what a question is about, and whether a reply means yes. It writes a dozen tokens in front of every answer, so it should be the cheapest one that labels reliably. Empty — the answering model does it too.',
+    default: 'openai:qwen/qwen3-30b-a3b-instruct-2507',
+    maxLength: 120,
+    placeholder: 'openai:qwen/qwen3-30b-a3b-instruct-2507',
+    env: 'AGENT_ROUTER_MODEL',
+    readBy: ['agent'],
+    live: true,
+    note: 'It sits on the critical path: a model that thinks before labelling makes every answer wait for it.',
+  },
+  'agent.routerReasoningEffort': {
+    kind: 'choice',
+    group: 'agent',
+    label: 'Labelling model thinks',
+    about:
+      'Picking one word out of two needs no deliberation. Avoid "none": some endpoints refuse to think less than they want to and answer 400, and while the agent recovers from that by itself, it should not have to.',
+    options: ['none', 'minimal', 'low', 'medium', 'high'],
+    default: 'low',
+    env: 'AGENT_ROUTER_REASONING_EFFORT',
+    readBy: ['agent'],
+    live: true,
+  },
+  'agent.toolHops': {
+    kind: 'number',
+    group: 'agent',
+    label: 'Tool rounds per answer',
+    about:
+      'How many times the model may look something up before it has to answer with what it has. Most answers need none; two is a lookup and a correction. Each round is another paid call and another wait.',
+    unit: 'rounds',
+    default: 3,
+    min: 0,
+    max: 6,
+    env: 'AGENT_TOOL_HOPS',
+    readBy: ['agent'],
+    live: true,
+  },
+  'agent.contextMaxPositions': {
+    kind: 'number',
+    group: 'agent',
+    label: 'Positions shown to the model',
+    about:
+      'How many positions per wallet the model is shown, largest first. The rest are summarised with their total and can still be looked up by name, so this trades tokens on every turn against detail the model has at hand.',
+    unit: 'per wallet',
+    default: 12,
+    min: 3,
+    max: 60,
+    env: 'AGENT_CONTEXT_MAX_POSITIONS',
+    readBy: ['agent'],
+    live: true,
+  },
+  'agent.providerSort': {
+    kind: 'choice',
+    group: 'agent',
+    label: 'Prefer providers by',
+    about:
+      'One model identifier is served by several providers behind an aggregator, and they differ. Throughput picks the fastest to answer; price the cheapest; latency the quickest to start.',
+    options: ['throughput', 'price', 'latency'],
+    default: 'throughput',
+    env: 'AGENT_PROVIDER_SORT',
+    readBy: ['agent'],
+    live: true,
+  },
 } as const satisfies Record<string, SettingSpec>;
 
 /** Every key the code may ask for. Derived, so it cannot drift from the declarations. */
@@ -373,7 +493,12 @@ export type ChoiceKey = {
   [K in SettingKey]: SpecOf<K> extends { kind: 'choice' } ? K : never;
 }[SettingKey];
 
-export type NumberKey = Exclude<SettingKey, ChoiceKey>;
+/** The knobs that are free text — a model identifier and its like */
+export type TextKey = {
+  [K in SettingKey]: SpecOf<K> extends { kind: 'text' } ? K : never;
+}[SettingKey];
+
+export type NumberKey = Exclude<SettingKey, ChoiceKey | TextKey>;
 
 /**
  * What one choice may be — `'debank' | 'zerion'`, read off the declaration.
@@ -386,7 +511,9 @@ export type ChoiceOf<K extends ChoiceKey> =
   SpecOf<K> extends { options: readonly (infer O)[] } ? O : never;
 
 /** What every knob is worth: a number, or one of its declared options */
-export type SettingValues = { [K in SettingKey]: K extends ChoiceKey ? ChoiceOf<K> : number };
+export type SettingValues = {
+  [K in SettingKey]: K extends ChoiceKey ? ChoiceOf<K> : K extends TextKey ? string : number;
+};
 
 /** What to change. Keys left out keep the value they have. */
 export type SettingsPatch = Partial<SettingValues>;

@@ -19,7 +19,7 @@ from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 
-from .config import ANSWERING, LABELLING, Role, settings
+from .config import Role, answering, labelling, provider_sort, settings
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -71,8 +71,8 @@ def _provider_policy() -> dict:
         policy["data_collection"] = settings.provider_data_collection
     if settings.provider_require_parameters:
         policy["require_parameters"] = True
-    if settings.provider_sort:
-        policy["sort"] = settings.provider_sort
+    if provider_sort():
+        policy["sort"] = provider_sort()
     return {"provider": policy} if policy else {}
 
 
@@ -130,20 +130,20 @@ def model_for(role: Role) -> BaseChatModel:
 
 def get_model() -> BaseChatModel:
     """The model that answers — what the user reads."""
-    return model_for(ANSWERING)
+    return model_for(answering())
 
 
 def get_router_model() -> BaseChatModel:
     """The model that labels — the intent and confirmation classifiers."""
-    return model_for(LABELLING)
+    return model_for(labelling())
 
 
 def answering_model() -> str:
-    return ANSWERING.model
+    return answering().model
 
 
 def labelling_model() -> str:
-    return LABELLING.model
+    return labelling().model
 
 
 async def ask(build, messages, model: str, forget=None):

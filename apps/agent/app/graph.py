@@ -44,7 +44,7 @@ from typing import TypedDict
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
-from .config import settings
+from .config import settings, tool_hops
 from .context import (
     cancelled_prompt,
     confirmation_request_prompt,
@@ -232,7 +232,7 @@ async def grounded_node(state: AgentState) -> AgentState:
         nonlocal bound
         bound = get_model().bind_tools(tools)
 
-    for _ in range(settings.tool_hops):
+    for _ in range(tool_hops()):
         reply = await ask(lambda: bound, messages, answering_model(), rebind)
         calls = getattr(reply, "tool_calls", None) or []
         if not calls:

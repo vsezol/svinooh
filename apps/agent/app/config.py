@@ -8,6 +8,8 @@ this module would learn how.
 import os
 from dataclasses import dataclass
 
+from . import remote_config
+
 # English on purpose, like every prompt in this repo: users write in any
 # language and the closing instruction makes the agent answer in kind, but the
 # prompt itself is code and code is English.
@@ -66,10 +68,9 @@ class Settings:
     #            somebody's wallet addresses and balances.
     #   require: refuse providers that do not really support the parameters we
     #            send — tools and structured outputs are not optional here.
-    #   sort   : which of the survivors to prefer.
+    #   sort   : which of the survivors to prefer — live, see provider_sort().
     provider_data_collection: str = os.getenv("AGENT_PROVIDER_DATA_COLLECTION", "deny")
     provider_require_parameters: bool = os.getenv("AGENT_PROVIDER_REQUIRE_PARAMETERS", "1") == "1"
-    provider_sort: str = os.getenv("AGENT_PROVIDER_SORT", "throughput")
     system_prompt: str = os.getenv("AGENT_SYSTEM", DEFAULT_SYSTEM_PROMPT)
     request_timeout_s: int = int(os.getenv("AGENT_TIMEOUT_S", "60"))
     # Conversation memory: how many messages a session keeps, and for how long
@@ -100,16 +101,6 @@ class Settings:
     # turn is at least one paid model call, several when tools run.
     rate_limit_requests: int = int(os.getenv("AGENT_RATE_LIMIT_REQUESTS", "20"))
     rate_limit_window_s: int = int(os.getenv("AGENT_RATE_LIMIT_WINDOW_S", "300"))
-    # How many rounds of tool calls one grounded turn may take before the
-    # model is asked to answer with what it has. A cap, not a target: most
-    # turns take zero or one.
-    tool_hops: int = int(os.getenv("AGENT_TOOL_HOPS", "3"))
-    # How many positions per wallet the context block carries (largest first,
-    # so what falls off the end is dust by construction). A knob, not gospel:
-    # the whole context is billed on every turn of a conversation, and the
-    # planned complement is a drill-down tool the model calls for specifics
-    # rather than an ever-fatter static block.
-    context_max_positions: int = int(os.getenv("AGENT_CONTEXT_MAX_POSITIONS", "12"))
 
 
 @dataclass(frozen=True)
@@ -142,33 +133,96 @@ class Role:
 def _role(
     name: str,
     prefix: str,
+    remote: dict,
     *,
-    model: str = "",
+    remote_keys: tuple[str, str, str],
     effort: str = "",
     max_tokens: int = 1024,
 ) -> Role:
-    """Read one role from the environment, falling back to the answering one."""
-    answering_model = os.getenv("AGENT_MODEL", "anthropic:claude-haiku-4-5")
-    # AGENT_REASONING_EFFORT has no role in its name because it named the only
-    # role there was; it still works, as the answering role's setting.
-    fallback_effort = os.getenv("AGENT_REASONING_EFFORT", effort)
+    """One role, resolved the way every knob in this product resolves.
+
+    Admin panel, then environment, then what the service shipped with — the
+    same order the TypeScript services use, for the same reason: an operator's
+    decision wins, the environment still works when nothing has been decided,
+    and the default is what runs before either exists.
+    """
+    model_key, effort_key, tokens_key = remote_keys
+    answering_model = str(remote.get("model") or "") or os.getenv(
+        "AGENT_MODEL", "anthropic:claude-haiku-4-5"
+    )
+
+    def pick(remote_key: str, env_key: str, fallback: str) -> str:
+        return str(remote.get(remote_key) or "") or os.getenv(f"AGENT_{env_key}", fallback)
+
+    tokens = remote.get(tokens_key)
     return Role(
         name=name,
-        model=os.getenv(f"AGENT_{prefix}MODEL", "") or model or answering_model,
-        reasoning_effort=os.getenv(f"AGENT_{prefix}REASONING_EFFORT", fallback_effort),
-        max_tokens=int(os.getenv(f"AGENT_{prefix}MAX_TOKENS", str(max_tokens))),
+        # A role with no model of its own does the job on the answering one.
+        model=pick(model_key, f"{prefix}MODEL", "") or answering_model,
+        # AGENT_REASONING_EFFORT has no role in its name because it named the
+        # only role there was; it still configures answering.
+        reasoning_effort=pick(
+            effort_key, f"{prefix}REASONING_EFFORT", os.getenv("AGENT_REASONING_EFFORT", effort)
+        ),
+        max_tokens=int(tokens) if isinstance(tokens, int) and tokens > 0
+        else int(os.getenv(f"AGENT_{prefix}MAX_TOKENS", str(max_tokens))),
     )
 
 
-#: Answers — what the user reads. Thinks a little; a chat is a place where
-#: somebody is watching a cursor.
-ANSWERING = _role("answering", "", effort="minimal", max_tokens=1024)
+def answering() -> Role:
+    """Answers — what the user reads. Thinks a little; somebody is watching a cursor."""
+    return _role(
+        "answering", "", remote_config.current(),
+        remote_keys=("model", "reasoningEffort", "maxTokens"),
+        effort="minimal", max_tokens=1024,
+    )
 
-#: Labels — the intent and confirmation classifiers. A dozen output tokens
-#: each, in front of every answer, so this is where a cheaper and faster tier
-#: pays for itself. Not "none": some endpoints refuse to think less than they
-#: want to (see app/llm.py), and the service recovers but should not need to.
-LABELLING = _role("labelling", "ROUTER_", effort="low", max_tokens=200)
+
+def labelling() -> Role:
+    """Labels — the intent and confirmation classifiers.
+
+    A dozen output tokens each, in front of every answer, so this is where a
+    cheaper and faster tier pays for itself. Not "none": some endpoints refuse
+    to think less than they want to (see app/llm.py), and the service recovers
+    but should not need to.
+    """
+    return _role(
+        "labelling", "ROUTER_", remote_config.current(),
+        remote_keys=("routerModel", "routerReasoningEffort", "routerMaxTokens"),
+        effort="low", max_tokens=200,
+    )
+
+
+def _live_number(remote_key: str, env_key: str, default: int) -> int:
+    """A number the panel may set: panel, then environment, then the default.
+
+    Read at the point of use, like every other live knob in this product —
+    which is also what makes it settable without a restart.
+    """
+    remote = remote_config.current().get(remote_key)
+    if isinstance(remote, int) and not isinstance(remote, bool) and remote >= 0:
+        return remote
+    try:
+        return int(os.getenv(env_key, str(default)))
+    except ValueError:
+        return default
+
+
+def tool_hops() -> int:
+    """How many rounds of looking things up one answer may take."""
+    return _live_number("toolHops", "AGENT_TOOL_HOPS", 3)
+
+
+def context_max_positions() -> int:
+    """How many positions per wallet the model is shown, largest first."""
+    return _live_number("contextMaxPositions", "AGENT_CONTEXT_MAX_POSITIONS", 12)
+
+
+def provider_sort() -> str:
+    """Which of an aggregator's providers to prefer."""
+    return str(remote_config.current().get("providerSort") or "") or os.getenv(
+        "AGENT_PROVIDER_SORT", "throughput"
+    )
 
 
 settings = Settings()
