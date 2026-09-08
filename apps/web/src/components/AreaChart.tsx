@@ -33,23 +33,6 @@ interface Props {
    * debt is red and a falling one green.
    */
   tone?: 'accent' | 'muted';
-  /**
-   * Moments worth pointing at on the time axis — money arriving or leaving.
-   *
-   * Drawn as a rule through the chart rather than as a dot on the line, because
-   * what they mark is a TIME and not a value: the deposit did not happen at
-   * $103,204, it happened on Tuesday. Hovering one says what it was.
-   */
-  marks?: ChartMark[];
-}
-
-export interface ChartMark {
-  /** When it happened, in ms */
-  t: number;
-  /** `in` is drawn in the rising colour, `out` in the falling one */
-  direction: 'in' | 'out';
-  /** What the hover card says — a line each */
-  lines: string[];
 }
 
 /**
@@ -112,15 +95,7 @@ function dateLabel(ms: number, period: HistoryRange): string {
  * Nothing is drawn behind the line: gridlines on a 200px sparkline of one
  * portfolio are decoration that competes with the only thing worth reading.
  */
-export function AreaChart({
-  values,
-  times,
-  period,
-  height,
-  bare = false,
-  tone = 'accent',
-  marks = [],
-}: Props) {
+export function AreaChart({ values, times, period, height, bare = false, tone = 'accent' }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const series = useRef<ISeriesApi<'Area'> | null>(null);
@@ -138,14 +113,6 @@ export function AreaChart({
   const [selection, setSelection] = useState<Selection | null>(null);
   /** Where the selected span currently falls on screen — see the effect that keeps it there */
   const [band, setBand] = useState<{ left: number; width: number } | null>(null);
-  /**
-   * Where each mark currently falls, in the same pixels and kept there the same
-   * way. A mark off the visible edge is left out rather than clamped: a rule
-   * pinned to the border of a chart it is no longer on is a claim about a time
-   * that is not shown.
-   */
-  const [markAt, setMarkAt] = useState<Array<{ mark: ChartMark; x: number }>>([]);
-  const [markHover, setMarkHover] = useState<number | null>(null);
   /** The stretch of time on screen, in ms — what the labels underneath report */
   const [shown, setShown] = useState<{ from: number; to: number } | null>(null);
 
@@ -177,9 +144,6 @@ export function AreaChart({
     for (const v of values) sum += v;
     return `${values.length}:${times[0] ?? 0}:${times[times.length - 1] ?? 0}:${sum}`;
   })();
-
-  /** The same trick for the marks — a poll hands back a new array either way */
-  const markPrint = marks.map((m) => `${m.t}${m.direction}`).join(',');
 
   // Build once; data and colours are pushed in by the effects below
   useEffect(() => {
@@ -321,46 +285,6 @@ export function AreaChart({
   }, [selection]);
 
   /**
-   * The marks, placed the same way and for the same reason: they are pixels
-   * over a chart that scrolls, so they are placed again every time it moves.
-   *
-   * A mark sits at a moment in time, and the series is a list of readings — so
-   * the moment is turned into a position by finding the reading it falls
-   * between and asking the chart where that index is. Nothing is drawn outside
-   * the box: past the edge, `logicalToCoordinate` keeps answering, and a rule
-   * left pinned to the border would be pointing at a time not on screen.
-   */
-  useEffect(() => {
-    const scale = chart.current?.timeScale();
-    if (!scale) return;
-    const place = () => {
-      if (!marks.length || times.length < 2) {
-        setMarkAt([]);
-        return;
-      }
-      const width = box.current?.clientWidth ?? 0;
-      const placed: Array<{ mark: ChartMark; x: number }> = [];
-      for (const mark of marks) {
-        // The fractional index of this moment between two readings, so a mark
-        // lands where it happened rather than snapping to the nearest scan
-        let i = 0;
-        while (i + 1 < times.length && times[i + 1] <= mark.t) i++;
-        const span = (times[i + 1] ?? times[i]) - times[i];
-        const within = span > 0 ? Math.min(1, Math.max(0, (mark.t - times[i]) / span)) : 0;
-        const x = chart.current?.timeScale().logicalToCoordinate((i + within) as never);
-        if (typeof x !== 'number' || x < 0 || x > width) continue;
-        placed.push({ mark, x });
-      }
-      setMarkAt(placed);
-    };
-    place();
-    scale.subscribeVisibleLogicalRangeChange(place);
-    return () => scale.unsubscribeVisibleLogicalRangeChange(place);
-    // times is read through the closure and re-run through markPrint/fingerprint
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [markPrint, fingerprint, period]);
-
-  /**
    * Both gestures, on one event model.
    *
    * Pointer events already say which input each one came from and carry an id
@@ -492,84 +416,6 @@ export function AreaChart({
             pointerEvents: 'none',
           }}
         />
-      ) : null}
-
-      {/* Money arriving or leaving: a rule through the chart at the moment it
-          happened. Hit area is wider than the line — a 1px target is not one.
-          The z-index is not decoration: the library stacks its own canvases at
-          1 and 2, and one of them is transparent and covers the whole chart —
-          so a mark without it is drawn (the canvas lets the colour through) and
-          cannot be hovered (the canvas takes the pointer). */}
-      {markAt.map(({ mark, x }, i) => {
-        const colour = mark.direction === 'in' ? 'var(--up)' : 'var(--down)';
-        return (
-          <div
-            key={`${mark.t}-${i}`}
-            onPointerEnter={() => setMarkHover(i)}
-            onPointerLeave={() => setMarkHover((at) => (at === i ? null : at))}
-            style={{
-              position: 'absolute',
-              top: 0,
-              bottom: 0,
-              left: x - 6,
-              width: 12,
-              zIndex: 3,
-              display: 'flex',
-              justifyContent: 'center',
-              cursor: 'help',
-            }}
-          >
-            <div
-              style={{
-                width: 2,
-                height: '100%',
-                background: `color-mix(in srgb, ${colour} ${markHover === i ? 90 : 42}%, transparent)`,
-                transition: 'background 0.15s ease',
-              }}
-            />
-          </div>
-        );
-      })}
-
-      {/* What the hovered mark was. Placed against whichever edge keeps it on
-          the chart, and transparent to the pointer so moving onto it does not
-          count as leaving the mark that opened it. */}
-      {markHover !== null && markAt[markHover] ? (
-        <div
-          className="mono"
-          style={{
-            position: 'absolute',
-            top: bare ? 26 : 30,
-            ...(markAt[markHover].x > (box.current?.clientWidth ?? 0) / 2
-              ? { right: Math.max(8, (box.current?.clientWidth ?? 0) - markAt[markHover].x + 8) }
-              : { left: markAt[markHover].x + 8 }),
-            maxWidth: 'min(220px, 70%)',
-            padding: '7px 9px',
-            borderRadius: 'var(--r-sm)',
-            border: '1px solid var(--line)',
-            background: 'var(--surf)',
-            boxShadow: 'var(--shadow-pop)',
-            fontSize: 'var(--fs-note)',
-            lineHeight: 1.45,
-            pointerEvents: 'none',
-            zIndex: 4,
-          }}
-        >
-          {markAt[markHover].mark.lines.map((line, n) => (
-            <div
-              key={n}
-              style={{
-                color: n === 0 ? 'var(--text)' : 'var(--mut)',
-                fontWeight: n === 0 ? 'var(--fw-medium)' : undefined,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {line}
-            </div>
-          ))}
-        </div>
       ) : null}
 
       {/* what the selection is worth, or the value under the cursor */}

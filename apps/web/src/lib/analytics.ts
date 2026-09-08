@@ -34,14 +34,6 @@ interface ProductEvents {
   pro_opened: Record<string, never>;
   /** The buy button pressed and a checkout requested from the gateway */
   checkout_opened: { firstMonth: boolean };
-  /**
-   * The experimental deposits-and-withdrawals switch flipped. The whole point
-   * of shipping it behind a toggle is finding out whether anybody turns it on
-   * and, having done so, leaves it on.
-   */
-  flow_basis_changed: { basis: string };
-  /** The transactions pane opened from under the chart */
-  transactions_opened: Record<string, never>;
 }
 
 /**
