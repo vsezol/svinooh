@@ -235,7 +235,8 @@ body[data-theme='light'] .sv-a-c-on-light {
   display: flex;
   gap: var(--sp-3);
   overflow-x: auto;
-  padding: 0 14px 8px;
+  /* Flush with the composer they belong to. The gutter is .sv-a-main's. */
+  padding: 0 0 var(--sp-4);
   flex-shrink: 0;
   scrollbar-width: none;
 }

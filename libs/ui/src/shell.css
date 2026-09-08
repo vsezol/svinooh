@@ -86,6 +86,25 @@ body[data-theme='light'] .on-dark {
    Two rows at rest, one when folded. Every number here is the design's, and
    the two states share a border so the fold does not move the line under it. */
 
+/* The header's height, published rather than copied. A screen that fills the
+   room under the header has to subtract it, and two rules that each wrote the
+   number down separately drifted apart -- one said 57 and the other 49, and
+   the chat spent months hanging 8px below the bottom of the window.
+
+   48px wordmark row + 36px tab strip + the hairline; above the breakpoint the
+   strip is gone and the wordmark row is 56. */
+:root,
+body {
+  --h-appbar: 85px;
+}
+
+@media (min-width: 720px) {
+  :root,
+  body {
+    --h-appbar: 57px;
+  }
+}
+
 .app-header {
   /* The strip of screen the page is handed but cannot use: the notch or the
      Dynamic Island lives there, and installed to a home screen the page runs

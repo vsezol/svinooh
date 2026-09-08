@@ -337,29 +337,39 @@ button {
    composer belongs at the bottom edge, and a page that scrolls underneath a
    conversation puts it somewhere different on every answer.
 
-   The margins pull back the padding the page put around every tab — this one
-   wants the whole strip under the header — and the padding here puts a
-   measured amount of it back. */
+   Every other tab is a document and takes the page's padding. This one is a
+   screen, so it takes none of it: the padding is cancelled on .app-main
+   while the tab is open, and the chat draws its own gutters — which is what
+   the design does too, one gutter rather than two nested ones. */
 .agent-embed {
   /* Exactly the room under the sticky header, and not a pixel more: any
      overflow here becomes a scrolling page, which is the one thing the chat
      cannot share a screen with.
 
-     49px is the header above the breakpoint — its 48px wordmark row plus the
-     hairline. The tab strip is not there; a desktop has the rail instead. */
-  height: calc(100dvh - 49px - env(safe-area-inset-top));
-  margin: calc(-1 * clamp(20px, 4vw, 36px)) 0 0;
-  padding: 14px 0 0;
+     The number is the header's own, published by the kit. This rule used to
+     write it down again as 49 — the phone's header, without its tab strip —
+     so the chat ran 8px past the bottom of the window and overflow:hidden
+     ate the bottom of the composer. */
+  height: calc(100dvh - var(--h-appbar) - env(safe-area-inset-top));
   overflow: hidden;
 }
 
 /* Set while the agent tab is open (see AgentEmbed). The page stops being a
-   scroller so the transcript can be one. */
+   scroller so the transcript can be one, and stops padding the one tab that
+   is measured against the window rather than laid out inside it. */
 html.agent-open,
 html.agent-open body {
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
+}
+
+html.agent-open .app-main {
+  /* Vertical only. The horizontal gutter stays: it is the page's, the chat
+     draws none of its own when embedded (see --sv-a-gutter), and cancelling
+     it here would change the width of the pager's panes mid-swipe. */
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 
@@ -375,12 +385,12 @@ html.agent-open body {
    chips reads as a second thing to operate. */
 @media (max-width: 719px) {
   .agent-embed {
-    /* 85px: the wordmark row (48) and the tab strip (36) and the hairline.
-       The header folds to 41 while you read, which gives the chat 44px back
-       rather than taking any — so this is sized to the header at rest. */
-    height: calc(100dvh - 85px - env(safe-area-inset-top));
+    /* --h-appbar is 85 here: the wordmark row (48), the tab strip (36) and the
+       hairline. The header folds to 41 while you read, which gives the chat
+       44px back rather than taking any — so this is the header at rest. */
     padding-bottom: env(safe-area-inset-bottom);
   }
+
 }
 
 /* ── /pro — the Pro page on the site's grid ───────────────────────────────
@@ -684,7 +694,7 @@ html.agent-open body {
      rule has to run down. */
   .side-rail {
     align-self: stretch;
-    min-height: calc(100dvh - 57px - env(safe-area-inset-top));
+    min-height: calc(100dvh - var(--h-appbar) - env(safe-area-inset-top));
     border-right: 1px solid var(--line);
     padding: 16px 12px;
   }
