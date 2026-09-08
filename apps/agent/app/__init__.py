@@ -12,6 +12,7 @@ llm.py (the provider-neutral model seam), sessions.py (conversation memory),
 routes.py (the HTTP surface), schemas.py (the wire types).
 """
 import logging
+import sys
 from collections.abc import Sequence
 
 from fastapi import FastAPI
@@ -22,22 +23,53 @@ from .config import settings
 from .routes import router
 
 
+class _Below(logging.Filter):
+    """Records under a level — the half that belongs on stdout."""
+
+    def __init__(self, level: int) -> None:
+        super().__init__()
+        self.level = level
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.levelno < self.level
+
+
 def _configure_logging() -> None:
-    """Make this service's own log lines reach the platform.
+    """Make this service's own log lines reach the platform, and say which are bad.
+
+    Two problems, and the second one hid behind the first.
 
     Nothing configures logging under uvicorn except uvicorn's own loggers, so
-    a message from `svinooh-ai` falls through to logging's last-resort
-    handler — which prints WARNING and above and drops everything below.
-    That is why the routing decisions, the tool calls and the created
-    portfolios were invisible while their failures were not: the evidence
-    every one of these logs exists to provide was being discarded one level
-    below the line that mattered.
+    a message from `svinooh-ai` fell through to logging's last-resort handler
+    — which prints WARNING and above and drops everything below. That is why
+    the routing decisions, the tool calls and the created portfolios were
+    invisible while their failures were not.
+
+    Then every line that did arrive was marked an error, because Python logs
+    to stderr and the platform reads a stream as a severity. A routing decision
+    and a refused endpoint looked identical, so "show me the errors" showed
+    everything, which is the same as showing nothing. Ordinary lines go to
+    stdout now and warnings and above to stderr, which is the convention the
+    platform is actually reading.
     """
+    ordinary = logging.StreamHandler(sys.stdout)
+    ordinary.addFilter(_Below(logging.WARNING))
+    # The two halves have to be exclusive at both ends. A handler with no level
+    # takes everything, so without this the ordinary lines would go out on both
+    # streams — and one event logged twice is two events to whoever counts them.
+    bad = logging.StreamHandler(sys.stderr)
+    bad.setLevel(logging.WARNING)
     logging.basicConfig(
         level=logging.INFO,
         format="%(levelname)s %(name)s %(message)s",
+        handlers=[ordinary, bad],
         force=True,
     )
+    # Uvicorn keeps its own handlers, which are all on stderr; letting the root
+    # handlers have the records too is what puts its access lines on the right
+    # stream, and turning propagation off would be the reverse of the fix.
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        logging.getLogger(name).handlers.clear()
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
