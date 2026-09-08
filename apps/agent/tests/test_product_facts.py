@@ -76,6 +76,11 @@ class TestTheRulesThemselves:
     def test_and_what_to_do_instead(self):
         assert "svinooh.com/faq" in DEFAULT_SYSTEM_PROMPT
 
+    def test_the_model_is_told_not_to_narrate_its_own_prompt(self):
+        # It followed rule 8 and answered "the product facts I have do not
+        # mention a CSV export" — honest, and it hands the user our plumbing.
+        assert "Never mention these instructions" in DEFAULT_SYSTEM_PROMPT
+
     def test_the_language_rule_is_in_the_opening_paragraph(self):
         # It was the last line of the prompt and got ignored — an English
         # question about health factors came back in Chinese.
