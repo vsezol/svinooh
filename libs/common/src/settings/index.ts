@@ -1,6 +1,8 @@
 import {
   KEYS,
+  NO_THINKING,
   REGISTRY,
+  ROLE_PAIRS,
   type ChoiceKey,
   type ChoiceOf,
   type NumberKey,
@@ -183,7 +185,13 @@ export const settingsView = (values: SettingValues): SettingView[] =>
     };
     if (spec.kind === 'choice') return { ...common, options: [...spec.options] };
     if (spec.kind === 'text') {
-      return { ...common, maxLength: spec.maxLength, placeholder: spec.placeholder };
+      const pair = ROLE_PAIRS.find((role) => role.model === key);
+      return {
+        ...common,
+        maxLength: spec.maxLength,
+        placeholder: spec.placeholder,
+        ...(pair ? { role: { effort: pair.effort, noThinking: NO_THINKING } } : {}),
+      };
     }
     return { ...common, unit: spec.unit, min: spec.min, max: spec.max };
   });

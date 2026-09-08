@@ -1,7 +1,8 @@
 'use client';
 
 import type { SettingDto } from '@svinooh/shared';
-import { ChoiceField, InfoMark, SettingNumber, SettingText } from './fields';
+import type { ModelChoiceDto } from '@svinooh/shared';
+import { ChoiceField, InfoMark, SettingModel, SettingNumber, SettingText } from './fields';
 
 /**
  * The same number said the way a person would say it, or null when the raw
@@ -29,6 +30,10 @@ function plainer(raw: string, unit?: string): string | null {
 export interface SettingRowProps {
   spec: SettingDto;
   value: string;
+  /** What the models on offer can do — empty when the catalogue is unreachable */
+  models: ModelChoiceDto[];
+  /** What this role's thinking knob is set to right now, for a knob that names a model */
+  effort?: string;
   onChange: (value: string) => void;
 }
 
@@ -39,7 +44,7 @@ export interface SettingRowProps {
  * behind the mark — a wall of explanation beside thirteen inputs is a wall
  * nobody reads.
  */
-export function SettingRow({ spec, value, onChange }: SettingRowProps) {
+export function SettingRow({ spec, value, models, effort, onChange }: SettingRowProps) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
@@ -60,6 +65,16 @@ export function SettingRow({ spec, value, onChange }: SettingRowProps) {
 
       {spec.kind === 'choice' ? (
         <ChoiceField value={value} options={spec.options ?? []} label={spec.label} onChange={onChange} />
+      ) : spec.kind === 'text' && spec.role ? (
+        <SettingModel
+          value={value}
+          models={models}
+          thinking={{ effort: effort ?? '', noThinking: spec.role.noThinking }}
+          maxLength={spec.maxLength}
+          placeholder={spec.placeholder}
+          label={spec.label}
+          onChange={onChange}
+        />
       ) : spec.kind === 'text' ? (
         <SettingText
           value={value}

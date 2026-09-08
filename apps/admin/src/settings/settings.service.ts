@@ -10,6 +10,7 @@ import {
   type SettingsPatch,
 } from '@svinooh/common';
 import type { SettingsDto } from '@svinooh/shared';
+import { ModelsService } from './models.service';
 
 /**
  * The only thing that writes the `Setting` table.
@@ -28,26 +29,38 @@ import type { SettingsDto } from '@svinooh/shared';
 export class SettingsService {
   private readonly logger = new Logger(SettingsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly models: ModelsService,
+  ) {}
 
   private async current() {
     return effectiveSettings(await this.prisma.setting.findMany());
   }
 
+  /**
+   * The knobs, and what the two model knobs may be set to.
+   *
+   * The catalogue rides along rather than living at its own endpoint because it
+   * is not a separate thing to know — it is what makes two of these fields
+   * answerable. The panel asks once and has everything it needs to render.
+   */
   async list(): Promise<SettingsDto> {
-    return { settings: settingsView(await this.current()) };
+    const [values, models] = await Promise.all([this.current(), this.models.list()]);
+    return { settings: settingsView(values), models };
   }
 
   /**
    * Apply a change, or say why it cannot be applied.
    *
    * The body is unknown until parseSettingsPatch has had it: that one call
-   * checks every value against its knob's bounds or options, and then checks
-   * the knobs against each other. What comes back is typed, so nothing below
-   * has to look at a value and wonder.
+   * checks every value against its knob's bounds or options, then checks the
+   * knobs against each other, and then checks the two that name a model
+   * against what that model can actually do. What comes back is typed, so
+   * nothing below has to look at a value and wonder.
    */
   async update(body: unknown, who: string): Promise<SettingsDto> {
-    const parsed = parseSettingsPatch(body, await this.current());
+    const parsed = parseSettingsPatch(body, await this.current(), await this.models.list());
     if (!parsed.ok) {
       throw new BadRequestException({
         statusCode: 400,
