@@ -38,8 +38,7 @@ def on_the_aggregator(monkeypatch):
 @pytest.fixture(autouse=True)
 def clean_caches():
     llm._models_that_insist_on_thinking.clear()
-    llm.get_model.cache_clear()
-    llm.get_router_model.cache_clear()
+    llm.model_for.cache_clear()
     intent._labeler.cache_clear()
     yield
     llm._models_that_insist_on_thinking.clear()

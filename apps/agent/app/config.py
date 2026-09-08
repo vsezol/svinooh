@@ -48,41 +48,15 @@ DEFAULT_SYSTEM_PROMPT = (
 @dataclass(frozen=True)
 class Settings:
     # ── the models ──────────────────────────────────────────────────────────
-    # Two models do two jobs, and both are named here rather than in the code
-    # that calls them:
-    #
-    #   AGENT_MODEL         answers — the one the user reads
-    #   AGENT_ROUTER_MODEL  labels — intent and confirmation classifiers, a
-    #                       dozen output tokens each, so this is where a
-    #                       cheaper tier pays off. Empty: the same model
-    #                       answers and labels.
-    #
-    # Both are "<provider>:<model>", resolved by langchain's init_chat_model,
-    # so changing vendor is a new value here plus that provider's package —
-    # never a code change. Haiku while we iterate: fast, cheap, and every
-    # experiment is billed.
-    model: str = os.getenv("AGENT_MODEL", "anthropic:claude-haiku-4-5")
-    router_model: str = os.getenv("AGENT_ROUTER_MODEL", "")
-    # The credentials both models use. Named for this service's own config
-    # rather than for whichever vendor is behind it today: the provider SDKs
-    # would each read their own variable (ANTHROPIC_API_KEY, OPENAI_API_KEY,
-    # GOOGLE_API_KEY...), which turns "switch the model" into "also learn what
-    # this vendor calls its key". Passed explicitly to the client instead, so
-    # one pair of names covers every provider. Empty key — the provider plugin
-    # falls back to its own variable, which keeps existing deployments working.
+    # Which model does which job lives in the Role objects below this class,
+    # one per job. What stays here is what the jobs share: the account we
+    # reach them through, and the policy for choosing a provider behind it.
     model_api_key: str = os.getenv("AGENT_MODEL_API_KEY", "")
     # One endpoint for many vendors (OpenRouter and the like): when set, model
     # calls go to this OpenAI-compatible base URL instead of the provider's own
     # — one key, any vendor's model, chosen by AGENT_MODEL alone
     # (e.g. AGENT_MODEL=openai:google/gemini-2.5-flash). Empty — direct.
     model_base_url: str = os.getenv("AGENT_MODEL_BASE_URL", "")
-    # How hard the answering model may think before it starts writing.
-    # Reasoning models spend real seconds here, and a chat is a place where a
-    # person is watching a cursor — "low" buys most of the quality for a
-    # fraction of the wait. Empty leaves the model's own default alone; the
-    # values an OpenAI-compatible aggregator accepts are none/minimal/low/
-    # medium/high.
-    reasoning_effort: str = os.getenv("AGENT_REASONING_EFFORT", "minimal")
     # Which of an aggregator's providers may serve these models. One model id
     # is served by several, and they differ in quantisation, in what they
     # actually support, in what they do with the prompt, and — measured on the
@@ -96,14 +70,7 @@ class Settings:
     provider_data_collection: str = os.getenv("AGENT_PROVIDER_DATA_COLLECTION", "deny")
     provider_require_parameters: bool = os.getenv("AGENT_PROVIDER_REQUIRE_PARAMETERS", "1") == "1"
     provider_sort: str = os.getenv("AGENT_PROVIDER_SORT", "throughput")
-    # The classifiers barely think: they pick one of two labels from one
-    # sentence, and they sit on the critical path in front of every answer.
-    # Not "none": some endpoints mandate reasoning and reject a request that
-    # switches it off, which is a 400 on every turn (the service now drops the
-    # budget by itself when that happens, but the default should not need it).
-    router_reasoning_effort: str = os.getenv("AGENT_ROUTER_REASONING_EFFORT", "low")
     system_prompt: str = os.getenv("AGENT_SYSTEM", DEFAULT_SYSTEM_PROMPT)
-    max_tokens: int = int(os.getenv("AGENT_MAX_TOKENS", "1024"))
     request_timeout_s: int = int(os.getenv("AGENT_TIMEOUT_S", "60"))
     # Conversation memory: how many messages a session keeps, and for how long
     # a silent session survives before it is forgotten.
@@ -143,6 +110,65 @@ class Settings:
     # planned complement is a drill-down tool the model calls for specifics
     # rather than an ever-fatter static block.
     context_max_positions: int = int(os.getenv("AGENT_CONTEXT_MAX_POSITIONS", "12"))
+
+
+@dataclass(frozen=True)
+class Role:
+    """A job the service gives a model, and the dials that job wants.
+
+    Roles differ in what they are for, so they differ in what to spend: the
+    model that answers is read by a person and can afford to think; the model
+    that labels picks one word out of two and must not keep anyone waiting.
+    Giving each its own settings is what lets those choices move apart.
+
+    Adding a role — a critic, a summariser — is one line at the bottom of this
+    module plus the variables it reads, and it runs on the answering model
+    until somebody configures it:
+
+        AGENT_<ROLE>_MODEL             which model does this job
+        AGENT_<ROLE>_REASONING_EFFORT  how much it may think first
+        AGENT_<ROLE>_MAX_TOKENS        how much it may write
+
+    The credentials and the provider policy stay shared: they are about the
+    account we call through, not about the job.
+    """
+
+    name: str
+    model: str
+    reasoning_effort: str
+    max_tokens: int
+
+
+def _role(
+    name: str,
+    prefix: str,
+    *,
+    model: str = "",
+    effort: str = "",
+    max_tokens: int = 1024,
+) -> Role:
+    """Read one role from the environment, falling back to the answering one."""
+    answering_model = os.getenv("AGENT_MODEL", "anthropic:claude-haiku-4-5")
+    # AGENT_REASONING_EFFORT has no role in its name because it named the only
+    # role there was; it still works, as the answering role's setting.
+    fallback_effort = os.getenv("AGENT_REASONING_EFFORT", effort)
+    return Role(
+        name=name,
+        model=os.getenv(f"AGENT_{prefix}MODEL", "") or model or answering_model,
+        reasoning_effort=os.getenv(f"AGENT_{prefix}REASONING_EFFORT", fallback_effort),
+        max_tokens=int(os.getenv(f"AGENT_{prefix}MAX_TOKENS", str(max_tokens))),
+    )
+
+
+#: Answers — what the user reads. Thinks a little; a chat is a place where
+#: somebody is watching a cursor.
+ANSWERING = _role("answering", "", effort="minimal", max_tokens=1024)
+
+#: Labels — the intent and confirmation classifiers. A dozen output tokens
+#: each, in front of every answer, so this is where a cheaper and faster tier
+#: pays for itself. Not "none": some endpoints refuse to think less than they
+#: want to (see app/llm.py), and the service recovers but should not need to.
+LABELLING = _role("labelling", "ROUTER_", effort="low", max_tokens=200)
 
 
 settings = Settings()

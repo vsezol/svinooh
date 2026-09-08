@@ -19,7 +19,7 @@ from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 
-from .config import settings
+from .config import ANSWERING, LABELLING, Role, settings
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -92,17 +92,8 @@ def let_it_think(model: str) -> bool:
         return False
     logger.warning("%s requires reasoning — no longer limiting it", model)
     _models_that_insist_on_thinking.add(model)
-    get_model.cache_clear()
-    get_router_model.cache_clear()
+    model_for.cache_clear()
     return True
-
-
-def answering_model() -> str:
-    return settings.model
-
-
-def labelling_model() -> str:
-    return settings.router_model or settings.model
 
 
 def _credentials() -> dict:
@@ -125,33 +116,34 @@ def _credentials() -> dict:
     return credentials
 
 
-@cache  # lazy singleton: the client is built once and reused by every request
+@cache  # lazy singleton per role: a client is built once and reused
+def model_for(role: Role) -> BaseChatModel:
+    """The client for one job, built from that job's own settings."""
+    return init_chat_model(
+        role.model,
+        max_tokens=role.max_tokens,
+        timeout=settings.request_timeout_s,
+        **_credentials(),
+        **_reasoning(role.reasoning_effort, role.model),
+    )
+
+
 def get_model() -> BaseChatModel:
-    return init_chat_model(
-        settings.model,
-        max_tokens=settings.max_tokens,
-        timeout=settings.request_timeout_s,
-        **_credentials(),
-        **_reasoning(settings.reasoning_effort, answering_model()),
-    )
+    """The model that answers — what the user reads."""
+    return model_for(ANSWERING)
 
 
-@cache
 def get_router_model() -> BaseChatModel:
-    """The model that labels turns (app/intent.py).
+    """The model that labels — the intent and confirmation classifiers."""
+    return model_for(LABELLING)
 
-    Routers ride the cheapest model that labels reliably — their output is a
-    dozen tokens, so intelligence is bought where it matters and pennies are
-    spent where it does not. Defaults to the main model (already the cheap
-    tier); AGENT_ROUTER_MODEL overrides it independently.
-    """
-    return init_chat_model(
-        settings.router_model or settings.model,
-        max_tokens=200,
-        timeout=settings.request_timeout_s,
-        **_credentials(),
-        **_reasoning(settings.router_reasoning_effort, labelling_model()),
-    )
+
+def answering_model() -> str:
+    return ANSWERING.model
+
+
+def labelling_model() -> str:
+    return LABELLING.model
 
 
 async def ask(build, messages, model: str, forget=None):
