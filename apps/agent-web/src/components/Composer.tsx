@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { useKeyboardFit } from '../app/useKeyboardFit';
 import type { FormEvent, KeyboardEvent } from 'react';
 
 interface Props {
@@ -55,9 +54,6 @@ export function Composer({ placeholder, disabled, onSend }: Props) {
     send();
   };
 
-  // While this has focus the page is held to what is visible — see the hook.
-  const keyboard = useKeyboardFit();
-
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     // Shift, and the IME's own Enter while a composition is open, both mean
     // "keep typing" — sending mid-composition would cut a word in half for
@@ -81,8 +77,6 @@ export function Composer({ placeholder, disabled, onSend }: Props) {
         aria-label="Message"
         autoComplete="off"
         enterKeyHint="send"
-        onFocus={keyboard.onFocus}
-        onBlur={keyboard.onBlur}
       />
       <button type="submit" className="sv-a-c-composer-send" disabled={disabled || !draft.trim()} aria-label="Send">
         {ARROW}
