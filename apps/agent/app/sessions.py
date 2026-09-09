@@ -28,6 +28,15 @@ from .store import Backend, Chat, Turn, now_ms
 TITLE_MAX = 60
 
 
+class NotYours(Exception):
+    """A session id that names somebody else's conversation.
+
+    Its own type rather than a None the caller might read as "not found":
+    those two mean opposite things here. Nothing is created for an id that is
+    not found, and nothing at all happens for one that is not yours.
+    """
+
+
 def title_of(question: str) -> str:
     """A chat's name, which is the first thing that was asked of it.
 
@@ -55,20 +64,48 @@ class SessionStore:
     def new_id(self) -> str:
         return uuid.uuid4().hex
 
-    async def history(self, session_id: str) -> list[BaseMessage]:
+    def context(self, chat: Chat | None) -> list[BaseMessage]:
         """The model's context, derived from the stored turns.
 
         Not a second store — the same turns, rendered. Oldest turns fall off
         the front, which bounds the tokens on every model call and keeps the
         recent exchanges, the ones "as we discussed" is about.
+
+        Takes the conversation rather than its id so a turn loads it once and
+        reads everything it needs off that: whose it is, what was said, and
+        what is pending.
         """
-        chat = await self._backend.load(session_id)
         if chat is None:
             return []
         messages: list[BaseMessage] = []
         for turn in chat.turns[-self._max_turns_in_context :]:
             messages += [HumanMessage(content=turn.q), AIMessage(content=turn.a)]
         return messages
+
+    async def resume(self, session_id: str, owner: str) -> Chat | None:
+        """The conversation a turn continues, checked against who is asking.
+
+        None when there is nothing at that id — a conversation whose thirty
+        days are up, or one this caller is about to start — and either is
+        theirs to begin.
+
+        `NotYours` when the id names somebody ELSE's conversation, which is the
+        case this method exists for. A session id is echoed back to the client
+        and now sits in a URL, so it travels: without this check, sending
+        somebody else's id would replay their conversation into the model as
+        context and append the sender's turn to it. Reading a conversation is
+        authorized on the read path; continuing one has to be authorized on
+        this one, or the read path's lock is on a door with another way in.
+        """
+        chat = await self._backend.load(session_id)
+        if chat is not None and chat.owner != owner:
+            raise NotYours(session_id)
+        return chat
+
+    async def history(self, session_id: str) -> list[BaseMessage]:
+        """The context at an id, with no owner check — tests and callers that
+        have already done one. A turn goes through `resume`."""
+        return self.context(await self._backend.load(session_id))
 
     async def append(
         self,

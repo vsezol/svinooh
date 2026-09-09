@@ -34,7 +34,7 @@ from .schemas import (
     ChatTurn,
     TextBlock,
 )
-from .sessions import SessionStore
+from .sessions import NotYours, SessionStore
 from .store import Chat, backend_for
 from .streaming import turn_events
 
@@ -119,15 +119,26 @@ async def _admit(
 
     await _claim_anonymous_chats(owner)
 
+    # Continuing a conversation is authorized, exactly like reading one. The id
+    # is echoed to the client and now lives in a URL, so it travels — and
+    # without this, sending somebody else's would replay their conversation
+    # into the model and append this turn to it. A 404 for the same reason the
+    # read path gives one: saying "not yours" confirms it exists.
+    try:
+        chat = await sessions.resume(session_id, owner.key)
+    except NotYours as error:
+        raise HTTPException(status_code=404, detail="no such conversation") from error
+
     # The session's history and its pending proposal ride into the graph, which
     # is what makes "as we discussed" — and "yes, create it" — work across
     # requests; the graph decides everything else and never touches the store.
+    # Both are read off the one conversation the line above loaded.
     state = {
         "question": text,
-        "history": await sessions.history(session_id),
+        "history": sessions.context(chat),
         "portfolio": body.portfolio,
         "authorization": authorization,
-        "pending_addresses": await sessions.pending(session_id),
+        "pending_addresses": list(chat.pending) if chat and chat.pending else None,
     }
     return text, session_id, owner, state
 

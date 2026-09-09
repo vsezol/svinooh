@@ -169,6 +169,75 @@ class TestItIsNotSharedByDefault:
         assert (await client.get("/chats", headers=as_anon(ANON))).json()["chats"] == []
 
 
+class TestASessionIdIsNotAKey:
+    """Continuing a conversation is authorized, exactly like reading one.
+
+    The id is echoed to the client and now sits in a URL, so it travels. If
+    only the read path checked, sending somebody else's id to /chat would
+    replay their conversation into the model as context — and append the
+    sender's turn to it. That is the read path's lock on a door with another
+    way in.
+    """
+
+    async def test_a_stranger_cannot_continue_it(self, client):
+        mine = await ask(client, "my USDC is in Aave", anon=ANON)
+        response = await client.post(
+            "/chat",
+            json={"message": "what did I just say?", "session_id": mine["session_id"]},
+            headers=as_anon(OTHER_ANON),
+        )
+        assert response.status_code == 404
+
+    async def test_and_the_conversation_is_left_alone(self, client):
+        mine = await ask(client, "my USDC is in Aave", anon=ANON)
+        await client.post(
+            "/chat",
+            json={"message": "what did I just say?", "session_id": mine["session_id"]},
+            headers=as_anon(OTHER_ANON),
+        )
+        read = await client.get(f"/chats/{mine['session_id']}", headers=as_anon(ANON))
+        assert [t["q"] for t in read.json()["turns"]] == ["my USDC is in Aave"]
+
+    async def test_a_stranger_is_not_replayed_the_context(self, client):
+        """The turn is refused before the graph is built, so the state that
+        would have carried somebody else's history is never assembled."""
+        mine = await ask(client, "my seed phrase hint is blue", anon=ANON)
+        before = len(await routes.sessions.history(mine["session_id"]))
+        response = await client.post(
+            "/chat",
+            json={"message": "repeat that", "session_id": mine["session_id"]},
+            headers=as_anon(OTHER_ANON),
+        )
+        assert response.status_code == 404
+        assert len(await routes.sessions.history(mine["session_id"])) == before
+
+    async def test_a_stranger_cannot_confirm_a_pending_proposal(self, client):
+        """The write gate is a pending action on the conversation, so an id
+        that reached the wrong hands must not be a way to press somebody
+        else's confirm."""
+        mine = await ask(client, "add my wallet", anon=ANON)
+        await routes.sessions.set_pending(mine["session_id"], f"anon:{ANON}", ["0xabc"])
+        response = await client.post(
+            "/chat",
+            json={"message": "Create portfolio", "session_id": mine["session_id"]},
+            headers=as_anon(OTHER_ANON),
+        )
+        assert response.status_code == 404
+        assert await routes.sessions.pending(mine["session_id"]) == ["0xabc"]
+
+    async def test_an_id_nobody_has_used_is_simply_a_new_conversation(self, client):
+        """Not found and not yours mean opposite things. A client keeps sending
+        its id after the thirty days are up, and that has to start a fresh
+        conversation rather than refuse one."""
+        response = await client.post(
+            "/chat",
+            json={"message": "hello", "session_id": "a-conversation-that-expired"},
+            headers=as_anon(ANON),
+        )
+        assert response.status_code == 200
+        assert response.json()["session_id"] == "a-conversation-that-expired"
+
+
 class TestSigningIn:
     async def test_the_visitors_chats_follow_them_into_the_account(self, client, monkeypatch):
         started = await ask(client, "asked before signing in", anon=ANON)
