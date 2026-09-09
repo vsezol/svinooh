@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import type { Conversation } from '../app/types';
+import { relativeDay } from '@svinooh/ui/when';
 import { Sheet, useDismiss } from './Sheet';
 
 interface Props {
@@ -16,27 +17,6 @@ const PLUS = (
     <path d="M12 5v14M5 12h14" />
   </svg>
 );
-
-/**
- * "Just now" / "Nh ago" / "Yesterday" / "N days ago" / "Mon D". Calendar-day
- * arithmetic, not 24h buckets: a chat from last evening reads "Yesterday"
- * even when it is only 10 hours old.
- */
-function relativeDate(at: number, now: number = Date.now()): string {
-  const mins = Math.floor((now - at) / 60_000);
-  const startOfDay = (t: number) => {
-    const d = new Date(t);
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  };
-  const days = Math.round((startOfDay(now) - startOfDay(at)) / 86_400_000);
-  if (days <= 0) {
-    if (mins < 60) return 'Just now';
-    return `${Math.floor(mins / 60)}h ago`;
-  }
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days} days ago`;
-  return new Date(at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
 
 /** Past conversations: a static rail on desktop, popover or sheet elsewhere. */
 export function HistoryPanel({ conversations, currentId, onSelect, onNew, onClose, mode }: Props) {
@@ -68,7 +48,7 @@ export function HistoryPanel({ conversations, currentId, onSelect, onNew, onClos
           onClick={() => onSelect(c.id)}
         >
           <span className="sv-a-c-hist-title">{c.title}</span>
-          <span className="sv-a-c-hist-date">{relativeDate(c.at)}</span>
+          <span className="sv-a-c-hist-date">{relativeDay(c.at)}</span>
         </button>
       ))}
     </div>
@@ -93,7 +73,7 @@ export function HistoryPanel({ conversations, currentId, onSelect, onNew, onClos
             onClick={() => onSelect(c.id)}
           >
             <span className="rail-history-title">{c.title}</span>
-            <span className="rail-history-when mono">{relativeDate(c.at)}</span>
+            <span className="rail-history-when mono">{relativeDay(c.at)}</span>
           </button>
         ))}
       </aside>

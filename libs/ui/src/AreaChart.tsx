@@ -485,8 +485,13 @@ export function AreaChart({
 
       {/* The measuring gesture has nothing on screen to reach for, and a
           modifier nobody knows about is a feature nobody has. Mouse only — a
-          phone measures with two fingers and has no shift to hold. */}
-      {values.length && !selection && hovered === null && !bare ? (
+          phone measures with two fingers and has no shift to hold.
+
+          Card furniture, so it needs the card to be ours: unframed, this is a
+          chart inside somebody else's box, and in the assistant's it landed
+          under that box's own reading in the same corner — two right-aligned
+          mono labels stacked where the design has one. */}
+      {values.length && !selection && hovered === null && !bare && framed ? (
         <div
           className="mono mouse-only"
           style={{
