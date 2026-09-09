@@ -108,7 +108,7 @@ export function SettingModel({
   const clash = chosen ? !chosen.thinks && asksForThought : false;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+    <div className="setting-field">
       <Input
         mono
         size="md"

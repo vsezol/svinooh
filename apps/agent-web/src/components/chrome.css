@@ -216,8 +216,9 @@ body[data-theme='light'] .sv-a-c-on-light {
   display: flex;
   gap: var(--sp-3);
   overflow-x: auto;
-  /* Flush with the composer they belong to. The gutter is .sv-a-main's. */
-  padding: 0 0 var(--sp-4);
+  /* Flush with the composer they belong to, whichever box is holding the
+     gutter at this width. */
+  padding: 0 var(--sv-a-gutter) var(--sp-4);
   flex-shrink: 0;
   scrollbar-width: none;
 }
@@ -587,11 +588,18 @@ body[data-theme='light'] .sv-a-c-on-light {
 }
 
 .sv-a-c-intro-head {
-  margin: 18px 0 0;
+  /* Nothing above it any more, so nothing to clear. */
+  margin: 0;
   font-size: var(--fs-hero-sm);
   font-weight: var(--fw-heavy);
   letter-spacing: -0.02em;
   line-height: 1.15;
+}
+
+/* The half that names the product carries the accent; the possessive stays in
+   the text colour, so the line reads as one sentence with one thing in it. */
+.sv-a-c-intro-name {
+  color: var(--acc-text);
 }
 
 .sv-a-c-intro-sub {
