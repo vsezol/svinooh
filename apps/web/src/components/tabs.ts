@@ -49,6 +49,12 @@ export const tabIndex = (tab: Tab, isAdmin: boolean): number =>
 
 /** How far a finger has to carry the page before letting go turns it over */
 const SWIPE_COMMIT = 70;
+/**
+ * How long a page takes to turn, in one place: the CSS transition below and
+ * the timer that puts the other page away both read it, and a slide that
+ * outlasts the timer is a page vanishing mid-turn.
+ */
+const SLIDE_MS = 440;
 /** Past the first page and past the last one, the drag goes heavy instead of free */
 const RUBBER = 0.25;
 /**
@@ -75,22 +81,53 @@ export function usePager(index: number, onIndex: (index: number) => void, count:
   const dragX = useRef(0);
 
   /**
-   * Both pages are only really there while one is on its way to replacing the
-   * other. Left side by side at rest they are as tall as the taller of them,
-   * and the shorter page ends in a screenful of nothing to scroll through —
-   * so the one that isn't open folds away once the strip stops moving. The
-   * timer is the slide's own length: fold it away any sooner and the page
-   * being swiped away vanishes mid-swipe.
+   * Which pages are on the strip, and when.
+   *
+   * Only ever two: the one being left and the one being landed on. Left side
+   * by side at rest they are as tall as the tallest of them, and the shorter
+   * pages end in a screenful of nothing to scroll through — so a page that is
+   * not part of the turn folds away.
+   *
+   * It used to be every page while the strip moved, which is why tapping a tab
+   * two along flew visibly through the one in between, and why the strip
+   * carried four pages' worth of layer for Safari to rasterise on every frame
+   * of a 440ms transform.
+   *
+   * `from` is derived during the render that changes `index`, not in an effect
+   * afterwards. An effect runs after the browser has already been handed a
+   * frame carrying the new transform — and on that frame the page being turned
+   * to was still folded away, so a page turn began on a blank.
    */
+  const [seen, setSeen] = useState(index);
+  const [from, setFrom] = useState(index);
   const [sliding, setSliding] = useState(false);
-  const previous = useRef(index);
+  /** This render puts the strip somewhere rather than taking it there. */
+  const [cut, setCut] = useState(false);
+  if (seen !== index) {
+    const neighbour = Math.abs(index - seen) === 1;
+    setFrom(seen);
+    setSeen(index);
+    // Only neighbours turn. A tap two tabs along is a jump, and animating one
+    // drags the strip across two screens with a page nobody asked for in the
+    // middle of the journey — or, once that page is folded away, an empty
+    // one. It cuts instead, which is what a jump looks like.
+    setSliding(neighbour);
+    setCut(!neighbour);
+  }
   useEffect(() => {
-    if (previous.current === index) return;
-    previous.current = index;
-    setSliding(true);
-    const done = setTimeout(() => setSliding(false), 460);
+    if (!sliding) return;
+    // A hair past the slide, so the page being left is still there for the
+    // last frame of it.
+    const done = setTimeout(() => setSliding(false), SLIDE_MS + 20);
     return () => clearTimeout(done);
-  }, [index]);
+  }, [sliding, index]);
+  // One frame without a transition is the whole of a cut. After the browser
+  // has painted it, the transition goes back on against a transform that is
+  // already where it belongs, so nothing moves — and the next page released
+  // from a half-swipe still springs back rather than snapping.
+  useEffect(() => {
+    if (cut) setCut(false);
+  }, [cut]);
 
   const onTouchStart = (e: React.TouchEvent) => {
     // Some things on the page own the sideways drag themselves — the charts,
@@ -134,11 +171,26 @@ export function usePager(index: number, onIndex: (index: number) => void, count:
     else if (dx > SWIPE_COMMIT && index > 0) onIndex(index - 1);
   };
 
+  const moving = drag.dragging || sliding;
+
   return {
     /** Goes on the window that clips the strip */
     handlers: { onTouchStart, onTouchMove, onTouchEnd, onTouchCancel: onTouchEnd },
-    /** True while both pages have to be on the strip together */
-    moving: drag.dragging || sliding,
+    /** True while more than one page has to be on the strip together */
+    moving,
+    /**
+     * Whether the page at this position is drawn at all — see .pane[data-shown].
+     *
+     * At rest, the open one. Under a finger, it and both its neighbours: the
+     * hand can go either way and finds out which as it moves. Mid-turn, the
+     * one being left and the one being landed on, and nothing in between even
+     * when the strip passes over it.
+     */
+    shows: (i: number) => {
+      if (!moving) return i === index;
+      if (drag.dragging) return Math.abs(i - index) <= 1;
+      return i === index || i === from;
+    },
     /** Goes on the strip itself */
     style: {
       // Whole screens, not a fraction of a track whose width depends on how
@@ -146,8 +198,16 @@ export function usePager(index: number, onIndex: (index: number) => void, count:
       // element's own width, and the track is exactly one screen wide, so
       // -100% is one page across however many pages exist — see .pager.
       transform: `translateX(calc(${index * -100}% + ${drag.x}px))`,
-      // Nothing to animate while the finger is the one moving it
-      transition: drag.dragging ? 'none' : 'transform 0.44s cubic-bezier(0.3,1.25,0.5,1)',
+      // Nothing to animate while the finger is the one moving it, and nothing
+      // to animate on a jump — see sliding above.
+      //
+      // The curve does not overshoot. It used to spring past the target by
+      // about 2% and settle back, which on a strip of pages means eight pixels
+      // of the page after the one you asked for, appearing at the edge and
+      // then leaving again. A page turn has something real behind it; there is
+      // nowhere for it to bounce into.
+      transition:
+        drag.dragging || cut ? 'none' : `transform ${SLIDE_MS}ms cubic-bezier(0.32,0.72,0,1)`,
     } as CSSProperties,
   };
 }
