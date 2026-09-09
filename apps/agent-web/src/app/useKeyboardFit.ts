@@ -45,24 +45,39 @@ export function useKeyboardFit(): { onFocus: () => void; onBlur: () => void } {
       return;
     }
 
+    // Held at the top from the moment of focus, not from the moment the
+    // keyboard's height is known.
+    //
+    // Safari scrolls to reveal the field the instant it is focused, and the
+    // resize that tells us the keyboard's height arrives a few hundred
+    // milliseconds later. Fitting on the resize alone therefore let the page
+    // fly up and snap back -- which is what it looked like: the composer shot
+    // up and then reattached. Pinning here means Safari's reveal never lands.
+    const home = () => {
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+    };
+
     const fit = () => {
-      // innerHeight is the window Safari has already shrunk, so the keyboard's
-      // bite has to be measured against the layout viewport it left behind.
+      // clientHeight is the layout viewport, which is the one Safari leaves
+      // alone; innerHeight is not, once it has scrolled.
       const taken = Math.round(root.clientHeight - vv.height);
       if (taken < KEYBOARD_MIN) {
         clear();
+        home();
         return;
       }
       root.style.setProperty('--sv-a-vh', `${Math.round(vv.height)}px`);
-      // The order matters: shorten first, then go home. The other way round
-      // and Safari scrolls back to reveal the field it thinks is buried.
-      window.scrollTo(0, 0);
+      // Shorten first, then go home: the other way round and Safari scrolls
+      // back to reveal a field it still thinks is buried.
+      home();
     };
 
     fit();
+    window.addEventListener('scroll', home, { passive: true });
     vv.addEventListener('resize', fit);
     vv.addEventListener('scroll', fit);
     return () => {
+      window.removeEventListener('scroll', home);
       vv.removeEventListener('resize', fit);
       vv.removeEventListener('scroll', fit);
       clear();

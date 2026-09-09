@@ -365,10 +365,16 @@ button {
 
 /* Set while the agent tab is open (see AgentEmbed). The page stops being a
    scroller so the transcript can be one, and stops padding the one tab that
-   is measured against the window rather than laid out inside it. */
+   is measured against the window rather than laid out inside it.
+
+   The height follows the keyboard too, and it has to: 100% resolves against
+   the layout viewport, which Safari does not shrink for the keyboard. So
+   fitting only the chat left the document its full 714 with the chat 377 of
+   it — and 337px of empty body underneath, which is a scroller, and which is
+   exactly the blank strip that kept appearing under the composer. */
 html.agent-open,
 html.agent-open body {
-  height: 100%;
+  height: var(--sv-a-vh, 100%);
   overflow: hidden;
   overscroll-behavior: none;
 }
