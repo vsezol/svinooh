@@ -88,11 +88,10 @@ body[data-theme='light'] .sv-a-c-on-light {
   overflow-wrap: anywhere;
 }
 
-/* 82%, and stated against the container so it beats the overflow guard below
-   it -- .sv-a-items caps every child at 100% to stop a wide table pushing the
-   column sideways, which also quietly uncapped this. A bubble that reaches
-   the far margin stops reading as one side of a conversation. */
-.sv-a-items > .sv-a-c-user {
+/* A bubble that reaches the far margin stops reading as one side of a
+   conversation. No longer needs to name its container to be heard: the
+   overflow guard carries no specificity now. */
+.sv-a-c-user {
   max-width: 82%;
 }
 

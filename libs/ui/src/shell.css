@@ -127,6 +127,48 @@ body[data-theme='light'] .on-dark {
    what lets a flex child shrink below its content; without it the list keeps
    its full height and pushes the rail past the bottom of the window instead of
    scrolling. */
+/* The fold, last in the rail and against its bottom edge. margin-top:auto is
+   what puts it there whatever is above it -- four pages, or four pages and a
+   history. */
+.rail-fold {
+  margin-top: auto;
+  flex-shrink: 0;
+  align-self: flex-end;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line2);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--mut);
+  cursor: pointer;
+  transition: color var(--ease-quick), border-color var(--ease-quick);
+}
+
+.rail-fold:hover {
+  color: var(--text);
+  border-color: var(--mut);
+}
+
+.side-rail[data-narrow='true'] .rail-fold {
+  align-self: center;
+}
+
+/* Narrow, the chevrons point the other way, because that is the way they
+   would take the rail. */
+.side-rail[data-narrow='true'] .rail-fold svg {
+  transform: scaleX(-1);
+}
+
+/* Narrow, New chat is the plus and nothing else. */
+.side-rail[data-narrow='true'] .rail-new {
+  width: 36px;
+  align-self: center;
+  gap: 0;
+}
+
 .rail-history-list {
   flex: 1;
   min-height: 0;

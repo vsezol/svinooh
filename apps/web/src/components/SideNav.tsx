@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { relativeDay } from '@svinooh/ui/when';
 import { AGENT_ENABLED } from '../lib/agent';
@@ -41,12 +42,14 @@ function SparkIcon({ size }: { size: number }) {
   );
 }
 
-const navItem = (active: boolean, disabled: boolean): CSSProperties => ({
+const NARROW_KEY = 'svinooh_rail_narrow';
+
+const navItem = (active: boolean, disabled: boolean, narrow = false): CSSProperties => ({
   display: 'flex',
   alignItems: 'center',
-  justifyContent: 'flex-start',
+  justifyContent: narrow ? 'center' : 'flex-start',
   gap: 10,
-  padding: '10px 13px',
+  padding: narrow ? '10px 0' : '10px 13px',
   borderRadius: 10,
   fontWeight: 'var(--fw-bold)',
   // The strip's size, because this is the same list of pages said the other
@@ -58,6 +61,14 @@ const navItem = (active: boolean, disabled: boolean): CSSProperties => ({
   background: active ? 'var(--acc-soft)' : 'transparent',
   opacity: disabled ? 0.55 : 1,
 });
+
+function ChevronsIcon({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...ICON} strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5" />
+    </svg>
+  );
+}
 
 function PlusIcon({ size }: { size: number }) {
   return (
@@ -107,15 +118,44 @@ interface Props {
  * door with nothing behind it.
  */
 export function SideNav({ tab, onTab, isAdmin, chat }: Props) {
-  const label = (text: string): ReactNode => <span style={{ whiteSpace: 'nowrap' }}>{text}</span>;
+  const [narrow, setNarrow] = useState(false);
+
+  // Read on the client, because the choice lives in storage and storage does
+  // not exist while the page is being prepared. Until then the rail is open,
+  // which is the state a first visit should get.
+  useEffect(() => {
+    try {
+      setNarrow(localStorage.getItem(NARROW_KEY) === '1');
+    } catch {
+      // A browser that refuses storage still gets a working rail, just a
+      // forgetful one.
+    }
+  }, []);
+
+  const toggle = () => {
+    setNarrow((was) => {
+      try {
+        localStorage.setItem(NARROW_KEY, was ? '0' : '1');
+      } catch {
+        // as above
+      }
+      return !was;
+    });
+  };
+
+  // Narrow, the label goes and the icon's own tooltip carries the name — which
+  // is why every row sets `title` whether or not it is showing one.
+  const label = (text: string): ReactNode =>
+    narrow ? null : <span style={{ whiteSpace: 'nowrap' }}>{text}</span>;
 
   return (
     <>
       {/* desktop rail */}
       <div
         className="side-rail"
+        data-narrow={narrow}
         style={{
-          width: 232,
+          width: narrow ? 68 : 232,
           flexShrink: 0,
           position: 'sticky',
           // Directly under the header, which is 56px and a hairline. It used to
@@ -134,7 +174,7 @@ export function SideNav({ tab, onTab, isAdmin, chat }: Props) {
           className="nav-item"
           onClick={() => onTab('portfolio')}
           title="Portfolio"
-          style={navItem(tab === 'portfolio', false)}
+          style={navItem(tab === 'portfolio', false, narrow)}
         >
           <ChartIcon size={16} />
           {label('Portfolio')}
@@ -143,7 +183,7 @@ export function SideNav({ tab, onTab, isAdmin, chat }: Props) {
           {...(AGENT_ENABLED
             ? { className: 'nav-item', onClick: () => onTab('agent'), title: 'AI agent' }
             : { title: 'AI agent — soon' })}
-          style={navItem(AGENT_ENABLED && tab === 'agent', !AGENT_ENABLED)}
+          style={navItem(AGENT_ENABLED && tab === 'agent', !AGENT_ENABLED, narrow)}
         >
           <SparkIcon size={16} />
           {label('AI agent')}
@@ -152,7 +192,7 @@ export function SideNav({ tab, onTab, isAdmin, chat }: Props) {
           className="nav-item"
           onClick={() => onTab('notifications')}
           title="Alerts"
-          style={navItem(tab === 'notifications', false)}
+          style={navItem(tab === 'notifications', false, narrow)}
         >
           <BellIcon size={16} />
           {label('Alerts')}
@@ -162,7 +202,7 @@ export function SideNav({ tab, onTab, isAdmin, chat }: Props) {
             className="nav-item"
             onClick={() => onTab('admin')}
             title="Admin"
-            style={navItem(tab === 'admin', false)}
+            style={navItem(tab === 'admin', false, narrow)}
           >
             <SlidersIcon size={16} />
             {label('Admin')}
@@ -177,11 +217,14 @@ export function SideNav({ tab, onTab, isAdmin, chat }: Props) {
         {chat ? (
           <>
             <div className="rail-rule" />
-            <button type="button" className="rail-new" onClick={chat.onNew}>
+            <button type="button" className="rail-new" onClick={chat.onNew} title="New chat">
               <PlusIcon size={15} />
-              New chat
+              {label('New chat')}
             </button>
-            {chat.conversations.length > 0 ? (
+            {/* Narrow, the list has no width to say anything with: a column of
+                clipped first words is not a list of conversations. The rail
+                keeps the one action that still reads at icon size. */}
+            {!narrow && chat.conversations.length > 0 ? (
               <>
                 <div className="rail-eyebrow mono">HISTORY</div>
                 {/* The list is the only part of the rail that grows without
@@ -207,6 +250,19 @@ export function SideNav({ tab, onTab, isAdmin, chat }: Props) {
             ) : null}
           </>
         ) : null}
+
+        {/* Pushed to the bottom of the rail, and the last thing in it: the
+            rail is a list of places, and this is not one of them. */}
+        <button
+          type="button"
+          className="rail-fold"
+          onClick={toggle}
+          title={narrow ? 'Widen the sidebar' : 'Narrow the sidebar'}
+          aria-label={narrow ? 'Widen the sidebar' : 'Narrow the sidebar'}
+          aria-expanded={!narrow}
+        >
+          <ChevronsIcon size={16} />
+        </button>
       </div>
     </>
   );

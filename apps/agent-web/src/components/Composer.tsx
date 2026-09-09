@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
+import { useHoldStill } from '../app/useHoldStill';
 
 interface Props {
   placeholder: string;
@@ -17,9 +18,31 @@ const ARROW = (
 const MAX_HEIGHT = 200;
 
 /**
+ * Whether the keyboard in front of this is a touch one.
+ *
+ * The pointer, not the width: what decides how Enter should behave is whether
+ * there is a shift key to hold, and a phone in landscape is still a phone.
+ */
+function useTouchKeyboard(): boolean {
+  const query = '(pointer: coarse)';
+  const [coarse, setCoarse] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(query).matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setCoarse(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return coarse;
+}
+
+/**
  * The message box, with the conventions people already have from every other
- * chat: Enter sends, Shift+Enter opens a line, and the box grows with the text
- * to a ceiling and then scrolls.
+ * chat: the box grows with the text to a ceiling and then scrolls, and Enter
+ * does what Enter does on the keyboard in front of you — sends on a hardware
+ * one, where Shift+Enter is there for a line break, and opens a line on a
+ * touch one, where it is not and the button is right there.
  *
  * A textarea cannot size itself to its content in CSS, so the height is reset
  * to auto and set from scrollHeight on every change — resetting first is what
@@ -27,7 +50,11 @@ const MAX_HEIGHT = 200;
  */
 export function Composer({ placeholder, disabled, onSend }: Props) {
   const [draft, setDraft] = useState('');
+  const [focused, setFocused] = useState(false);
   const box = useRef<HTMLTextAreaElement>(null);
+  const touch = useTouchKeyboard();
+  // While this has focus the page stops panning out from under it.
+  useHoldStill(focused);
 
   useEffect(() => {
     const node = box.current;
@@ -59,6 +86,10 @@ export function Composer({ placeholder, disabled, onSend }: Props) {
     // "keep typing" — sending mid-composition would cut a word in half for
     // anyone typing Japanese, Chinese or Korean.
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+    // A touch keyboard has no shift to hold, so Enter is the only way to open
+    // a line and the button is the only way to send. Taking Enter here left a
+    // phone with no way to write a second line at all.
+    if (touch) return;
     event.preventDefault();
     send();
   };
@@ -75,8 +106,12 @@ export function Composer({ placeholder, disabled, onSend }: Props) {
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={onKeyDown}
         aria-label="Message"
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         autoComplete="off"
-        enterKeyHint="send"
+        // The key does what the label says: a return glyph where it opens a
+        // line, "send" where it sends.
+        enterKeyHint={touch ? 'enter' : 'send'}
       />
       <button type="submit" className="sv-a-c-composer-send" disabled={disabled || !draft.trim()} aria-label="Send">
         {ARROW}
