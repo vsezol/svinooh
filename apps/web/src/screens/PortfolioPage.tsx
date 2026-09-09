@@ -370,6 +370,47 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   const tabs = tabsFor(isAdmin);
   const pager = usePager(tabIndex(tab, isAdmin), (index) => setTab(tabs[index].key), tabs.length);
 
+  /**
+   * Which page is open.
+   *
+   * A visitor has no rail, so they can only ever be on the one tab the link
+   * pointed them at — whatever state says. Up here rather than beside the
+   * markup that reads it, because the scroll lock below is a hook and a hook
+   * cannot live past the early returns.
+   */
+  const activeTab: Tab = data?.isOwner === true ? tab : 'portfolio';
+
+  /**
+   * What a pane says about itself: which page it is, and whether it is drawn.
+   *
+   * Both come off the same array the strip and the rail count from, rather
+   * than off a number written beside the markup — see ORDER IS THE CONTRACT
+   * below, which is the rule this keeps for us.
+   */
+  const paneProps = (key: Tab) => ({
+    className: 'pane',
+    'data-active': activeTab === key,
+    'data-shown': pager.shows(tabIndex(key, isAdmin)),
+  });
+
+  /**
+   * The chat is the one page that is a screen rather than a document, so the
+   * page behind it stops scrolling while it is open.
+   *
+   * Here rather than inside the chat, and never while the strip is moving.
+   * The widget used to set it on mount, which meant the document's height and
+   * scrollability changed in the middle of a page turn: the strip was sliding
+   * sideways while the ground under it was being clipped to the window, and
+   * the turn came out somewhere between two pages. The lock only ever changes
+   * when nothing is moving.
+   */
+  useEffect(() => {
+    if (pager.moving) return;
+    const root = document.documentElement;
+    root.classList.toggle('agent-open', activeTab === 'agent');
+  }, [activeTab, pager.moving]);
+  useEffect(() => () => document.documentElement.classList.remove('agent-open'), []);
+
 
   const addWallet = async () => {
     const address = input.trim();
@@ -518,9 +559,6 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
       }).catch(() => setHideSmall(!on));
     }
   };
-  // A visitor has no rail, so they can only ever be on the one tab the link
-  // pointed them at — whatever state says
-  const activeTab: Tab = isOwner ? tab : 'portfolio';
   const syncMinutes = config?.syncIntervalMin ?? 5;
   // A portfolio nobody owns is open for building: anyone can add wallets to it
   // without an account. Taking wallets out, or renaming them, still needs one.
@@ -678,7 +716,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
 
                 One pane per entry, too: a page the strip does not list is a
                 page nothing can reach. See AGENT_ENABLED and isAdmin. */}
-            <div className="pane" data-active={activeTab === 'portfolio'}>
+            <div {...paneProps('portfolio')}>
             {/* total */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
@@ -852,7 +890,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
             </div>
 
             {isOwner && AGENT_ENABLED ? (
-              <div className="pane" data-active={activeTab === 'agent'}>
+              <div {...paneProps('agent')}>
                 {activeTab === 'agent' ? (
                   <AgentEmbed
                     widgetUrl={AGENT_WIDGET_URL}
@@ -868,14 +906,14 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
             ) : null}
 
             {isOwner ? (
-              <div className="pane" data-active={activeTab === 'notifications'}>
+              <div {...paneProps('notifications')}>
                 <AlertSettings slug={slug} wallets={wallets} syncMinutes={syncMinutes} />
               </div>
             ) : null}
 
 
             {isOwner && isAdmin ? (
-              <div className="pane" data-active={activeTab === 'admin'}>
+              <div {...paneProps('admin')}>
                 {activeTab === 'admin' ? <AdminPanel /> : null}
               </div>
             ) : null}

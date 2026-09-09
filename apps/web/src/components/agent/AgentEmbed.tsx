@@ -118,11 +118,11 @@ export function AgentEmbed({ widgetUrl, agentUrl, slug, token, portfolios, onCon
   // So the page is allowed to move. Safari lifts it to put the composer above
   // the keyboard and puts it back on blur, which is one whole movement that
   // reverses itself rather than a layout arguing with a measurement.
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.add('agent-open');
-    return () => root.classList.remove('agent-open');
-  }, []);
+  // The page behind the chat stops scrolling while this is open, and that is
+  // the page's own business rather than this component's -- see PortfolioPage,
+  // which holds the lock still while the strip of tabs is moving. Setting it
+  // on mount from here meant the ground was clipped to the window in the
+  // middle of a page turn.
 
   useEffect(() => {
     let handle: AgentControl & { unmount(): void } | null = null;
