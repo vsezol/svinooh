@@ -10,19 +10,21 @@ import './styles/base.css';
  */
 export function mount(el: HTMLElement, opts: MountOptions): MountHandle {
   const root = createRoot(el);
-  // The two actions a host's own navigation needs. They cannot be returned
+  // The actions a host's own navigation needs. They cannot be returned
   // directly — the component does not exist until React has rendered, which is
   // after this function returns — so a box is handed in, filled on the first
   // render, and read through the handle.
   const control = {
     newChat: () => undefined,
     openConversation: (_id: string) => undefined,
+    openHistory: () => undefined,
   };
   root.render(<App {...opts} control={control} />);
   return {
     unmount: () => root.unmount(),
     newChat: () => control.newChat(),
     openConversation: (id: string) => control.openConversation(id),
+    openHistory: () => control.openHistory(),
   };
 }
 

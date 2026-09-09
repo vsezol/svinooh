@@ -330,6 +330,7 @@ export function App(props: AppProps) {
     if (!control) return;
     control.newChat = newChat;
     control.openConversation = selectConversation;
+    control.openHistory = () => setHistoryOpen(true);
   });
 
   const pickPortfolio = useCallback((nextSlug: string) => {

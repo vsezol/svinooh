@@ -36,7 +36,7 @@ interface AgentMount {
       signedIn?: boolean;
       onConversations?: (list: ConversationRef[]) => void;
     },
-  ): { unmount(): void; newChat(): void; openConversation(id: string): void };
+  ): { unmount(): void; newChat(): void; openConversation(id: string): void; openHistory(): void };
 }
 
 /**
@@ -131,6 +131,8 @@ export interface ConversationRef {
 export interface AgentControl {
   newChat(): void;
   openConversation(id: string): void;
+  /** Show the past conversations, for a surface with no rail to list them in. */
+  openHistory(): void;
 }
 
 export function AgentEmbed({ widgetUrl, agentUrl, slug, token, portfolios, onConversations, control }: Props) {

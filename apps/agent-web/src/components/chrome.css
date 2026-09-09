@@ -460,13 +460,17 @@ body[data-theme='light'] .sv-a-c-on-light {
   overflow-y: auto;
 }
 
+/* The design's row, wherever it is drawn. The rail's copy of it lives in the
+   kit (.rail-history) and these two had drifted: 8/10 against 9/12, an 8px
+   radius against 10, and a highlight in the accent against one in the
+   surface. Same row, same numbers. */
 .sv-a-c-hist-item {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 8px 10px;
+  padding: 9px 12px;
   border: none;
-  border-radius: var(--r-sm);
+  border-radius: 10px;
   background: none;
   cursor: pointer;
   color: var(--text);
@@ -478,7 +482,7 @@ body[data-theme='light'] .sv-a-c-on-light {
 }
 
 .sv-a-c-hist-item[data-active='true'] {
-  background: var(--acc-soft);
+  background: var(--surf2);
 }
 
 .sv-a-c-hist-title {
@@ -493,7 +497,7 @@ body[data-theme='light'] .sv-a-c-on-light {
 
 .sv-a-c-hist-date {
   display: block;
-  margin-top: 2px;
+  margin-top: 3px;
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--mut);
