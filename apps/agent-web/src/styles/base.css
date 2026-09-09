@@ -46,9 +46,12 @@
 }
 
 /* Same reason, one level out: no home indicator sits under a keyboard, so its
-   inset is dead space while the composer has focus. */
-.sv-a-root[data-variant='standalone']:focus-within {
-  padding-bottom: 0;
+   inset is dead space while the composer has focus. A phone thing, like the
+   composer's own padding below -- see the note there. */
+@media (max-width: 719px) {
+  .sv-a-root[data-variant='standalone']:focus-within {
+    padding-bottom: 0;
+  }
 }
 
 .sv-a-body {
@@ -224,19 +227,29 @@
   padding: var(--sp-4) var(--sv-a-gutter) var(--sp-5);
 }
 
-/* Typing: the box goes as low as the page allows.
+@media (min-width: 720px) {
+  .sv-a-composer {
+    padding: var(--sp-5) 0 var(--sp-7);
+  }
+}
+
+/* Typing, on a phone: the box goes as low as the page allows.
  
    Safari scrolls to reveal the bottom of the page, so every pixel below the
    composer is a pixel between the composer and the keys. The gap that got
    reported was ours -- a home indicator's inset and a resting margin, neither
-   of which is doing anything while somebody is typing. */
-.sv-a-root:focus-within .sv-a-composer {
-  padding-bottom: var(--sp-2);
-}
-
-@media (min-width: 720px) {
-  .sv-a-composer {
-    padding: var(--sp-5) 0 var(--sp-7);
+   of which is doing anything while somebody is typing.
+ 
+   Below the breakpoint and nowhere else. There is no keyboard on a desktop and
+   nothing to reclaim, so all this rule did there was drop the composer 20px
+   the moment you clicked into it and put it back when you clicked away --
+   which is a box that moves under the cursor for no reason. It used to be
+   unscoped, and two classes and a pseudo-class beat the plain
+   `.sv-a-composer` in the query above whatever the order, so the desktop's
+   own padding never stood a chance. */
+@media (max-width: 719px) {
+  .sv-a-root:focus-within .sv-a-composer {
+    padding-bottom: var(--sp-2);
   }
 }
 
