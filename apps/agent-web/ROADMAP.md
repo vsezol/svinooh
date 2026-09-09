@@ -82,8 +82,9 @@ per instance, gone on restart, and a second replica has never heard of it. There
 database behind either, for anyone, signed in or not.
 
 *So the URL reopens rather than shares.* `/ai/c/<id>` finds nothing for anybody else —
-including the same person on their phone — and clearing site data loses everything. The
-chat's own "Saved · svinooh.com/ai/c/<id>" card promises what the storage cannot keep.
+including the same person on their phone — and clearing site data loses everything.
+Which is also why the canvas's "Saved · svinooh.com/ai/c/<id>" line is not built yet:
+it would promise what the storage cannot keep.
 
 *And a visitor cannot be onboarded.* Creating a portfolio needs a token
 (`create_portfolio_with_wallets`), so a visitor who pastes an address is told to sign in
