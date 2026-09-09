@@ -99,7 +99,17 @@ export interface StepEvent {
   id: string;
   label?: string;
   state: 'running' | 'done' | 'failed';
+  /** How long it took, from the service, once it is over. */
   ms?: number;
+  /**
+   * When this side first heard the step start.
+   *
+   * Added here rather than sent, because it is what a running step counts up
+   * from and the service cannot say it — the number that matters to somebody
+   * watching is how long they have been waiting, which is measured from when
+   * the line appeared in front of them.
+   */
+  startedAt?: number;
 }
 
 export interface StreamHandlers {

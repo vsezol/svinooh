@@ -74,7 +74,7 @@ class TestWhatIsReported:
         labels = " ".join(str(s.get("label", "")) for s in reported)
         assert "portfolio" not in labels.lower()
 
-    async def test_a_failure_closes_the_line_rather_than_leaving_it_spinning(self):
+    async def test_a_failure_closes_the_line_rather_than_leaving_it_spinning(self, monkeypatch):
         async def boom():
             async with step("x", "Doing the thing"):
                 raise RuntimeError("no")
@@ -84,11 +84,44 @@ class TestWhatIsReported:
 
         # The writer is the graph's; outside one there is none, so this test
         # supplies its own and asserts the same events reach it.
-        object.__setattr__(steps, "_writer", lambda: seen.append)
+        #
+        # Through monkeypatch, which puts it back. Set with object.__setattr__
+        # it stayed set for the rest of the session, so every later test in
+        # this file had its steps posted into this list instead of the stream
+        # — and read an empty trace as a passing one.
+        monkeypatch.setattr(steps, "_writer", lambda: seen.append)
         with pytest.raises(RuntimeError):
             await boom()
         assert [s["state"] for s in seen] == ["running", "failed"]
         assert isinstance(seen[-1]["ms"], int)
+
+
+class TestNoPartOfTheWaitIsUnaccountedFor:
+    """The other half of the rule.
+
+    "Nothing on screen that did not happen" was kept from the start; this is
+    the half that was missing — everything that DOES happen says so. A turn
+    used to report the operations around the model and nothing about the model
+    itself, so a reader watched three lines close and then sat through several
+    seconds of a chat that looked frozen.
+    """
+
+    async def test_the_model_call_is_itself_an_operation(self):
+        reported = await steps_of({"question": "what is impermanent loss?"})
+        assert any(s.get("label") == "Writing the answer" for s in reported)
+
+    async def test_every_line_is_closed_by_the_end_of_the_turn(self):
+        # Nothing is left spinning: a line that opens and never closes is the
+        # same frozen chat by another route.
+        reported = await steps_of({"question": "what is impermanent loss?"})
+        opened = [s["id"] for s in reported if s.get("state") == "running"]
+        closed = [s["id"] for s in reported if s.get("state") in ("done", "failed")]
+        assert sorted(opened) == sorted(closed)
+
+    async def test_the_answer_is_still_the_answer(self):
+        # The step is a wrapper around the call, not a change to it.
+        state = await graph.agent_graph().ainvoke({"question": "q"})
+        assert state["answer"] == ANSWER
 
 
 class TestReportingIsNeverLoadBearing:
