@@ -63,27 +63,61 @@ the pattern generalises and that a new block kind is additive on the wire.
 
 **What it teaches.** Why the block vocabulary is versioned, and what "additively" buys.
 
-### 3. A conversation somebody else can open
+### 3. Somebody with no account, and a conversation that outlives the tab
+
+Three things that turn out to be one thing: onboarding without a sign-up, history that
+survives a reload, and a URL per conversation. All three need the same missing piece —
+a server that knows who is asking before it knows their name.
 
 **What landed.** `/ai` is the app's home and answers without an account, the landing
 hands it the first question, and `/ai/c/<id>` is a route
 ([#178](https://github.com/vsezol/svinooh/pull/178)).
 
-**What is left, and it is the point of the step.** That URL reopens a conversation; it
-does not share one. Conversations live in the browser that had them
-(`app/history.ts`), so the link finds nothing for anybody else — including the same
-person on their phone — and clearing site data loses them. The chat's own "Saved ·
-svinooh.com/ai/c/<id>" card promises something the storage cannot keep.
+**What is not true yet.**
 
-**The shape.** Durable history in the agent's own store, keyed by user — its own small
-database, never the portfolio's, so the service stays independent (see the note at the
-top of `sessions.py`, which has said this from the start). `history.ts` becomes wire
-calls and its localStorage key retires. Then sharing is a decision per conversation
-rather than a link that happens to work: a chat names positions and amounts, and the
-privacy rule is that nothing identifying somebody reaches anybody else by default.
+*Nothing is stored anywhere.* The transcript you see in the rail lives in the browser
+that had it (`app/history.ts`, localStorage). The context the model is replayed lives in
+the agent's RAM (`SessionStore`, keyed by an opaque `session_id`, capped and expiring) —
+per instance, gone on restart, and a second replica has never heard of it. There is no
+database behind either, for anyone, signed in or not.
 
-**What it teaches.** What has to be true before a URL can be shared, and why "it opens
-for me" is not the same as shareable.
+*So the URL reopens rather than shares.* `/ai/c/<id>` finds nothing for anybody else —
+including the same person on their phone — and clearing site data loses everything. The
+chat's own "Saved · svinooh.com/ai/c/<id>" card promises what the storage cannot keep.
+
+*And a visitor cannot be onboarded.* Creating a portfolio needs a token
+(`create_portfolio_with_wallets`), so a visitor who pastes an address is told to sign in
+— where the landing's whole premise is that they should not have to.
+
+**The shape.**
+
+1. **An anonymous identity.** A client-generated id, held in the browser and sent with
+   every request, so the service can key on somebody before it knows their name. It is a
+   soft identity by construction — clearing storage or opening a private window is a new
+   person — so it is what history hangs on, not what a limit is enforced by. A limit
+   wants an address behind it too.
+2. **Durable history in the agent's own store**, keyed by that identity and re-keyed to
+   the account when one is made. Its own small database, never the portfolio's, so the
+   service stays independent — the note at the top of `sessions.py` has said this from
+   the start. `history.ts` becomes wire calls and its localStorage key retires, and the
+   same store holds the session context, which is what stops a restart from losing the
+   thread.
+3. **A URL per conversation, from the first turn.** Not a share button that mints one —
+   every chat has an address the way every portfolio does, and `/ai` redirects to it.
+   Sharing is then a decision on the conversation rather than a link that happens to
+   work: a chat names positions and amounts, and the privacy rule is that nothing
+   identifying somebody reaches anybody else by default.
+4. **The agent creates a portfolio for a visitor.** With 1 in place, the anonymous POST
+   the API already has (`POST /portfolios/anonymous` — ownerless, claimable later) can be
+   what onboarding calls when there is no token, and a visit ends with a live portfolio
+   instead of a sign-in wall.
+5. **A free allowance, then the account.** Around five questions a session, then the
+   answer is the sign-in card. Counted against the identity from 1 for the copy, and
+   against something harder for the enforcement.
+
+**What it teaches.** That "who is asking" is the load-bearing question under three
+features that look unrelated, and the difference between an identity you can hang state
+on and one you can enforce a limit with.
 
 ### 4. A cheap labelling model, verified this time
 
