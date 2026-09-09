@@ -22,7 +22,7 @@ import { ScopeSelect } from '../components/ScopeSelect';
 import { ShareButton } from '../components/ShareButton';
 import { TAB_PARAM, homeTab, tabFromUrl, tabsFor, tabIndex, usePager } from '../components/tabs';
 import { usePaywall } from '../components/Paywall';
-import { AgentEmbed } from '../components/agent/AgentEmbed';
+import { AgentEmbed, preloadAgent } from '../components/agent/AgentEmbed';
 import { SideNav, type Tab } from '../components/SideNav';
 import { SyncedAgo } from '../components/SyncedAgo';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -400,6 +400,9 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
    */
   const paneProps = (key: Tab) => ({
     className: 'pane',
+    // Which page this is, so the stylesheet can say what it takes — see
+    // .pane[data-tab='agent'], which takes none of the page's padding.
+    'data-tab': key,
     'data-active': activeTab === key,
     'data-shown': onStrip(key),
   });
@@ -420,6 +423,26 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
     const root = document.documentElement;
     root.classList.toggle('agent-open', activeTab === 'agent');
   }, [activeTab, pager.moving]);
+
+  /**
+   * The chat's code, fetched while you are reading the portfolio.
+   *
+   * On idle, so it queues behind this page's own data rather than competing
+   * with it — and once, for the owner, because a visitor has no chat tab to
+   * turn to.
+   */
+  const canChat = data?.isOwner === true && AGENT_ENABLED;
+  useEffect(() => {
+    if (!canChat) return;
+    const start = () => preloadAgent(AGENT_WIDGET_URL);
+    const idle = window.requestIdleCallback;
+    if (idle) {
+      const id = idle(start, { timeout: 4000 });
+      return () => window.cancelIdleCallback?.(id);
+    }
+    const t = window.setTimeout(start, 1200);
+    return () => window.clearTimeout(t);
+  }, [canChat]);
   useEffect(() => () => document.documentElement.classList.remove('agent-open'), []);
 
 
