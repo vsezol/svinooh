@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
-import { useHoldStill } from '../app/useHoldStill';
-import { useKeyboardFit } from '../app/useKeyboardFit';
 
 interface Props {
   placeholder: string;
@@ -51,14 +49,8 @@ function useTouchKeyboard(): boolean {
  */
 export function Composer({ placeholder, disabled, onSend }: Props) {
   const [draft, setDraft] = useState('');
-  const [focused, setFocused] = useState(false);
   const box = useRef<HTMLTextAreaElement>(null);
   const touch = useTouchKeyboard();
-  // While this has focus the page fits the window the keyboard left and stops
-  // panning out from under it. Two halves of one thing: the fit removes the
-  // scroll, and taking the gesture means nothing can start another.
-  const keyboard = useKeyboardFit();
-  useHoldStill(focused);
 
   useEffect(() => {
     const node = box.current;
@@ -110,14 +102,6 @@ export function Composer({ placeholder, disabled, onSend }: Props) {
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={onKeyDown}
         aria-label="Message"
-        onFocus={() => {
-          setFocused(true);
-          keyboard.onFocus();
-        }}
-        onBlur={() => {
-          setFocused(false);
-          keyboard.onBlur();
-        }}
         autoComplete="off"
         // The key does what the label says: a return glyph where it opens a
         // line, "send" where it sends.

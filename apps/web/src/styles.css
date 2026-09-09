@@ -359,7 +359,7 @@ button {
      write it down again as 49 — the phone's header, without its tab strip —
      so the chat ran 8px past the bottom of the window and overflow:hidden
      ate the bottom of the composer. */
-  height: calc(var(--sv-a-vh, 100dvh) - var(--h-appbar) - env(safe-area-inset-top));
+  height: calc(100dvh - var(--h-appbar) - env(safe-area-inset-top));
   overflow: hidden;
 }
 
@@ -367,14 +367,13 @@ button {
    scroller so the transcript can be one, and stops padding the one tab that
    is measured against the window rather than laid out inside it.
 
-   The height follows the keyboard too, and it has to: 100% resolves against
-   the layout viewport, which Safari does not shrink for the keyboard. So
-   fitting only the chat left the document its full 714 with the chat 377 of
-   it — and 337px of empty body underneath, which is a scroller, and which is
-   exactly the blank strip that kept appearing under the composer. */
+   The height does not follow the keyboard. Three attempts at that are in the
+   history and the last one worked and still was not worth having — see
+   .sv-a-root[data-variant='standalone'] in the widget's base.css for the
+   numbers and the reasoning. iOS moves the page on focus; it is allowed to. */
 html.agent-open,
 html.agent-open body {
-  height: var(--sv-a-vh, 100%);
+  height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
 }
@@ -396,19 +395,15 @@ html.agent-open body {
        hairline. The header folds to 41 while you read, which gives the chat
        44px back rather than taking any — so this is the header at rest.
 
-       --sv-a-vh, above, is what is visible while the keyboard is up, and it
-       is set together with putting the window back to the top. That second
-       half is what the two earlier attempts left out: a page made shorter
-       while still scrolled leaves the window framing the space below it,
-       which is the blank screen reported both times. See useKeyboardFit. */
+       Not the keyboard's height — see the widget's base.css. */
     padding-bottom: env(safe-area-inset-bottom);
   }
 
-  /* No home indicator under a keyboard, so its inset is 34px of nothing
-     between the composer and the keys — which is the gap that got reported.
-     Reclaimed only while the chat is fitted to the keyboard, so the indicator
-     keeps its room every other moment. */
-  html[style*='--sv-a-vh'] .agent-embed {
+  /* Typing: no home indicator sits under a keyboard, so its inset is 34px of
+     nothing between the composer and the keys, and Safari scrolls to reveal
+     the bottom of the page — so those 34px are the gap that got reported.
+     Given back the moment the composer loses focus. */
+  .agent-embed:focus-within {
     padding-bottom: 0;
   }
 
