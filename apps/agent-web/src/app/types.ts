@@ -184,7 +184,7 @@ export interface MountOptions {
    * already returned can reach them. Not part of the public shape — mount
    * makes it and hands the filled version back.
    */
-  control?: { newChat: () => void; openConversation: (id: string) => void };
+  control?: { newChat: () => void; openConversation: (id: string) => void; openHistory: () => void };
 }
 
 /** One conversation, as much of it as a host needs to draw a row. */
@@ -203,4 +203,11 @@ export interface MountHandle {
   newChat(): void;
   /** Open one of the conversations reported through `onConversations`. */
   openConversation(id: string): void;
+  /**
+   * Show the list of past conversations.
+   *
+   * For a host with nowhere to draw them itself — a phone, where there is no
+   * rail. The chat opens its own sheet, which is the one the design draws.
+   */
+  openHistory(): void;
 }

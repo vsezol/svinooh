@@ -38,8 +38,10 @@ const MOON = (
   </svg>
 );
 
+// Sized by the stylesheet, which takes a point off both when the strip folds
+// — see .top-tab-actions in the kit.
 const PLUS = (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
     <path d="M12 5v14M5 12h14" />
   </svg>
 );
@@ -51,11 +53,13 @@ const ACCOUNT = (
   </svg>
 );
 
+// A clock, which is the design's mark for this. It was a rewind arrow wrapped
+// round one — three paths saying "go back in time" where the canvas says
+// "past conversations" with two.
 const HISTORY = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M3.5 12a8.5 8.5 0 1 0 2.5-6L3.5 8.5" />
-    <path d="M3.5 3.5v5h5" />
-    <path d="M12 7.5V12l3 2" />
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
   </svg>
 );
 

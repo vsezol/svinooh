@@ -372,6 +372,18 @@ body {
   flex-shrink: 0;
 }
 
+/* 16px in the strip at rest. Folded, the strip is 40px carrying the wordmark
+   too, and the design takes a point off the icons to pay for it. */
+.top-tab-actions svg {
+  width: 16px;
+  height: 16px;
+}
+
+.app-header[data-folded='true'] .top-tab-actions svg {
+  width: 15px;
+  height: 15px;
+}
+
 /* A desktop has a rail showing the same list, so the strip goes and the
    wordmark row stays — one header, two shapes, no second component.
 
