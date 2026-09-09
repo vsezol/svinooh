@@ -101,14 +101,18 @@ export function AppHeader({
 
   return (
     <header className="app-header" data-folded={folded}>
-      {/* Folded, the wordmark row is gone and its mark rides in the strip. */}
-      {folded ? null : (
-        <div className="app-brand">
-          {/* Sized by the stylesheet: 19px on a phone, 21 where there is room. */}
-          <Logo size={null} onClick={onLogo} />
-          {brandActions ? <div className="app-brand-actions">{brandActions}</div> : null}
-        </div>
-      )}
+      {/* Always rendered; the stylesheet hides it when folded, and only on a
+          phone. Folding used to remove it here, at any width -- and above the
+          breakpoint the strip is hidden too, so a scrolled desktop page was
+          left with a header one pixel tall: no wordmark, no theme switch, no
+          way back to the site. The fold buys back a row on the screen with
+          the fewest of them; a desktop header has one row and nothing to
+          trade. */}
+      <div className="app-brand">
+        {/* Sized by the stylesheet: 19px on a phone, 21 where there is room. */}
+        <Logo size={null} onClick={onLogo} />
+        {brandActions ? <div className="app-brand-actions">{brandActions}</div> : null}
+      </div>
       {strip ? <div className="top-tabs">{strip}</div> : null}
     </header>
   );

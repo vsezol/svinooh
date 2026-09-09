@@ -170,8 +170,37 @@ export interface MountOptions {
   variant?: 'embedded' | 'standalone';
   /** Signed-in state the shell already knows (avoids a flash in the door). */
   signedIn?: boolean;
+  /**
+   * The conversations, whenever they change.
+   *
+   * A host with a rail of its own draws them there — the design puts New chat
+   * and the history list in the sidebar, beside the pages, rather than as
+   * buttons floating over the transcript. The widget still owns them; this is
+   * how it says what it has.
+   */
+  onConversations?: (list: ConversationRef[]) => void;
+  /**
+   * A box the component fills in with its two actions, so the handle mount()
+   * already returned can reach them. Not part of the public shape — mount
+   * makes it and hands the filled version back.
+   */
+  control?: { newChat: () => void; openConversation: (id: string) => void };
+}
+
+/** One conversation, as much of it as a host needs to draw a row. */
+export interface ConversationRef {
+  id: string;
+  title: string;
+  /** When it was last spoken to, in ms. */
+  at: number;
+  /** Whether it is the one on screen. */
+  active: boolean;
 }
 
 export interface MountHandle {
   unmount(): void;
+  /** Start a fresh conversation, as the rail's New chat does. */
+  newChat(): void;
+  /** Open one of the conversations reported through `onConversations`. */
+  openConversation(id: string): void;
 }

@@ -34,8 +34,9 @@ interface AgentMount {
       theme?: 'dark' | 'light';
       variant?: 'embedded' | 'standalone';
       signedIn?: boolean;
+      onConversations?: (list: ConversationRef[]) => void;
     },
-  ): { unmount(): void };
+  ): { unmount(): void; newChat(): void; openConversation(id: string): void };
 }
 
 /**
@@ -71,9 +72,26 @@ interface Props {
   slug: string;
   token?: string;
   portfolios?: { slug: string; name: string | null }[];
+  /** The chat's own conversations, for a host that draws them in its rail. */
+  onConversations?: (list: ConversationRef[]) => void;
+  /** Filled in once the widget is up, so the rail can drive it. */
+  control?: { current: AgentControl | null };
 }
 
-export function AgentEmbed({ widgetUrl, agentUrl, slug, token, portfolios }: Props) {
+/** One conversation, as much as a rail needs to draw a row. */
+export interface ConversationRef {
+  id: string;
+  title: string;
+  at: number;
+  active: boolean;
+}
+
+export interface AgentControl {
+  newChat(): void;
+  openConversation(id: string): void;
+}
+
+export function AgentEmbed({ widgetUrl, agentUrl, slug, token, portfolios, onConversations, control }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
 
@@ -84,51 +102,30 @@ export function AgentEmbed({ widgetUrl, agentUrl, slug, token, portfolios }: Pro
   // is mounted — it is mounted only while it is the open tab — the page is not
   // a scroller at all.
   //
-  // That is necessary and not sufficient, which is the whole iOS problem. A
-  // keyboard there does not shrink the page: the layout viewport keeps its
-  // full height and only the *visual* viewport — the part you can actually see
-  // — gets smaller. Safari then slides that window down the page to keep the
-  // focused field in it, and everything measured against the layout viewport,
-  // the sticky header included, slides off the top. Nothing has scrolled; the
-  // page is simply being looked at through a smaller hole, lower down.
+  // That is necessary and not sufficient, and the sufficient part is not
+  // available. A keyboard on iOS does not shrink the page: the layout viewport
+  // keeps its height, only the visible part gets smaller, and Safari slides
+  // that window down to keep the focused field in it. Everything measured
+  // against the page slides off the top with it.
   //
   // `interactive-widget=resizes-content` is the declarative answer and Safari
-  // does not implement it. So the visible height is measured and handed to the
-  // stylesheet, and the chat is built to that instead of to the page.
+  // does not implement it. Measuring `visualViewport.height` and building the
+  // chat to that is the usual workaround, and it was tried here and shipped
+  // and was worse: the number arrives late on Safari, so the chat resized a
+  // beat behind the keyboard and settled at a size that fitted neither state.
+  // Same wall YouTube and VK hit, and they let the page move too.
   //
-  // That treats the cause rather than the symptom, which matters here. The
-  // tempting fix is to translate the app back up by the offset Safari slid it
-  // — but a transform makes an element the containing block for every fixed
-  // thing inside it, and the account menu is a fixed portal. Sizing the chat
-  // to what is visible means the composer is already in the visible part, so
-  // Safari never slides anything and there is no offset to undo.
+  // So the page is allowed to move. Safari lifts it to put the composer above
+  // the keyboard and puts it back on blur, which is one whole movement that
+  // reverses itself rather than a layout arguing with a measurement.
   useEffect(() => {
     const root = document.documentElement;
     root.classList.add('agent-open');
-
-    const vv = window.visualViewport;
-    const measure = () => {
-      if (!vv) return;
-      // How much of the page is actually on screen right now. With the page
-      // itself unable to scroll, the visible part starts at the top, so this
-      // one number is the whole of what the chat has to fit inside.
-      root.style.setProperty('--visible-h', `${Math.round(vv.height)}px`);
-    };
-
-    measure();
-    vv?.addEventListener('resize', measure);
-    vv?.addEventListener('scroll', measure);
-
-    return () => {
-      root.classList.remove('agent-open');
-      vv?.removeEventListener('resize', measure);
-      vv?.removeEventListener('scroll', measure);
-      root.style.removeProperty('--visible-h');
-    };
+    return () => root.classList.remove('agent-open');
   }, []);
 
   useEffect(() => {
-    let handle: { unmount(): void } | null = null;
+    let handle: AgentControl & { unmount(): void } | null = null;
     // The load is async and the tab can close before it lands; mounting into a
     // detached node would leak a React root nothing ever unmounts.
     let cancelled = false;
@@ -149,7 +146,11 @@ export function AgentEmbed({ widgetUrl, agentUrl, slug, token, portfolios }: Pro
           // keep in step. `theme` is for the standalone door.
           variant: 'embedded',
           signedIn: Boolean(token),
+          onConversations,
         });
+        // The rail drives the chat through this: New chat, and opening one of
+        // the conversations it was just told about.
+        if (control) control.current = handle;
       } catch {
         // A remote that will not load is a tab that says so, not a blank pane
         // or a crashed page.
@@ -159,12 +160,13 @@ export function AgentEmbed({ widgetUrl, agentUrl, slug, token, portfolios }: Pro
 
     return () => {
       cancelled = true;
+      if (control) control.current = null;
       handle?.unmount();
     };
     // Remounting on a token or portfolio change is the point: both decide what
     // the chat is allowed to see, and the mount contract has no way to revise
     // them in place.
-  }, [widgetUrl, agentUrl, slug, token, portfolios]);
+  }, [widgetUrl, agentUrl, slug, token, portfolios, onConversations, control]);
 
   if (failed) {
     return (

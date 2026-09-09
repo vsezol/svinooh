@@ -28,35 +28,6 @@
   margin-left: auto;
 }
 
-.sv-a-c-logo {
-  display: inline-flex;
-  align-items: baseline;
-  font-family: var(--sans);
-  font-size: 19px;
-  font-weight: var(--fw-heavy);
-  letter-spacing: -0.03em;
-  color: var(--text);
-  user-select: none;
-}
-
-/* The wordmark's two o's are the product logo's ring eyes. */
-.sv-a-c-logo-eye {
-  display: inline-block;
-  width: 0.56em;
-  height: 0.56em;
-  border: 0.135em solid var(--acc);
-  border-radius: 50%;
-  margin-left: 0.06em;
-}
-
-.sv-a-c-logo-eye[data-second='true'] {
-  margin-left: -0.14em;
-}
-
-.sv-a-c-logo-h {
-  margin-left: 0.05em;
-}
-
 /* Which theme icon shows is decided in CSS off data-theme, not in JS: the
    attribute is set before first paint, a JS choice would flash on hydration.
    Dark is the themeless default, matching the host convention. */
@@ -99,19 +70,30 @@ body[data-theme='light'] .sv-a-c-on-light {
 /* width:fit-content + margin-left:auto right-aligns even outside a flex log. */
 .sv-a-c-user {
   width: fit-content;
-  max-width: 85%;
   margin-left: auto;
   align-self: flex-end;
   background: var(--acc-soft);
-  border-radius: 10px;
-  padding: 9px 12px;
+  /* A bubble with a tail: square-ish at the corner it is spoken from, round
+     everywhere else. It was a 10px box from the first design and stayed one
+     through the second, where it is this. */
+  border-radius: 18px 18px 4px 18px;
+  padding: 9px 14px;
   font-family: var(--sans);
-  font-size: 13px;
-  font-weight: var(--fw-bold);
+  /* Reading size, and regular. It was 13px bold, which is a label; what is in
+     here is a sentence somebody wrote. */
+  font-size: var(--fs-read);
   line-height: 1.45;
   color: var(--text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* 82%, and stated against the container so it beats the overflow guard below
+   it -- .sv-a-items caps every child at 100% to stop a wide table pushing the
+   column sideways, which also quietly uncapped this. A bubble that reaches
+   the far margin stops reading as one side of a conversation. */
+.sv-a-items > .sv-a-c-user {
+  max-width: 82%;
 }
 
 /* The blocks of one answer, stacked. 12px between them because a chart under
@@ -235,7 +217,8 @@ body[data-theme='light'] .sv-a-c-on-light {
   display: flex;
   gap: var(--sp-3);
   overflow-x: auto;
-  padding: 0 14px 8px;
+  /* Flush with the composer they belong to. The gutter is .sv-a-main's. */
+  padding: 0 0 var(--sp-4);
   flex-shrink: 0;
   scrollbar-width: none;
 }
@@ -439,10 +422,13 @@ body[data-theme='light'] .sv-a-c-on-light {
   gap: 14px;
 }
 
+/* The design's sidebar: 232 wide, 16/12 padding, 4px between rows. Same box
+   the site draws beside its pages -- see .side-rail. */
 .sv-a-c-hist[data-mode='rail'] {
-  width: 250px;
+  width: 232px;
   flex: none;
-  padding: 22px;
+  gap: var(--sp-2);
+  padding: 16px 12px;
   min-height: 0;
   overflow-y: auto;
 }
@@ -569,98 +555,12 @@ body[data-theme='light'] .sv-a-c-on-light {
   padding: 24px 16px;
 }
 
-.sv-a-c-door-head {
-  margin: 0;
-  font-family: var(--sans);
-  font-size: var(--fs-display);
-  font-weight: var(--fw-heavy);
-  letter-spacing: var(--tr-tight);
-  color: var(--text);
-}
-
-.sv-a-c-door-sub {
-  margin: 0;
-  font-family: var(--sans);
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--mut);
-  max-width: 400px;
-}
-
-.sv-a-c-door-features {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 14px 0;
-  text-align: left;
-}
-
-.sv-a-c-door-feature {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-family: var(--sans);
-  font-size: 13px;
-  color: var(--text);
-}
-
-.sv-a-c-door-icon {
-  display: inline-flex;
-  flex: none;
-  color: var(--acc-text);
-}
-
 .sv-a-c-door-ctas {
   display: flex;
   flex-direction: column;
   gap: 8px;
   width: 100%;
   max-width: 300px;
-}
-
-.sv-a-c-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 10px;
-  padding: 24px 16px;
-}
-
-.sv-a-c-empty-title {
-  margin: 0;
-  font-family: var(--sans);
-  font-size: var(--fs-title);
-  font-weight: var(--fw-heavy);
-  color: var(--text);
-}
-
-.sv-a-c-empty-copy {
-  margin: 0;
-  font-family: var(--sans);
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--mut);
-  max-width: 420px;
-}
-
-
-.sv-a-c-pills {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin: 6px 0 2px;
-}
-
-.sv-a-c-pill {
-  border: 1px solid var(--line2);
-  border-radius: var(--r-full);
-  padding: 7px 12px;
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--text);
 }
 
 /* The standalone top bar is the product's header: the shared .app-header

@@ -51,17 +51,69 @@
     flex: none;
     /* The drag writes this variable directly, so a resize costs a style
        recalculation instead of a React render. */
-    width: var(--sv-a-rail-width, 250px);
+    width: var(--sv-a-rail-width, 232px);
     min-height: 0;
     border-right: 1px solid var(--line);
   }
 }
 
+/* One gutter, drawn once.
+
+   The chat is a stack of rows -- a portfolio chip, a transcript, the openers,
+   a composer -- and each of them used to inset itself. Two of them agreed at
+   12px, one at 14, one at nothing, and the result was four different left
+   edges on one screen. The gutter is .sv-a-main's now, and nothing inside it
+   has a horizontal padding of its own.
+
+   Embedded, it is zero: the page around the chat has already drawn a gutter,
+   and a second one inside it is just a narrower column with a seam down the
+   side. */
+.sv-a-root {
+  /* 14px, not a spacing token: the scale collapsed 14 into 12 because the odd
+     numbers in it were nudges, but this one is a page gutter -- the design's
+     phone gutter and the same one .app-main draws on the site. 32 above the
+     breakpoint, which is the design's too. */
+  --sv-a-gutter: 14px;
+}
+
+@media (min-width: 720px) {
+  .sv-a-root {
+    --sv-a-gutter: var(--sp-8);
+  }
+}
+
+.sv-a-root[data-variant='embedded'] {
+  --sv-a-gutter: 0px;
+}
+
 .sv-a-main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  padding: 0 var(--sv-a-gutter);
+}
+
+/* The chat's column, and the only place its width is decided.
+
+   760px centred inside the gutter -- the design's own mainStyle/colStyle
+   pair. Everything that stacks in the chat lives in here, so the openers,
+   the transcript and the composer cannot drift apart: there is one edge and
+   they all sit on it. */
+.sv-a-col {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 720px) {
+  .sv-a-col {
+    max-width: 760px;
+    margin: 0 auto;
+  }
 }
 
 /* Embedded top bar: grounding chip left, chat controls right. */
@@ -83,23 +135,13 @@
   justify-content: space-between;
   gap: var(--sp-4);
   width: 100%;
-  max-width: 720px;
-  margin: 0 auto;
-  padding: var(--sp-4) var(--sp-5);
+  padding: var(--sp-4) 0;
 }
 
 @media (max-width: 719px) {
   .sv-a-topbar[data-variant='standalone'] {
     display: none;
   }
-}
-
-/* Pushed to the end rather than spaced against a sibling: embedded this row
-   holds nothing else, and space-between with one child leaves it on the left. */
-.sv-a-topbar-actions {
-  margin-left: auto;
-  display: flex;
-  gap: var(--sp-4);
 }
 
 .sv-a-log {
@@ -117,7 +159,6 @@
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  padding: 0 var(--sp-5);
 }
 
 /* margin-top:auto anchors a short log to the bottom edge while a long log
@@ -127,7 +168,6 @@
   flex-direction: column;
   gap: var(--sp-5);
   width: 100%;
-  max-width: 720px;
   margin: auto auto 0;
   padding: var(--sp-6) 0;
 }
@@ -135,7 +175,6 @@
 .sv-a-empty {
   margin: auto;
   width: 100%;
-  max-width: 720px;
   display: flex;
   justify-content: center;
 }
@@ -143,9 +182,13 @@
 .sv-a-composer {
   flex: none;
   width: 100%;
-  max-width: 720px;
-  margin: 0 auto;
-  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+  padding: var(--sp-4) 0 var(--sp-5);
+}
+
+@media (min-width: 720px) {
+  .sv-a-composer {
+    padding: var(--sp-5) 0 var(--sp-7);
+  }
 }
 
 /* ── the rail's own furniture ─────────────────────────────────────────────
@@ -181,43 +224,6 @@
 
 .sv-a-rail-handle:hover::after {
   opacity: 0.5;
-}
-
-.sv-a-rail-toggle {
-  position: absolute;
-  right: 10px;
-  bottom: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--line2);
-  border-radius: var(--r-sm);
-  background: var(--surf);
-  color: var(--mut);
-  cursor: pointer;
-  transition: color var(--ease-quick), border-color var(--ease-quick);
-}
-
-.sv-a-rail-toggle:hover {
-  color: var(--text);
-  border-color: var(--acc);
-}
-
-.sv-a-rail[data-collapsed] .sv-a-rail-toggle {
-  right: 50%;
-  transform: translateX(50%);
-}
-
-/* The chevrons point the way the click goes. */
-.sv-a-rail[data-collapsed] .sv-a-rail-toggle svg {
-  transform: scaleX(-1);
-}
-
-.sv-a-c-hist[data-collapsed] {
-  align-items: center;
-  padding: 22px 0;
 }
 
 /* Nothing inside the chat may be wider than the chat. Long unbroken strings —
@@ -270,6 +276,14 @@
 .sv-a-root :where(*) {
   scrollbar-width: thin;
   scrollbar-color: var(--line2) transparent;
+}
+
+/* Except the openers, which say "there are more" by being cut off at the
+   edge. A bar under six chips reads as a second thing to operate. :where()
+   above gives that rule no specificity, but it is the later sheet, so the
+   opt-out has to be stated where the rule is. */
+.sv-a-root .sv-a-c-chips {
+  scrollbar-width: none;
 }
 
 .sv-a-root :where(*)::-webkit-scrollbar {

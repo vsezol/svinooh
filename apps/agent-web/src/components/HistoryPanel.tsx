@@ -9,8 +9,6 @@ interface Props {
   onNew: () => void;
   onClose?: () => void;
   mode: 'rail' | 'popover' | 'sheet';
-  /** Rail only: the icon-sized state. */
-  collapsed?: boolean;
 }
 
 const PLUS = (
@@ -41,7 +39,7 @@ function relativeDate(at: number, now: number = Date.now()): string {
 }
 
 /** Past conversations: a static rail on desktop, popover or sheet elsewhere. */
-export function HistoryPanel({ conversations, currentId, onSelect, onNew, onClose, mode, collapsed }: Props) {
+export function HistoryPanel({ conversations, currentId, onSelect, onNew, onClose, mode }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   useDismiss(mode === 'popover', onClose, ref);
 
@@ -77,30 +75,27 @@ export function HistoryPanel({ conversations, currentId, onSelect, onNew, onClos
   );
 
   if (mode === 'rail') {
-    // Collapsed, the rail keeps only the one action that still makes sense at
-    // icon size; the list needs width to say anything at all.
-    if (collapsed) {
-      return (
-        <aside className="sv-a-c-hist" data-mode="rail" data-collapsed="true">
-          <button
-            type="button"
-            className="ui-icon-btn"
-            data-variant="soft"
-            data-size="sm"
-            onClick={onNew}
-            aria-label="New chat"
-            title="New chat"
-          >
-            {PLUS}
-          </button>
-        </aside>
-      );
-    }
+    // The kit's rail furniture, the same classes the site's own sidebar uses.
+    // Two rails drawing one design is how they drifted apart the first time.
     return (
       <aside className="sv-a-c-hist" data-mode="rail">
-        {newChat(true)}
-        <div className="sv-a-c-eyebrow">History</div>
-        {list}
+        <button type="button" className="rail-new" onClick={onNew}>
+          {PLUS}
+          New chat
+        </button>
+        <div className="rail-eyebrow mono">HISTORY</div>
+        {conversations.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            className="rail-history"
+            data-active={c.id === currentId ? 'true' : undefined}
+            onClick={() => onSelect(c.id)}
+          >
+            <span className="rail-history-title">{c.title}</span>
+            <span className="rail-history-when mono">{relativeDate(c.at)}</span>
+          </button>
+        ))}
       </aside>
     );
   }

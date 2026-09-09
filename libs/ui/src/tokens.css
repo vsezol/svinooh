@@ -44,6 +44,10 @@ body {
   --fs-nav: 13.5px;
   --fs-nav-tight: 12.5px;
   /* The default. Body copy, inputs, buttons, navigation */
+  /* The label on a compact control — a pill you press, a row you pick. Between
+     note and body because it has to read as pressable at a glance without
+     taking the weight of body text. */
+  --fs-control: 13px;
   --fs-body: 14px;
   /* Emphasis within a card — a wallet's total, a landing lede */
   /* What a chat is set in. A shade above body because an answer is read a

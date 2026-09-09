@@ -2,18 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 const WIDTH_KEY = 'svinooh_agent_rail_width';
-const COLLAPSED_KEY = 'svinooh_agent_rail_collapsed';
 const MIN = 190;
 const MAX = 420;
-const DEFAULT = 250;
-/** Wide enough for an icon and its padding, and nothing else. */
-export const COLLAPSED_WIDTH = 56;
-
-const CHEVRONS = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5" />
-  </svg>
-);
+/* The design's sidebar width. The rail is resizable from here, but it opens
+   on the number the design draws and the site's own rail keeps. */
+const DEFAULT = 232;
 
 function read(key: string, fallback: number): number {
   try {
@@ -34,11 +27,16 @@ function write(key: string, value: string): void {
 }
 
 interface Props {
-  children: (collapsed: boolean) => ReactNode;
+  children: ReactNode;
 }
 
 /**
- * The side rail: draggable width, collapsible, and it remembers both.
+ * The side rail: draggable width, and it remembers it.
+ *
+ * It does not collapse. It used to, with a chevron parked in its bottom
+ * corner — a control the design does not draw, on a rail whose whole job is
+ * to show a list of titles you can read. The site's own rail lost the same
+ * control for the same reason.
  *
  * The width lives in a CSS custom property rather than React state during a
  * drag — the pointer moves far more often than a chat needs to re-render, and
@@ -46,20 +44,14 @@ interface Props {
  * when the pointer is released.
  */
 export function Rail({ children }: Props) {
-  const [collapsed, setCollapsed] = useState(false);
   const [width, setWidth] = useState(DEFAULT);
   const rail = useRef<HTMLElement>(null);
   const dragging = useRef(false);
 
-  // Read once, on the client: the values live in storage, which does not exist
+  // Read once, on the client: the value lives in storage, which does not exist
   // while the page is being prepared.
   useEffect(() => {
     setWidth(read(WIDTH_KEY, DEFAULT));
-    try {
-      setCollapsed(localStorage.getItem(COLLAPSED_KEY) === '1');
-    } catch {
-      setCollapsed(false);
-    }
   }, []);
 
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -90,44 +82,23 @@ export function Rail({ children }: Props) {
     }
   }, []);
 
-  const toggle = () => {
-    setCollapsed((was) => {
-      write(COLLAPSED_KEY, was ? '0' : '1');
-      return !was;
-    });
-  };
-
   return (
     <aside
       ref={rail}
       className="sv-a-rail"
-      data-collapsed={collapsed || undefined}
-      style={{ ['--sv-a-rail-width' as string]: `${collapsed ? COLLAPSED_WIDTH : width}px` }}
+      style={{ ['--sv-a-rail-width' as string]: `${width}px` }}
     >
-      <div className="sv-a-rail-body">{children(collapsed)}</div>
-      <button
-        type="button"
-        className="sv-a-rail-toggle"
-        onClick={toggle}
-        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        aria-expanded={!collapsed}
-      >
-        {CHEVRONS}
-      </button>
-      {/* No handle while collapsed: dragging a rail that is not showing its
-          width would be a gesture with nothing to see. */}
-      {collapsed ? null : (
-        <div
-          className="sv-a-rail-handle"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize sidebar"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-        />
-      )}
+      <div className="sv-a-rail-body">{children}</div>
+      <div
+        className="sv-a-rail-handle"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      />
     </aside>
   );
 }
