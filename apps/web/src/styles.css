@@ -861,3 +861,71 @@ html.agent-open body {
     text-align: left !important;
   }
 }
+
+/* ───────── the landing ─────────
+   The front door: the hero's field is a real composer, and everything under it
+   is the product demonstrating itself. Classes only where a media query or a
+   keyframe needs a home — every other number is inline beside the markup it
+   belongs to, the way the rest of the app is written. */
+
+/* The caret that blinks at the end of the question typing itself in. A step
+   function, not a fade: a caret does not dim. */
+@keyframes svcaret {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* An answer, or a block under one, arriving. */
+@keyframes svin {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The examples under the composer. They scroll sideways rather than wrapping,
+   so the row is one line at every width — and the bar goes, because a
+   scrollbar under three chips reads as a second thing to operate. */
+.sv-l-chips {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.sv-l-chips::-webkit-scrollbar {
+  display: none;
+}
+
+/* Text one side, a card the other. Auto-fit rather than a breakpoint: the
+   columns fold when 300px each stops fitting, wherever that is. */
+.sv-l-split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: clamp(24px, 4vw, 64px);
+  align-items: center;
+}
+
+/* The other square of the checkerboard — the card leads, so the eye
+   alternates on the way down the page.
+
+   Done here rather than in the markup so the DOM order stays the reading
+   order: the text explains the card, so a screen reader and a folded single
+   column both want it first. Narrower than 860 the two columns are too tight
+   for a card to open with, and it goes back to following its text. */
+@media (min-width: 860px) {
+  .sv-l-split[data-lead='card'] > :first-child {
+    order: 2;
+  }
+
+  .sv-l-split[data-lead='card'] > :last-child {
+    order: 1;
+  }
+}

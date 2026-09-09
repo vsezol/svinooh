@@ -34,6 +34,7 @@ Three rules run through all of it:
 | [#147](https://github.com/vsezol/svinooh/pull/147) | One header, and it folds | Everything else sits on it, and there were two of them |
 | [#148](https://github.com/vsezol/svinooh/pull/148) | The chat shows its work | The trace, the links, the typography — and the real step events behind them |
 | [#151](https://github.com/vsezol/svinooh/pull/151) | The chart in a chat is the chart | Rule 1, made true for the first widget |
+| [#178](https://github.com/vsezol/svinooh/pull/178) | The landing is the front door, and `/ai` is the app's home | Step 3, most of it — see what is left of it below |
 
 ## Next
 
@@ -62,14 +63,62 @@ the pattern generalises and that a new block kind is additive on the wire.
 
 **What it teaches.** Why the block vocabulary is versioned, and what "additively" buys.
 
-### 3. A chat has a URL
+### 3. Somebody with no account, and a conversation that outlives the tab
 
-`/ai` and `/ai/c/<id>`. The chat becomes the app's home, a conversation can be linked,
-and returning to one is a navigation rather than a tab you happened to leave open.
-Artboard 04 shows the link in the desktop sidebar.
+Three things that turn out to be one thing: onboarding without a sign-up, history that
+survives a reload, and a URL per conversation. All three need the same missing piece —
+a server that knows who is asking before it knows their name.
 
-**What it teaches.** Routing state that is worth putting in a URL, and what happens to
-the swipeable pager when tabs become routes.
+**What landed.** `/ai` is the app's home and answers without an account, the landing
+hands it the first question, and `/ai/c/<id>` is a route
+([#178](https://github.com/vsezol/svinooh/pull/178)).
+
+**What is not true yet.**
+
+*Nothing is stored anywhere.* The transcript you see in the rail lives in the browser
+that had it (`app/history.ts`, localStorage). The context the model is replayed lives in
+the agent's RAM (`SessionStore`, keyed by an opaque `session_id`, capped and expiring) —
+per instance, gone on restart, and a second replica has never heard of it. There is no
+database behind either, for anyone, signed in or not.
+
+*So the URL reopens rather than shares.* `/ai/c/<id>` finds nothing for anybody else —
+including the same person on their phone — and clearing site data loses everything.
+Which is also why the canvas's "Saved · svinooh.com/ai/c/<id>" line is not built yet:
+it would promise what the storage cannot keep.
+
+*And a visitor cannot be onboarded.* Creating a portfolio needs a token
+(`create_portfolio_with_wallets`), so a visitor who pastes an address is told to sign in
+— where the landing's whole premise is that they should not have to.
+
+**The shape.**
+
+1. **An anonymous identity.** A client-generated id, held in the browser and sent with
+   every request, so the service can key on somebody before it knows their name. It is a
+   soft identity by construction — clearing storage or opening a private window is a new
+   person — so it is what history hangs on, not what a limit is enforced by. A limit
+   wants an address behind it too.
+2. **Durable history in the agent's own store**, keyed by that identity and re-keyed to
+   the account when one is made. Its own small database, never the portfolio's, so the
+   service stays independent — the note at the top of `sessions.py` has said this from
+   the start. `history.ts` becomes wire calls and its localStorage key retires, and the
+   same store holds the session context, which is what stops a restart from losing the
+   thread.
+3. **A URL per conversation, from the first turn.** Not a share button that mints one —
+   every chat has an address the way every portfolio does, and `/ai` redirects to it.
+   Sharing is then a decision on the conversation rather than a link that happens to
+   work: a chat names positions and amounts, and the privacy rule is that nothing
+   identifying somebody reaches anybody else by default.
+4. **The agent creates a portfolio for a visitor.** With 1 in place, the anonymous POST
+   the API already has (`POST /portfolios/anonymous` — ownerless, claimable later) can be
+   what onboarding calls when there is no token, and a visit ends with a live portfolio
+   instead of a sign-in wall.
+5. **A free allowance, then the account.** Around five questions a session, then the
+   answer is the sign-in card. Counted against the identity from 1 for the copy, and
+   against something harder for the enforcement.
+
+**What it teaches.** That "who is asking" is the load-bearing question under three
+features that look unrelated, and the difference between an identity you can hang state
+on and one you can enforce a limit with.
 
 ### 4. A cheap labelling model, verified this time
 
@@ -110,7 +159,24 @@ confirmation is read as a clear yes. No single model output can reach the signin
 **What it teaches.** Human-in-the-loop for something that costs money, and why the gate
 is structural rather than a line in a prompt.
 
-### 6. The desktop, properly
+### 6. The insight cards read the chain
+
+**The debt.** The landing's yield card — a day of USDC lending replayed, four lenders
+filling in proportion to what they hold — runs on figures that are typical rather than
+measured (`apps/web/src/lib/yield-replay.ts`). Nothing in this app aggregates lending
+markets: a position carries the APY its own protocol reports, and no one sums them. The
+card carries no LIVE badge for that reason, and its heading states a count of lenders
+that nothing counts.
+
+**The shape.** A real source behind `replayFrame` — the same seam the card already reads
+through, so the card does not change. Then the same source is a tool the agent can call,
+which is what makes "where are the best LPs putting USDC?" — the question the landing
+puts in a pill, right beside the card — an answer rather than a promise.
+
+**What it teaches.** How an illustration on a marketing page becomes a data source the
+product answers from, and that the honest version says which one it is.
+
+### 7. The desktop, properly
 
 Artboard 04: the sidebar with AI first, the history list, the shareable link. Today the
 desktop is the mobile layout in a wider window.

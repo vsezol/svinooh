@@ -19,9 +19,18 @@ export function mount(el: HTMLElement, opts: MountOptions): MountHandle {
     openConversation: (_id: string) => undefined,
     openHistory: () => undefined,
   };
-  root.render(<App {...opts} control={control} />);
+  // What the chat is currently mounted with. Kept so `update` can change one
+  // option — a token that has just arrived — without the host having to
+  // restate the rest of them, or unmount and lose the conversation.
+  let current = opts;
+  const draw = () => root.render(<App {...current} control={control} />);
+  draw();
   return {
     unmount: () => root.unmount(),
+    update: (next: Partial<MountOptions>) => {
+      current = { ...current, ...next };
+      draw();
+    },
     newChat: () => control.newChat(),
     openConversation: (id: string) => control.openConversation(id),
     openHistory: () => control.openHistory(),

@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev -p 5173",
     "build": "next build",
-    "start": "next start -p ${PORT:-4173}"
+    "start": "next start -p ${PORT:-4173}",
+    "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@module-federation/runtime": "^2.9.0",

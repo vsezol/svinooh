@@ -16,7 +16,18 @@ export type SignInMethod = 'telegram' | 'x' | 'dev';
 interface ProductEvents {
   /** A successful sign-in, whichever flow completed it */
   signed_in: { method: SignInMethod };
-  /** A portfolio brought into being — from the landing's address box or the switcher */
+  /**
+   * The landing's composer used as the front door: a first question asked, and
+   * the page handed over to the chat. No properties — what was typed is the
+   * visitor's, and often a wallet address.
+   */
+  landing_asked: Record<string, never>;
+  /**
+   * A portfolio brought into being. 'switcher' is the only live source: the
+   * landing's address box is gone — the composer sends everything to the chat
+   * now — and 'landing' stays in the union because the events it produced are
+   * still in PostHog.
+   */
   portfolio_created: { source: 'landing' | 'switcher' };
   /** A wallet added to a portfolio that already exists */
   wallet_added: { chain: string };
