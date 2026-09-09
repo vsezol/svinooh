@@ -139,13 +139,29 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
    * wallet address. Then the page lifts and fades, and /ai mounts under it
    * with the question already in the log.
    */
+  /** The page lifts and fades, and the chat takes the screen behind it. */
+  const leave = () => {
+    if (leaving) return;
+    setLeaving(true);
+    window.setTimeout(() => router.push('/ai'), LEAVE_MS);
+  };
+
   const send = (text: string) => {
     if (leaving) return;
     parkQuestion(text);
     track('landing_asked', {});
-    setLeaving(true);
-    window.setTimeout(() => router.push('/ai'), LEAVE_MS);
+    leave();
   };
+
+  /**
+   * The same door, opened with nothing to say yet.
+   *
+   * The closing card's button is not a scroll back up to the field — it is the
+   * way in, and by the time somebody has read the whole page they have been
+   * asked to start a conversation four times. So it starts one, empty, and the
+   * chat's own openers are there for anybody still deciding what to ask.
+   */
+  const openChat = leave;
 
   const demoPositions = useMemo(() => {
     if (!demo) return [];
@@ -287,6 +303,18 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
                 </span>
               </div>
             ))}
+            {/* The way in, which the canvas does not draw and this card needs:
+                it is a real portfolio with real positions, and the whole point
+                of the section is that you can go and look at one. */}
+            {demo ? (
+              <Link
+                href={`/p/${demo.slug}`}
+                className="row-hover mono"
+                style={{ display: 'block', borderTop: '1px solid var(--line)', padding: '11px 18px', textAlign: 'center', fontSize: 'var(--fs-tag)', letterSpacing: '0.12em', color: 'var(--acc-text)', textDecoration: 'none', userSelect: 'none' }}
+              >
+                OPEN THIS PORTFOLIO →
+              </Link>
+            ) : null}
           </Card>
         </div>
 
@@ -418,7 +446,7 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
                 <span style={{ color: 'var(--line2)' }}>·</span>
                 <span>YOUR KEYS</span>
               </div>
-              <Button size="lg" style={{ marginTop: 22 }} onClick={() => composer.current?.focus()}>
+              <Button size="lg" style={{ marginTop: 22 }} onClick={openChat}>
                 Ask the agent
               </Button>
             </div>

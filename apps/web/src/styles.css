@@ -892,6 +892,30 @@ html.agent-open body {
   }
 }
 
+/* The panel under the field, and the one thing about it that matters: it never
+   jumps.
+
+   Its content changes height between scenes and between widths — three stat
+   cards are one row at 640 and two at 375 — so the box is given the height its
+   content measures and glides to the next one. A card that changed size under
+   a field somebody is typing in would move the field.
+
+   The floor is the design's 186px, so the shortest scene does not shrink it. */
+.sv-l-demo {
+  /* The gauge inside it is absolute and spans its width, which is the width
+     the scenes have to be measured at. */
+  position: relative;
+  overflow: hidden;
+  min-height: 186px;
+  transition: height 320ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sv-l-demo {
+    transition: none;
+  }
+}
+
 /* The examples under the composer. They scroll sideways rather than wrapping,
    so the row is one line at every width — and the bar goes, because a
    scrollbar under three chips reads as a second thing to operate. */
