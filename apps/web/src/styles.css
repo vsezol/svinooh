@@ -359,7 +359,7 @@ button {
      write it down again as 49 — the phone's header, without its tab strip —
      so the chat ran 8px past the bottom of the window and overflow:hidden
      ate the bottom of the composer. */
-  height: calc(100dvh - var(--h-appbar) - env(safe-area-inset-top));
+  height: calc(var(--sv-a-vh, 100dvh) - var(--h-appbar) - env(safe-area-inset-top));
   overflow: hidden;
 }
 
@@ -390,12 +390,20 @@ html.agent-open body {
        hairline. The header folds to 41 while you read, which gives the chat
        44px back rather than taking any — so this is the header at rest.
 
-       Not the keyboard's height. That has been tried twice: once tracking
-       visualViewport.height live, once waiting for it to settle. Both leave
-       this box shorter than the window Safari has slid up, and what is then on
-       screen is the empty part below the chat — a blank page with a keyboard
-       under it. See .sv-a-root[data-variant='standalone']. */
+       --sv-a-vh, above, is what is visible while the keyboard is up, and it
+       is set together with putting the window back to the top. That second
+       half is what the two earlier attempts left out: a page made shorter
+       while still scrolled leaves the window framing the space below it,
+       which is the blank screen reported both times. See useKeyboardFit. */
     padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* No home indicator under a keyboard, so its inset is 34px of nothing
+     between the composer and the keys — which is the gap that got reported.
+     Reclaimed only while the chat is fitted to the keyboard, so the indicator
+     keeps its room every other moment. */
+  html[style*='--sv-a-vh'] .agent-embed {
+    padding-bottom: 0;
   }
 
 }
