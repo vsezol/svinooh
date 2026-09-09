@@ -249,6 +249,24 @@ class TestSigningIn:
         listed = (await client.get("/chats", headers=as_anon(ANON))).json()["chats"]
         assert [c["id"] for c in listed] == [started["session_id"]]
 
+    async def test_the_rail_is_not_empty_the_moment_they_sign_in(self, client, monkeypatch):
+        """The account is offered under the first answer, and the rail asks for
+        the list straight away — before there is a next question to carry the
+        move. An empty list there reads as the conversation having been lost by
+        the act of keeping it."""
+        started = await ask(client, "asked before signing in", anon=ANON)
+        signed_in_as(monkeypatch, "42")
+        # No turn in between: this is the list request the rail makes on the
+        # token arriving.
+        listed = (await client.get("/chats", headers=as_anon(ANON))).json()["chats"]
+        assert [c["id"] for c in listed] == [started["session_id"]]
+
+    async def test_and_the_conversation_opens_from_its_url_straight_away(self, client, monkeypatch):
+        started = await ask(client, "before", anon=ANON)
+        signed_in_as(monkeypatch, "42")
+        read = await client.get(f"/chats/{started['session_id']}", headers=as_anon(ANON))
+        assert read.status_code == 200
+
     async def test_the_conversation_is_whole_across_the_sign_in(self, client, monkeypatch):
         """Signing in continues the conversation rather than restarting it —
         the turns from before the account are still in it afterwards."""

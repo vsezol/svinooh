@@ -241,8 +241,16 @@ async def _reader(authorization: str | None, anon_id: str | None) -> Owner:
     No session id to fall back on here, and none is wanted: a read with no
     identity at all has nothing it could be allowed to see, so it resolves to
     an owner that owns nothing rather than to something guessable.
+
+    The re-key runs here as well as on a turn, and it has to. Somebody signs in
+    from the card under their first answer and the rail asks for their list
+    immediately — before there is a next question to carry the move. Without
+    this that list comes back empty, and the conversation they just decided was
+    worth keeping looks lost at exactly the moment they acted to keep it.
     """
-    return await resolve_owner(authorization, anon_id, session_id="")
+    owner = await resolve_owner(authorization, anon_id, session_id="")
+    await _claim_anonymous_chats(owner)
+    return owner
 
 
 def _summaries(chats: list[Chat]) -> list[ChatSummary]:
