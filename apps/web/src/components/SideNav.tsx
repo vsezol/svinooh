@@ -184,18 +184,25 @@ export function SideNav({ tab, onTab, isAdmin, chat }: Props) {
             {chat.conversations.length > 0 ? (
               <>
                 <div className="rail-eyebrow mono">HISTORY</div>
-                {chat.conversations.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    className="rail-history ph-mask"
-                    data-active={c.active}
-                    onClick={() => chat.onOpen(c.id)}
-                  >
-                    <span className="rail-history-title">{c.title}</span>
-                    <span className="rail-history-when mono">{relativeDay(c.at)}</span>
-                  </button>
-                ))}
+                {/* The list is the only part of the rail that grows without
+                    limit, so it is the only part that scrolls. The pages above
+                    it stay reachable — and on this tab the page behind the
+                    rail does not scroll at all, so without this a long history
+                    simply ran off the bottom of the screen. */}
+                <div className="rail-history-list">
+                  {chat.conversations.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className="rail-history ph-mask"
+                      data-active={c.active}
+                      onClick={() => chat.onOpen(c.id)}
+                    >
+                      <span className="rail-history-title">{c.title}</span>
+                      <span className="rail-history-when mono">{relativeDay(c.at)}</span>
+                    </button>
+                  ))}
+                </div>
               </>
             ) : null}
           </>

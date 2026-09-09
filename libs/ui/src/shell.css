@@ -123,6 +123,23 @@ body[data-theme='light'] .on-dark {
   border-color: var(--mut);
 }
 
+/* Rows in their own scroller, with the rail's own 4px rhythm. min-height:0 is
+   what lets a flex child shrink below its content; without it the list keeps
+   its full height and pushes the rail past the bottom of the window instead of
+   scrolling. */
+.rail-history-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  /* The bar sits inside the rail's own padding rather than against the rule
+     down its edge. */
+  margin-right: -6px;
+  padding-right: 6px;
+}
+
 .rail-eyebrow {
   font-size: var(--fs-micro);
   letter-spacing: 0.16em;

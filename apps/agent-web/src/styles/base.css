@@ -27,10 +27,15 @@
 }
 
 .sv-a-root[data-variant='standalone'] {
-  /* --sv-a-vh is set only while the composer has focus on a browser that keeps
-     its layout viewport behind the keyboard — see useKeyboardFit. Everywhere
-     else, and every other moment, this is 100dvh. */
-  height: var(--sv-a-vh, 100dvh);
+  /* 100dvh, and nothing cleverer than that.
+
+     Sizing this to the keyboard has now been tried twice and shipped twice and
+     been wrong twice — first by tracking visualViewport.height live, then by
+     waiting for it to settle. Both leave the page shorter than the window
+     Safari has slid, and what is left on screen is the empty part below the
+     chat. iOS is allowed to move the page; it lifts it on focus and puts it
+     back on blur, and that is the behaviour to keep. */
+  height: 100dvh;
   background: var(--bg);
   padding-bottom: env(safe-area-inset-bottom);
 }

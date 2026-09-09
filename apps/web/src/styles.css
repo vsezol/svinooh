@@ -307,6 +307,10 @@ button {
      tab two along flew visibly through the one in between. */
   .pane[data-shown='false'] {
     height: 0;
+    /* border-box keeps padding even at height 0, so this goes too or a folded
+       page is still 84px of nothing. */
+    padding-top: 0;
+    padding-bottom: 0;
     overflow: hidden;
   }
 }
@@ -355,7 +359,7 @@ button {
      write it down again as 49 — the phone's header, without its tab strip —
      so the chat ran 8px past the bottom of the window and overflow:hidden
      ate the bottom of the composer. */
-  height: calc(var(--sv-a-vh, 100dvh) - var(--h-appbar) - env(safe-area-inset-top));
+  height: calc(100dvh - var(--h-appbar) - env(safe-area-inset-top));
   overflow: hidden;
 }
 
@@ -367,14 +371,6 @@ html.agent-open body {
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
-}
-
-html.agent-open .app-main {
-  /* The vertical padding is all there is here to cancel; the gutter belongs to
-     the pages (see .pane), and the chat draws none of its own when embedded
-     (see --sv-a-gutter), so the page's is the only one. */
-  padding-top: 0;
-  padding-bottom: 0;
 }
 
 
@@ -394,10 +390,11 @@ html.agent-open .app-main {
        hairline. The header folds to 41 while you read, which gives the chat
        44px back rather than taking any — so this is the header at rest.
 
-       --sv-a-vh, above, is the window minus the keyboard, and only while the
-       composer has focus: iOS keeps its layout viewport behind the keys and
-       slides the window instead, which leaves a page taller than the window
-       for the finger to pan the composer out of. See useKeyboardFit. */
+       Not the keyboard's height. That has been tried twice: once tracking
+       visualViewport.height live, once waiting for it to settle. Both leave
+       this box shorter than the window Safari has slid up, and what is then on
+       screen is the empty part below the chat — a blank page with a keyboard
+       under it. See .sv-a-root[data-variant='standalone']. */
     padding-bottom: env(safe-area-inset-bottom);
   }
 
@@ -680,8 +677,6 @@ html.agent-open .app-main {
 .app-main {
   flex: 1;
   min-width: 0;
-  padding-top: clamp(20px, 4vw, 36px);
-  padding-bottom: 60px;
 }
 
 /* The gutter is the page's, not the window's.
@@ -692,8 +687,20 @@ html.agent-open .app-main {
    appears at the edge during a turn is the next page's own margin, and the
    clip lands on the edge of the screen where it looks like one. */
 .pane {
+  padding-top: clamp(20px, 4vw, 36px);
+  padding-bottom: 60px;
   padding-left: calc(clamp(14px, 3.5vw, 28px) + env(safe-area-inset-left));
   padding-right: calc(clamp(14px, 3.5vw, 28px) + env(safe-area-inset-right));
+}
+
+/* The chat is a screen rather than a document, so it takes none of the page's
+   padding. Stated by the page itself rather than by a class on <html>: that
+   class is only settled once the strip has stopped, so cancelling the padding
+   through it moved the whole page 24px up on the last frame of every turn
+   onto this tab. A page's own padding cannot arrive late. */
+.pane[data-tab='agent'] {
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 @media (min-width: 720px) {
@@ -717,7 +724,13 @@ html.agent-open .app-main {
      rule has to run down. */
   .side-rail {
     align-self: stretch;
-    min-height: calc(100dvh - var(--h-appbar) - env(safe-area-inset-top));
+    /* Exactly the window under the header, not merely at least it: the rail is
+       sticky, so anything taller than this has nowhere to go — and on the chat
+       tab the page behind it does not scroll either, which is how a long
+       history ended up running off the bottom of the screen. What grows inside
+       it scrolls; see .rail-history-list. */
+    height: calc(100dvh - var(--h-appbar) - env(safe-area-inset-top));
+    min-height: 0;
     border-right: 1px solid var(--line);
     padding: 16px 12px;
   }
