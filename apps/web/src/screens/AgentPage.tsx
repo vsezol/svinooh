@@ -1,0 +1,251 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { AppHeader, Button } from '../ui';
+import { AccountMenu } from '../components/AccountMenu';
+import { AgentEmbed, type AgentControl, type ConversationRef } from '../components/agent/AgentEmbed';
+import { AuthModal } from '../components/AuthModal';
+import { SideNav, type Tab } from '../components/SideNav';
+import { ThemeToggle } from '../components/ThemeToggle';
+import { TAB_PARAM, tabsFor } from '../components/tabs';
+import { AGENT_ENABLED, AGENT_URL, AGENT_WIDGET_URL } from '../lib/agent';
+import { tokenStore } from '../lib/api';
+import { useAuth } from '../lib/auth';
+import { clearQuestion, peekQuestion } from '../lib/handoff';
+
+/**
+ * /ai — the app's front door, which is a conversation.
+ *
+ * The chat is the page here rather than a tab on somebody's portfolio, and it
+ * works signed out: an account is offered after the first answer, when there
+ * is something worth keeping, which is the whole shape of the landing above
+ * it. A question typed there is already in the log by the time this appears —
+ * see lib/handoff.
+ *
+ * The two other pages are places rather than panes. Somebody with a portfolio
+ * has real ones to go to and the strip navigates; somebody without has nothing
+ * behind them yet, and the pane says what would put something there instead of
+ * showing an empty frame.
+ */
+
+/** What Portfolio and Alerts have to say to somebody who has neither yet. */
+const NOTHING_YET: Record<'portfolio' | 'notifications', { title: string; body: string }> = {
+  portfolio: {
+    title: 'No wallets yet',
+    body: 'Paste an address in the chat and the agent sets it up.',
+  },
+  notifications: {
+    title: 'No alerts yet',
+    body: 'Ask the agent to watch a health factor or a pool range.',
+  },
+};
+
+const ICON = {
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 2,
+  strokeLinecap: 'round',
+} as const;
+
+export function AgentPage({ conversationId }: { conversationId?: string } = {}) {
+  const router = useRouter();
+  const { me, loading: authLoading, logout } = useAuth();
+  const [conversations, setConversations] = useState<ConversationRef[]>([]);
+  const agent = useRef<AgentControl | null>(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  /** Which of the three the strip is pointing at. */
+  const [view, setView] = useState<Tab>('agent');
+  /**
+   * The question the landing parked — read once, and spent as soon as it is
+   * read, so a reload of this page is a fresh chat rather than the same
+   * question asked again. See lib/handoff for why those are two steps.
+   */
+  const [parked] = useState(peekQuestion);
+  useEffect(clearQuestion, []);
+  /**
+   * Whether we know who is asking yet.
+   *
+   * The question waits for this. A returning visitor's token arrives a moment
+   * after the page does, and a portfolio question asked in that moment would
+   * be answered for a stranger — "portfolio questions need sign-in" to
+   * somebody who is signed in. Nothing to wait for when there is no token in
+   * the first place, which is the visit this page was built for.
+   */
+  const [noToken, setNoToken] = useState(false);
+  useEffect(() => {
+    if (!tokenStore.get()) setNoToken(true);
+  }, []);
+  const known = noToken || !authLoading;
+
+  const isAdmin = me?.isAdmin === true;
+  const tabs = useMemo(() => tabsFor(isAdmin), [isAdmin]);
+  const slug = me?.portfolioSlug;
+  const token = me ? (tokenStore.get() ?? undefined) : undefined;
+
+  // The chat is a screen rather than a document: the page it sits on stops
+  // scrolling so the transcript can be the only scroller — see .agent-open,
+  // and the note in AgentEmbed about what iOS does with a keyboard.
+  useEffect(() => {
+    document.documentElement.classList.toggle('agent-open', view === 'agent');
+    return () => document.documentElement.classList.remove('agent-open');
+  }, [view]);
+
+  // With the assistant switched off there is nothing on this page at all, and
+  // the front door is the landing. See AGENT_ENABLED, which is a decision
+  // about what is finished rather than an environment variable.
+  useEffect(() => {
+    if (!AGENT_ENABLED) router.replace('/');
+  }, [router]);
+
+  /**
+   * The conversation a /ai/c/<id> link names, opened once the chat is up.
+   *
+   * Reopenable rather than shareable: conversations live in this browser, so a
+   * link to one is a link back to your own. Somebody else's id finds nothing
+   * and they get a new chat, which is the honest outcome until conversations
+   * are kept on the server.
+   */
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current || !conversationId) return;
+    if (!conversations.some((c) => c.id === conversationId)) return;
+    // Once. The list changes again the moment this lands — the conversation it
+    // opens becomes the active one — and without the guard that would drag
+    // somebody back here every time they opened a different one.
+    opened.current = true;
+    agent.current?.openConversation(conversationId);
+  }, [conversationId, conversations]);
+
+  /**
+   * The chat asking for a sign-in — the card under the first answer.
+   *
+   * It dispatches rather than draws its own flow, because the account is this
+   * app's: the modal, the providers and the token all live here. Signing in
+   * does not restart the chat, which is the point of the whole exchange — see
+   * AgentEmbed's update.
+   */
+  useEffect(() => {
+    const open = () => setAuthOpen(true);
+    window.addEventListener('svinooh:agent-signin', open);
+    return () => window.removeEventListener('svinooh:agent-signin', open);
+  }, []);
+
+  const onTab = useCallback(
+    (key: Tab) => {
+      if (key === 'agent') {
+        setView('agent');
+        return;
+      }
+      // A portfolio exists: these are real pages, and the strip is navigation.
+      if (slug) {
+        router.push(key === 'portfolio' ? `/p/${slug}` : `/p/${slug}?${TAB_PARAM}=${key}`);
+        return;
+      }
+      setView(key);
+    },
+    [router, slug],
+  );
+
+  const nothing = view === 'portfolio' || view === 'notifications' ? NOTHING_YET[view] : null;
+
+  return (
+    <div style={{ animation: 'svin .45s ease both' }}>
+      <AppHeader
+        tabs={tabs}
+        active={view}
+        onTab={(key: string) => onTab(key as Tab)}
+        onLogo={() => router.push('/')}
+        // The chat's own two actions, where a phone can reach them: there is
+        // no rail below the breakpoint.
+        tabActions={
+          view === 'agent' ? (
+            <>
+              <button type="button" className="tab-action" aria-label="New chat" onClick={() => agent.current?.newChat()}>
+                <svg viewBox="0 0 24 24" {...ICON} aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
+              <button type="button" className="tab-action" aria-label="History" onClick={() => agent.current?.openHistory()}>
+                <svg viewBox="0 0 24 24" {...ICON} strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3 2" />
+                </svg>
+              </button>
+            </>
+          ) : undefined
+        }
+        brandActions={
+          <>
+            <ThemeToggle />
+            {me ? (
+              <AccountMenu
+                name={me.name}
+                username={me.username}
+                photoUrl={me.photoUrl}
+                onPro={() => router.push('/pro')}
+                onExit={() => {
+                  logout();
+                  router.push('/');
+                }}
+              />
+            ) : (
+              <Button size="sm" onClick={() => setAuthOpen(true)}>
+                Sign in
+              </Button>
+            )}
+          </>
+        }
+      />
+
+      <div className="app-body">
+        <SideNav
+          tab={view}
+          onTab={onTab}
+          isAdmin={isAdmin}
+          chat={
+            view === 'agent'
+              ? {
+                  conversations,
+                  onNew: () => agent.current?.newChat(),
+                  onOpen: (id) => agent.current?.openConversation(id),
+                }
+              : undefined
+          }
+        />
+        {/* No strip of pages to drag here: the chat is the page, and the other
+            two are somewhere to go rather than something to swipe to. */}
+        <div className="app-main">
+          <div className="pane" data-tab={view} data-active="true" data-shown="true">
+            {nothing ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 0', textAlign: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 'var(--fw-heavy)', fontSize: 'var(--fs-title)', letterSpacing: 'var(--tr-tight)' }}>
+                    {nothing.title}
+                  </div>
+                  <p style={{ fontSize: 'var(--fs-body)', color: 'var(--mut)', margin: '8px 0 0' }}>{nothing.body}</p>
+                  <Button size="sm" variant="soft" style={{ marginTop: 16 }} onClick={() => setView('agent')}>
+                    Back to the agent
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <AgentEmbed
+                widgetUrl={AGENT_WIDGET_URL}
+                agentUrl={AGENT_URL}
+                slug={slug}
+                token={token}
+                portfolios={me?.portfolios}
+                initialQuestion={known ? parked : undefined}
+                onConversations={setConversations}
+                control={agent}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {authOpen ? <AuthModal onClose={() => setAuthOpen(false)} /> : null}
+    </div>
+  );
+}

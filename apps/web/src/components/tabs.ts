@@ -13,39 +13,70 @@ import type { Tab } from './SideNav';
  * pages, neither of which is anything to look at.
  */
 
+/** One page, as much of it as a strip or a rail needs to draw a row. */
+export interface PageTab {
+  key: Tab;
+  label: string;
+}
+
 /**
- * The pages, in the order they sit in — and the order a finger swipes them.
+ * The pages an owner has, in the order they sit in — and the order a finger
+ * swipes them.
  *
  * The agent is in the list only once it is switched on (see AGENT_ENABLED).
  * Everything counts off this array — the strip, the rail, and how many pages
  * the pager has — so leaving it out is the whole of hiding it here, and there
  * is no way for the phone to reach a page the rail does not offer.
  */
-export const tabsFor = (isAdmin: boolean): Array<{ key: Tab; label: string }> => [
-  // The portfolio stays first while the assistant is still growing into the
-  // job. It will lead when it can carry a first visit on its own; today the
-  // page is what somebody came for.
-  { key: 'portfolio', label: 'Portfolio' },
+export const tabsFor = (isAdmin: boolean): PageTab[] => [
+  // The assistant leads. It used to come second, while it was still growing
+  // into the job — and the note here said it would lead once it could carry a
+  // first visit on its own, which is what the landing now hands it: the front
+  // door is a composer, and what arrives at the app is a conversation already
+  // under way. So it is first, and it is where /ai opens.
   ...(AGENT_ENABLED ? ([{ key: 'agent', label: 'AI' }] as const) : []),
+  { key: 'portfolio', label: 'Portfolio' },
   { key: 'notifications', label: 'Alerts' },
   // Admin comes last and only for an admin, so everybody else's strip is
   // exactly what it was and there is no page for a phone to swipe to
   ...(isAdmin ? ([{ key: 'admin', label: 'Admin' }] as const) : []),
 ];
 
-/** Where a visit lands when the URL does not say. */
+/**
+ * What a visitor has: the one page the link pointed at.
+ *
+ * A list of its own rather than a filter of the one above, because the pager
+ * counts pages off whichever list it is given — and a visitor who was handed
+ * the four-page list would be able to swipe sideways onto three pages that are
+ * not rendered for them.
+ */
+export const GUEST_TABS: PageTab[] = [{ key: 'portfolio', label: 'Portfolio' }];
+
+/**
+ * Where a visit to a PORTFOLIO lands when the URL does not say.
+ *
+ * Not the assistant, even though the assistant is first on the strip: /p/<slug>
+ * is a link somebody handed out, and it opens the thing they were pointing at.
+ * The app's own front door is /ai, which opens the chat by being the chat.
+ */
 export const homeTab = (): Tab => 'portfolio';
 
 /** The name a tab goes by in a link. */
 export const TAB_PARAM = 'tab';
 
-/** The tab a URL is asking for, or null when it names none we have. */
-export const tabFromUrl = (value: string | null, isAdmin: boolean): Tab | null =>
-  tabsFor(isAdmin).find((t) => t.key === value)?.key ?? null;
+/** The tab a URL is asking for, or null when it names none this viewer has. */
+export const tabFromUrl = (value: string | null, tabs: readonly PageTab[]): Tab | null =>
+  tabs.find((t) => t.key === value)?.key ?? null;
 
-/** Where a tab sits on the strip. The rail and the pager both count from here. */
-export const tabIndex = (tab: Tab, isAdmin: boolean): number =>
-  Math.max(0, tabsFor(isAdmin).findIndex((t) => t.key === tab));
+/**
+ * Where a tab sits on the strip, or -1 when this viewer has no such page.
+ *
+ * Takes the list rather than looking it up, so the strip, the panes and the
+ * pager cannot end up counting off three slightly different lists — which is
+ * the whole of ORDER IS THE CONTRACT in PortfolioPage.
+ */
+export const tabIndex = (tabs: readonly PageTab[], tab: Tab): number =>
+  tabs.findIndex((t) => t.key === tab);
 
 /** How far a finger has to carry the page before letting go turns it over */
 const SWIPE_COMMIT = 70;

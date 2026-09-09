@@ -20,7 +20,7 @@ import { PortfolioName } from '../components/PortfolioName';
 import { PortfolioSwitcher } from '../components/PortfolioSwitcher';
 import { ScopeSelect } from '../components/ScopeSelect';
 import { ShareButton } from '../components/ShareButton';
-import { TAB_PARAM, homeTab, tabFromUrl, tabsFor, tabIndex, usePager } from '../components/tabs';
+import { GUEST_TABS, TAB_PARAM, homeTab, tabFromUrl, tabsFor, tabIndex, usePager } from '../components/tabs';
 import { usePaywall } from '../components/Paywall';
 import { AgentEmbed, preloadAgent } from '../components/agent/AgentEmbed';
 import { SideNav, type Tab } from '../components/SideNav';
@@ -355,6 +355,21 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   // admin page and gains it a moment later — which is the same thing that
   // happens to the whole owner view, and for the same reason
   const isAdmin = me?.isAdmin === true;
+  // Up here with the rest of them, because everything below is a hook and a
+  // hook cannot live past the early returns further down.
+  const isOwner = data?.isOwner === true;
+
+  /**
+   * The pages this viewer has, in the order they sit in.
+   *
+   * A visitor has one — the portfolio the link pointed at — and it has to be
+   * a list of one rather than the owner's list with the strip hidden: the
+   * pager counts pages off whatever it is given, so a visitor handed four
+   * would be able to swipe onto three that are never rendered for them. That
+   * mattered the moment the assistant moved to the front of the list, because
+   * the portfolio stopped being page zero.
+   */
+  const tabs = useMemo(() => (isOwner ? tabsFor(isAdmin) : GUEST_TABS), [isOwner, isAdmin]);
 
   /**
    * A link that names a tab opens it.
@@ -364,21 +379,23 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
    * leave you where you were rather than on a page that is not there.
    */
   useEffect(() => {
-    const asked = tabFromUrl(new URLSearchParams(window.location.search).get(TAB_PARAM), isAdmin);
+    const asked = tabFromUrl(new URLSearchParams(window.location.search).get(TAB_PARAM), tabs);
     if (asked) setTabState(asked);
-  }, [isAdmin]);
-  const tabs = tabsFor(isAdmin);
-  const pager = usePager(tabIndex(tab, isAdmin), (index) => setTab(tabs[index].key), tabs.length);
+  }, [tabs]);
 
   /**
    * Which page is open.
    *
    * A visitor has no rail, so they can only ever be on the one tab the link
-   * pointed them at — whatever state says. Up here rather than beside the
-   * markup that reads it, because the scroll lock below is a hook and a hook
-   * cannot live past the early returns.
+   * pointed them at — whatever state says.
    */
-  const activeTab: Tab = data?.isOwner === true ? tab : 'portfolio';
+  const activeTab: Tab = isOwner ? tab : 'portfolio';
+
+  const pager = usePager(
+    Math.max(0, tabIndex(tabs, activeTab)),
+    (index) => setTab(tabs[index].key),
+    tabs.length,
+  );
 
   /**
    * Whether this page is on the strip: the open one, or one end of a turn.
@@ -387,7 +404,10 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
    * number written beside the markup — see ORDER IS THE CONTRACT below, which
    * is the rule this keeps for us.
    */
-  const onStrip = (key: Tab) => pager.shows(tabIndex(key, isAdmin));
+  const onStrip = (key: Tab) => {
+    const at = tabIndex(tabs, key);
+    return at >= 0 && pager.shows(at);
+  };
 
   /**
    * What a pane says about itself: which page it is, and whether it is drawn.
@@ -431,7 +451,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
    * with it — and once, for the owner, because a visitor has no chat tab to
    * turn to.
    */
-  const canChat = data?.isOwner === true && AGENT_ENABLED;
+  const canChat = isOwner && AGENT_ENABLED;
   useEffect(() => {
     if (!canChat) return;
     const start = () => preloadAgent(AGENT_WIDGET_URL);
@@ -576,8 +596,6 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
     );
   }
 
-  const isOwner = data.isOwner;
-
   /**
    * Applied at once, remembered on the account. The owner's press is saved so
    * a refresh and another device agree with it; a guest's toggle is their own
@@ -666,7 +684,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
           in through the two slots: what belongs to the app beside the
           wordmark, what belongs to the open tab beside the tabs. */}
       <AppHeader
-        tabs={isOwner ? tabsFor(isAdmin) : []}
+        tabs={isOwner ? tabs : []}
         active={activeTab}
         onTab={(key: string) => setTab(key as Tab)}
         onLogo={() => router.push('/')}
@@ -767,6 +785,22 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
 
                 One pane per entry, too: a page the strip does not list is a
                 page nothing can reach. See AGENT_ENABLED and isAdmin. */}
+            {isOwner && AGENT_ENABLED ? (
+              <div {...paneProps('agent')}>
+                {onStrip('agent') ? (
+                  <AgentEmbed
+                    widgetUrl={AGENT_WIDGET_URL}
+                    agentUrl={AGENT_URL}
+                    slug={slug}
+                    token={tokenStore.get() ?? undefined}
+                    portfolios={me?.portfolios}
+                    onConversations={setConversations}
+                    control={agent}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+
             <div {...paneProps('portfolio')}>
             {/* total */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
@@ -939,22 +973,6 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
               <DeletePortfolio slug={slug} portfolios={me.portfolios} />
             ) : null}
             </div>
-
-            {isOwner && AGENT_ENABLED ? (
-              <div {...paneProps('agent')}>
-                {onStrip('agent') ? (
-                  <AgentEmbed
-                    widgetUrl={AGENT_WIDGET_URL}
-                    agentUrl={AGENT_URL}
-                    slug={slug}
-                    token={tokenStore.get() ?? undefined}
-                    portfolios={me?.portfolios}
-                    onConversations={setConversations}
-                    control={agent}
-                  />
-                ) : null}
-              </div>
-            ) : null}
 
             {isOwner ? (
               <div {...paneProps('notifications')}>

@@ -171,6 +171,15 @@ export interface MountOptions {
   /** Signed-in state the shell already knows (avoids a flash in the door). */
   signedIn?: boolean;
   /**
+   * A question typed somewhere else, asked the moment the chat is up.
+   *
+   * The product's front door is a composer on the landing page: what is typed
+   * there is the first message of a real conversation, and by the time this
+   * mounts it should already be in the log with an answer arriving. Asked
+   * exactly once per mount, as if it had been typed here.
+   */
+  initialQuestion?: string;
+  /**
    * The conversations, whenever they change.
    *
    * A host with a rail of its own draws them there — the design puts New chat
@@ -199,6 +208,18 @@ export interface ConversationRef {
 
 export interface MountHandle {
   unmount(): void;
+  /**
+   * Revise what the chat was mounted with, without restarting it.
+   *
+   * A token arrives after the chat is already up — somebody signs in from the
+   * sign-in card under their first answer, which is where the product asks —
+   * and the alternative was for the host to unmount and mount again. That
+   * threw away the conversation on screen at the exact moment it had become
+   * worth keeping.
+   *
+   * Only the options passed are changed; everything else stays as it was.
+   */
+  update(opts: Partial<MountOptions>): void;
   /** Start a fresh conversation, as the rail's New chat does. */
   newChat(): void;
   /** Open one of the conversations reported through `onConversations`. */

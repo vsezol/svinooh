@@ -113,6 +113,7 @@ export function App(props: AppProps) {
     variant = 'embedded',
     locked = false,
     signedIn = false,
+    initialQuestion,
     demoConversation,
     demoHistoryList,
     onConversations,
@@ -260,6 +261,25 @@ export function App(props: AppProps) {
     },
     [busy, demo, push, ask],
   );
+
+  /**
+   * The question the host handed over, put to the chat as if it had been typed.
+   *
+   * Watched rather than read at mount: the host holds it back until it knows
+   * who is asking, and a returning visitor's token lands a moment after the
+   * page does. A portfolio question asked in that moment would be answered for
+   * a stranger.
+   *
+   * Once, ever. The guard is a ref rather than a dependency because `send` is
+   * rebuilt whenever the turn's busy state changes, and the first thing this
+   * does is make it busy.
+   */
+  const handedOver = useRef(false);
+  useEffect(() => {
+    if (handedOver.current || !initialQuestion) return;
+    handedOver.current = true;
+    send(initialQuestion);
+  }, [initialQuestion, send]);
 
   const retryLast = useCallback(() => {
     // Retries re-ask without another user bubble — the question is already

@@ -34,10 +34,28 @@ interface AgentMount {
       theme?: 'dark' | 'light';
       variant?: 'embedded' | 'standalone';
       signedIn?: boolean;
+      /** Asked as soon as the chat is up, as if it had been typed. */
+      initialQuestion?: string;
       onConversations?: (list: ConversationRef[]) => void;
     },
-  ): { unmount(): void; newChat(): void; openConversation(id: string): void; openHistory(): void };
+  ): AgentHandle;
 }
+
+/**
+ * What mount() hands back. `update` arrived later than the rest, so it is
+ * optional here: this app and the chat are separate deployments, and a host
+ * that has shipped must keep working against a widget that has not.
+ */
+type AgentHandle = AgentControl & {
+  unmount(): void;
+  update?(opts: {
+    token?: string;
+    portfolioSlug?: string;
+    portfolios?: { slug: string; name: string }[];
+    signedIn?: boolean;
+    initialQuestion?: string;
+  }): void;
+};
 
 /**
  * One federation instance per page, created lazily.
@@ -111,9 +129,23 @@ interface Props {
   widgetUrl: string;
   /** Where questions go — the API deployment. */
   agentUrl: string;
-  slug: string;
+  /**
+   * The portfolio on the host's screen, when there is one. Absent on /ai for
+   * somebody who has not made one yet — the chat answers without it, and can
+   * make one for them.
+   */
+  slug?: string;
   token?: string;
   portfolios?: { slug: string; name: string | null }[];
+  /**
+   * The question the visitor typed somewhere else — the landing's composer —
+   * asked the moment the chat is up.
+   *
+   * Asked once and only once, whatever happens to this component afterwards:
+   * signing in swaps the token, which remounts the widget, and a question
+   * re-asked there would be the same question twice in one conversation.
+   */
+  initialQuestion?: string;
   /** The chat's own conversations, for a host that draws them in its rail. */
   onConversations?: (list: ConversationRef[]) => void;
   /** Filled in once the widget is up, so the rail can drive it. */
@@ -135,9 +167,36 @@ export interface AgentControl {
   openHistory(): void;
 }
 
-export function AgentEmbed({ widgetUrl, agentUrl, slug, token, portfolios, onConversations, control }: Props) {
+export function AgentEmbed({
+  widgetUrl,
+  agentUrl,
+  slug,
+  token,
+  portfolios,
+  initialQuestion,
+  onConversations,
+  control,
+}: Props) {
   const host = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
+  /** Whether the handed-over question has already been put to the chat. */
+  const asked = useRef(false);
+  const handle = useRef<AgentHandle | null>(null);
+  /**
+   * Bumped only when the chat on the other side of the boundary is too old to
+   * take a revision in place — then this is the old behaviour, a remount.
+   */
+  const [remounts, setRemounts] = useState(0);
+  /**
+   * What the mount should be given, read at the moment it happens.
+   *
+   * The load is async, so the values that were current when the effect ran are
+   * not necessarily the ones that should go in — and putting them in the
+   * effect's dependencies is what used to restart the chat every time one of
+   * them arrived.
+   */
+  const latest = useRef({ token, slug, portfolios, initialQuestion });
+  latest.current = { token, slug, portfolios, initialQuestion };
 
   // A chat is a column that scrolls inside itself. Left on a page that also
   // scrolls, iOS gives you both at once: the transcript drags the page behind
@@ -169,7 +228,6 @@ export function AgentEmbed({ widgetUrl, agentUrl, slug, token, portfolios, onCon
   // middle of a page turn.
 
   useEffect(() => {
-    let handle: AgentControl & { unmount(): void } | null = null;
     // The load is async and the tab can close before it lands; mounting into a
     // detached node would leak a React root nothing ever unmounts.
     let cancelled = false;
@@ -180,21 +238,25 @@ export function AgentEmbed({ widgetUrl, agentUrl, slug, token, portfolios, onCon
           'svinooh_agent/mount',
         );
         if (cancelled || !host.current || !mod) return;
-        handle = mod.mount(host.current, {
+        const now = latest.current;
+        const mounted = mod.mount(host.current, {
           agentUrl,
-          token,
-          portfolioSlug: slug,
-          portfolios: portfolios?.map((p) => ({ slug: p.slug, name: p.name ?? p.slug })),
+          token: now.token,
+          portfolioSlug: now.slug,
+          portfolios: now.portfolios?.map((p) => ({ slug: p.slug, name: p.name ?? p.slug })),
           // Theme is not passed: embedded, the chat draws on this page's own
           // custom properties, so it follows the header toggle with no prop to
           // keep in step. `theme` is for the standalone door.
           variant: 'embedded',
-          signedIn: Boolean(token),
+          signedIn: Boolean(now.token),
+          initialQuestion: asked.current ? undefined : now.initialQuestion,
           onConversations,
         });
+        asked.current = true;
+        handle.current = mounted;
         // The rail drives the chat through this: New chat, and opening one of
         // the conversations it was just told about.
-        if (control) control.current = handle;
+        if (control) control.current = mounted;
       } catch {
         // A remote that will not load is a tab that says so, not a blank pane
         // or a crashed page.
@@ -205,12 +267,43 @@ export function AgentEmbed({ widgetUrl, agentUrl, slug, token, portfolios, onCon
     return () => {
       cancelled = true;
       if (control) control.current = null;
-      handle?.unmount();
+      handle.current?.unmount();
+      handle.current = null;
     };
-    // Remounting on a token or portfolio change is the point: both decide what
-    // the chat is allowed to see, and the mount contract has no way to revise
-    // them in place.
-  }, [widgetUrl, agentUrl, slug, token, portfolios, onConversations, control]);
+    // Once per chat. What the caller may see — the token, the portfolio — is
+    // revised in place below rather than by starting over, because starting
+    // over throws away the conversation on screen. Which is exactly what
+    // happened at the worst moment: the product asks somebody to sign in under
+    // their first answer, and signing in swapped the token.
+  }, [widgetUrl, agentUrl, onConversations, control, remounts]);
+
+  /**
+   * Keep the running chat in step with who is asking and what they are looking
+   * at.
+   *
+   * A widget old enough not to have `update` gets the old treatment — a
+   * remount — because the two are deployed separately and the alternative is a
+   * chat answering with a token it no longer has.
+   */
+  useEffect(() => {
+    const live = handle.current;
+    if (!live) return;
+    if (typeof live.update !== 'function') {
+      setRemounts((n) => n + 1);
+      return;
+    }
+    live.update({
+      token,
+      portfolioSlug: slug,
+      portfolios: portfolios?.map((p) => ({ slug: p.slug, name: p.name ?? p.slug })),
+      signedIn: Boolean(token),
+      // The handed-over question comes this way too, because it is held back
+      // until the host knows who is asking — and that is usually a moment
+      // after the chat is already on screen. The chat asks it once, whichever
+      // way it arrives.
+      initialQuestion,
+    });
+  }, [token, slug, portfolios, initialQuestion]);
 
   if (failed) {
     return (

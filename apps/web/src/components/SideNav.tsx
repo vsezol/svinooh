@@ -107,7 +107,7 @@ interface Props {
 
 /**
  * The owner's places — three of them once the agent is switched on, two until
- * then. See AGENT_ENABLED.
+ * then, and the agent first. See AGENT_ENABLED and tabsFor.
  *
  * The rail beside the page on a desktop. A phone gets tabs across the top
  * instead — see AppHeader in the kit — and the stylesheet picks between them, so
@@ -167,18 +167,10 @@ export function SideNav({ tab, onTab, isAdmin, chat }: Props) {
           gap: 'var(--sp-2)',
         }}
       >
-        {/* Same order as the strip, which is the same list of pages. They are
-            two drawings of one navigation, and a reader moving between a phone
-            and a desktop should not have to re-learn where things are. */}
-        <div
-          className="nav-item"
-          onClick={() => onTab('portfolio')}
-          title="Portfolio"
-          style={navItem(tab === 'portfolio', false, narrow)}
-        >
-          <ChartIcon size={16} />
-          {label('Portfolio')}
-        </div>
+        {/* Same order as the strip, which is the same list of pages — see
+            tabsFor, where that order is decided. They are two drawings of one
+            navigation, and a reader moving between a phone and a desktop
+            should not have to re-learn where things are. */}
         <div
           {...(AGENT_ENABLED
             ? { className: 'nav-item', onClick: () => onTab('agent'), title: 'AI agent' }
@@ -187,6 +179,15 @@ export function SideNav({ tab, onTab, isAdmin, chat }: Props) {
         >
           <SparkIcon size={16} />
           {label('AI agent')}
+        </div>
+        <div
+          className="nav-item"
+          onClick={() => onTab('portfolio')}
+          title="Portfolio"
+          style={navItem(tab === 'portfolio', false, narrow)}
+        >
+          <ChartIcon size={16} />
+          {label('Portfolio')}
         </div>
         <div
           className="nav-item"
