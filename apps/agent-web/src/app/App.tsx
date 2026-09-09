@@ -367,10 +367,18 @@ export function App(props: AppProps) {
    * Null until the first turn has been answered: a chat nobody has spoken to
    * has nothing at its address yet, and `/ai` is the right place to be while
    * that is true.
+   *
+   * Watches `active.id` as well as the address, and that is load-bearing
+   * rather than tidy. Opening a conversation that turns out not to be ours
+   * ends on a fresh blank chat — an address of null, which is what it already
+   * was — so on the address alone this would not fire, and the host would be
+   * left waiting forever for an answer to a question it had asked. The id
+   * changes on every new chat, so "the conversation on screen changed" is the
+   * event, and its address is what the event carries.
    */
   useEffect(() => {
     onConversationId?.(active.sessionId ?? null);
-  }, [active.sessionId, onConversationId]);
+  }, [active.id, active.sessionId, onConversationId]);
 
   /**
    * Which conversation is being fetched, so a slower earlier one cannot land

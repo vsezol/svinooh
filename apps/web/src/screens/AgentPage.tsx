@@ -61,7 +61,18 @@ export function AgentPage({ conversationId }: { conversationId?: string } = {}) 
    */
   const [activeId, setActiveId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  /**
+   * Whether a conversation we asked the chat to open is still being fetched.
+   *
+   * The chat answers by reporting which conversation is on screen — the one we
+   * named, or a fresh blank one when that id is not ours. Until it does, the
+   * URL must not be touched: the address on screen is a link somebody
+   * followed, and rewriting it from the not-yet-loaded state would bounce them
+   * to /ai and back.
+   */
+  const awaitingOpen = useRef(false);
   const onConversationId = useCallback((id: string | null) => {
+    awaitingOpen.current = false;
     setReady(true);
     setActiveId(id);
   }, []);
@@ -131,6 +142,7 @@ export function AgentPage({ conversationId }: { conversationId?: string } = {}) 
     // Already the one on screen — the usual case, when this page put the id in
     // the URL a moment ago. Re-opening it would be a wasted fetch.
     if (activeId === conversationId) return;
+    awaitingOpen.current = true;
     agent.current?.openConversation(conversationId);
   }, [ready, conversationId, activeId]);
 
@@ -138,18 +150,31 @@ export function AgentPage({ conversationId }: { conversationId?: string } = {}) 
    * The address of the conversation on screen.
    *
    * Every chat has one from its first turn, the way every portfolio does,
-   * rather than from a share button that mints one. `replace` rather than
-   * `push`: which conversation is open is the chat's state, not a stack of
-   * pages somebody walked through, and a history entry per answer would make
-   * the back button undo a turn.
+   * rather than from a share button that mints one.
+   *
+   * `history.replaceState` rather than `router.replace`, and that is not a
+   * detail. `/ai` and `/ai/c/<id>` are two route files rendering this same
+   * screen, so a router navigation between them unmounts one page subtree and
+   * mounts the other — which unmounts the chat, at the exact moment its first
+   * answer arrives and gives it an address. The native call moves the address
+   * bar without navigating, and Next patches it to keep `usePathname` in step,
+   * so the URL becomes the conversation's without the conversation being
+   * thrown away to say so. It is the same reason AgentEmbed revises the widget
+   * in place instead of remounting it.
+   *
+   * Replace rather than push either way: which conversation is open is the
+   * chat's state, not a stack of pages somebody walked through, and a history
+   * entry per answer would make the back button undo a turn.
    */
   useEffect(() => {
     if (!ready) return;
-    // Don't move the URL out from under a link that has not been opened yet.
+    // Don't move the URL out from under a link that has not been opened yet,
+    // or one that is still loading — see awaitingOpen.
     if (conversationId && opened.current !== conversationId) return;
+    if (awaitingOpen.current) return;
     const target = activeId ? `/ai/c/${activeId}` : '/ai';
-    if (pathname !== target) router.replace(target);
-  }, [ready, activeId, conversationId, pathname, router]);
+    if (pathname !== target) window.history.replaceState(null, '', target);
+  }, [ready, activeId, conversationId, pathname]);
 
   /**
    * The chat asking for a sign-in — the card under the first answer.
