@@ -88,6 +88,24 @@ function federation(widgetUrl: string) {
   return instance;
 }
 
+/**
+ * Fetch the chat's code before anybody asks for it.
+ *
+ * The widget is the largest thing this page can load and it is behind a tab,
+ * so it used to arrive when the tab did: you turned to the chat and watched it
+ * appear. The federation runtime caches by module, so this is the same call
+ * the mount makes — made early, and its result thrown away. The mount then
+ * resolves from cache and the chat is on the strip before the turn ends.
+ *
+ * Safe to call repeatedly and safe to fail: a preload that does not arrive
+ * leaves the mount to do exactly what it did before.
+ */
+export function preloadAgent(widgetUrl: string): void {
+  void federation(widgetUrl)
+    .loadRemote('svinooh_agent/mount')
+    .catch(() => undefined);
+}
+
 interface Props {
   /** Where the remote entry is served from — the frontend deployment. */
   widgetUrl: string;
