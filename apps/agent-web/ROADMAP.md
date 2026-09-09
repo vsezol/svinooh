@@ -34,6 +34,7 @@ Three rules run through all of it:
 | [#147](https://github.com/vsezol/svinooh/pull/147) | One header, and it folds | Everything else sits on it, and there were two of them |
 | [#148](https://github.com/vsezol/svinooh/pull/148) | The chat shows its work | The trace, the links, the typography — and the real step events behind them |
 | [#151](https://github.com/vsezol/svinooh/pull/151) | The chart in a chat is the chart | Rule 1, made true for the first widget |
+| [#178](https://github.com/vsezol/svinooh/pull/178) | The landing is the front door, and `/ai` is the app's home | Step 3, most of it — see what is left of it below |
 
 ## Next
 
@@ -62,14 +63,27 @@ the pattern generalises and that a new block kind is additive on the wire.
 
 **What it teaches.** Why the block vocabulary is versioned, and what "additively" buys.
 
-### 3. A chat has a URL
+### 3. A conversation somebody else can open
 
-`/ai` and `/ai/c/<id>`. The chat becomes the app's home, a conversation can be linked,
-and returning to one is a navigation rather than a tab you happened to leave open.
-Artboard 04 shows the link in the desktop sidebar.
+**What landed.** `/ai` is the app's home and answers without an account, the landing
+hands it the first question, and `/ai/c/<id>` is a route
+([#178](https://github.com/vsezol/svinooh/pull/178)).
 
-**What it teaches.** Routing state that is worth putting in a URL, and what happens to
-the swipeable pager when tabs become routes.
+**What is left, and it is the point of the step.** That URL reopens a conversation; it
+does not share one. Conversations live in the browser that had them
+(`app/history.ts`), so the link finds nothing for anybody else — including the same
+person on their phone — and clearing site data loses them. The chat's own "Saved ·
+svinooh.com/ai/c/<id>" card promises something the storage cannot keep.
+
+**The shape.** Durable history in the agent's own store, keyed by user — its own small
+database, never the portfolio's, so the service stays independent (see the note at the
+top of `sessions.py`, which has said this from the start). `history.ts` becomes wire
+calls and its localStorage key retires. Then sharing is a decision per conversation
+rather than a link that happens to work: a chat names positions and amounts, and the
+privacy rule is that nothing identifying somebody reaches anybody else by default.
+
+**What it teaches.** What has to be true before a URL can be shared, and why "it opens
+for me" is not the same as shareable.
 
 ### 4. A cheap labelling model, verified this time
 
@@ -110,7 +124,24 @@ confirmation is read as a clear yes. No single model output can reach the signin
 **What it teaches.** Human-in-the-loop for something that costs money, and why the gate
 is structural rather than a line in a prompt.
 
-### 6. The desktop, properly
+### 6. The insight cards read the chain
+
+**The debt.** The landing's yield card — a day of USDC lending replayed, four lenders
+filling in proportion to what they hold — runs on figures that are typical rather than
+measured (`apps/web/src/lib/yield-replay.ts`). Nothing in this app aggregates lending
+markets: a position carries the APY its own protocol reports, and no one sums them. The
+card carries no LIVE badge for that reason, and its heading states a count of lenders
+that nothing counts.
+
+**The shape.** A real source behind `replayFrame` — the same seam the card already reads
+through, so the card does not change. Then the same source is a tool the agent can call,
+which is what makes "where are the best LPs putting USDC?" — the question the landing
+puts in a pill, right beside the card — an answer rather than a promise.
+
+**What it teaches.** How an illustration on a marketing page becomes a data source the
+product answers from, and that the honest version says which one it is.
+
+### 7. The desktop, properly
 
 Artboard 04: the sidebar with AI first, the history list, the shareable link. Today the
 desktop is the mobile layout in a wider window.

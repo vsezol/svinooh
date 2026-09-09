@@ -11,7 +11,7 @@ import { ChainMarquee } from '../components/ChainMarquee';
 import { HeroComposer, type HeroComposerHandle } from '../components/marketing/HeroComposer';
 import { YieldReplay } from '../components/marketing/YieldReplay';
 import { Logo } from '../components/Logo';
-import { Button, Card } from '../ui';
+import { Button, ButtonLink, Card } from '../ui';
 import { Sparkline } from '../components/Sparkline';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { track } from '../lib/analytics';
@@ -197,6 +197,12 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
       >
         <Logo size={19} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Not in the canvas's header, which has only the theme and the way
+              in. Kept because this is the one page that sells the paid plan
+              and the footer's link is a crawl path rather than an offer. */}
+          <ButtonLink size="sm" variant="quiet" href="/pro">
+            Pro
+          </ButtonLink>
           <ThemeToggle />
           {me ? (
             <AccountMenu
