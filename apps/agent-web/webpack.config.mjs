@@ -15,12 +15,16 @@ export default {
     // 'auto' derives the public path from the loading script tag.
     publicPath: 'auto',
     clean: true,
-    // Entry names stay stable — index.html points at main.js and federation
-    // hosts point at remoteEntry.js — while the chunks they pull carry a
-    // content hash, which is what makes caching them for a year safe: a
-    // changed chunk is a different name, so a browser can never hold a stale
-    // one.
-    filename: '[name].js',
+    // Everything this build emits carries a content hash except the one file
+    // that cannot: remoteEntry.js, whose name federation hosts write down.
+    //
+    // The entry used to be plain main.js too, on the reasoning that index.html
+    // points at it and index.html is served no-cache. Which is true at the
+    // origin and was not true at the edge -- Cloudflare rewrites Cache-Control
+    // on anything ending in .js to four hours, so the page was fresh and the
+    // script it asked for was from this morning. A name that changes is the
+    // only instruction a cache in front of us cannot overrule.
+    filename: '[name].[contenthash:8].js',
     chunkFilename: '[name].[contenthash:8].js',
   },
   devtool: 'source-map',
