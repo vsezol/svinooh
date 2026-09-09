@@ -296,11 +296,16 @@ button {
   .side-rail {
     display: none;
   }
+
   /* Side by side the strip is as tall as its tallest page, which leaves the
      shorter ones ending in a screenful of nothing to scroll through. So a page
-     that isn't open folds away — but only once the strip has stopped, or the
-     page being swiped away would vanish from under the finger. */
-  .pager:not([data-moving='true']) .pane[data-active='false'] {
+     folds away unless it is part of what is happening — see usePager's shows(),
+     which is the open page at rest and the two ends of a turn while one is
+     under way.
+
+     It used to be every page whenever the strip moved, which is why tapping a
+     tab two along flew visibly through the one in between. */
+  .pane[data-shown='false'] {
     height: 0;
     overflow: hidden;
   }
@@ -365,9 +370,9 @@ html.agent-open body {
 }
 
 html.agent-open .app-main {
-  /* Vertical only. The horizontal gutter stays: it is the page's, the chat
-     draws none of its own when embedded (see --sv-a-gutter), and cancelling
-     it here would change the width of the pager's panes mid-swipe. */
+  /* The vertical padding is all there is here to cancel; the gutter belongs to
+     the pages (see .pane), and the chat draws none of its own when embedded
+     (see --sv-a-gutter), so the page's is the only one. */
   padding-top: 0;
   padding-bottom: 0;
 }
@@ -672,14 +677,27 @@ html.agent-open .app-main {
   min-width: 0;
   padding-top: clamp(20px, 4vw, 36px);
   padding-bottom: 60px;
+}
+
+/* The gutter is the page's, not the window's.
+
+   The window clips the strip at its own padding box, so a gutter here was a
+   strip of screen the page next door showed through while it slid past — and
+   went dark again the moment it stopped. Given to the pages instead, what
+   appears at the edge during a turn is the next page's own margin, and the
+   clip lands on the edge of the screen where it looks like one. */
+.pane {
   padding-left: calc(clamp(14px, 3.5vw, 28px) + env(safe-area-inset-left));
   padding-right: calc(clamp(14px, 3.5vw, 28px) + env(safe-area-inset-right));
 }
 
 @media (min-width: 720px) {
-  .app-main {
+  .pane {
     padding-left: 32px;
     padding-right: 32px;
+  }
+
+  .app-main {
     /* Capped and centred in whatever the rail leaves, the way the design
        centres its column inside its own main. Full-bleed reads as a mistake
        on a wide monitor: a table stretched to 1900px is a table nobody can
