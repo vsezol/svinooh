@@ -36,6 +36,25 @@
    The plot itself is the app's AreaChart, which draws its own axes, readout
    and gestures. What is left here is the card around it. */
 
+/* Chart beside its own scale, the way the design's card is built: one column
+   that takes what is left and one that takes what the two figures need. */
+.sv-a-b-chart-plot {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-3) 10px;
+}
+
+/* The high and the low, against the top and the bottom of what is drawn. */
+.sv-a-b-chart-scale {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: right;
+  font-size: var(--fs-eyebrow);
+  color: var(--mut);
+}
+
 .sv-a-b-chart-head {
   display: flex;
   align-items: baseline;

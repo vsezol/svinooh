@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { fmtUsdCompact } from './compact';
 import { useDesktop } from '../../app/useDesktop';
 import type { ChartBlock } from '../../app/types';
 
@@ -37,6 +38,13 @@ export default function ChartBlockView({ block }: { block: ChartBlock }) {
   const values = block.points.map((p) => p.v);
   const times = block.points.map((p) => p.t);
 
+  // The high and the low of what is drawn, down the right-hand edge — the
+  // card's own scale, the way the design draws it. The chart itself has no
+  // price axis: it is the portfolio's chart, sized for a page where the
+  // numbers are already above it, and in a message they are not.
+  const high = values.length ? Math.max(...values) : null;
+  const low = values.length ? Math.min(...values) : null;
+
   return (
     <div className="sv-a-b-card sv-a-b-chart">
       <div className="sv-a-b-chart-head">
@@ -51,11 +59,17 @@ export default function ChartBlockView({ block }: { block: ChartBlock }) {
           does not jump when the library lands. A number rather than a
           percentage: the chart sizes its canvas from this box, and a box that
           resolves against a parent with no height resolves to nothing. */}
-      <Suspense fallback={<div style={{ height, marginTop: 10 }} />}>
-        <div style={{ marginTop: 10 }}>
+      <div className="sv-a-b-chart-plot">
+        <Suspense fallback={<div style={{ height }} />}>
           <AreaChart values={values} times={times} period={block.period} height={height} framed={false} />
-        </div>
-      </Suspense>
+        </Suspense>
+        {high != null && low != null ? (
+          <div className="sv-a-b-chart-scale mono" style={{ height }}>
+            <span>{fmtUsdCompact(high)}</span>
+            <span>{fmtUsdCompact(low)}</span>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

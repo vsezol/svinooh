@@ -257,7 +257,11 @@ body[data-theme='light'] .sv-a-c-on-light {
   background: none;
   cursor: pointer;
   border-radius: var(--r-full);
-  padding: 6px 12px;
+  /* The design's box: a toolbar-height pill, and less room on the right than
+     the left because the chevron sits closer to its own edge than the mark
+     does. */
+  height: var(--h-sm);
+  padding: 0 9px 0 11px;
   color: var(--text);
   transition: background var(--ease-quick);
 }
@@ -266,15 +270,15 @@ body[data-theme='light'] .sv-a-c-on-light {
   background: var(--surf2);
 }
 
-.sv-a-c-ground-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--acc);
+.sv-a-c-ground-mark {
+  display: inline-flex;
+  flex: none;
 }
 
-.sv-a-c-ground[data-empty='true'] .sv-a-c-ground-dot {
-  background: var(--mut);
+/* Nothing to be about yet: the mark greys out with the name. It used to be a
+   filled dot, so this filled it grey; an outline takes its colour instead. */
+.sv-a-c-ground[data-empty='true'] .sv-a-c-ground-mark {
+  color: var(--mut);
 }
 
 .sv-a-c-ground-name {

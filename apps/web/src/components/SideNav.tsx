@@ -1,6 +1,7 @@
 'use client';
 
 import type { CSSProperties, ReactNode } from 'react';
+import { relativeDay } from '@svinooh/ui/when';
 import { AGENT_ENABLED } from '../lib/agent';
 
 export type Tab = 'portfolio' | 'notifications' | 'agent' | 'admin';
@@ -64,17 +65,6 @@ function PlusIcon({ size }: { size: number }) {
       <path d="M12 5v14M5 12h14" />
     </svg>
   );
-}
-
-/** How long ago, in as few words as say it. */
-function ago(at: number): string {
-  const mins = Math.max(0, Math.round((Date.now() - at) / 60000));
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  return days === 1 ? 'Yesterday' : `${days}d ago`;
 }
 
 function SlidersIcon({ size }: { size: number }) {
@@ -203,7 +193,7 @@ export function SideNav({ tab, onTab, isAdmin, chat }: Props) {
                     onClick={() => chat.onOpen(c.id)}
                   >
                     <span className="rail-history-title">{c.title}</span>
-                    <span className="rail-history-when mono">{ago(c.at)}</span>
+                    <span className="rail-history-when mono">{relativeDay(c.at)}</span>
                   </button>
                 ))}
               </>
