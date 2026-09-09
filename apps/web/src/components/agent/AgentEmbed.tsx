@@ -48,12 +48,36 @@ interface AgentMount {
  */
 let instance: ReturnType<typeof createInstance> | null = null;
 
+/**
+ * A minute-stamp for the remote entry's URL.
+ *
+ * remoteEntry.js is the one file in the widget's build whose name cannot carry
+ * a content hash — it is the name this file writes down, so it has to stay put
+ * — and it is the file that names every hashed chunk. A browser holding an old
+ * copy therefore runs an old chat, perfectly, out of cache, while the page
+ * around it is new. Which is exactly what shipping a redesign looked like: a
+ * new rail with the previous week's chat inside it.
+ *
+ * The widget's own nginx asks for sixty seconds. Cloudflare rewrites
+ * Cache-Control on anything ending in .js to four hours and there is no header
+ * the origin can send that wins that argument. A URL is different: caches key
+ * on the whole of it, query included, so a stamp that changes every minute is
+ * a sixty-second cache that actually holds — enforced from the side that can
+ * enforce it.
+ *
+ * It costs one 7KB request a minute at worst. The chunks it names keep their
+ * hashes and their year.
+ */
+const entryStamp = () => Math.floor(Date.now() / 60_000);
+
 function federation(widgetUrl: string) {
   if (!instance) {
     const shareConfig = { singleton: true, requiredVersion: '^19.2.0' as const };
     instance = createInstance({
       name: 'svinooh_shell',
-      remotes: [{ name: 'svinooh_agent', entry: `${widgetUrl}/remoteEntry.js` }],
+      remotes: [
+        { name: 'svinooh_agent', entry: `${widgetUrl}/remoteEntry.js?t=${entryStamp()}` },
+      ],
       shared: {
         react: { version: '19.2.0', lib: () => React, shareConfig },
         'react-dom': { version: '19.2.0', lib: () => ReactDOM, shareConfig },
