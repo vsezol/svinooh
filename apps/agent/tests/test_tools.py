@@ -6,7 +6,15 @@ reached when something is missing or refused.
 """
 import pytest
 
-from app.tools import MAX_MATCHES, find_positions, portfolio_tools, run_tools, summarize_history, window_of
+from app.tools import (
+    MAX_MATCHES,
+    find_positions,
+    portfolio_tools,
+    run_tools,
+    summarize_history,
+    tool_phrase,
+    window_of,
+)
 from tests import fixtures as fx
 
 # A week of readings, oldest first, with the series reaching back further than
@@ -164,3 +172,33 @@ class TestToolWiring:
         ]
         messages = await run_tools(calls, tools)
         assert [m.tool_call_id for m in messages] == ["a", "b"]
+
+
+class TestHowACallReadsToWhoeverAsked:
+    """The trace is read by the person who asked the question, not by us."""
+
+    def test_a_period_is_said_the_way_somebody_would_say_it(self):
+        assert tool_phrase("history_summary", {"period": "7d"}) == "Reading the last 7 days"
+        assert tool_phrase("history_summary", {"period": "1h"}) == "Reading the last hour"
+        assert tool_phrase("history_summary", {"period": "all"}) == "Reading the whole history"
+
+    def test_a_lookup_names_what_is_being_looked_up(self):
+        assert tool_phrase("position_details", {"query": "aave"}) == "Looking up aave"
+
+    def test_no_two_periods_read_the_same(self):
+        # The whole point of the trace is that it can be checked against what
+        # ran, so two different calls must not produce one sentence — that
+        # would be worse than the function name it replaced.
+        said = [tool_phrase("history_summary", {"period": p}) for p in ("1h", "24h", "7d", "30d", "all")]
+        assert len(set(said)) == len(said)
+        assert all(s is not None for s in said)
+
+    def test_a_tool_with_no_phrase_says_nothing_rather_than_something_wrong(self):
+        # None sends run_tools back to the tool's own name and argument. A new
+        # tool reports honestly on its first day instead of borrowing a
+        # sentence written for a different one.
+        assert tool_phrase("some_new_tool", {"x": 1}) is None
+
+    def test_an_argument_outside_the_known_set_falls_back_too(self):
+        assert tool_phrase("history_summary", {"period": "3y"}) is None
+        assert tool_phrase("position_details", {"query": "  "}) is None

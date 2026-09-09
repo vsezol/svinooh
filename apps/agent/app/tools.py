@@ -180,6 +180,40 @@ def portfolio_tools(source, slug: str, token: str, data: dict) -> list:
     return [history_summary, position_details]
 
 
+# How long a period sounds when somebody says it out loud.
+_PERIODS = {
+    "1h": "the last hour",
+    "24h": "the last 24 hours",
+    "7d": "the last 7 days",
+    "30d": "the last 30 days",
+    "all": "the whole history",
+}
+
+
+def tool_phrase(name: str, args: dict) -> str | None:
+    """What a call is doing, in the words a reader would use for it.
+
+    The trace is meant to be read by whoever asked the question, and
+    "history_summary · 7d" is the name of a function, not an account of
+    anything. What it must not become is prose that has drifted from the call:
+    every phrase here names the same argument the call was made with, so the
+    line is still checkable against what ran.
+
+    One phrase per tool, and lives beside the tools so adding one is a line
+    away from adding the other. A tool with no phrase returns None and is
+    reported by its own name -- honest rather than tidy. A new tool says
+    something true on its first day instead of borrowing somebody else's
+    sentence.
+    """
+    if name == "history_summary":
+        period = str(args.get("period", ""))
+        return f"Reading {_PERIODS[period]}" if period in _PERIODS else None
+    if name == "position_details":
+        query = str(args.get("query", "")).strip()
+        return f"Looking up {query}" if query else None
+    return None
+
+
 async def run_tools(calls: list[dict], tools: list) -> list[ToolMessage]:
     """Execute the model's tool calls; every outcome returns as a message.
 
@@ -195,9 +229,12 @@ async def run_tools(calls: list[dict], tools: list) -> list[ToolMessage]:
             handler = by_name.get(name)
             if handler is None:
                 raise KeyError(f"unknown tool: {name}")
-            # Reported by its own name and its own argument, so the line on
-            # screen cannot describe something other than the call that ran.
-            async with step(call.get("id") or name, tool_label(name, args)):
+            # Said in the words a reader would use, and falling back to the
+            # tool's own name and argument, so the line on screen cannot
+            # describe something other than the call that ran.
+            async with step(
+                call.get("id") or name, tool_phrase(name, args) or tool_label(name, args)
+            ):
                 result = await handler.ainvoke(args)
             logger.info("tool %s(%s) -> %d chars", name, args, len(str(result)))
         except Exception as error:  # noqa: BLE001 — the model handles tool failures

@@ -248,9 +248,15 @@
 }
 
 /* Every message, and everything a message contains, is bounded by the column
-   it sits in. */
-.sv-a-items > *,
-.sv-a-items > * > * {
+   it sits in.
+   
+   :where() so this carries no specificity at all. It is a floor, not a rule:
+   anything that says how wide it wants to be says it louder than this. Written
+   plainly it was the same weight as a class and sat in the later sheet, so it
+   quietly *widened* everything that had asked to be narrower -- the trace card
+   to the full column against the design's 380, the user's bubble to the full
+   column against 82%. A cap that uncaps things is worse than no cap. */
+:where(.sv-a-items > *, .sv-a-items > * > *) {
   min-width: 0;
   max-width: 100%;
 }
