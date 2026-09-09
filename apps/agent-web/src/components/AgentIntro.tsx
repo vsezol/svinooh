@@ -14,7 +14,7 @@ export function AgentIntro() {
   return (
     <div className="sv-a-c-intro">
       <h1 className="sv-a-c-intro-head">
-        Your <span className="sv-a-c-intro-name">DeFi Copilot</span>
+        Your <span className="sv-a-c-intro-name">DeFi-Copilot</span>
       </h1>
       <p className="sv-a-c-intro-sub">
         Ask anything in DeFi. Give it a task — it finds the move, you sign.
