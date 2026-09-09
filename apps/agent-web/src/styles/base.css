@@ -27,7 +27,10 @@
 }
 
 .sv-a-root[data-variant='standalone'] {
-  height: 100dvh;
+  /* --sv-a-vh is set only while the composer has focus on a browser that keeps
+     its layout viewport behind the keyboard — see useKeyboardFit. Everywhere
+     else, and every other moment, this is 100dvh. */
+  height: var(--sv-a-vh, 100dvh);
   background: var(--bg);
   padding-bottom: env(safe-area-inset-bottom);
 }

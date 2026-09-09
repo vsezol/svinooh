@@ -381,16 +381,27 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   const activeTab: Tab = data?.isOwner === true ? tab : 'portfolio';
 
   /**
+   * Whether this page is on the strip: the open one, or one end of a turn.
+   *
+   * Off the same array the strip and the rail count from, rather than off a
+   * number written beside the markup — see ORDER IS THE CONTRACT below, which
+   * is the rule this keeps for us.
+   */
+  const onStrip = (key: Tab) => pager.shows(tabIndex(key, isAdmin));
+
+  /**
    * What a pane says about itself: which page it is, and whether it is drawn.
    *
-   * Both come off the same array the strip and the rail count from, rather
-   * than off a number written beside the markup — see ORDER IS THE CONTRACT
-   * below, which is the rule this keeps for us.
+   * The pages that render conditionally read `onStrip` too, not `activeTab`.
+   * Keyed on the open tab, a page emptied itself on the first frame of the
+   * turn away from it — so the strip spent the whole slide carrying a blank
+   * where the page you were leaving should have been, and the page you were
+   * arriving at only began loading once it got there.
    */
   const paneProps = (key: Tab) => ({
     className: 'pane',
     'data-active': activeTab === key,
-    'data-shown': pager.shows(tabIndex(key, isAdmin)),
+    'data-shown': onStrip(key),
   });
 
   /**
@@ -891,7 +902,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
 
             {isOwner && AGENT_ENABLED ? (
               <div {...paneProps('agent')}>
-                {activeTab === 'agent' ? (
+                {onStrip('agent') ? (
                   <AgentEmbed
                     widgetUrl={AGENT_WIDGET_URL}
                     agentUrl={AGENT_URL}
@@ -914,7 +925,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
 
             {isOwner && isAdmin ? (
               <div {...paneProps('admin')}>
-                {activeTab === 'admin' ? <AdminPanel /> : null}
+                {onStrip('admin') ? <AdminPanel /> : null}
               </div>
             ) : null}
           </div>

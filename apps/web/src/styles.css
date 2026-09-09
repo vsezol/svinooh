@@ -355,7 +355,7 @@ button {
      write it down again as 49 — the phone's header, without its tab strip —
      so the chat ran 8px past the bottom of the window and overflow:hidden
      ate the bottom of the composer. */
-  height: calc(100dvh - var(--h-appbar) - env(safe-area-inset-top));
+  height: calc(var(--sv-a-vh, 100dvh) - var(--h-appbar) - env(safe-area-inset-top));
   overflow: hidden;
 }
 
@@ -392,7 +392,12 @@ html.agent-open .app-main {
   .agent-embed {
     /* --h-appbar is 85 here: the wordmark row (48), the tab strip (36) and the
        hairline. The header folds to 41 while you read, which gives the chat
-       44px back rather than taking any — so this is the header at rest. */
+       44px back rather than taking any — so this is the header at rest.
+
+       --sv-a-vh, above, is the window minus the keyboard, and only while the
+       composer has focus: iOS keeps its layout viewport behind the keys and
+       slides the window instead, which leaves a page taller than the window
+       for the finger to pan the composer out of. See useKeyboardFit. */
     padding-bottom: env(safe-area-inset-bottom);
   }
 
