@@ -87,22 +87,37 @@
    Embedded, it is zero: the page around the chat has already drawn a gutter,
    and a second one inside it is just a narrower column with a seam down the
    side. */
+/* Two insets, and which of them is doing the work changes with the width --
+   because where the inset sits decides where the scrollbar sits.
+ 
+   A phone draws its scrollbar as an overlay: it floats over whatever is under
+   it. With the inset on the frame, the transcript ended at the inset and the
+   bar came down on the last characters of every line. So on a phone the frame
+   has none and each row carries its own -- the transcript runs to the edge of
+   the glass with its text held off it, and the bar lands on the margin rather
+   than on the words.
+ 
+   Above the breakpoint it is the other way round, which is the design's too:
+   the frame holds 32px, the rows sit flush inside the column, and a bar at the
+   edge of a 760px column is nowhere near anything.
+ 
+   14px rather than a spacing token: the scale collapsed 14 into 12 because the
+   odd numbers in it were nudges, and this one is a page gutter. */
 .sv-a-root {
-  /* 14px, not a spacing token: the scale collapsed 14 into 12 because the odd
-     numbers in it were nudges, but this one is a page gutter -- the design's
-     phone gutter and the same one .app-main draws on the site. 32 above the
-     breakpoint, which is the design's too. */
   --sv-a-gutter: 14px;
+  --sv-a-frame: 0px;
 }
 
 @media (min-width: 720px) {
   .sv-a-root {
-    --sv-a-gutter: var(--sp-8);
+    --sv-a-gutter: 0px;
+    --sv-a-frame: var(--sp-8);
   }
-}
 
-.sv-a-root[data-variant='embedded'] {
-  --sv-a-gutter: 0px;
+  /* Embedded, the page around the chat has already drawn the frame. */
+  .sv-a-root[data-variant='embedded'] {
+    --sv-a-frame: 0px;
+  }
 }
 
 .sv-a-main {
@@ -111,7 +126,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0 var(--sv-a-gutter);
+  padding: 0 var(--sv-a-frame);
 }
 
 /* The chat's column, and the only place its width is decided.
@@ -154,7 +169,7 @@
   justify-content: space-between;
   gap: var(--sp-4);
   width: 100%;
-  padding: var(--sp-4) 0;
+  padding: var(--sp-4) var(--sv-a-gutter);
 }
 
 @media (max-width: 719px) {
@@ -178,6 +193,11 @@
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
+  /* The inset is the scroller's own, not its parent's. That is the whole
+     trick: the box reaches the edge so the overlay bar is drawn there, and
+     the text stops short of it. */
+  padding-left: var(--sv-a-gutter);
+  padding-right: var(--sv-a-gutter);
 }
 
 /* margin-top:auto anchors a short log to the bottom edge while a long log
@@ -201,7 +221,7 @@
 .sv-a-composer {
   flex: none;
   width: 100%;
-  padding: var(--sp-4) 0 var(--sp-5);
+  padding: var(--sp-4) var(--sv-a-gutter) var(--sp-5);
 }
 
 /* Typing: the box goes as low as the page allows.

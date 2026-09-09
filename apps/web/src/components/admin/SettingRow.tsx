@@ -46,8 +46,8 @@ export interface SettingRowProps {
  */
 export function SettingRow({ spec, value, models, effort, onChange }: SettingRowProps) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
+    <div className="setting-row">
+      <div className="setting-row-name">
         <span style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--fs-body)' }}>{spec.label}</span>
         {spec.unit ? (
           <span className="mono" style={{ fontSize: 'var(--fs-tag)', color: 'var(--mut)' }}>
@@ -63,34 +63,39 @@ export function SettingRow({ spec, value, models, effort, onChange }: SettingRow
         </InfoMark>
       </div>
 
-      {spec.kind === 'choice' ? (
-        <ChoiceField value={value} options={spec.options ?? []} label={spec.label} onChange={onChange} />
-      ) : spec.kind === 'text' && spec.role ? (
-        <SettingModel
-          value={value}
-          models={models}
-          thinking={{ effort: effort ?? '', noThinking: spec.role.noThinking }}
-          maxLength={spec.maxLength}
-          placeholder={spec.placeholder}
-          label={spec.label}
-          onChange={onChange}
-        />
-      ) : spec.kind === 'text' ? (
-        <SettingText
-          value={value}
-          maxLength={spec.maxLength}
-          placeholder={spec.placeholder}
-          label={spec.label}
-          onChange={onChange}
-        />
-      ) : (
-        <>
-          <span className="mono" style={{ fontSize: 'var(--fs-tag)', color: 'var(--mut)' }}>
-            {plainer(value, spec.unit)}
-          </span>
-          <SettingNumber value={value} min={spec.min} max={spec.max} label={spec.label} onChange={onChange} />
-        </>
-      )}
+      {/* One wrapper whatever the control turns out to be, so a phone has a
+          single thing to give the width to — the number case is two siblings,
+          a readable hint beside the field. */}
+      <div className="setting-row-control">
+        {spec.kind === 'choice' ? (
+          <ChoiceField value={value} options={spec.options ?? []} label={spec.label} onChange={onChange} />
+        ) : spec.kind === 'text' && spec.role ? (
+          <SettingModel
+            value={value}
+            models={models}
+            thinking={{ effort: effort ?? '', noThinking: spec.role.noThinking }}
+            maxLength={spec.maxLength}
+            placeholder={spec.placeholder}
+            label={spec.label}
+            onChange={onChange}
+          />
+        ) : spec.kind === 'text' ? (
+          <SettingText
+            value={value}
+            maxLength={spec.maxLength}
+            placeholder={spec.placeholder}
+            label={spec.label}
+            onChange={onChange}
+          />
+        ) : (
+          <>
+            <span className="mono" style={{ fontSize: 'var(--fs-tag)', color: 'var(--mut)' }}>
+              {plainer(value, spec.unit)}
+            </span>
+            <SettingNumber value={value} min={spec.min} max={spec.max} label={spec.label} onChange={onChange} />
+          </>
+        )}
+      </div>
     </div>
   );
 }

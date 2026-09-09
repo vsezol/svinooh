@@ -712,6 +712,18 @@ html.agent-open body {
   padding-bottom: 0;
 }
 
+@media (max-width: 719px) {
+  /* And no side inset either, below the breakpoint. The chat's transcript is
+     the only scroller on the screen and a phone draws its scrollbar as an
+     overlay, so the scroller has to reach the edge of the glass or the bar
+     comes down on the text. The chat insets its own rows instead — see
+     --sv-a-gutter. */
+  .pane[data-tab='agent'] {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
 @media (min-width: 720px) {
   .pane {
     padding-left: 32px;
@@ -762,4 +774,90 @@ html.agent-open body {
 
 .tab-action:hover {
   color: var(--text);
+}
+
+
+/* ───────── the admin's knobs ─────────
+   A name, its unit, a mark that explains it, and the control that changes it.
+   One line where there is room for one. */
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.setting-row-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+}
+
+.setting-row-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex: none;
+}
+
+/* A field with a line under it — a model id and what that model can do. */
+.setting-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+@media (max-width: 719px) {
+  /* A phone has no room for both on one line. The control took the width it
+     was written for -- 300px for a model id -- and the name was left with
+     whatever letters fitted underneath it, which is what the screenshots
+     showed. Stacked instead, and with more air between rows: two knobs a
+     hair apart are two knobs you mis-tap. */
+  .setting-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-3);
+    margin-top: var(--sp-7);
+  }
+
+  .setting-row-name {
+    flex: none;
+  }
+
+  .setting-row-control {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  /* The fields are written for a desktop column and carry their own widths.
+     Here the row is the width. */
+  .setting-row-control > *,
+  .setting-row-control input,
+  .setting-row-control button {
+    width: 100% !important;
+    max-width: none;
+  }
+
+  /* Except the readable hint beside a number, which is text and not a field. */
+  .setting-row-control > span.mono {
+    width: auto !important;
+    flex: none;
+    order: 2;
+  }
+
+  /* The line under a field reads left-to-right with the field above it, and
+     takes the row's width rather than the 300px the field was drawn at. */
+  .setting-field {
+    align-items: stretch;
+  }
+
+  .setting-field span {
+    max-width: none !important;
+    text-align: left !important;
+  }
 }
