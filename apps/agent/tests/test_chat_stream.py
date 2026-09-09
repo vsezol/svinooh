@@ -17,6 +17,7 @@ import app.graph as graph
 import app.intent as intent
 import app.routes as routes
 from app import create_app
+from app.store import backend_for
 from app.intent import IntentLabel
 
 ANSWER = "A health factor is a safety margin."
@@ -40,8 +41,9 @@ def a_working_turn(monkeypatch):
         graph, "get_model", lambda: GenericFakeChatModel(messages=iter([AIMessage(content=ANSWER)]))
     )
     graph.agent_graph.cache_clear()
-    # A fresh store per test: these assert on what a session remembers.
-    routes.sessions.__init__(40, 1800)
+    # A fresh store per test: these assert on what a session remembers. An
+    # empty url is the in-memory backend, so the suite stays offline.
+    routes.sessions.__init__(backend_for(""), 40, 100)
     yield
     graph.agent_graph.cache_clear()
 
@@ -106,7 +108,7 @@ class TestItIsTheSameTurn:
     async def test_the_session_remembers_a_streamed_turn(self, client):
         events = parse((await client.post("/chat/stream", json={"message": "hello"})).text)
         session = events[-1][1]["session_id"]
-        remembered = routes.sessions.history(session)
+        remembered = await routes.sessions.history(session)
         assert [message.content for message in remembered] == ["hello", ANSWER]
 
     async def test_and_carries_it_into_the_next_question(self, client):
@@ -114,7 +116,7 @@ class TestItIsTheSameTurn:
         session = first[-1][1]["session_id"]
         graph.agent_graph.cache_clear()
         await client.post("/chat/stream", json={"message": "again", "session_id": session})
-        assert len(routes.sessions.history(session)) == 4
+        assert len(await routes.sessions.history(session)) == 4
 
 
 class TestRefusals:
@@ -160,7 +162,9 @@ class TestRefusals:
         graph.agent_graph.cache_clear()
         events = parse((await client.post("/chat/stream", json={"message": "q"})).text)
         session = events[0][1]["session_id"]
-        assert routes.sessions.history(session) == [], "a question with no answer is not a turn"
+        assert await routes.sessions.history(session) == [], (
+            "a question with no answer is not a turn"
+        )
 
 
 class TestTheOldWayStillWorks:

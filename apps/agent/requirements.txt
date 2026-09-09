@@ -10,8 +10,13 @@ langchain-openai>=0.3
 # The conversation graph: nodes, typed state, conditional edges (app/graph.py)
 langgraph>=0.2
 # Rate-limit arithmetic and storage (app/limits.py) — the engine behind
-# flask-limiter/slowapi; Redis storage is the multi-instance step
+# flask-limiter/slowapi. Its Redis storage is what makes the limit hold across
+# instances instead of once per replica.
 limits>=3.13
+# The agent's own store: conversations (app/store.py) and the rate limiter's
+# counters. One client library for both — `limits` defaults to coredis and is
+# pointed at this one instead, so the service does not carry two.
+redis>=5.0
 # The provider plugin behind the default AGENT_MODEL. Another provider is
 # another line here (e.g. langchain-google-genai) plus a new AGENT_MODEL value.
 langchain-anthropic>=0.3

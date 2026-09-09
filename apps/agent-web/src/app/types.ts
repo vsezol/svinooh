@@ -136,6 +136,18 @@ export type ChatItem =
   | { id: string; role: 'note'; text: string; retryAfterS?: number }
   | { id: string; role: 'status'; text: string };
 
+/**
+ * One conversation, as this app holds it.
+ *
+ * `id` is the service's own id for it, which is both the address in the URL
+ * and the key its turns are stored under — one identifier, because there is
+ * one conversation. `sessionId` is that same id, kept as the field the wire
+ * calls read so the request shape did not have to change; a conversation that
+ * has never been spoken to has neither yet.
+ *
+ * `items` is empty on a row that came from the listing — a rail needs a title
+ * and a time, and the transcript is fetched when one is opened.
+ */
 export interface Conversation {
   id: string;
   title: string;
@@ -188,6 +200,16 @@ export interface MountOptions {
    * how it says what it has.
    */
   onConversations?: (list: ConversationRef[]) => void;
+  /**
+   * Which conversation is on screen, whenever that changes — including the
+   * moment a new one is given its id by its first turn.
+   *
+   * The host puts it in the URL. A conversation is a server object now, so it
+   * has an address the way a portfolio does, and that address exists from the
+   * first question rather than from a share button that mints one. Null while
+   * a fresh chat has not been spoken to yet: there is nothing to link to.
+   */
+  onConversationId?: (id: string | null) => void;
   /**
    * A box the component fills in with its two actions, so the handle mount()
    * already returned can reach them. Not part of the public shape — mount

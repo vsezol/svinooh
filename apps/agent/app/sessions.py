@@ -1,85 +1,163 @@
-"""Conversation memory — the smallest honest version of what production does.
+"""Conversation memory — and now the conversations themselves.
 
 The model API is stateless: "context" in every production system is the server
 keeping the conversation and replaying it into each call. This store is that
-mechanism, per session_id — in memory, capped, expiring. In memory means
-per-instance and gone on restart; the production step up is an external store
-(Redis, a database, or a LangGraph checkpointer) behind this same class, and
-the roadmap keeps that inside this service, never in the widget.
+mechanism — and, since the store became durable, it is also the product
+feature the note here used to promise for later: past conversations, kept in
+the agent's own store (app/store.py), never the portfolio's database, so the
+service's independence holds.
 
-Deliberately NOT a chat-history feature. "Open my past conversations" is a
-product feature that needs durable storage keyed by user — the agent's own
-store (its own small DB/Redis, never the portfolio's database, so independence
-holds), which becomes possible once token validation tells this
-service who the user is. This class is only the working context of a live
-conversation, which is why losing it on restart is acceptable.
+The two turned out to be one thing, which is the whole point of this class.
+A conversation is stored **once**, as its turns. What the model is replayed is
+a projection of those turns (`history`, the last N rendered as messages) and
+what the reader sees is another (`chat`, the turns with their blocks). Keeping
+a message list beside the transcript would be two copies of one conversation —
+the split that made a restart lose the thread while the transcript stayed on
+screen.
+
+The interface is the one this class always had, plus the listing methods a
+durable store makes possible. Every method is now async, because a network
+store cannot pretend otherwise; every caller was already in an async context.
 """
-import time
 import uuid
-from dataclasses import dataclass, field
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
+from .store import Backend, Chat, Turn, now_ms
 
-@dataclass
-class _Entry:
-    touched: float
-    messages: list[BaseMessage] = field(default_factory=list)
-    # An action proposed but not yet confirmed — today, the list of wallet
-    # addresses of a portfolio-creation proposal. Living in the session is what
-    # makes the confirmation a SEPARATE turn: the write physically cannot
-    # happen in the same request that proposed it.
-    pending: list[str] | None = None
+TITLE_MAX = 60
+
+
+def title_of(question: str) -> str:
+    """A chat's name, which is the first thing that was asked of it.
+
+    Server-side now: the title travels with the conversation, so the phone that
+    opens it later shows the same name as the laptop that started it. The rule
+    is the one the browser used, moved rather than reinvented.
+    """
+    text = question.strip()
+    if not text:
+        return "New chat"
+    return f"{text[: TITLE_MAX - 1]}…" if len(text) > TITLE_MAX else text
 
 
 class SessionStore:
-    def __init__(self, max_messages: int, ttl_s: int):
-        self._max = max_messages
-        self._ttl = ttl_s
-        self._sessions: dict[str, _Entry] = {}
+    def __init__(self, backend: Backend, max_messages: int, max_turns: int):
+        self._backend = backend
+        # How many messages the model is replayed. A turn is two of them, so an
+        # odd cap simply rounds down to whole turns — half an exchange is not a
+        # useful thing to send.
+        self._max_turns_in_context = max(1, max_messages // 2)
+        # How many turns a conversation keeps at all. Larger than the context
+        # window: the reader scrolls back further than the model is replayed.
+        self._max_turns = max(self._max_turns_in_context, max_turns)
 
     def new_id(self) -> str:
         return uuid.uuid4().hex
 
-    def history(self, session_id: str) -> list[BaseMessage]:
-        self._evict()
-        entry = self._sessions.get(session_id)
-        return list(entry.messages) if entry else []
+    async def history(self, session_id: str) -> list[BaseMessage]:
+        """The model's context, derived from the stored turns.
 
-    def append(self, session_id: str, question: str, answer: str) -> None:
-        entry = self._touch(session_id)
-        entry.messages += [HumanMessage(content=question), AIMessage(content=answer)]
-        # Oldest turns fall off the front: the cap bounds both memory here and
-        # tokens on every model call, and recent turns are the ones that matter.
-        entry.messages = entry.messages[-self._max :]
-
-    def pending(self, session_id: str) -> list[str] | None:
-        entry = self._sessions.get(session_id)
-        return list(entry.pending) if entry and entry.pending else None
-
-    def set_pending(self, session_id: str, addresses: list[str]) -> None:
-        self._touch(session_id).pending = list(addresses)
-
-    def clear_pending(self, session_id: str) -> None:
-        entry = self._sessions.get(session_id)
-        if entry:
-            entry.pending = None
-
-    def _touch(self, session_id: str) -> _Entry:
-        entry = self._sessions.get(session_id)
-        if entry is None:
-            entry = self._sessions[session_id] = _Entry(touched=time.time())
-        entry.touched = time.time()
-        return entry
-
-    def _evict(self) -> None:
-        """Lazily forget sessions nobody has touched for the TTL.
-
-        Called on the read path rather than by a timer: with no background task
-        there is nothing extra to crash, and a store that is never read grows
-        by at most what its callers sent.
+        Not a second store — the same turns, rendered. Oldest turns fall off
+        the front, which bounds the tokens on every model call and keeps the
+        recent exchanges, the ones "as we discussed" is about.
         """
-        deadline = time.time() - self._ttl
-        dead = [sid for sid, entry in self._sessions.items() if entry.touched < deadline]
-        for sid in dead:
-            del self._sessions[sid]
+        chat = await self._backend.load(session_id)
+        if chat is None:
+            return []
+        messages: list[BaseMessage] = []
+        for turn in chat.turns[-self._max_turns_in_context :]:
+            messages += [HumanMessage(content=turn.q), AIMessage(content=turn.a)]
+        return messages
+
+    async def append(
+        self,
+        session_id: str,
+        owner: str,
+        question: str,
+        answer: str,
+        blocks: list[dict],
+    ) -> Chat:
+        """Remember a finished turn, creating the conversation if it is new.
+
+        The owner is stamped once, when the conversation is created, and never
+        moved by a later turn: a chat belongs to whoever started it, and the
+        only thing that changes that is signing in (see `reassign`).
+        """
+        chat = await self._load_or_start(session_id, owner)
+        chat.turns.append(Turn(q=question, a=answer, at=now_ms(), blocks=blocks))
+        chat.turns = chat.turns[-self._max_turns :]
+        if not chat.title:
+            chat.title = title_of(question)
+        chat.updated = now_ms()
+        await self._backend.save(chat)
+        return chat
+
+    async def pending(self, session_id: str) -> list[str] | None:
+        chat = await self._backend.load(session_id)
+        return list(chat.pending) if chat and chat.pending else None
+
+    async def set_pending(self, session_id: str, owner: str, addresses: list[str]) -> None:
+        chat = await self._load_or_start(session_id, owner)
+        chat.pending = list(addresses)
+        chat.updated = now_ms()
+        await self._backend.save(chat)
+
+    async def clear_pending(self, session_id: str) -> None:
+        chat = await self._backend.load(session_id)
+        if chat is None or chat.pending is None:
+            return
+        chat.pending = None
+        await self._backend.save(chat)
+
+    # ── the conversations, as a list somebody can open ──────────────────────
+
+    async def list(self, owner: str, limit: int = 50) -> list[Chat]:
+        """That owner's conversations, newest first.
+
+        One call: the index is a ZSET scored by when each chat was last spoken
+        to, so ordering is the store's job rather than something done here over
+        everything it holds.
+        """
+        return await self._backend.load_many(owner, limit)
+
+    async def chat(self, session_id: str, owner: str) -> Chat | None:
+        """One conversation, if it is this owner's.
+
+        Somebody else's id is None rather than a refusal, and the route turns
+        that into a 404. A 403 would confirm the conversation exists, and a
+        chat names positions and amounts — the privacy rule is that nothing
+        identifying somebody reaches anybody else, which includes the fact of
+        them having asked something.
+        """
+        chat = await self._backend.load(session_id)
+        return chat if chat and chat.owner == owner else None
+
+    async def delete(self, session_id: str, owner: str) -> bool:
+        chat = await self.chat(session_id, owner)
+        if chat is None:
+            return False
+        await self._backend.delete(chat)
+        return True
+
+    async def owns_any(self, owner: str) -> bool:
+        return await self._backend.has(owner)
+
+    async def reassign(self, source: str, target: str) -> int:
+        """Hand an anonymous visitor's conversations to the account they made.
+
+        The anonymous identity is soft by construction — clearing storage is a
+        new person — so this is the one moment a chat changes hands, and it
+        only ever goes one way: from the id in the browser to the account that
+        browser just signed into.
+        """
+        if source == target:
+            return 0
+        return await self._backend.reassign(source, target)
+
+    async def _load_or_start(self, session_id: str, owner: str) -> Chat:
+        chat = await self._backend.load(session_id)
+        if chat is not None:
+            return chat
+        stamp = now_ms()
+        return Chat(id=session_id, owner=owner, title="", created=stamp, updated=stamp)
