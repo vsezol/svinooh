@@ -64,7 +64,7 @@ class ChatTurn(BaseModel):
 
     `blocks` is what the reader saw; `a` is the same answer as the text the
     model is replayed. One record with two projections rather than two records
-    — see app/store.py. The client renders `blocks` and never has to rebuild
+    — see app/application/sessions.py. The client renders `blocks` and never has to rebuild
     them from `a`, which would be a layer guessing what to draw.
     """
 

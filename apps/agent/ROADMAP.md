@@ -43,3 +43,4 @@ them.
 | [#194](https://github.com/vsezol/svinooh/pull/194) | The agent deploys again — the cache mount Railway would not take (with [#193](https://github.com/vsezol/svinooh/pull/193)) |
 | [#195](https://github.com/vsezol/svinooh/pull/195) | Step 4, the portfolio stops being a dict: a typed domain behind an anti-corruption layer |
 | [#196](https://github.com/vsezol/svinooh/pull/196) | Step 5, the use cases move out of the route handlers; refusals become domain errors |
+| [#197](https://github.com/vsezol/svinooh/pull/197) | Step 6, the agent gets a port: `Ask` in, `Reply` out, and the prompts in a module of their own |

@@ -118,4 +118,6 @@ class TestWhereTheDialsComeFrom:
         assert configured(PanelValues(tool_hops=0), tool_hops=5).tool_hops() == 0
 
     def test_the_prompt_can_be_overridden_from_the_environment(self):
-        assert configured(system_prompt="be terse").system_prompt() == "be terse"
+        from app.agent.prompts import system_prompt
+
+        assert system_prompt(configured(system_prompt="be terse")) == "be terse"

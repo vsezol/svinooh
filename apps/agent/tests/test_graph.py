@@ -8,7 +8,9 @@ builds its own Agent over an Api and a Model it can inspect afterwards.
 import pytest
 
 from app.agent.onboarding import create_portfolio_with_wallets
+from app.domain.conversation import Turn
 from app.domain.portfolio import Me, PortfolioRef
+from app.ports import Ask, Failed, Finished, Progress
 from tests import fixtures as fx
 from tests.support import agent
 
@@ -65,6 +67,7 @@ class Model:
 
     def __init__(self, tool_calls=None, text="answered"):
         self.prompts = []
+        self.seen = []
         self.bound = 0
         self._tool_calls = tool_calls
         self.text = text
@@ -75,6 +78,7 @@ class Model:
 
     async def ainvoke(self, messages):
         self.prompts.append(messages[0].content)
+        self.seen = messages
         calls, self._tool_calls = self._tool_calls, None
 
         class Reply:
@@ -92,7 +96,13 @@ def wire(*, intent="portfolio", confirmation=None, api=None, model=None):
 
 
 async def run(bot, **state):
-    return await bot.run({"question": "q", "history": [], **state})
+    """The graph itself, so a test can see which branch a turn took.
+
+    `LangGraphAgent.run` answers in the port's words — an answer and its
+    orders — and deliberately says nothing about the route. These tests are
+    about the route, and this file is the implementation's own.
+    """
+    return await bot.graph.ainvoke({"question": "q", "history": (), **state})
 
 
 class TestRouting:
@@ -337,3 +347,63 @@ class TestWrites:
         bot = agent(model=Model(), portfolio=api, intent="general", confirmations=Broken())
         out = await run(bot, authorization="Bearer T", pending_addresses=["0xAAA"])
         assert api.created == 0 and not out.get("pending_clear")
+
+
+class TestTheContractWithTheLayerAbove:
+    """What a use case sees: an answer and its orders, never a graph state.
+
+    The tests above read the state the nodes wrote, because they are about
+    the routing and this file is the implementation's own. These are about
+    the seam — the only thing app/application is allowed to know.
+    """
+
+    async def test_a_turn_answers_in_the_ports_own_words(self):
+        bot, _, _ = wire(intent="general")
+        reply = await bot.run(Ask(question="what is a health factor?"))
+        assert reply.answer == "answered"
+        assert reply.pending_set is None
+        assert reply.pending_clear is False and reply.portfolio_created is None
+
+    async def test_a_proposal_comes_back_as_an_order_rather_than_a_write(self):
+        model = Model(
+            tool_calls=[{"name": "ProposePortfolio", "args": {"addresses": ["0xAAA"]}, "id": "c"}]
+        )
+        bot, api, _ = wire(api=Api(owned=[]), model=model)
+        reply = await bot.run(Ask(question="track my wallet"))
+        assert reply.pending_set == ("0xAAA",), "the order, not the write"
+        assert api.created == 0 and api.created_anonymous == []
+
+    async def test_a_confirmed_proposal_names_what_to_remember(self):
+        bot, api, _ = wire(confirmation="confirm")
+        reply = await bot.run(Ask(question="yes", pending_addresses=("0xAAA", "sol1")))
+        assert api.created_anonymous == ["0xAAA"]
+        assert reply.portfolio_created == "anon-pf" and reply.pending_clear is True
+
+    async def test_the_conversation_is_replayed_as_the_exchange_it_was(self):
+        # The store keeps turns; what a model call looks like is the agent's
+        # business, and this is where the two meet.
+        model = Model()
+        bot, _, _ = wire(intent="general", model=model)
+        await bot.run(Ask(question="and now?", history=(Turn(q="hello", a="hi", at=0),)))
+        assert [m.content for m in model.seen[1:]] == ["hello", "hi", "and now?"]
+
+    async def test_a_watched_turn_reports_in_the_same_words(self):
+        bot, _, _ = wire(intent="general")
+        updates = [update async for update in bot.watch(Ask(question="q"))]
+        assert isinstance(updates[-1], Finished)
+        assert updates[-1].reply.answer == "answered"
+        assert all(isinstance(u, Progress) for u in updates[:-1])
+        assert any(u.kind == "step" for u in updates[:-1]), "the work reported itself"
+
+    async def test_a_turn_that_cannot_finish_says_so_in_the_same_words(self):
+        class Refusing:
+            def bind_tools(self, _tools):
+                return self
+
+            async def ainvoke(self, _messages):
+                raise RuntimeError("upstream is on fire")
+
+        bot, _, _ = wire(intent="general", model=Refusing())
+        updates = [update async for update in bot.watch(Ask(question="q"))]
+        assert isinstance(updates[-1], Failed)
+        assert "could not be finished" in updates[-1].message

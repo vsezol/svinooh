@@ -181,7 +181,7 @@ class TestExpiry:
     """A chat disappearing when its key expires is the intended behaviour.
 
     What is not intended is the index outliving it, which is what these are
-    actually about — see the module docstring in app/store.py.
+    actually about — see the module docstring in app/application/sessions.py.
     """
 
     async def test_a_conversation_is_kept_for_thirty_days(self):
