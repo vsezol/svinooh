@@ -17,7 +17,7 @@ import app.agent.graph as graph
 import app.agent.intent as intent
 import app.api.routes as routes
 from app import create_app
-from app.adapters.store import backend_for
+from app.adapters.memory import MemoryConversationStore
 from app.agent.intent import IntentLabel
 
 ANSWER = "A health factor is a safety margin."
@@ -43,7 +43,7 @@ def a_working_turn(monkeypatch):
     graph.agent_graph.cache_clear()
     # A fresh store per test: these assert on what a session remembers. An
     # empty url is the in-memory backend, so the suite stays offline.
-    routes.sessions.__init__(backend_for(""), 40, 100)
+    routes.sessions.__init__(MemoryConversationStore(), 40, 100)
     yield
     graph.agent_graph.cache_clear()
 

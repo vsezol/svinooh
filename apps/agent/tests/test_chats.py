@@ -12,13 +12,14 @@ from langchain_core.messages import AIMessage
 
 import app.agent.graph as graph
 import app.agent.intent as intent
-import app.domain.identity as owner_module
+import app.services.identity as identity_service
 import app.api.routes as routes
 from app import create_app
 from app.services.auth import Caller
 from app.agent.intent import IntentLabel
 from app.domain.identity import ANON_HEADER
-from app.adapters.store import backend_for
+from app.adapters import memory
+from app.adapters.memory import MemoryConversationStore
 
 ANSWER = "A health factor is a safety margin."
 ANON = "a" * 32
@@ -45,14 +46,14 @@ def a_working_turn(monkeypatch):
         lambda: GenericFakeChatModel(messages=iter([AIMessage(content=ANSWER)] * 20)),
     )
     graph.agent_graph.cache_clear()
-    routes.sessions.__init__(backend_for(""), 40, 100)
+    routes.sessions.__init__(MemoryConversationStore(), 40, 100)
     # A fresh budget too. These tests ask a good many questions as the same
     # anonymous caller, and the anonymous share one bucket by design — without
     # this they spend the previous test's allowance.
-    routes.limiter.__init__(1000, 60)
+    routes.limiter.__init__(1000, 60, memory.rate_limit_storage())
     # Nobody is signed in unless a test says so. Patched where owner.py looked
     # it up, so the real gate — and the host it would call — stays untouched.
-    monkeypatch.setattr(owner_module, "authenticate", _nobody)
+    monkeypatch.setattr(identity_service, "authenticate", _nobody)
     yield
     graph.agent_graph.cache_clear()
 
@@ -65,7 +66,7 @@ def signed_in_as(monkeypatch, user_id: str) -> None:
     async def somebody(_authorization):
         return Caller(user_id=user_id)
 
-    monkeypatch.setattr(owner_module, "authenticate", somebody)
+    monkeypatch.setattr(identity_service, "authenticate", somebody)
 
 
 @pytest.fixture
@@ -282,7 +283,7 @@ class TestSigningIn:
         await ask(client, "after", anon=ANON)
         # Signed out again on the same machine: the account's conversations are
         # the account's, not the browser's.
-        monkeypatch.setattr(owner_module, "authenticate", _nobody)
+        monkeypatch.setattr(identity_service, "authenticate", _nobody)
         read = await client.get(f"/chats/{started['session_id']}", headers=as_anon(ANON))
         assert read.status_code == 404
 
@@ -291,7 +292,7 @@ class TestSigningIn:
     ):
         signed_in_as(monkeypatch, "42")
         answered = await ask(client, "mine", anon=ANON)
-        monkeypatch.setattr(owner_module, "authenticate", _nobody)
+        monkeypatch.setattr(identity_service, "authenticate", _nobody)
         # The browser id is still in the header, but the chat was the account's.
         assert (await client.get("/chats", headers=as_anon(ANON))).json()["chats"] == []
         assert (await client.get(f"/chats/{answered['session_id']}", headers=as_anon(ANON))).status_code == 404

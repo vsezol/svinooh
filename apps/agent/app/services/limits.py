@@ -3,59 +3,42 @@
 Every chat turn is a paid model call (several, when tools run), so the rate
 limit is not etiquette here: it is the cap on what one caller can spend.
 
-The counting is not ours: the `limits` library — the engine inside
-flask-limiter and slowapi — provides the moving-window strategy and the
-storage. Production rate limiting is a solved problem with sharp edges (window
-arithmetic, races), so we buy the arithmetic and keep what is genuinely ours:
-the KEY, a caller named by our auth gate rather than an IP.
-
-Storage is Redis when there is one, memory when there is not — the swap this
-module's note has described from the start, made for the same reason the
-conversation store made it and in the same commit. In-process counting is not
-a smaller version of a rate limit across two instances; it is a rate limit
-multiplied by however many replicas are running, which is the cost lock not
-holding. The library's storage is the whole of the change: the key, the
-window and every caller stay exactly as they were.
+What is ours is the KEY — a caller named by our auth gate rather than an IP —
+and the decision to let a turn through when the counters cannot be reached.
+The window arithmetic is bought from the `limits` library, and *where* the
+counting happens is an adapter: app/adapters/redis/rate_limit.py shares the
+instance, app/adapters/memory.py counts in this process. This class never
+learns which it was given.
 """
 import logging
 import time
 
 from limits import RateLimitItemPerSecond
-from limits.aio.storage import MemoryStorage, RedisStorage
 from limits.aio.strategies import MovingWindowRateLimiter
 
 logger = logging.getLogger("svinooh-ai")
 
-#: Keeps the limiter's counters out of the way of everything else on the
-#: instance — the portfolio cache included. See app/store.py on sharing one.
-KEY_PREFIX = "agent:rl"
 
+class WindowRateLimiter:
+    """ports.RateLimiter over a moving window.
 
-def _storage(redis_url: str):
-    """Shared counters when there is a Redis, per-process ones when there is not."""
-    if not redis_url:
-        logger.info("REDIS_URL not set — rate limiting is per-process")
-        return MemoryStorage()
-    # The library picks its client from the scheme, and its async Redis
-    # storage speaks `async+redis://`. redis-py rather than the default
-    # coredis, so this service has one Redis client library and not two.
-    uri = redis_url if redis_url.startswith("async+") else f"async+{redis_url}"
-    return RedisStorage(uri, implementation="redispy", key_prefix=KEY_PREFIX)
+    `storage` is one of the library's storage objects, handed in by the
+    composition root — this class does not build one, which is what keeps the
+    choice of Redis out of the service layer entirely.
+    """
 
-
-class RateLimiter:
-    def __init__(self, max_requests: int, window_s: int, redis_url: str = ""):
+    def __init__(self, max_requests: int, window_s: int, storage):
         self._item = RateLimitItemPerSecond(max_requests, window_s)
-        self._strategy = MovingWindowRateLimiter(_storage(redis_url))
+        self._strategy = MovingWindowRateLimiter(storage)
 
     async def retry_after(self, key: str) -> int | None:
         """Charge one attempt; None means allowed, a number is seconds to wait.
 
         A storage that cannot answer lets the turn through. The limit is a cost
-        lock, not a security boundary — refusing everybody because Redis blinked
-        would turn a cache outage into an outage of the product, and the door
-        that actually matters (the token, and the host API behind it) is not
-        this one.
+        lock, not a security boundary — refusing everybody because Redis
+        blinked would turn a cache outage into an outage of the product, and
+        the door that actually matters (the token, and the host API behind it)
+        is not this one.
         """
         try:
             if await self._strategy.hit(self._item, key):

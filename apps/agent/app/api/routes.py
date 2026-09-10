@@ -21,10 +21,14 @@ from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
 
 from .. import remote_config
-from ..config import settings
 from ..agent.graph import agent_graph
-from ..services.limits import RateLimiter
-from ..domain.identity import ANON_HEADER, Owner, resolve_owner
+from ..agent.streaming import turn_events
+from ..composition import limiter, sessions
+from ..config import settings
+from ..domain.conversation import Chat
+from ..domain.identity import ANON_HEADER, Owner
+from ..services.identity import resolve_owner
+from ..services.sessions import NotYours
 from .schemas import (
     ChatDetail,
     ChatList,
@@ -34,19 +38,8 @@ from .schemas import (
     ChatTurn,
     TextBlock,
 )
-from ..services.sessions import NotYours, SessionStore
-from ..adapters.store import Chat, backend_for
-from ..agent.streaming import turn_events
 
 router = APIRouter()
-sessions = SessionStore(
-    backend_for(settings.redis_url),
-    settings.history_max_messages,
-    settings.chat_max_turns,
-)
-limiter = RateLimiter(
-    settings.rate_limit_requests, settings.rate_limit_window_s, settings.redis_url
-)
 
 
 @router.get("/health")
@@ -79,9 +72,9 @@ async def _claim_anonymous_chats(owner: Owner) -> None:
     matters because the product asks somebody to sign in underneath their first
     answer — the exact moment the conversation became worth keeping.
     """
-    if not owner.signed_in or not owner.anon_id:
+    source = owner.anonymous_key
+    if not owner.signed_in or source is None:
         return
-    source = f"anon:{owner.anon_id}"
     if await sessions.owns_any(source):
         await sessions.reassign(source, owner.key)
 
@@ -269,7 +262,7 @@ async def list_chats(
     because the key a listing is built from is the caller's own.
     """
     owner = await _reader(authorization, anon_id)
-    if owner.key.startswith("sess:"):
+    if not owner.listable:
         return ChatList(chats=[])
     return ChatList(chats=_summaries(await sessions.list(owner.key, settings.chat_list_limit)))
 

@@ -1,31 +1,29 @@
 """Conversation memory — and now the conversations themselves.
 
 The model API is stateless: "context" in every production system is the server
-keeping the conversation and replaying it into each call. This store is that
-mechanism — and, since the store became durable, it is also the product
-feature the note here used to promise for later: past conversations, kept in
-the agent's own store (app/store.py), never the portfolio's database, so the
-service's independence holds.
+keeping the conversation and replaying it into each call. This service is that
+mechanism — and, since the store became durable, it is also the product feature
+the old note here promised for later: past conversations, kept in the agent's
+own store, never the portfolio's database, so the service's independence holds.
 
 The two turned out to be one thing, which is the whole point of this class.
 A conversation is stored **once**, as its turns. What the model is replayed is
-a projection of those turns (`history`, the last N rendered as messages) and
+a projection of those turns (`context`, the last N rendered as messages) and
 what the reader sees is another (`chat`, the turns with their blocks). Keeping
 a message list beside the transcript would be two copies of one conversation —
 the split that made a restart lose the thread while the transcript stayed on
 screen.
 
-The interface is the one this class always had, plus the listing methods a
-durable store makes possible. Every method is now async, because a network
-store cannot pretend otherwise; every caller was already in an async context.
+It depends on ports.ConversationStore and never on an adapter, which is what
+lets Redis be swapped for a database or an HTTP service without a line moving
+in this file.
 """
 import uuid
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
-from ..adapters.store import Backend, Chat, Turn, now_ms
-
-TITLE_MAX = 60
+from ..domain.conversation import Chat
+from ..ports import ConversationStore
 
 
 class NotYours(Exception):
@@ -37,22 +35,9 @@ class NotYours(Exception):
     """
 
 
-def title_of(question: str) -> str:
-    """A chat's name, which is the first thing that was asked of it.
-
-    Server-side now: the title travels with the conversation, so the phone that
-    opens it later shows the same name as the laptop that started it. The rule
-    is the one the browser used, moved rather than reinvented.
-    """
-    text = question.strip()
-    if not text:
-        return "New chat"
-    return f"{text[: TITLE_MAX - 1]}…" if len(text) > TITLE_MAX else text
-
-
 class SessionStore:
-    def __init__(self, backend: Backend, max_messages: int, max_turns: int):
-        self._backend = backend
+    def __init__(self, store: ConversationStore, max_messages: int, max_turns: int):
+        self._store = store
         # How many messages the model is replayed. A turn is two of them, so an
         # odd cap simply rounds down to whole turns — half an exchange is not a
         # useful thing to send.
@@ -97,7 +82,7 @@ class SessionStore:
         authorized on the read path; continuing one has to be authorized on
         this one, or the read path's lock is on a door with another way in.
         """
-        chat = await self._backend.load(session_id)
+        chat = await self._store.load(session_id)
         if chat is not None and chat.owner != owner:
             raise NotYours(session_id)
         return chat
@@ -105,7 +90,7 @@ class SessionStore:
     async def history(self, session_id: str) -> list[BaseMessage]:
         """The context at an id, with no owner check — tests and callers that
         have already done one. A turn goes through `resume`."""
-        return self.context(await self._backend.load(session_id))
+        return self.context(await self._store.load(session_id))
 
     async def append(
         self,
@@ -122,41 +107,31 @@ class SessionStore:
         only thing that changes that is signing in (see `reassign`).
         """
         chat = await self._load_or_start(session_id, owner)
-        chat.turns.append(Turn(q=question, a=answer, at=now_ms(), blocks=blocks))
-        chat.turns = chat.turns[-self._max_turns :]
-        if not chat.title:
-            chat.title = title_of(question)
-        chat.updated = now_ms()
-        await self._backend.save(chat)
+        chat.add(question, answer, blocks, self._max_turns)
+        await self._store.save(chat)
         return chat
 
     async def pending(self, session_id: str) -> list[str] | None:
-        chat = await self._backend.load(session_id)
+        chat = await self._store.load(session_id)
         return list(chat.pending) if chat and chat.pending else None
 
     async def set_pending(self, session_id: str, owner: str, addresses: list[str]) -> None:
         chat = await self._load_or_start(session_id, owner)
         chat.pending = list(addresses)
-        chat.updated = now_ms()
-        await self._backend.save(chat)
+        await self._store.save(chat)
 
     async def clear_pending(self, session_id: str) -> None:
-        chat = await self._backend.load(session_id)
+        chat = await self._store.load(session_id)
         if chat is None or chat.pending is None:
             return
         chat.pending = None
-        await self._backend.save(chat)
+        await self._store.save(chat)
 
     # ── the conversations, as a list somebody can open ──────────────────────
 
     async def list(self, owner: str, limit: int = 50) -> list[Chat]:
-        """That owner's conversations, newest first.
-
-        One call: the index is a ZSET scored by when each chat was last spoken
-        to, so ordering is the store's job rather than something done here over
-        everything it holds.
-        """
-        return await self._backend.load_many(owner, limit)
+        """That owner's conversations, newest first."""
+        return await self._store.for_owner(owner, limit)
 
     async def chat(self, session_id: str, owner: str) -> Chat | None:
         """One conversation, if it is this owner's.
@@ -167,18 +142,18 @@ class SessionStore:
         identifying somebody reaches anybody else, which includes the fact of
         them having asked something.
         """
-        chat = await self._backend.load(session_id)
+        chat = await self._store.load(session_id)
         return chat if chat and chat.owner == owner else None
 
     async def delete(self, session_id: str, owner: str) -> bool:
         chat = await self.chat(session_id, owner)
         if chat is None:
             return False
-        await self._backend.delete(chat)
+        await self._store.delete(chat)
         return True
 
     async def owns_any(self, owner: str) -> bool:
-        return await self._backend.has(owner)
+        return await self._store.has_any(owner)
 
     async def reassign(self, source: str, target: str) -> int:
         """Hand an anonymous visitor's conversations to the account they made.
@@ -190,11 +165,8 @@ class SessionStore:
         """
         if source == target:
             return 0
-        return await self._backend.reassign(source, target)
+        return await self._store.reassign(source, target)
 
     async def _load_or_start(self, session_id: str, owner: str) -> Chat:
-        chat = await self._backend.load(session_id)
-        if chat is not None:
-            return chat
-        stamp = now_ms()
-        return Chat(id=session_id, owner=owner, title="", created=stamp, updated=stamp)
+        chat = await self._store.load(session_id)
+        return chat if chat is not None else Chat.start(session_id, owner)

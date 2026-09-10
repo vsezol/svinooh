@@ -10,14 +10,16 @@ import time
 
 import pytest
 
-from app.services.sessions import SessionStore, title_of
-from app.adapters.store import CHAT_TTL_S, MemoryBackend, backend_for
+from app.adapters.memory import MemoryConversationStore
+from app.composition import conversation_store
+from app.domain.conversation import CHAT_TTL_S, title_of
+from app.services.sessions import SessionStore
 
 
 @pytest.fixture
 def store():
     # 6 messages of context (three turns), 5 turns kept in the transcript.
-    return SessionStore(MemoryBackend(), max_messages=6, max_turns=5)
+    return SessionStore(MemoryConversationStore(), max_messages=6, max_turns=5)
 
 
 class TestOneRepresentation:
@@ -195,14 +197,14 @@ class TestExpiry:
 
 class TestTheFallback:
     def test_no_redis_url_is_the_in_memory_backend(self):
-        assert isinstance(backend_for(""), MemoryBackend)
+        assert isinstance(conversation_store(""), MemoryConversationStore)
 
 
 # ── reaching into the dev backend, so expiry can be tested without waiting ──
 
 
-def _backend(store: SessionStore) -> MemoryBackend:
-    return store._backend  # noqa: SLF001 — the point of the test is what is inside
+def _backend(store: SessionStore) -> MemoryConversationStore:
+    return store._store  # noqa: SLF001 — the point of the test is what is inside
 
 
 def _expire_chat(store: SessionStore, chat_id: str) -> None:

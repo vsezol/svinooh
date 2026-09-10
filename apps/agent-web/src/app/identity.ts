@@ -21,6 +21,30 @@
  * -------------------------------------------------------------------------
  */
 
+/**
+ * Why localStorage is the right place for this — and what it does cost.
+ *
+ * What is stored is not a credential. It carries no signature, unlocks no
+ * account, and the server treats it as soft by design: it names a browser, and
+ * `_budget` in the service deliberately refuses to meter anything against it
+ * for exactly that reason.
+ *
+ * It is, though, a bearer token for one thing: whoever holds it can read that
+ * browser's anonymous conversations, because that is the whole point of it.
+ * So the honest comparison is against what the app already keeps here — the
+ * account's JWT, in `svinooh_token` (apps/web/src/lib/api.ts), with this same
+ * in-memory fallback. Anything that can read this id can already read that
+ * token, and that token is strictly more powerful. This adds no attack surface
+ * that is not already there, and it is origin-scoped and never sent
+ * automatically, so it is not a CSRF vector the way a cookie would be.
+ *
+ * The residual risk is a shared computer: the id persists, so the next person
+ * at that machine inherits the previous one's anonymous conversations. That is
+ * inherent to a soft identity held in a browser rather than to localStorage —
+ * sessionStorage would fix it and would also lose the conversation on every
+ * tab close, which is the thing this exists to prevent. Signing in re-keys the
+ * conversations to the account, after which this id owns nothing.
+ */
 const KEY = 'svinooh_agent_id_v1';
 
 /** The header the id rides on. The service names the same string. */

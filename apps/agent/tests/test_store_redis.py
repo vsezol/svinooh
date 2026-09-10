@@ -29,7 +29,8 @@ import uuid
 import pytest
 
 from app.services.sessions import SessionStore
-from app.adapters.store import CHAT_TTL_S, RedisBackend
+from app.adapters.redis.conversations import RedisConversationStore
+from app.domain.conversation import CHAT_TTL_S
 
 URL = os.getenv("AGENT_TEST_REDIS_URL", "redis://localhost:6399/0")
 
@@ -53,7 +54,7 @@ async def _reachable() -> bool:
 async def redis_store():
     if not await _reachable():
         pytest.skip(f"no Redis at {URL}")
-    backend = RedisBackend(URL)
+    backend = RedisConversationStore(URL)
     store = SessionStore(backend, max_messages=6, max_turns=5)
     owners: list[str] = []
     chat_ids: list[str] = []
