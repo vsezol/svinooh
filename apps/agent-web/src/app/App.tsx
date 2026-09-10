@@ -158,6 +158,9 @@ export function App(props: AppProps) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const lastQuestion = useRef<string | null>(null);
+  // The question a sign-in card promised to answer once there is an account.
+  // Written where the card arrives, read by the effect that watches the token.
+  const walledQuestion = useRef<string | null>(null);
   const desktop = useDesktop();
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -253,6 +256,15 @@ export function App(props: AppProps) {
         // The receipt rides with them, folded. It belongs to this turn rather
         // than to the screen, so scrolling back to an old answer still shows
         // what that answer was built from.
+        //
+        // One of those blocks can be a door rather than an answer: the
+        // allowance turned a typed question into a sign-in card, and the card
+        // says it will be answered afterwards. Remembered here so the effect
+        // below keeps that promise instead of the reader retyping it.
+        const card = res.blocks.find(
+          (block): block is SignInBlock => block.kind === 'signin',
+        );
+        if (card?.pendingQuestion) walledQuestion.current = card.pendingQuestion;
         const receipt = stepsRef.current;
         push([
           {
@@ -309,6 +321,27 @@ export function App(props: AppProps) {
     handedOver.current = true;
     send(initialQuestion);
   }, [initialQuestion, send]);
+
+  /**
+   * The question the sign-in card promised to answer, asked once the account
+   * arrives — the same shape as the hand-off above, for the same reason.
+   *
+   * The token is watched rather than the sign-in click, because clicking it is
+   * not signing in: the shell opens its own flow, and what comes back is a
+   * token landing on a widget that was never unmounted (AgentEmbed.update).
+   * A transition rather than a truthy check, so a visitor who was already
+   * signed in when a card was somehow shown is not asked anything on mount.
+   */
+  const hadToken = useRef(Boolean(token));
+  useEffect(() => {
+    const signedIn = Boolean(token);
+    const justSignedIn = signedIn && !hadToken.current;
+    hadToken.current = signedIn;
+    if (!justSignedIn) return;
+    const question = walledQuestion.current;
+    walledQuestion.current = null;
+    if (question) send(question);
+  }, [token, send]);
 
   const retryLast = useCallback(() => {
     // Retries re-ask without another user bubble — the question is already

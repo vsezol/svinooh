@@ -33,6 +33,24 @@ class TextBlock(BaseModel):
     text: str
 
 
+class SignInBlock(BaseModel):
+    """The answer once a visitor's free questions are spent.
+
+    The second block kind, and the first that is not an answer: it is what the
+    service says INSTEAD of one. It carries the question so the widget can ask
+    it again by itself once the auth flow returns — the person typed it, was
+    shown a door instead of an answer, and should not have to type it twice.
+    """
+
+    kind: Literal["signin"] = "signin"
+    title: str
+    sub: str
+    #: camelCase on the wire, like every other multi-word field the widget reads.
+    pending_question: str | None = Field(
+        default=None, serialization_alias="pendingQuestion"
+    )
+
+
 class ChatSummary(BaseModel):
     """A conversation as a row in a list — what a rail needs to draw one."""
 
@@ -78,7 +96,10 @@ class ChatResponse(BaseModel):
     # because `schema` collides with pydantic's own namespace; on the wire it
     # is "schema".)
     schema_version: int = Field(default=1, serialization_alias="schema")
-    blocks: list[TextBlock]
+    # A union, which is what "the vocabulary grows additively" means in
+    # practice: a widget that does not know a kind skips it, and one that does
+    # renders it, without either end changing endpoint.
+    blocks: list[TextBlock | SignInBlock]
     # Transitional, expand-then-contract: the gateway-era web tab reads
     # `reply`, the widget will read `blocks` — the field is deleted with the
     # gateway, and no consumer ever sees a wire it cannot parse.

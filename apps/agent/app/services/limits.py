@@ -48,3 +48,38 @@ class WindowRateLimiter:
         except Exception as error:  # noqa: BLE001 — see the docstring
             logger.warning("rate limit storage failed (%r) — allowing the turn", error)
             return None
+
+
+class WindowAllowance:
+    """ports.Allowance over the same moving window as the limiter above.
+
+    The arithmetic is bought from the same library and the storage is the same
+    adapter; what differs is the key it is charged to and what a refusal means.
+    The rate limit charges every anonymous caller to ONE shared bucket, because
+    a browser id is too soft to meter cost with — a private window refills it.
+    The allowance charges each browser id separately, because it is not
+    metering cost: it is the product saying "this is where an account starts",
+    and saying it to the wrong visitor because a stranger asked first would be
+    worse than a visitor who resets their storage hearing it late.
+
+    Failing open, for the same reason the limiter does: a Redis blink must not
+    turn into a sign-in wall for people who have asked nothing.
+    """
+
+    def __init__(self, max_questions: int, window_s: int, storage):
+        self._item = RateLimitItemPerSecond(max_questions, window_s)
+        self._strategy = MovingWindowRateLimiter(storage)
+
+    async def charge(self, key: str) -> bool:
+        """Spend one question; True while there are any left.
+
+        A spent allowance charges nothing — the library records an attempt only
+        when it is under the limit — so the card being shown does not push the
+        window out and strand somebody one question further from an answer
+        every time they ask.
+        """
+        try:
+            return await self._strategy.hit(self._item, key)
+        except Exception as error:  # noqa: BLE001 — see the class docstring
+            logger.warning("allowance storage failed (%r) — letting the question through", error)
+            return True

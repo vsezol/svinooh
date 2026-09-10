@@ -37,6 +37,7 @@ Three rules run through all of it:
 | [#178](https://github.com/vsezol/svinooh/pull/178) | The landing is the front door, and `/ai` is the app's home | Step 3, most of it — see what is left of it below |
 | [#179](https://github.com/vsezol/svinooh/pull/179) | A conversation is kept, and it has an address | Step 3 parts 2 and 3 — the store the other three parts key on |
 | [#183](https://github.com/vsezol/svinooh/pull/183) | A visitor gets a portfolio, not a sign-in wall | Step 3 part 4 — the front door's premise, finally true |
+| [#184](https://github.com/vsezol/svinooh/pull/184) | Five questions, then the account | Step 3 part 5 — where a free product stops being free |
 
 ## Next
 
@@ -89,13 +90,10 @@ is itself the thing being kept private.
 
 **What is not true yet.**
 
-*There is no allowance yet.* Every question a visitor asks is free, so part 5 — the
-five that are, and the sign-in card after them — is the whole of what is left.
-
-*And the identity underneath it all is half-built.* The server seam is in place
-(`app/owner.py`, and `agent-web/src/app/identity.ts` in the browser) because parts 2 and
-3 could not key anything without one, but it was built beside part 1 rather than by it —
-see below.
+*The identity underneath it all is half-built.* The server seam is in place
+(`app/domain/identity.py` and `app/services/identity.py`, and
+`agent-web/src/app/identity.ts` in the browser) because parts 2 and 3 could not key
+anything without one, but it was built beside part 1 rather than by it — see below.
 
 **The shape.**
 
@@ -111,6 +109,8 @@ see below.
    files of its own so this part can take it over rather than fight it in `auth.py`. The
    id is validated before it becomes part of a key, and the rate limit still charges
    every anonymous caller to one shared bucket — the id is too soft to meter with.
+   Part 5 charges its allowance per id anyway, which is the distinction worth keeping:
+   a cost lock and a product limit want different keys and are allowed to disagree.
 2. ~~**Durable history in the agent's own store**~~ — done in
    [#179](https://github.com/vsezol/svinooh/pull/179). Redis with its own `agent:` prefix,
    never the portfolio's database, so D1 holds. The one thing worth carrying forward: an
@@ -134,9 +134,16 @@ see below.
    that is disclosed in the turn BEFORE the write, because after it the fact is already
    true. A conversation also remembers the portfolio it made, since nobody can ask the
    host what a nameless caller owns.
-5. **A free allowance, then the account.** Around five questions a session, then the
-   answer is the sign-in card. Counted against the identity from 1 for the copy, and
-   against something harder for the enforcement.
+5. ~~**A free allowance, then the account.**~~ — done in
+   [#184](https://github.com/vsezol/svinooh/pull/184). Five questions a day per browser
+   id, then the answer is the sign-in card — the second block kind the service emits,
+   and the first that is not an answer. Counted against the identity from 1, which is
+   the soft half knowingly: it is a stated limit, not a wall, and the enforcement it
+   would need is still an account. Two things it turned out to need. The card carries
+   the question, and the widget asks it again once a token lands, or the card's own
+   promise is a lie. And the walled turn is STORED — the client takes a turn's id for
+   the conversation's address, so a turn that kept nothing leaves `/ai/c/<id>` naming
+   a conversation the server never heard of.
 
 **What it teaches.** That "who is asking" is the load-bearing question under three
 features that look unrelated, and the difference between an identity you can hang state
