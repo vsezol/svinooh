@@ -2,5 +2,8 @@ __pycache__/
 *.pyc
 .venv/
 .env
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 # built bundle copied in by the Dockerfile's node stage
 widget/

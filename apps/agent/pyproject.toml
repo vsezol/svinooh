@@ -1,0 +1,88 @@
+# The service's one manifest: dependencies, and the tools that gate a change.
+# `uv lock` pins every version into uv.lock; the Dockerfile and CI install from
+# that file alone, so what runs in production is what the tests ran against.
+
+[project]
+name = "svinooh-agent"
+version = "0.0.1"
+description = "The svinooh AI agent service: FastAPI in front, LangGraph behind."
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.141",
+    "uvicorn[standard]>=0.52",
+    # The portfolio public API and the host's config endpoint are fetched with this.
+    "httpx>=0.28",
+    "pydantic>=2.13",
+    # init_chat_model, the provider-neutral model factory, and the graph engine.
+    "langchain>=1.4",
+    "langchain-core>=1.6",
+    "langgraph>=1.2",
+    # Provider plugins: the OpenAI-compatible wire (aggregators like OpenRouter)
+    # and Anthropic direct. Another vendor is another line here.
+    "langchain-openai>=1.6",
+    "langchain-anthropic>=1.7",
+    # Rate-limit arithmetic and storage; its Redis storage shares our pool.
+    "limits>=5.8",
+    # Conversations and the rate limiter's counters, one client library for both.
+    "redis>=8.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1",
+    "pytest-asyncio>=1.4",
+    "ruff>=0.16",
+    "mypy>=2.3",
+]
+
+[tool.uv]
+# An application, not a library: nothing to build, nothing to install as a package.
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+# `assert a and b` is how these tests read; pytest names the failing half anyway.
+ignore = ["PT018"]
+select = [
+    "E", "F", "W",   # pycodestyle, pyflakes
+    "I",             # import order
+    "N",             # naming
+    "UP",            # modern syntax for the Python we run
+    "B",             # likely bugs
+    "BLE",           # a bare `except Exception` has to say why
+    "ASYNC",         # blocking calls inside async code
+    "C4", "SIM",     # comprehensions, simplifications
+    "PT",            # pytest style
+    "T20",           # no stray prints
+    "RUF",
+]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["app"]
+plugins = ["pydantic.mypy"]
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = ["limits.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+# Tests import the service as `app.*` and its fixtures as `tests.*`.
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "contract: checks the live API still sends the shape the fixtures claim (needs network)",
+]
+# Contract tests are opt-in: the default run is deterministic and offline.
+addopts = "-m 'not contract'"
