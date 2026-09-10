@@ -75,15 +75,19 @@ class TestWhatIsStillHeard:
         say(logging.INFO, "identity: no token")
         assert "identity: no token" in out.getvalue()
 
-    def test_the_http_client_is_kept_quiet(self, streams):
-        # One line per model call, times every turn, drowns the decisions.
+    @pytest.mark.parametrize("client", ["httpx", "httpx2"])
+    def test_the_http_clients_are_kept_quiet(self, streams, client):
+        # One line per model call, times every turn, drowns the decisions —
+        # and there are two clients: ours, and the one the model libraries
+        # bring. Silencing only the first left production doing exactly that.
         out, err = streams
-        logging.getLogger("httpx").info("HTTP Request: POST ...")
+        logging.getLogger(client).info("HTTP Request: POST ...")
         assert out.getvalue() == "" and err.getvalue() == ""
 
-    def test_but_its_failures_are_not(self, streams):
+    @pytest.mark.parametrize("client", ["httpx", "httpx2"])
+    def test_but_their_failures_are_not(self, streams, client):
         _, err = streams
-        logging.getLogger("httpx").warning("connect timeout")
+        logging.getLogger(client).warning("connect timeout")
         assert "connect timeout" in err.getvalue()
 
     def test_uvicorn_is_left_to_the_root_handlers(self, streams):

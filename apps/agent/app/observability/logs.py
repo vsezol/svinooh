@@ -101,4 +101,10 @@ def configure() -> None:
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         logging.getLogger(name).handlers.clear()
     # One line per model call, times every turn, drowns the decisions.
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    #
+    # Two names, because there are two clients. Ours is `httpx`; the model
+    # libraries bring `httpx2`, a separate package with a logger of its own,
+    # and silencing only the first left production writing an INFO line for
+    # every call to OpenRouter — the exact noise this line exists to stop.
+    for chatty in ("httpx", "httpx2"):
+        logging.getLogger(chatty).setLevel(logging.WARNING)
