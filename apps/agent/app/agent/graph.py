@@ -58,6 +58,7 @@ from .prompts import (
     creation_failed_prompt,
     degraded_prompt,
     grounded_prompt,
+    nothing_proposed_prompt,
     onboarding_prompt,
     system_prompt,
 )
@@ -307,7 +308,17 @@ class LangGraphAgent:
 
         calls = getattr(reply, "tool_calls", None) or []
         if not calls:
-            # No proposal yet: the conversation is still collecting addresses.
+            # Nothing was proposed. If the person nonetheless just said yes,
+            # they are agreeing to something that does not exist — and in
+            # production the model answered exactly that with "Done, the
+            # portfolio is live". What was not proposed cannot have been
+            # created, so the answer is not left to be improvised.
+            if await self._reads_as_a_yes(state["question"]):
+                logger.info("onboarding: a yes with nothing behind it")
+                return await self._answer(
+                    nothing_proposed_prompt(system_prompt(self._config)), state
+                )
+            # Otherwise the conversation is still collecting addresses.
             return {"answer": extract_text(reply)}
 
         addresses = sanitize_addresses(calls[0].get("args", {}).get("addresses", []))
@@ -367,6 +378,21 @@ class LangGraphAgent:
     async def _unavailable(self, state: AgentState) -> AgentState:
         """Identity could not be resolved: answer, and say the numbers are out of reach."""
         return await self._answer(degraded_prompt(system_prompt(self._config)), state)
+
+    async def _reads_as_a_yes(self, question: str) -> bool:
+        """Whether a reply is a plain confirmation, for a branch that has none.
+
+        The same classifier the write gate uses, asked in the one other place
+        a yes can arrive: an unreadable reply is not one, because guessing
+        wrong here would answer a question nobody asked.
+        """
+        try:
+            async with step("confirm", "Reading your reply"):
+                verdict = await self._confirmations.classify(question)
+        except Exception as error:  # noqa: BLE001 — an unreadable reply is not a yes
+            logger.warning("confirmation classifier failed (%r) — reading it as not a yes", error)
+            return False
+        return verdict.decision == "confirm"
 
     # ── shared by the nodes ─────────────────────────────────────────────────
 

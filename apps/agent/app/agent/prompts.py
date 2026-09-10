@@ -135,8 +135,11 @@ def onboarding_prompt(base: str, signed_in: bool) -> str:
             "with the link can see it — and that signing in later claims it. "
             "When — and only when — they have shared addresses and want to "
             "proceed, call the ProposePortfolio tool with the addresses "
-            "exactly as written. Never invent or complete an address, and do "
-            "not claim anything was created — they will be asked to confirm."
+            "exactly as written — in that same reply, rather than asking "
+            "whether to. Never invent or complete an address. And never say a "
+            "portfolio was created, is live or is ready: calling the tool "
+            "proposes one, the user confirms on the next turn, and only then "
+            "does anything exist."
         )
     return (
         f"{base}\n\nThe user asks about their portfolio but does not own one "
@@ -211,6 +214,24 @@ def created_prompt(base: str, created: Created) -> str:
         "do not promise to send it later.\n\nTell them it is scanning now and "
         "they can ask about it here once the first sync lands. Relay failures "
         "honestly — do not soften a refused address into a success."
+    )
+
+
+def nothing_proposed_prompt(base: str) -> str:
+    """A yes with nothing behind it — the one answer that must not be improvised.
+
+    In production the model was shown an address, asked "want me to?" instead
+    of proposing, and then answered the user's "yes, create it" with "Done —
+    the portfolio is live". Nothing had been proposed, so nothing was created,
+    and somebody was sent looking for a portfolio that does not exist — and
+    for an ownerless one there is no account to find it under.
+    """
+    return (
+        f"{base}\n\nThe user just agreed to something, but no portfolio was "
+        "ever proposed and NOTHING has been created. Say so plainly, in their "
+        "language: nothing exists yet. Then ask them to send the wallet "
+        "addresses so you can propose one. Never say a portfolio was created, "
+        "is live, or is ready — none of that is true."
     )
 
 
