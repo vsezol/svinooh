@@ -147,6 +147,12 @@ class Settings:
     auth_cache_ttl_s: int = int(os.getenv("AGENT_AUTH_CACHE_TTL_S", "60"))
     # The cost lock: how many chat turns one caller gets per window. Every
     # turn is at least one paid model call, several when tools run.
+    # What a visitor gets before the answer is the sign-in card. Counted
+    # against their browser id, which is soft on purpose — clearing storage is
+    # a new person — so this is a stated limit rather than a wall, and the
+    # window keeps it a nudge instead of a one-time budget for all time.
+    free_questions: int = int(os.getenv("AGENT_FREE_QUESTIONS", "5"))
+    free_window_s: int = int(os.getenv("AGENT_FREE_WINDOW_S", "86400"))
     rate_limit_requests: int = int(os.getenv("AGENT_RATE_LIMIT_REQUESTS", "20"))
     rate_limit_window_s: int = int(os.getenv("AGENT_RATE_LIMIT_WINDOW_S", "300"))
 
