@@ -1,31 +1,31 @@
 """Read-only drill-down tools — what the model may ask the service to fetch.
 
-The context block (app/context.py) is the standing summary; these tools are
-the magnifying glass. When a question is about a specific position or about
-how things moved, the model calls a tool, the service executes it, and the
-result returns to the model as a message — the agentic loop, run by
-grounded_node.
+The context block (app/agent/context.py) is the standing summary; these tools
+are the magnifying glass. When a question is about a specific position or
+about how things moved, the model calls a tool, the service executes it, and
+the result returns to the model as a message — the agentic loop, run by the
+grounded node.
 
 Two rules hold everywhere here:
 
 - **The model chooses arguments, never identity.** Each tool is built per
-  request as a closure over the caller's slug, token and fetched data; the
-  schema the model sees has only `period` or `query`. There is no argument it
-  could use to point a tool at someone else's portfolio — privacy by
+  request as a closure over the caller's slug, token and fetched portfolio;
+  the schema the model sees has only `period` or `query`. There is no argument
+  it could use to point a tool at someone else's portfolio — privacy by
   construction extends to tools.
-- **Code computes, the model narrates.** A history question is answered by
-  Python arithmetic over the full series (up to ~1200 points); the model
-  receives five computed lines, never the raw points — cheaper, and immune to
-  LLM arithmetic.
+- **Code computes, the model narrates.** The arithmetic is the domain's
+  (app/domain/portfolio.py), over the full series; the model receives a few
+  computed lines, never the raw points — cheaper, and immune to LLM
+  arithmetic. What is left in this module is the wording.
 """
 
 import logging
-from datetime import datetime
-from typing import Literal
 
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
 
+from ..adapters.portfolio import DataSource
+from ..domain.portfolio import History, Period, Portfolio, total_of
 from .context import position_line, short_address, usd
 from .steps import step, tool_label
 
@@ -34,126 +34,51 @@ logger = logging.getLogger("svinooh-ai")
 MAX_MATCHES = 30
 
 
-# How wide each period actually is. The API answers a period with a series that
-# reaches back SEVERAL of them, so a chart has somewhere to scroll to — which
-# means the first point it returns is not the start of the period asked for.
-# The product's own figure slices the window off the end of the series, and so
-# does this: "over the last week" has to mean the same thing in the chat as it
-# does on the page.
-WINDOW_MS: dict[str, int | None] = {
-    "1h": 3_600_000,
-    "24h": 24 * 3_600_000,
-    "7d": 7 * 86_400_000,
-    "30d": 30 * 86_400_000,
-    "all": None,
-}
-
-
-def _epoch_ms(point: dict) -> float | None:
-    stamp = point.get("t")
-    if isinstance(stamp, (int, float)):
-        return float(stamp)
-    if isinstance(stamp, str):
-        try:
-            # The API sends ISO-8601; a trailing Z is not something
-            # fromisoformat accepts before 3.11's relaxation everywhere.
-            return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp() * 1000
-        except ValueError:
-            return None
-    return None
-
-
-def window_of(points: list[dict], period: str) -> list[dict]:
-    """The points inside the asked-for period, counted back from the last one."""
-    width = WINDOW_MS.get(period)
-    if width is None or not points:
-        return points
-    last = _epoch_ms(points[-1])
-    if last is None:
-        return points
-    opens = last - width
-    inside = [p for p in points if (_epoch_ms(p) or 0) >= opens]
-    # Fewer than two readings inside the window says nothing about a change;
-    # the whole series at least says something true about a longer one.
-    return inside if len(inside) >= 2 else points
-
-
-def summarize_history(series: dict, period: str) -> str:
-    """The arithmetic half of a history answer: facts computed, not modeled."""
-    usable = [p for p in (series.get("points") or []) if isinstance(p.get("usd"), (int, float))]
-    points = window_of(usable, period)
-    if len(points) < 2:
+def summarize_history(history: History, period: str) -> str:
+    """A period's change, said in the words the model will quote."""
+    change = history.change(period)
+    if change is None:
         return "Not enough history recorded for this period yet."
-    first, last = points[0], points[-1]
-    low = min(points, key=lambda p: p["usd"])
-    high = max(points, key=lambda p: p["usd"])
-    delta = last["usd"] - first["usd"]
-    percent = (delta / first["usd"] * 100) if first["usd"] else 0.0
     return (
-        f"Period {period}: {len(points)} readings.\n"
-        f"Start {usd(first['usd'])} at {first.get('t')} -> last reading {usd(last['usd'])} "
-        f"at {last.get('t')}.\n"
-        f"Change {delta:+,.2f} USD ({percent:+.1f}%).\n"
-        f"Low {usd(low['usd'])} at {low.get('t')}; high {usd(high['usd'])} at {high.get('t')}.\n"
+        f"Period {period}: {len(change.readings)} readings.\n"
+        f"Start {usd(change.first.usd)} at {change.first.at} -> "
+        f"last reading {usd(change.last.usd)} at {change.last.at}.\n"
+        f"Change {change.delta:+,.2f} USD ({change.percent:+.1f}%).\n"
+        f"Low {usd(change.low.usd)} at {change.low.at}; "
+        f"high {usd(change.high.usd)} at {change.high.at}.\n"
         "The last reading is the newest recorded point, which can sit slightly "
         "behind the live total shown in the portfolio above — quote the live "
         "total when asked what the portfolio is worth now."
     )
 
 
-def find_positions(data: dict, query: str) -> str:
-    """Every position matching the query, uncapped by the context block's limit.
-
-    Matches on what a person names a position by: its symbol, its full name,
-    the protocol it sits in and the network it lives on. Searching the symbol
-    alone was why "uniswap" found nothing in a portfolio holding three Uniswap
-    pools — the protocol is in `platform`, and nobody asks about a pool by its
-    LP token symbol.
-    """
-    needle = query.strip().lower()
-    if not needle:
+def find_positions(portfolio: Portfolio, query: str) -> str:
+    """Every position matching the query, uncapped by the context block's limit."""
+    if not query.strip():
         return "Empty query."
-    matches = []
-    for wallet in data.get("wallets") or []:
-        address = short_address(wallet.get("address") or "?")
-        for position in wallet.get("positions") or []:
-            haystack = " ".join(
-                str(position.get(field) or "")
-                for field in ("symbol", "name", "platform", "network", "category")
-            ).lower()
-            if needle in haystack:
-                matches.append((position.get("valueUsd") or 0, address, position))
+    matches = portfolio.matching(query)
     if not matches:
+        # A miss names what IS there, so the model's next guess is informed
+        # rather than another word from the same question.
+        held = ", ".join(portfolio.protocols) or "no protocol positions"
         return (
-            f'No position matches "{query}". The portfolio holds: '
-            + ", ".join(
-                sorted(
-                    {
-                        str(p.get("platform"))
-                        for w in (data.get("wallets") or [])
-                        for p in (w.get("positions") or [])
-                        if p.get("platform") and p.get("platform") != "wallet"
-                    }
-                )
-                or ["no protocol positions"]
-            )
-            + " — and plain token holdings."
+            f'No position matches "{query}". '
+            f"The portfolio holds: {held} — and plain token holdings."
         )
-    matches.sort(key=lambda row: -row[0])
-    total = sum(value for value, _, _ in matches)
+    total = total_of(match.position for match in matches)
     head = (
         f'{len(matches)} position(s) match "{query}", {usd(total)} in total'
         + (f" (showing the largest {MAX_MATCHES})" if len(matches) > MAX_MATCHES else "")
         + ":"
     )
     lines = [
-        f"{address}: {position_line(position, detail=True)}"
-        for _, address, position in matches[:MAX_MATCHES]
+        f"{short_address(match.address)}: {position_line(match.position, detail=True)}"
+        for match in matches[:MAX_MATCHES]
     ]
     return "\n".join([head, *lines])
 
 
-def portfolio_tools(source, slug: str, token: str | None, data: dict) -> list:
+def portfolio_tools(source: DataSource, slug: str, token: str | None, portfolio: Portfolio) -> list:
     """Build this request's tools around this caller's portfolio.
 
     The docstrings below are not documentation — they are the instructions the
@@ -161,7 +86,7 @@ def portfolio_tools(source, slug: str, token: str | None, data: dict) -> list:
     """
 
     @tool
-    async def history_summary(period: Literal["1h", "24h", "7d", "30d", "all"]) -> str:
+    async def history_summary(period: Period) -> str:
         """How the portfolio's total value moved over a period.
 
         Call when the user asks what changed, grew or dropped, or about peaks
@@ -181,7 +106,7 @@ def portfolio_tools(source, slug: str, token: str | None, data: dict) -> list:
         a protocol name: "aave", "usdc", "uniswap". If nothing matches, try
         once more with a different word from the user's question.
         """
-        return find_positions(data, query)
+        return find_positions(portfolio, query)
 
     return [history_summary, position_details]
 
@@ -207,9 +132,7 @@ def tool_phrase(name: str, args: dict) -> str | None:
 
     One phrase per tool, and lives beside the tools so adding one is a line
     away from adding the other. A tool with no phrase returns None and is
-    reported by its own name -- honest rather than tidy. A new tool says
-    something true on its first day instead of borrowing somebody else's
-    sentence.
+    reported by its own name -- honest rather than tidy.
     """
     if name == "history_summary":
         period = str(args.get("period", ""))
