@@ -121,20 +121,27 @@ class TestThePendingProposal:
 
 
 class TestThePortfolioAConversationMade:
-    """For a visitor, the conversation is the only record that they have one."""
+    """For a visitor, the conversation is the only record that they have one.
+
+    Read through `chat`, as the rest of this file does. These were written
+    against `resume`, on a branch that started before the one which split that
+    method into `open_turn` and `chat` — two changes that never touched the
+    same file, merged cleanly, and left three tests calling something that no
+    longer exists.
+    """
 
     async def test_it_survives_between_turns(self, store):
         await store.set_portfolio("c1", "anon:deadbeef", "pf-1")
-        assert (await store.resume("c1", "anon:deadbeef")).portfolio == "pf-1"
+        assert (await store.chat("c1", "anon:deadbeef")).portfolio == "pf-1"
 
     async def test_a_later_turn_does_not_drop_it(self, store):
         await store.set_portfolio("c1", "anon:deadbeef", "pf-1")
         await store.append("c1", "anon:deadbeef", "how much is it worth", "a", [])
-        assert (await store.resume("c1", "anon:deadbeef")).portfolio == "pf-1"
+        assert (await store.chat("c1", "anon:deadbeef")).portfolio == "pf-1"
 
     async def test_a_conversation_that_made_nothing_remembers_nothing(self, store):
         await store.append("c1", "anon:deadbeef", "q", "a", [])
-        assert (await store.resume("c1", "anon:deadbeef")).portfolio is None
+        assert (await store.chat("c1", "anon:deadbeef")).portfolio is None
 
 
 class TestSigningIn:
