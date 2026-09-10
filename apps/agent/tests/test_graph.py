@@ -428,6 +428,13 @@ class TestTheContractWithTheLayerAbove:
         assert reply.answer.endswith("/p/anon-pf")
         assert reply.answer.startswith("Done.")
 
+    async def test_and_only_once_when_the_model_wrote_it_too(self):
+        # Told not to write the link itself, the model sometimes does. A reply
+        # ending in the same link twice reads like a bug because it is one.
+        bot, _, _ = wire(confirmation="confirm", model=Model(text="Done. /p/anon-pf"))
+        reply = await bot.run(Ask(question="yes", pending_addresses=("0xAAA",)))
+        assert reply.answer.count("/p/anon-pf") == 1
+
     async def test_and_nothing_is_appended_when_nothing_was_created(self):
         class Refusing(Api):
             async def create_anonymous_portfolio(self, address):

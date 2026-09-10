@@ -367,7 +367,13 @@ class LangGraphAgent:
             # "svinooh.com/p/…" once and left it out entirely the next time —
             # both after being handed it. A path is language-neutral, so this
             # costs the answer nothing and cannot be lost.
-            outcome["answer"] = f"{answered['answer']}\n\n/p/{result.slug}"
+            #
+            # Only when it is not already there: told not to write the link
+            # itself, the model sometimes writes it anyway, and a reply ending
+            # in the same link twice reads like a bug because it is one.
+            link = f"/p/{result.slug}"
+            written = answered["answer"]
+            outcome["answer"] = written if link in written else f"{written}\n\n{link}"
         return outcome
 
     async def _cancel_creation(self, state: AgentState) -> AgentState:
