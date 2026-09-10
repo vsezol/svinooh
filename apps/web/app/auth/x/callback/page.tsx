@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { AuthResponseDto } from '@svinooh/shared';
 import { Logo } from '../../../../src/components/Logo';
+import { takeReturn } from '../../../../src/lib/after-signin';
 import { api, ApiError } from '../../../../src/lib/api';
 import { useAuth } from '../../../../src/lib/auth';
 import { Button, Note, Spinner } from '../../../../src/ui';
@@ -45,7 +46,9 @@ function XCallback() {
       body: JSON.stringify({ code, state }),
     })
       .then((res) => applyAuth(res, 'x'))
-      .then((me) => router.replace(`/p/${me.portfolioSlug}`))
+      // Back where the sign-in started, when it started somewhere that would
+      // lose something — the chat. Otherwise the portfolio, as it always was.
+      .then((me) => router.replace(takeReturn() ?? `/p/${me.portfolioSlug}`))
       .catch((err) => {
         setFailed(err instanceof ApiError ? err.message : 'Sign-in did not complete.');
       });

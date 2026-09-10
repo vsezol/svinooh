@@ -137,14 +137,20 @@ export function AgentPage({ conversationId }: { conversationId?: string } = {}) 
    */
   const opened = useRef<string | null>(null);
   useEffect(() => {
-    if (!ready || !conversationId || opened.current === conversationId) return;
+    // `known` for the same reason the parked question waits for it, and it
+    // bites hardest right after somebody signs in: their conversations move
+    // to the account, so a read that goes out before the token arrives is an
+    // anonymous read of a chat that is no longer anonymous — a 404, and a
+    // 404 is a blank chat. The conversation would vanish on the next reload
+    // of the address it had just been given.
+    if (!known || !ready || !conversationId || opened.current === conversationId) return;
     opened.current = conversationId;
     // Already the one on screen — the usual case, when this page put the id in
     // the URL a moment ago. Re-opening it would be a wasted fetch.
     if (activeId === conversationId) return;
     awaitingOpen.current = true;
     agent.current?.openConversation(conversationId);
-  }, [ready, conversationId, activeId]);
+  }, [known, ready, conversationId, activeId]);
 
   /**
    * The address of the conversation on screen.
@@ -305,7 +311,11 @@ export function AgentPage({ conversationId }: { conversationId?: string } = {}) 
         </div>
       </div>
 
-      {authOpen ? <AuthModal onClose={() => setAuthOpen(false)} /> : null}
+      {/* The one thing this modal must not do here is take somebody away.
+          It asks for an account underneath a first answer, and the answer is
+          what they are signing in to keep — so it comes back to this address,
+          conversation and all, rather than to the new portfolio. */}
+      {authOpen ? <AuthModal onClose={() => setAuthOpen(false)} returnTo={pathname} /> : null}
     </div>
   );
 }
