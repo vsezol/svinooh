@@ -101,11 +101,11 @@ def portfolio_tools(source: DataSource, slug: str, token: str | None, portfolio:
     def position_details(query: str) -> str:
         """Full detail on positions matching a token symbol or protocol name.
 
-        Call when the user asks about a specific token, pool or protocol that
-        the portfolio overview above does not show. The match is a
-        case-insensitive substring, so pass one short word — a token symbol or
-        a protocol name: "aave", "usdc", "uniswap". If nothing matches, try
-        once more with a different word from the user's question.
+        Call when the user asks about a specific token, pool or protocol
+        that the portfolio overview above does not show. Pass one short word
+        — a token symbol or a protocol name — and it matches any word in a
+        position that starts with it, whatever the case. If nothing matches,
+        try once more with a different word from the user's question.
         """
         return find_positions(portfolio, query)
 

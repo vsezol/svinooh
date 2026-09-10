@@ -362,15 +362,13 @@ class LangGraphAgent:
         outcome: AgentState = {**answered, "pending_clear": True}
         if result.slug:
             outcome["portfolio_created"] = result.slug
-            # Appended rather than asked for. The link is the only way back to
-            # a portfolio nobody owns, and in production the model wrote
-            # "svinooh.com/p/…" once and left it out entirely the next time —
-            # both after being handed it. A path is language-neutral, so this
-            # costs the answer nothing and cannot be lost.
+            # Appended rather than asked for: the link is the only way back
+            # to a portfolio nobody owns, and a model that abbreviates it or
+            # promises it later has lost it for good. A path is
+            # language-neutral, so this costs the answer nothing.
             #
-            # Only when it is not already there: told not to write the link
-            # itself, the model sometimes writes it anyway, and a reply ending
-            # in the same link twice reads like a bug because it is one.
+            # Only when it is not already there, so a model that writes it
+            # anyway does not end its reply with the same link twice.
             link = f"/p/{result.slug}"
             written = answered["answer"]
             outcome["answer"] = written if link in written else f"{written}\n\n{link}"

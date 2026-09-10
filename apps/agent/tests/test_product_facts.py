@@ -55,27 +55,28 @@ class TestWhatReachesTheModel:
 
 
 class TestWhatIsSaidAboutAPortfolioNobodyOwns:
-    """The one mistake here that cannot be walked back.
+    """Who can see it is a fact the prompt has to carry, either way.
 
-    An ownerless portfolio is public. A production answer said "it's private
-    by default" with the disclosure in front of it, which tells somebody
-    their balances are hidden when anyone with the link can read them.
+    An ownerless portfolio is public and an owned one is not, and the
+    difference is the whole of this project's first rule. What matters is
+    that each is told its own truth — not which words it is told in.
     """
 
-    def test_the_disclosure_forbids_the_word_it_kept_reaching_for(self):
+    def test_an_ownerless_one_is_told_it_is_public(self):
         from app.agent.prompts import created_prompt
         from app.domain.onboarding import Created
 
-        said = created_prompt("base", Created(slug="anon-pf", anonymous=True))
-        assert "PUBLIC" in said and "Never call it private" in said
+        said = created_prompt("base", Created(slug="anon-pf", anonymous=True)).lower()
+        assert "public" in said and "anyone with the link" in said
+        assert "claims it" in said, "and that an account is how it stops being ownerless"
 
     def test_and_an_owned_one_is_told_none_of_it(self):
         # Their portfolio IS private, so the same warning there would be false.
         from app.agent.prompts import created_prompt
         from app.domain.onboarding import Created
 
-        said = created_prompt("base", Created(slug="mine", anonymous=False))
-        assert "PUBLIC" not in said and "private" not in said
+        said = created_prompt("base", Created(slug="mine", anonymous=False)).lower()
+        assert "public" not in said and "private" not in said
 
 
 class TestTheRulesThemselves:

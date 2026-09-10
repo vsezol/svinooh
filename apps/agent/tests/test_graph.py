@@ -246,7 +246,8 @@ class TestAYesWithNothingBehindIt:
         bot = agent(model=model, portfolio=api, intent="portfolio", confirmation="confirm")
         await run(bot, question="Yes, create it.")
         assert api.created == 0 and api.created_anonymous == []
-        assert "NOTHING has been created" in model.prompts[-1], "the fact is given, not asked for"
+        told = model.prompts[-1].lower()
+        assert "nothing has been created" in told, "the fact is given, not asked for"
 
     async def test_and_the_conversation_carries_on_when_it_is_not_a_yes(self):
         model = Model(text="Send me the addresses.")
