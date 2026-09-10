@@ -14,10 +14,10 @@ import time
 import pytest
 
 from app.adapters.memory import MemoryConversationStore
+from app.application.sessions import SessionStore
 from app.container import build
 from app.domain.conversation import CHAT_TTL_S, title_of
 from app.domain.ids import new_chat_id
-from app.services.sessions import SessionStore
 from app.settings import Settings
 
 
@@ -30,8 +30,8 @@ def store():
 class TestOneRepresentation:
     async def test_the_context_is_derived_from_the_stored_turns(self, store):
         await store.append("c1", "user:1", "what changed?", "not much", [])
-        messages = await store.history("c1")
-        assert [m.content for m in messages] == ["what changed?", "not much"]
+        replayed = await store.history("c1")
+        assert [(t.q, t.a) for t in replayed] == [("what changed?", "not much")]
 
     async def test_a_conversation_reads_back_whole(self, store):
         await store.append("c1", "user:1", "first", "a1", [{"kind": "text", "text": "a1"}])
@@ -45,15 +45,10 @@ class TestOneRepresentation:
     async def test_the_model_sees_less_than_the_reader_does(self, store):
         for n in range(5):
             await store.append("c1", "user:1", f"q{n}", f"a{n}", [])
-        # Three turns of context, out of five kept.
-        assert [m.content for m in await store.history("c1")] == [
-            "q2",
-            "a2",
-            "q3",
-            "a3",
-            "q4",
-            "a4",
-        ]
+        # Three turns of context, out of five kept. The cap is counted in
+        # messages, which is two per turn, so an odd one rounds down to whole
+        # exchanges — half of one is not a useful thing to send.
+        assert [t.q for t in await store.history("c1")] == ["q2", "q3", "q4"]
         assert len((await store.chat("c1", "user:1")).turns) == 5
 
     async def test_a_conversation_stops_growing_forever(self, store):
@@ -198,7 +193,7 @@ class TestExpiry:
         assert await store.chat("c1", "user:1") is None
         # And its context with it — a model replayed from a chat that no longer
         # exists would be answering out of a conversation nobody can see.
-        assert await store.history("c1") == []
+        assert await store.history("c1") == ()
 
     async def test_the_index_does_not_show_what_has_expired(self, store):
         await store.append("gone", "user:1", "q", "a", [])
@@ -299,9 +294,9 @@ class TestTheIdIsAnAddress:
         """The arithmetic only has to make this rare; the store still asks."""
         await store.append("TAKEN", "user:1", "q", "a", [])
         handed = iter(["TAKEN", "TAKEN", "FRESH1"])
-        monkeypatch.setattr("app.services.sessions.new_chat_id", lambda: next(handed))
+        monkeypatch.setattr("app.application.sessions.new_chat_id", lambda: next(handed))
         assert await store.new_id() == "FRESH1"
 
     async def test_a_fresh_id_is_used_as_it_is(self, store, monkeypatch):
-        monkeypatch.setattr("app.services.sessions.new_chat_id", lambda: "FRESH1")
+        monkeypatch.setattr("app.application.sessions.new_chat_id", lambda: "FRESH1")
         assert await store.new_id() == "FRESH1"

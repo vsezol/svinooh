@@ -5,7 +5,7 @@ the obvious first choice and the wrong one for something whose whole job is to
 be an address somebody sees, copies and occasionally reads out.
 
 **Why short is safe here, and where it would not be.** This id is not a secret.
-Reading a conversation checks that it belongs to the caller (services/sessions
+Reading a conversation checks that it belongs to the caller (application/sessions
 `chat` and `resume`); a guessed id gets a 404 exactly like an invented one, and
 the answer is the same either way, so guessing buys nothing. That is the
 property that makes six characters reasonable — and it is precisely the
@@ -20,7 +20,7 @@ will eventually read one down a phone. Fifty-six symbols, six of them:
     56^6 = 30,840,979,456
 
 Collisions are handled rather than assumed away: the store is asked before an
-id is used (services/sessions `new_id`), so the arithmetic only has to make
+id is used (application/sessions `new_id`), so the arithmetic only has to make
 retries rare, and at any scale this product will see, it does.
 
 Existing 32-character ids keep working — nothing looks at an id's shape, only

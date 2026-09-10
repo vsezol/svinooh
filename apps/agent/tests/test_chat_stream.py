@@ -94,13 +94,13 @@ class TestItIsTheSameTurn:
         events = parse((await client.post("/chat/stream", json={"message": "hello"})).text)
         session = events[-1][1]["session_id"]
         remembered = await wired.sessions.history(session)
-        assert [message.content for message in remembered] == ["hello", ANSWER]
+        assert [(t.q, t.a) for t in remembered] == [("hello", ANSWER)]
 
     async def test_and_carries_it_into_the_next_question(self, client, wired):
         first = parse((await client.post("/chat/stream", json={"message": "hello"})).text)
         session = first[-1][1]["session_id"]
         await client.post("/chat/stream", json={"message": "again", "session_id": session})
-        assert len(await wired.sessions.history(session)) == 4
+        assert [t.q for t in await wired.sessions.history(session)] == ["hello", "again"]
 
 
 class TestRefusals:
@@ -126,7 +126,7 @@ class TestRefusals:
         async with client_for(wired) as client:
             events = parse((await client.post("/chat/stream", json={"message": "q"})).text)
         session = events[0][1]["session_id"]
-        assert await wired.sessions.history(session) == [], (
+        assert await wired.sessions.history(session) == (), (
             "a question with no answer is not a turn"
         )
 

@@ -18,6 +18,7 @@ from typing import Protocol
 
 import httpx
 
+from ..domain.errors import UnknownTokenError
 from ..domain.portfolio import History, Me, Portfolio
 from . import wire
 
@@ -65,7 +66,17 @@ class PortfolioApiSource:
         # own". Host-specific on purpose — it is NOT part of the DataSource
         # protocol, because identity belongs to the host product, while the
         # protocol is only what every data source must answer.
-        return wire.me(await self._get("/api/auth/me", token))
+        #
+        # A rejection is translated here, where the status codes are: above
+        # this line the answer is "the host does not know them", and nothing
+        # up there has to know what 403 means.
+        try:
+            payload = await self._get("/api/auth/me", token)
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code in (401, 403):
+                raise UnknownTokenError from error
+            raise
+        return wire.me(payload)
 
     async def create_portfolio(self, token: str | None) -> str:
         # The agent's writes go through the same public API as its reads, with

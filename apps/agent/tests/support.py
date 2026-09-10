@@ -21,13 +21,15 @@ from app.agent.graph import Agent
 from app.agent.intent import IntentLabel
 from app.agent.llm import Models
 from app.agent.onboarding import ConfirmationDecision
+from app.application.auth import Caller
+from app.application.chats import Chats
+from app.application.identity import Identity
+from app.application.limits import WindowAllowance, WindowRateLimiter
+from app.application.sessions import SessionStore
+from app.application.turns import Turns
 from app.config import Config
 from app.container import Container
 from app.panel import NOTHING_DECIDED, PanelValues
-from app.services.auth import Caller
-from app.services.identity import Identity
-from app.services.limits import WindowAllowance, WindowRateLimiter
-from app.services.sessions import SessionStore
 from app.settings import Settings
 
 # ── the fakes ───────────────────────────────────────────────────────────────
@@ -183,18 +185,25 @@ def container(
     kept = store if store is not None else MemoryConversationStore()
     counters = rate_limit_storage()
     models = models_of(model if model is not None else fake_model("answered"), settings)
+    who = Identity(door if door is not None else Door())
+    sessions = SessionStore(kept, settings.history_max_messages, settings.chat_max_turns)
+    # Generous by default: most tests ask far more than five questions.
+    meter = limiter if limiter is not None else WindowRateLimiter(1000, 60, counters)
+    purse = allowance if allowance is not None else WindowAllowance(1000, 60, counters)
+    bot = Agent(config, host, models, Intents(intent), Confirmations(confirmation))
     return Container(
         settings=settings,
         panel=panel,
         config=config,
         portfolio=host,
-        identity=Identity(door if door is not None else Door()),
+        identity=who,
         store=kept,
-        sessions=SessionStore(kept, settings.history_max_messages, settings.chat_max_turns),
-        # Generous by default: most tests ask far more than five questions.
-        limiter=limiter if limiter is not None else WindowRateLimiter(1000, 60, counters),
-        allowance=allowance if allowance is not None else WindowAllowance(1000, 60, counters),
-        agent=Agent(config, host, models, Intents(intent), Confirmations(confirmation)),
+        sessions=sessions,
+        limiter=meter,
+        allowance=purse,
+        agent=bot,
+        turns=Turns(sessions, who, meter, purse, bot),
+        chats=Chats(sessions, who, settings.chat_list_limit),
     )
 
 

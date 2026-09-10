@@ -34,12 +34,13 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any, TypedDict
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from ..adapters.portfolio import PortfolioApiSource
 from ..config import Config
+from ..domain.conversation import Turn
 from .context import (
     cancelled_prompt,
     confirmation_request_prompt,
@@ -68,7 +69,8 @@ class AgentState(TypedDict, total=False):
     """What flows through the graph — each node reads some keys, writes others."""
 
     question: str
-    history: list[BaseMessage]
+    #: The exchanges to replay, as the conversation stored them.
+    history: tuple[Turn, ...]
     # The widget's hint about which portfolio is on screen, and the caller's
     # token to fetch it with — both may be absent.
     portfolio: str | None
@@ -341,11 +343,12 @@ class Agent:
 
     @staticmethod
     def _messages(system: str, state: AgentState) -> list[BaseMessage]:
-        return [
-            SystemMessage(content=system),
-            *state.get("history", []),
-            HumanMessage(content=state["question"]),
-        ]
+        """The prompt, the conversation so far, and the question being asked."""
+        messages: list[BaseMessage] = [SystemMessage(content=system)]
+        for turn in state.get("history", ()):
+            messages += [HumanMessage(content=turn.q), AIMessage(content=turn.a)]
+        messages.append(HumanMessage(content=state["question"]))
+        return messages
 
     async def _answer(self, system: str, state: AgentState) -> AgentState:
         # The model call is an operation like any other, and until it was

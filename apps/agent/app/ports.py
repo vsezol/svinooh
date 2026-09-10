@@ -4,13 +4,13 @@ Every one of these is something we depend on and do not own. The layers above
 name the protocol; app/adapters names the vendor; app/container.py is the one
 place the two are introduced to each other. So "replace Redis with a database,
 or with an HTTP service" is a new module in adapters plus one line in the
-container — never a change in app/services.
+container — never a change in app/application.
 
 `Protocol` rather than an abstract base class, which is the Python way to do
 this: an adapter satisfies a port by having the right methods, so nothing has
 to import a base to inherit from and the dependency really does point one way.
 Runtime type checks are not the point — the point is that a reader of
-app/services can see the whole contract without opening an adapter.
+app/application can see the whole contract without opening an adapter.
 """
 
 from typing import Protocol

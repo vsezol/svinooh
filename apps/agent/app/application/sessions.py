@@ -21,9 +21,7 @@ in this file.
 
 import logging
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-
-from ..domain.conversation import Chat
+from ..domain.conversation import Chat, Turn
 from ..domain.identity import Owner
 from ..domain.ids import new_chat_id
 from ..ports import ConversationStore
@@ -102,27 +100,25 @@ class SessionStore:
         fresh = await self.new_id()
         return fresh, None, Owner.for_session(fresh)
 
-    def context(self, chat: Chat | None) -> list[BaseMessage]:
-        """The model's context, derived from the stored turns.
+    def context(self, chat: Chat | None) -> tuple[Turn, ...]:
+        """The exchanges the model is replayed, oldest ones dropped.
 
-        Not a second store — the same turns, rendered. Oldest turns fall off
-        the front, which bounds the tokens on every model call and keeps the
-        recent exchanges, the ones "as we discussed" is about.
+        The turns themselves, not messages: what a model call looks like is
+        the agent layer's business, and this one only decides how much of the
+        conversation it gets. Bounding it here bounds the tokens on every
+        call and keeps the recent exchanges, the ones "as we discussed" is
+        about.
 
         Takes the conversation rather than its id so a turn loads it once and
-        reads everything it needs off that: whose it is, what was said, and
-        what is pending.
+        reads everything off that: whose it is, what was said, what is pending.
         """
         if chat is None:
-            return []
-        messages: list[BaseMessage] = []
-        for turn in chat.turns[-self._max_turns_in_context :]:
-            messages += [HumanMessage(content=turn.q), AIMessage(content=turn.a)]
-        return messages
+            return ()
+        return tuple(chat.turns[-self._max_turns_in_context :])
 
-    async def history(self, session_id: str) -> list[BaseMessage]:
-        """The context at an id, with no owner check — tests and callers that
-        have already done one. A turn goes through `start_or_resume`."""
+    async def history(self, session_id: str) -> tuple[Turn, ...]:
+        """The context at an id, with no owner check — for callers that have
+        already done one. A turn goes through `open_turn`."""
         return self.context(await self._store.load(session_id))
 
     async def append(
@@ -193,6 +189,23 @@ class SessionStore:
 
     async def owns_any(self, owner: str) -> bool:
         return await self._store.has_any(owner)
+
+    async def claim(self, owner: Owner | None) -> None:
+        """Move a visitor's conversations onto the account they just signed into.
+
+        Lazy and self-limiting rather than an endpoint the client has to
+        remember to call: one EXISTS on an authenticated request, and once the
+        move is done the anonymous index is gone, so every later check is a
+        miss. A client that never announces its sign-in still ends up with its
+        history — which matters because the product asks for an account
+        underneath the first answer, the exact moment the conversation became
+        worth keeping.
+        """
+        if owner is None or not owner.signed_in:
+            return
+        source = owner.anonymous_key
+        if source is not None and await self.owns_any(source):
+            await self.reassign(source, owner.key)
 
     async def reassign(self, source: str, target: str) -> int:
         """Hand an anonymous visitor's conversations to the account they made.

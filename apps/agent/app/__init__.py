@@ -2,7 +2,7 @@
 
 POST /chat takes a message, runs it through the graph with the conversation's
 history, and answers in blocks. The layers: app/domain is what a conversation
-is, app/services what is done with one, app/adapters where it is kept and
+is, app/application what is done with one, app/adapters where it is kept and
 where the portfolio comes from, app/agent the graph and the model, app/api
 the wire — and app/container.py the one place they are introduced.
 """
@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .api import errors
 from .api.routes import router
 from .container import Container, build
 from .domain.identity import ANON_HEADER
@@ -107,5 +108,7 @@ def create_app(container: Container | None = None) -> FastAPI:
             allow_headers=["authorization", "content-type", ANON_HEADER.lower()],
             max_age=3600,
         )
+    # What each domain refusal means on the wire, in one place.
+    errors.install(app)
     app.include_router(router)
     return app
