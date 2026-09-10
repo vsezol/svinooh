@@ -9,7 +9,16 @@ which is exactly when the tools that read it should be re-examined.
 The shapes mirror PortfolioDto / WalletDto / PositionDto in libs/shared: the
 fields the agent reads are all present, including the ones a plain token
 holding leaves null.
+
+They are the WIRE, and stay so: tests/test_contract.py reads their keys to
+check the live API still sends them. What everything above the adapter works
+in is the domain, and the `as_*` helpers at the bottom get there by running
+these through the real mapper — so every test that reads a portfolio also
+proves the translation still works.
 """
+
+from app.adapters import wire
+from app.domain.portfolio import History, Portfolio, Position
 
 
 def position(
@@ -187,3 +196,19 @@ def history(points: list[tuple[str, float]], range_: str = "7d") -> dict:
             for stamp, total in points
         ],
     }
+
+
+# ── the same fixtures, as everything above the adapter sees them ────────────
+
+
+def as_portfolio(data: dict | None = None, **kwargs) -> Portfolio:
+    """A parsed portfolio: `rich_portfolio` by default, or the payload given."""
+    return wire.portfolio(rich_portfolio(**kwargs) if data is None else data)
+
+
+def as_history(points: list[tuple[str, float]], range_: str = "7d") -> History:
+    return wire.history(history(points, range_))
+
+
+def as_position(data: dict) -> Position:
+    return wire.position(data)

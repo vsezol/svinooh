@@ -203,14 +203,13 @@ class Agent:
             logger.warning("identity lookup failed: %r", error)
             return {"route": "unavailable"}
 
-        owned = me.get("portfolios") or []
-        if not owned:
+        if not me.portfolios:
             logger.info("identity: owns none -> onboard")
             return {"route": "onboard"}
         # Their first portfolio stands in for "theirs" until the conversation
         # can pick between several — a refinement the state has room for.
-        target = owned[0].get("slug", "")
-        logger.info("identity: owns %d -> grounded in %s", len(owned), target)
+        target = me.portfolios[0].slug
+        logger.info("identity: owns %d -> grounded in %s", len(me.portfolios), target)
         return {"route": "grounded", "target_portfolio": target}
 
     async def _general(self, state: AgentState) -> AgentState:
@@ -234,9 +233,9 @@ class Agent:
         token = state.get("authorization")
         try:
             async with step("portfolio", f"Reading portfolio · {target}"):
-                data = await self._portfolio.portfolio(target, token)
-            system = grounded_prompt(system, data, self._config.context_max_positions())
-            tools = portfolio_tools(self._portfolio, target, token, data)
+                portfolio = await self._portfolio.portfolio(target, token)
+            system = grounded_prompt(system, portfolio, self._config.context_max_positions())
+            tools = portfolio_tools(self._portfolio, target, token, portfolio)
         except Exception as error:  # noqa: BLE001 — any fetch failure degrades the same way
             logger.warning("portfolio context fetch failed for %s: %r", target, error)
             system = degraded_prompt(system)
@@ -319,14 +318,14 @@ class Agent:
             return await self._answer(creation_failed_prompt(self._config.system_prompt()), state)
         logger.info(
             "onboarding: created %s (+%d wallets, %d refused)",
-            result.get("slug"),
-            len(result.get("added", [])),
-            len(result.get("failed", [])),
+            result.slug,
+            len(result.added),
+            len(result.refused),
         )
         answered = await self._answer(created_prompt(self._config.system_prompt(), result), state)
         outcome: AgentState = {**answered, "pending_clear": True}
-        if result.get("slug"):
-            outcome["portfolio_created"] = str(result["slug"])
+        if result.slug:
+            outcome["portfolio_created"] = result.slug
         return outcome
 
     async def _cancel_creation(self, state: AgentState) -> AgentState:

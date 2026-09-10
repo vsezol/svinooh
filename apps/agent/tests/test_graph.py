@@ -8,6 +8,7 @@ builds its own Agent over an Api and a Model it can inspect afterwards.
 import pytest
 
 from app.agent.onboarding import create_portfolio_with_wallets
+from app.domain.portfolio import Me, PortfolioRef
 from tests import fixtures as fx
 from tests.support import agent
 
@@ -17,8 +18,9 @@ class Api:
 
     def __init__(self, *, owned=None, portfolio=None, refuse=False, me_fails=False):
         self.calls = []
+        #: The slugs this caller owns, as /auth/me would list them.
         self.owned = owned if owned is not None else []
-        self.portfolio_data = portfolio or fx.rich_portfolio()
+        self.portfolio_data = portfolio or fx.as_portfolio()
         self.refuse = refuse
         self.me_fails = me_fails
         self.created = 0
@@ -34,7 +36,7 @@ class Api:
         self.calls.append(("me", token))
         if self.me_fails:
             raise RuntimeError("auth is down")
-        return {"id": "u1", "portfolios": self.owned}
+        return Me(user_id="u1", portfolios=tuple(PortfolioRef(slug=s) for s in self.owned))
 
     async def portfolio(self, ref, token):
         self.calls.append(("portfolio", ref, token))
@@ -43,20 +45,19 @@ class Api:
         return self.portfolio_data
 
     async def history(self, ref, range_, token):
-        return fx.history([("2026-09-01T00:00:00Z", 1.0), ("2026-09-07T00:00:00Z", 2.0)])
+        return fx.as_history([("2026-09-01T00:00:00Z", 1.0), ("2026-09-07T00:00:00Z", 2.0)])
 
     async def create_portfolio(self, token):
         self.created += 1
-        return {"slug": "new-pf"}
+        return "new-pf"
 
     async def create_anonymous_portfolio(self, address):
         self.created_anonymous.append(address)
-        return {"slug": "anon-pf"}
+        return "anon-pf"
 
     async def add_wallet(self, slug, address, token):
         self.wallets.append((slug, address))
         self.wallet_tokens.append(token)
-        return {"id": "w"}
 
 
 class Model:
@@ -115,7 +116,7 @@ class TestRouting:
         assert ("portfolio", "public-pf", None) in api.calls, "no token is not a header"
 
     async def test_signed_in_with_no_hint_asks_who_is_asking(self):
-        bot, api, _ = wire(api=Api(owned=[{"slug": "theirs"}]))
+        bot, api, _ = wire(api=Api(owned=["theirs"]))
         out = await run(bot, authorization="Bearer T")
         assert out["target_portfolio"] == "theirs"
         assert ("me", "Bearer T") in api.calls
@@ -228,8 +229,8 @@ class TestTheExecutionItself:
         api = Api()
         owned = await create_portfolio_with_wallets(api, ["0xAAA"], "Bearer T")
         visitor = await create_portfolio_with_wallets(api, ["0xBBB"], None)
-        assert owned["anonymous"] is False and owned["slug"] == "new-pf"
-        assert visitor["anonymous"] is True and visitor["slug"] == "anon-pf"
+        assert owned.anonymous is False and owned.slug == "new-pf"
+        assert visitor.anonymous is True and visitor.slug == "anon-pf"
 
     async def test_the_address_that_opened_it_counts_as_added(self):
         # The ownerless POST both creates and holds the first wallet. Reporting
@@ -237,7 +238,7 @@ class TestTheExecutionItself:
         # first address was dropped.
         api = Api()
         result = await create_portfolio_with_wallets(api, ["0xAAA", "sol1"], None)
-        assert result["added"] == ["0xAAA", "sol1"]
+        assert result.added == ("0xAAA", "sol1")
         assert api.wallets == [("anon-pf", "sol1")], "only the rest are POSTed"
 
     async def test_an_empty_proposal_makes_nothing_rather_than_guessing(self):
@@ -257,9 +258,9 @@ class TestTheExecutionItself:
                 return await super().add_wallet(slug, address, token)
 
         result = await create_portfolio_with_wallets(Picky(), ["0xAAA", "bad", "sol1"], None)
-        assert result["added"] == ["0xAAA", "sol1"]
-        assert [f["address"] for f in result["failed"]] == ["bad"]
-        assert result["slug"] == "anon-pf", "the portfolio still exists"
+        assert result.added == ("0xAAA", "sol1")
+        assert [r.address for r in result.refused] == ["bad"]
+        assert result.slug == "anon-pf", "the portfolio still exists"
 
 
 class TestWrites:

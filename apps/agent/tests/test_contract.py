@@ -99,10 +99,15 @@ class TestPortfolioShape:
         assert all(isinstance(v, expected) for v in values)
 
     def test_the_agent_can_read_it_at_all(self, live_portfolio):
-        # The whole point, end to end: real data through the real renderer.
+        # The whole point, end to end: real data through the real mapper and
+        # the real renderer. A field that changed type fails in the parse,
+        # which is the boundary that exists to catch it.
+        from app.adapters import wire
         from app.agent.context import portfolio_context
 
-        block = portfolio_context(live_portfolio)
+        parsed = wire.portfolio(live_portfolio)
+        assert parsed.slug and parsed.wallets, "the payload parsed into nothing"
+        block = portfolio_context(parsed, 12)
         assert "By network" in block and "position(s)" in block
 
 
@@ -120,15 +125,15 @@ class TestHistoryShape:
             assert set(fx.history([("t", 1.0)])["points"][0]) <= set(points[0])
 
     def test_the_window_slice_reads_the_timestamps_it_is_given(self, live_portfolio):
-        # window_of parses `t`; a format change would silently widen every
-        # period back to the whole series.
-        from app.agent.tools import _epoch_ms
+        # The mapper parses `t` once; a format change would silently widen
+        # every period back to the whole series.
+        from app.adapters import wire
 
         with httpx.Client(base_url=API, timeout=60) as client:
             series = client.get(
                 f"/portfolios/{live_portfolio['slug']}/history", params={"range": "7d"}
             ).json()
-        points = series.get("points") or []
-        if not points:
+        if not (series.get("points") or []):
             pytest.skip("no history recorded yet for this portfolio")
-        assert _epoch_ms(points[0]) is not None, "timestamps stopped parsing"
+        readings = wire.history(series).readings
+        assert readings and readings[0].epoch_ms is not None, "timestamps stopped parsing"

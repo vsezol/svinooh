@@ -24,6 +24,7 @@ from langchain_core.runnables import Runnable
 from pydantic import BaseModel, Field
 
 from ..config import Config
+from ..domain.onboarding import Created, Refused
 from .llm import Models, structured
 
 logger = logging.getLogger("svinooh-ai")
@@ -101,7 +102,7 @@ def _as_decision(model: BaseChatModel) -> Runnable[Any, Any]:
 # ── phase 3: the execution — what actually hits the API, after the yes ─────
 
 
-async def create_portfolio_with_wallets(source, addresses: list[str], token: str | None) -> dict:
+async def create_portfolio_with_wallets(source, addresses: list[str], token: str | None) -> Created:
     """Create the portfolio and add every address, through the public API.
 
     Two failure grades on purpose. The portfolio POST failing fails the whole
@@ -133,19 +134,18 @@ async def create_portfolio_with_wallets(source, addresses: list[str], token: str
             # inventing a wallet — the caller relays this as "nothing created".
             raise ValueError("an anonymous portfolio needs at least one address")
         # The first address is spent on the create and is therefore already in.
-        created = await source.create_anonymous_portfolio(addresses[0])
+        slug = await source.create_anonymous_portfolio(addresses[0])
         seeded, rest = addresses[:1], addresses[1:]
     else:
-        created = await source.create_portfolio(token)
+        slug = await source.create_portfolio(token)
         seeded, rest = [], addresses
-    slug = created.get("slug", "")
     added: list[str] = list(seeded)
-    failed: list[dict] = []
+    refused: list[Refused] = []
     for address in rest:
         try:
             await source.add_wallet(slug, address, token)
             added.append(address)
         except Exception as error:  # noqa: BLE001 — one bad address must not sink the rest
             logger.warning("add_wallet failed for %s: %r", address, error)
-            failed.append({"address": address, "error": str(error)})
-    return {"slug": slug, "added": added, "failed": failed, "anonymous": anonymous}
+            refused.append(Refused(address=address, reason=str(error)))
+    return Created(slug=slug, added=tuple(added), refused=tuple(refused), anonymous=anonymous)

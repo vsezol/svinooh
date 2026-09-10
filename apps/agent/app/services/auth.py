@@ -64,7 +64,7 @@ class Authenticator:
             logger.warning("auth check failed (%r) — treating caller as anonymous", error)
             return None
 
-        caller = Caller(user_id=str(me.get("id") or ""))
+        caller = Caller(user_id=me.user_id)
         self._cache[key] = (time.time() + self._ttl_s, caller)
         return caller
 
