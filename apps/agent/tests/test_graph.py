@@ -230,6 +230,51 @@ class TestAVisitorWithNoAccount:
         assert "public" not in model.prompts[-1]
 
 
+class TestAYesWithNothingBehindIt:
+    """The worst answer this branch can give, and it gave it in production.
+
+    Shown an address, the model asked "want me to?" instead of proposing.
+    The next turn's "yes, create it" therefore found no proposal, fell back
+    into onboarding, and was answered with "Done — the portfolio is live".
+    Nothing had been created, and for a portfolio nobody owns there is no
+    account to go looking under.
+    """
+
+    async def test_a_yes_is_not_answered_by_improvising(self):
+        api = Api(owned=[])
+        model = Model(text="Done — the portfolio is live.")
+        bot = agent(model=model, portfolio=api, intent="portfolio", confirmation="confirm")
+        await run(bot, question="Yes, create it.")
+        assert api.created == 0 and api.created_anonymous == []
+        assert "NOTHING has been created" in model.prompts[-1], "the fact is given, not asked for"
+
+    async def test_and_the_conversation_carries_on_when_it_is_not_a_yes(self):
+        model = Model(text="Send me the addresses.")
+        bot = agent(model=model, portfolio=Api(owned=[]), intent="portfolio", confirmation="other")
+        out = await run(bot, question="what is a wallet?")
+        assert out["answer"] == "Send me the addresses."
+
+    async def test_an_unreadable_reply_is_not_a_yes(self):
+        class Broken:
+            async def classify(self, _reply):
+                raise RuntimeError("classifier down")
+
+        model = Model(text="Send me the addresses.")
+        bot = agent(
+            model=model, portfolio=Api(owned=[]), intent="portfolio", confirmations=Broken()
+        )
+        out = await run(bot, question="yes")
+        assert out["answer"] == "Send me the addresses."
+
+    async def test_a_real_proposal_is_untouched(self):
+        model = Model(
+            tool_calls=[{"name": "ProposePortfolio", "args": {"addresses": ["0xAAA"]}, "id": "c"}]
+        )
+        bot, api, _ = wire(api=Api(owned=[]), model=model)
+        out = await run(bot)
+        assert out["pending_set"] == ["0xAAA"] and api.created == 0
+
+
 class TestTheExecutionItself:
     """`create_portfolio_with_wallets` directly — the two doors, up close."""
 
