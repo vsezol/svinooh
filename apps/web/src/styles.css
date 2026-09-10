@@ -197,6 +197,13 @@ button {
   background: var(--surf2);
 }
 
+/* A row runs the full width of the card holding it, and that card clips — so
+   the keyboard ring is drawn inside the row. Outside it, all that survived the
+   clip was a line above and a line below. See :focus-visible in the kit. */
+.row-hover:focus-visible {
+  outline-offset: -2px;
+}
+
 .copy-link:hover {
   color: var(--acc-text);
 }
@@ -890,6 +897,24 @@ html.agent-open body {
     opacity: 1;
     transform: none;
   }
+}
+
+/* The composer card, and the one rule it needs a class for: the field's focus.
+
+   The border goes accent, which is what every other input in this product does
+   — see .ui-input:focus in the kit and .sv-a-c-composer:focus-within in the
+   chat. A ring around the input itself would be a box drawn through the middle
+   of the card, because the input is borderless and spans the whole row.
+
+   The border lives here rather than inline because an inline border-color
+   would beat this rule whatever it said. */
+.sv-l-composer {
+  border: 1px solid var(--line2);
+  transition: border-color var(--ease-settle);
+}
+
+.sv-l-composer:focus-within {
+  border-color: var(--acc);
 }
 
 /* The panel under the field, and the one thing about it that matters: it never

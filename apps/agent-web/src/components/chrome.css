@@ -377,6 +377,12 @@ body[data-theme='light'] .sv-a-c-on-light {
   transition: background var(--ease-quick);
 }
 
+/* Full-width rows inside a clipping panel — the ring goes inside them. */
+.sv-a-c-hist-item:focus-visible,
+.sv-a-c-switch-row:focus-visible {
+  outline-offset: -2px;
+}
+
 .sv-a-c-switch-row:hover {
   background: var(--surf2);
 }
