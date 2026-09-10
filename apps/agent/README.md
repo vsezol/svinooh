@@ -27,6 +27,20 @@ looks like nothing at all:
 curl -s localhost:3000/ready
 ```
 
+## What it says while it runs
+
+Every line is one JSON object carrying the id of the request that produced
+it, so one turn can be read back out of a busy log:
+
+```bash
+railway logs --service agent | jq -c 'select(.request_id == "…")'
+```
+
+`/metrics` is the Prometheus scrape, named to match the rest of the product:
+the HTTP series are the same ones the api and the wallet emit, and the
+agent's own are underneath — `svinooh_agent_turns_total`,
+`svinooh_agent_model_duration_seconds`, `svinooh_agent_tool_calls_total`.
+
 ## Check it
 
 The gates CI runs on every PR that touches `apps/agent`:

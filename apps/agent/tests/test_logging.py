@@ -1,19 +1,24 @@
-"""Which stream a log line goes out on, and why that decides anything.
+"""Which stream a log line goes out on, what shape it is, and whose turn it is.
 
 The platform reads a stream as a severity. Python logs everything to stderr,
 so every line this service wrote was filed as an error: a routing decision and
 a refused endpoint looked the same, "show me the errors" showed all of it, and
 two production outages this week sat in plain sight in a list where nothing
 stood out.
+
+The shape is the second half. One turn writes half a dozen lines and under any
+load they arrive interleaved with everybody else's, so each carries the id of
+the request that produced it and the whole line is one JSON object.
 """
 
 import io
+import json
 import logging
 import sys
 
 import pytest
 
-from app import _configure_logging
+from app.observability.logs import configure, request_id
 
 
 @pytest.fixture
@@ -27,7 +32,7 @@ def streams(monkeypatch):
     out, err = io.StringIO(), io.StringIO()
     monkeypatch.setattr(sys, "stdout", out)
     monkeypatch.setattr(sys, "stderr", err)
-    _configure_logging()
+    configure()
     yield out, err
     logging.basicConfig(force=True)
 
@@ -87,3 +92,49 @@ class TestWhatIsStillHeard:
         out, _ = streams
         logging.getLogger("uvicorn.access").info("GET /health 200")
         assert "GET /health 200" in out.getvalue()
+
+
+def only_line(stream: io.StringIO) -> dict:
+    """The one object written to a stream."""
+    written = [line for line in stream.getvalue().splitlines() if line.strip()]
+    assert len(written) == 1, written
+    return json.loads(written[0])
+
+
+class TestTheShapeOfALine:
+    def test_a_line_is_one_object(self, streams):
+        out, _ = streams
+        say(logging.INFO, "intent: general")
+        line = only_line(out)
+        assert line["message"] == "intent: general"
+        assert line["level"] == "INFO" and line["logger"] == "svinooh-ai"
+
+    def test_a_failure_carries_its_traceback(self, streams):
+        _, err = streams
+        try:
+            raise RuntimeError("upstream is on fire")
+        except RuntimeError:
+            logging.getLogger("svinooh-ai").exception("turn failed")
+        assert "RuntimeError: upstream is on fire" in only_line(err)["exception"]
+
+    def test_what_a_caller_adds_survives(self, streams):
+        out, _ = streams
+        logging.getLogger("svinooh-ai").info("created", extra={"slug": "new-pf"})
+        assert only_line(out)["slug"] == "new-pf"
+
+
+class TestWhoseTurnItIs:
+    def test_a_line_written_during_a_request_carries_its_id(self, streams):
+        out, _ = streams
+        token = request_id.set("abc123")
+        try:
+            say(logging.INFO, "intent: general")
+        finally:
+            request_id.reset(token)
+        assert only_line(out)["request_id"] == "abc123"
+
+    def test_and_one_written_outside_a_request_claims_nothing(self, streams):
+        # The panel refreshes in the background; it belongs to nobody.
+        out, _ = streams
+        say(logging.INFO, "agent config changed")
+        assert "request_id" not in only_line(out)

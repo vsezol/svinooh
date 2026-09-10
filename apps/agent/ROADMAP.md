@@ -45,3 +45,4 @@ them.
 | [#196](https://github.com/vsezol/svinooh/pull/196) | Step 5, the use cases move out of the route handlers; refusals become domain errors |
 | [#197](https://github.com/vsezol/svinooh/pull/197) | Step 6, the agent gets a port: `Ask` in, `Reply` out, and the prompts in a module of their own |
 | [#198](https://github.com/vsezol/svinooh/pull/198) | Step 7, hardening: one pool, a cap on model calls, a deadline, limits on the wire, `/ready` |
+| [#199](https://github.com/vsezol/svinooh/pull/199) | Step 8, observability: JSON logs with a request id, `/metrics`, the Prometheus job |

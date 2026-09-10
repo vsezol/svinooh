@@ -28,6 +28,13 @@ scrape_configs:
     static_configs:
       - targets: ['wallet.railway.internal:3000']
 
+  # The agent counts the same HTTP series as the others, plus its own: turns,
+  # the models they call, and the tools those call.
+  - job_name: svinooh-agent
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['agent.railway.internal:3000']
+
   # The observability stack watches itself too — if log ingestion breaks, that
   # should be visible here rather than by noticing missing data
   - job_name: loki
