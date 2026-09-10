@@ -1,0 +1,54 @@
+# The gates for apps/agent, the same three a developer runs locally (see
+# apps/agent/README.md), plus proof that the image still builds. Scoped to the
+# service's own paths: a change to the web app does not run Python tests.
+name: agent
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/agent/**
+      - .github/workflows/agent.yml
+      - .dockerignore
+  pull_request:
+    paths:
+      - apps/agent/**
+      - .github/workflows/agent.yml
+      - .dockerignore
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/agent
+    services:
+      # The Redis-backed store tests skip without one; here they run.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/agent/uv.lock
+      - run: uv sync --frozen
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv run mypy
+      - run: uv run pytest -q
+        env:
+          AGENT_TEST_REDIS_URL: redis://localhost:6379/0
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build --file apps/agent/Dockerfile .
