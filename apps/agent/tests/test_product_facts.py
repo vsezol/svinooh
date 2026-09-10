@@ -13,7 +13,8 @@ reaches the model once it has.
 """
 
 from app.adapters.memory import StaticPanel
-from app.config import DEFAULT_SYSTEM_PROMPT, Config
+from app.agent.prompts import DEFAULT_SYSTEM_PROMPT, product_facts, system_prompt
+from app.config import Config
 from app.panel import PanelValues, ProductFact
 from app.settings import Settings
 
@@ -29,17 +30,17 @@ def told(*facts: ProductFact) -> Config:
 
 class TestWhatReachesTheModel:
     def test_the_facts_are_in_the_prompt(self):
-        prompt = told(*FACTS).system_prompt()
+        prompt = system_prompt(told(*FACTS))
         assert "Paste the address into the field under the charts." in prompt
         assert "EVM networks, Solana, TRON and Bitcoin." in prompt
 
     def test_the_question_travels_with_its_answer(self):
         # A bare list of sentences is harder to use than a list of answers to
         # questions somebody actually asks.
-        assert "How do I add a wallet?" in told(*FACTS).system_prompt()
+        assert "How do I add a wallet?" in system_prompt(told(*FACTS))
 
     def test_the_rules_come_first_and_stay_whole(self):
-        prompt = told(*FACTS).system_prompt()
+        prompt = system_prompt(told(*FACTS))
         assert prompt.startswith(DEFAULT_SYSTEM_PROMPT)
         assert "this, and nothing beyond it" in prompt
 
@@ -47,10 +48,10 @@ class TestWhatReachesTheModel:
         # Whatever the section is called is what the model calls it back: it
         # answered "the product facts do not list any" because that is the
         # name the header taught it.
-        assert "product facts" not in told(*FACTS).product_facts().lower()
+        assert "product facts" not in product_facts(told(*FACTS)).lower()
 
     def test_nothing_is_appended_when_there_are_no_facts(self):
-        assert told().system_prompt() == DEFAULT_SYSTEM_PROMPT
+        assert system_prompt(told()) == DEFAULT_SYSTEM_PROMPT
 
 
 class TestTheRulesThemselves:

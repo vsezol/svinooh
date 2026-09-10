@@ -41,15 +41,7 @@ from langgraph.graph.state import CompiledStateGraph
 from ..adapters.portfolio import PortfolioApiSource
 from ..config import Config
 from ..domain.conversation import Turn
-from .context import (
-    cancelled_prompt,
-    confirmation_request_prompt,
-    created_prompt,
-    creation_failed_prompt,
-    degraded_prompt,
-    grounded_prompt,
-    onboarding_prompt,
-)
+from ..ports import Ask, Failed, Finished, Progress, Reply, Update
 from .intent import IntentClassifier
 from .llm import Models, extract_text
 from .onboarding import (
@@ -57,6 +49,16 @@ from .onboarding import (
     ProposePortfolio,
     create_portfolio_with_wallets,
     sanitize_addresses,
+)
+from .prompts import (
+    cancelled_prompt,
+    confirmation_request_prompt,
+    created_prompt,
+    creation_failed_prompt,
+    degraded_prompt,
+    grounded_prompt,
+    onboarding_prompt,
+    system_prompt,
 )
 from .steps import step
 from .streaming import turn_events
@@ -109,8 +111,8 @@ ANSWERING_NODES = (
 )
 
 
-class Agent:
-    """The graph, built once with everything its nodes need.
+class LangGraphAgent:
+    """ports.Agent as a LangGraph StateGraph.
 
     Nothing in a node reaches for a global: the dials, the portfolio API, the
     model clients and the two classifiers arrive through the constructor.
@@ -133,13 +135,25 @@ class Agent:
         self._confirmations = confirmations
         self.graph = self._build()
 
-    async def run(self, state: AgentState) -> dict[str, Any]:
-        """One turn, awaited: the final state, answer included."""
-        return await self.graph.ainvoke(state)
+    async def run(self, ask: Ask) -> Reply:
+        """One turn, awaited: the answer, once it is finished."""
+        return _reply(await self.graph.ainvoke(_state(ask)))
 
-    def watch(self, state: AgentState) -> AsyncIterator[tuple[str, dict]]:
-        """The same turn, reported while it happens (app/agent/streaming.py)."""
-        return turn_events(self.graph, dict(state), answering=ANSWERING_NODES)
+    async def watch(self, ask: Ask) -> AsyncIterator[Update]:
+        """The same turn, reported while it happens.
+
+        The graph is watched rather than awaited (app/agent/streaming.py) and
+        what it reports is said again in the port's own words, so the layer
+        above never learns which library ran underneath.
+        """
+        watched = turn_events(self.graph, dict(_state(ask)), answering=ANSWERING_NODES)
+        async for kind, payload in watched:
+            if kind == "done":
+                yield Finished(_reply(payload))
+            elif kind == "error":
+                yield Failed(str(payload.get("message", "")))
+            else:
+                yield Progress(kind="step" if kind == "step" else "token", payload=payload)
 
     # ── the nodes ───────────────────────────────────────────────────────────
 
@@ -216,7 +230,7 @@ class Agent:
 
     async def _general(self, state: AgentState) -> AgentState:
         """A general question: answer directly, with no portfolio fetch."""
-        return await self._answer(self._config.system_prompt(), state)
+        return await self._answer(system_prompt(self._config), state)
 
     async def _grounded(self, state: AgentState) -> AgentState:
         """Ground the answer in the target portfolio, and let the model drill down.
@@ -229,7 +243,7 @@ class Agent:
         Degrades honestly: a slow or down API makes the answer general, not
         absent, and with no data there are no tools to drill into it with.
         """
-        system = self._config.system_prompt()
+        system = system_prompt(self._config)
         tools: list = []
         target = state["target_portfolio"]
         token = state.get("authorization")
@@ -273,7 +287,7 @@ class Agent:
         gets made, and so what the prompts must disclose before making it.
         """
         signed_in = bool(state.get("authorization"))
-        system = onboarding_prompt(self._config.system_prompt(), signed_in)
+        system = onboarding_prompt(system_prompt(self._config), signed_in)
         messages = self._messages(system, state)
         async with step("think-0", "Thinking"):
             reply = await self._models.ask(
@@ -295,7 +309,7 @@ class Agent:
 
         logger.info("onboarding: proposing %d wallet(s)", len(addresses))
         confirmation = await self._answer(
-            confirmation_request_prompt(self._config.system_prompt(), addresses, not signed_in),
+            confirmation_request_prompt(system_prompt(self._config), addresses, not signed_in),
             state,
         )
         return {**confirmation, "pending_set": addresses}
@@ -317,14 +331,14 @@ class Agent:
                 )
         except Exception as error:  # noqa: BLE001 — nothing was created; say so
             logger.warning("portfolio creation failed: %r", error)
-            return await self._answer(creation_failed_prompt(self._config.system_prompt()), state)
+            return await self._answer(creation_failed_prompt(system_prompt(self._config)), state)
         logger.info(
             "onboarding: created %s (+%d wallets, %d refused)",
             result.slug,
             len(result.added),
             len(result.refused),
         )
-        answered = await self._answer(created_prompt(self._config.system_prompt(), result), state)
+        answered = await self._answer(created_prompt(system_prompt(self._config), result), state)
         outcome: AgentState = {**answered, "pending_clear": True}
         if result.slug:
             outcome["portfolio_created"] = result.slug
@@ -332,12 +346,12 @@ class Agent:
 
     async def _cancel_creation(self, state: AgentState) -> AgentState:
         """A declined proposal: drop it and say so — nothing was created."""
-        answered = await self._answer(cancelled_prompt(self._config.system_prompt()), state)
+        answered = await self._answer(cancelled_prompt(system_prompt(self._config)), state)
         return {**answered, "pending_clear": True}
 
     async def _unavailable(self, state: AgentState) -> AgentState:
         """Identity could not be resolved: answer, and say the numbers are out of reach."""
-        return await self._answer(degraded_prompt(self._config.system_prompt()), state)
+        return await self._answer(degraded_prompt(system_prompt(self._config)), state)
 
     # ── shared by the nodes ─────────────────────────────────────────────────
 
@@ -398,3 +412,26 @@ class Agent:
         for leaf in ANSWERING_NODES:
             builder.add_edge(leaf, END)
         return builder.compile()
+
+
+def _state(ask: Ask) -> AgentState:
+    """The turn's request, as the state the nodes read."""
+    return {
+        "question": ask.question,
+        "history": ask.history,
+        "portfolio": ask.portfolio,
+        "authorization": ask.authorization,
+        "pending_addresses": list(ask.pending_addresses) if ask.pending_addresses else None,
+    }
+
+
+def _reply(state: dict[str, Any]) -> Reply:
+    """What the graph left in the state, as the answer and its orders."""
+    created = state.get("portfolio_created")
+    pending = state.get("pending_set")
+    return Reply(
+        answer=str(state.get("answer", "")),
+        pending_set=tuple(pending) if pending else None,
+        pending_clear=bool(state.get("pending_clear")),
+        portfolio_created=str(created) if created else None,
+    )

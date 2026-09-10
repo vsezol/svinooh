@@ -11,10 +11,9 @@ import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
-from ..agent.graph import Agent, AgentState
 from ..domain.errors import EmptyMessageError, RateLimitedError
 from ..domain.identity import Caller, Owner
-from ..ports import Allowance, RateLimiter
+from ..ports import Agent, Allowance, Ask, Finished, Progress, RateLimiter, Reply
 from .identity import Identity
 from .sessions import SessionStore
 
@@ -39,7 +38,7 @@ class Admitted:
     question: str
     session_id: str
     owner: Owner
-    state: AgentState
+    ask: Ask
     #: True when a visitor's free questions are spent: the answer is a door
     #: rather than an answer, and the caller decides what that door looks like.
     walled: bool
@@ -92,25 +91,25 @@ class Turns:
             session_id=session_id,
             owner=settled,
             walled=not await self._may_ask(settled),
-            # The history and the pending proposal ride into the graph, which
+            # The history and the pending proposal ride into the turn, which
             # is what makes "as we discussed" and "yes, create it" work across
-            # requests; the graph decides everything else and never touches
+            # requests; the agent decides everything else and never touches
             # the store.
-            state={
-                "question": question,
-                "history": self._sessions.context(chat),
+            ask=Ask(
+                question=question,
+                history=self._sessions.context(chat),
                 # The widget's hint wins — it is what is on screen. Behind it,
                 # the portfolio this conversation created, so a visitor who has
                 # one is grounded in it rather than onboarded a second time.
-                "portfolio": asked.portfolio or (chat.portfolio if chat else None),
-                "authorization": caller.authorization,
-                "pending_addresses": list(chat.pending) if chat and chat.pending else None,
-            },
+                portfolio=asked.portfolio or (chat.portfolio if chat else None),
+                authorization=caller.authorization,
+                pending_addresses=tuple(chat.pending) if chat and chat.pending else None,
+            ),
         )
 
     async def answer(self, admitted: Admitted) -> str:
         """Run the turn, apply what it decided, and hand back the answer."""
-        return await self._applied(await self._agent.run(admitted.state), admitted)
+        return await self._applied(await self._agent.run(admitted.ask), admitted)
 
     async def watch(self, admitted: Admitted) -> AsyncIterator[tuple[str, dict]]:
         """The same turn, reported while it happens.
@@ -118,11 +117,14 @@ class Turns:
         Every event but the last passes through untouched; `done` carries the
         finished answer, once the turn's decisions have been applied.
         """
-        async for name, data in self._agent.watch(admitted.state):
-            if name != "done":
-                yield name, data
-                continue
-            yield "done", {"text": await self._applied(data, admitted)}
+        async for update in self._agent.watch(admitted.ask):
+            match update:
+                case Progress(kind, payload):
+                    yield kind, payload
+                case Finished(reply):
+                    yield "done", {"text": await self._applied(reply, admitted)}
+                case _:
+                    yield "error", {"message": update.message}
 
     async def remember(self, admitted: Admitted, answer: str, blocks: list[dict]) -> None:
         """Record a finished turn, drawn the way the caller drew it.
@@ -137,21 +139,21 @@ class Turns:
             admitted.session_id, admitted.owner.key, admitted.question, answer, blocks
         )
 
-    async def _applied(self, state: dict, admitted: Admitted) -> str:
-        """Apply what the turn decided to the session, and hand back the answer.
+    async def _applied(self, reply: Reply, admitted: Admitted) -> str:
+        """Carry out what the turn decided, and hand back the answer.
 
-        The graph stays pure: it names what should be remembered — a proposal
+        The agent stays pure: it names what should be remembered — a proposal
         stashed, a proposal dropped, a portfolio created — and never writes it
         itself. This is where those names become writes.
         """
         session, owner = admitted.session_id, admitted.owner.key
-        if state.get("pending_set"):
-            await self._sessions.set_pending(session, owner, state["pending_set"])
-        if state.get("pending_clear"):
+        if reply.pending_set:
+            await self._sessions.set_pending(session, owner, list(reply.pending_set))
+        if reply.pending_clear:
             await self._sessions.clear_pending(session)
-        if state.get("portfolio_created"):
-            await self._sessions.set_portfolio(session, owner, state["portfolio_created"])
-        return str(state["answer"])
+        if reply.portfolio_created:
+            await self._sessions.set_portfolio(session, owner, reply.portfolio_created)
+        return reply.answer
 
     async def _may_ask(self, owner: Owner) -> bool:
         """Whether this caller still has a free question.

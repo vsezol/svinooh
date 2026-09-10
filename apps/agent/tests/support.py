@@ -17,7 +17,7 @@ from langchain_core.messages import AIMessage
 
 from app import create_app
 from app.adapters.memory import MemoryConversationStore, StaticPanel, rate_limit_storage
-from app.agent.graph import Agent
+from app.agent.graph import LangGraphAgent
 from app.agent.intent import IntentLabel
 from app.agent.llm import Models
 from app.agent.onboarding import ConfirmationDecision
@@ -152,11 +152,11 @@ def agent(
     confirmations=None,
     settings: Settings | None = None,
     panel: PanelValues = NOTHING_DECIDED,
-) -> Agent:
+) -> LangGraphAgent:
     """The real graph over fakes."""
     settings = settings or Settings()
     config = Config(settings, StaticPanel(panel))
-    return Agent(
+    return LangGraphAgent(
         config,
         portfolio if portfolio is not None else NoHost(),
         models_of(model if model is not None else fake_model("answered"), settings),
@@ -190,7 +190,7 @@ def container(
     # Generous by default: most tests ask far more than five questions.
     meter = limiter if limiter is not None else WindowRateLimiter(1000, 60, counters)
     purse = allowance if allowance is not None else WindowAllowance(1000, 60, counters)
-    bot = Agent(config, host, models, Intents(intent), Confirmations(confirmation))
+    bot = LangGraphAgent(config, host, models, Intents(intent), Confirmations(confirmation))
     return Container(
         settings=settings,
         panel=panel,

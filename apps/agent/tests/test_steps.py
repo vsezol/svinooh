@@ -9,7 +9,9 @@ actually ran, and says what it actually was".
 
 import pytest
 
+from app.agent.graph import ANSWERING_NODES
 from app.agent.steps import step, tool_label
+from app.agent.streaming import turn_events
 from tests.support import agent, fake_model
 
 ANSWER = "Everything else is unlevered."
@@ -20,7 +22,8 @@ def a_turn():
 
 
 async def steps_of(state: dict) -> list[dict]:
-    return [data async for name, data in a_turn().watch(state) if name == "step"]
+    watched = turn_events(a_turn().graph, state, answering=ANSWERING_NODES)
+    return [data async for name, data in watched if name == "step"]
 
 
 class TestWhatIsReported:
@@ -96,7 +99,7 @@ class TestNoPartOfTheWaitIsUnaccountedFor:
 
     async def test_the_answer_is_still_the_answer(self):
         # The step is a wrapper around the call, not a change to it.
-        state = await a_turn().run({"question": "q"})
+        state = await a_turn().graph.ainvoke({"question": "q"})
         assert state["answer"] == ANSWER
 
 
@@ -104,7 +107,7 @@ class TestReportingIsNeverLoadBearing:
     async def test_a_turn_runs_the_same_with_nobody_watching(self):
         # /chat does not stream, so there is no writer at all. A step must then
         # be an ordinary timer that tells nobody, not an error.
-        state = await a_turn().run({"question": "q"})
+        state = await a_turn().graph.ainvoke({"question": "q"})
         assert state["answer"] == ANSWER
 
     async def test_a_broken_channel_does_not_fail_the_turn(self, monkeypatch):

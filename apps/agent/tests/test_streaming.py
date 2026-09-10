@@ -23,7 +23,8 @@ def watching(**overrides):
 
 
 async def collect(state: dict, bot=None) -> tuple[list[str], list[tuple[str, dict]]]:
-    events = [event async for event in (bot or watching()).watch(state)]
+    graph = (bot or watching()).graph
+    events = [event async for event in turn_events(graph, state, answering=ANSWERING_NODES)]
     return [data["text"] for name, data in events if name == "token"], events
 
 

@@ -20,7 +20,7 @@ from redis.asyncio import ConnectionPool
 from .adapters import memory
 from .adapters.panel import RemotePanel
 from .adapters.portfolio import PortfolioApiSource
-from .agent.graph import Agent
+from .agent.graph import LangGraphAgent
 from .agent.intent import IntentClassifier
 from .agent.llm import Models
 from .agent.onboarding import ConfirmationClassifier
@@ -31,7 +31,7 @@ from .application.limits import WindowAllowance, WindowRateLimiter
 from .application.sessions import SessionStore
 from .application.turns import Turns
 from .config import Config
-from .ports import Allowance, ConversationStore, Panel, RateLimiter
+from .ports import Agent, Allowance, ConversationStore, Panel, RateLimiter
 from .settings import Settings
 
 logger = logging.getLogger("svinooh-ai")
@@ -92,7 +92,7 @@ def build(settings: Settings) -> Container:
         settings.rate_limit_requests, settings.rate_limit_window_s, counters
     )
     allowance = WindowAllowance(settings.free_questions, settings.free_window_s, counters)
-    agent = Agent(
+    agent: Agent = LangGraphAgent(
         config,
         portfolio,
         models,
