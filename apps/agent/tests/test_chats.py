@@ -51,6 +51,10 @@ def a_working_turn(monkeypatch):
     # anonymous caller, and the anonymous share one bucket by design — without
     # this they spend the previous test's allowance.
     routes.limiter.__init__(1000, 60, memory.rate_limit_storage())
+    # And a fresh allowance, for the same reason: these tests are one visitor
+    # asking far more than five questions, and the point of most of them is not
+    # the allowance. The tests that ARE about it set their own.
+    routes.allowance.__init__(1000, 60, memory.rate_limit_storage())
     # Nobody is signed in unless a test says so. Patched where owner.py looked
     # it up, so the real gate — and the host it would call — stays untouched.
     monkeypatch.setattr(identity_service, "authenticate", _nobody)
@@ -349,6 +353,87 @@ class TestTheCostLock:
         signed_in_as(monkeypatch, "42")
         await ask(client, "one", anon=ANON)
         assert charged == ["user:42"]
+
+
+class TestTheFreeAllowance:
+    """Five questions, then the answer is a door rather than an answer."""
+
+    def _allow(self, n: int) -> None:
+        routes.allowance.__init__(n, 3600, memory.rate_limit_storage())
+
+    async def test_a_visitor_gets_their_questions_and_then_the_card(self, client):
+        self._allow(3)
+        for i in range(3):
+            answered = await ask(client, f"q{i}", anon=ANON)
+            assert answered["blocks"][0]["kind"] == "text", f"q{i} was answered"
+        walled = await ask(client, "one too many", anon=ANON)
+        assert [b["kind"] for b in walled["blocks"]] == ["signin"]
+
+    async def test_the_card_carries_the_question_so_nobody_types_it_twice(self, client):
+        self._allow(1)
+        await ask(client, "first", anon=ANON)
+        walled = await ask(client, "what is my health factor?", anon=ANON)
+        assert walled["blocks"][0]["pendingQuestion"] == "what is my health factor?"
+
+    async def test_it_is_a_200_because_nobody_did_anything_wrong(self, client):
+        self._allow(0)
+        response = await client.post(
+            "/chat", json={"message": "q"}, headers={ANON_HEADER: ANON}
+        )
+        assert response.status_code == 200
+
+    async def test_one_visitor_running_out_does_not_spend_anothers(self, client):
+        # The opposite of the cost lock, deliberately: that is charged to one
+        # shared bucket because the id is too soft to meter cost with, and this
+        # is charged per id because telling a stranger "you have asked enough"
+        # on somebody else's questions is the wrong sentence entirely.
+        self._allow(1)
+        await ask(client, "mine", anon=ANON)
+        assert (await ask(client, "theirs", anon=OTHER_ANON))["blocks"][0]["kind"] == "text"
+
+    async def test_an_account_never_meets_it(self, client, monkeypatch):
+        self._allow(0)
+        signed_in_as(monkeypatch, "42")
+        answered = await ask(client, "q", anon=ANON)
+        assert answered["blocks"][0]["kind"] == "text"
+
+    async def test_a_spent_allowance_is_not_charged_again(self, client):
+        # Otherwise every refused question pushes the window out and the
+        # visitor is walked further from an answer by asking.
+        self._allow(1)
+        await ask(client, "first", anon=ANON)
+        for _ in range(3):
+            await ask(client, "again", anon=ANON)
+        walled = await ask(client, "again", anon=ANON)
+        assert walled["blocks"][0]["kind"] == "signin"
+
+    async def test_the_walled_turn_still_has_an_address(self, client):
+        # The client takes the turn's id for the conversation's URL, so a turn
+        # that stored nothing would leave /ai/c/<id> pointing at a 404.
+        self._allow(0)
+        walled = await ask(client, "what is my health factor?", anon=ANON)
+        opened = await client.get(
+            f"/chats/{walled['session_id']}", headers={ANON_HEADER: ANON}
+        )
+        assert opened.status_code == 200, opened.text
+        turns = opened.json()["turns"]
+        assert turns[-1]["q"] == "what is my health factor?"
+        assert [b["kind"] for b in turns[-1]["blocks"]] == ["signin"], "the card is kept"
+
+    async def test_the_stream_says_the_same_thing(self, client):
+        self._allow(0)
+        async with client.stream(
+            "POST", "/chat/stream", json={"message": "q"}, headers={ANON_HEADER: ANON}
+        ) as response:
+            assert response.status_code == 200
+            body = "".join([chunk async for chunk in response.aiter_text()])
+        assert "event: start" in body
+        tight = body.replace(" ", "")
+        assert '"kind":"signin"' in tight
+        # camelCase on this wire too: the stream dumps by alias explicitly and
+        # /chat gets it from FastAPI, and the widget reads one field name.
+        assert '"pendingQuestion":"q"' in tight
+        assert "event: step" not in body, "nothing ran, so nothing reported running"
 
 
 class TestTheBrowserDoor:

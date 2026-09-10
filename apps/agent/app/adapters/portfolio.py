@@ -70,7 +70,18 @@ class PortfolioApiSource:
         # the DataSource protocol, which stays read-only.
         return await self._post("/api/portfolios", token, {})
 
-    async def add_wallet(self, slug: str, address: str, token: str) -> dict:
+    async def create_anonymous_portfolio(self, address: str) -> dict:
+        # The ownerless door, and the reason a visitor never meets a sign-in
+        # wall: this POST takes no token and returns a portfolio that belongs
+        # to nobody, claimable by an account later. It is find-or-CREATE on the
+        # address, so a second visitor pasting the same wallet lands on the
+        # same portfolio rather than a duplicate of it.
+        return await self._post("/api/portfolios/anonymous", None, {"address": address})
+
+    async def add_wallet(self, slug: str, address: str, token: str | None) -> dict:
+        # Optional auth on the host side: an ownerless portfolio accepts a
+        # wallet from anyone, an owned one only from its owner. Passing None is
+        # therefore meaningful rather than a missing argument.
         return await self._post(f"/api/portfolios/{slug}/wallets", token, {"address": address})
 
     async def portfolio(self, ref: str, token: str | None) -> dict:

@@ -90,6 +90,13 @@ class Chat:
     # the request that proposed it. It used to live in RAM, which meant a
     # restart between the proposal and the yes silently dropped the proposal.
     pending: list[str] | None = None
+    # The portfolio this conversation brought into being, for a visitor with no
+    # account. A signed-in caller is asked "what do you own" and the host
+    # answers; nobody can ask that about somebody who has no name, so the one
+    # place the answer can live is the conversation that did it. Without this a
+    # visitor is onboarded again on the very next question — offered a
+    # portfolio they already have.
+    portfolio: str | None = None
 
     def add(self, question: str, answer: str, blocks: list[dict], keep: int) -> None:
         """Record a finished turn, naming the conversation if it is the first.
@@ -118,6 +125,7 @@ class Chat:
             "updated": self.updated,
             "turns": [turn.as_dict() for turn in self.turns],
             "pending": self.pending,
+            "portfolio": self.portfolio,
         }
 
     @staticmethod
@@ -143,4 +151,7 @@ class Chat:
             if isinstance(turns, list)
             else [],
             pending=[str(a) for a in pending] if isinstance(pending, list) and pending else None,
+            # Absent in every chat stored before this field existed, which is
+            # why it is read like all the rest: missing is None, not an error.
+            portfolio=str(raw["portfolio"]) if raw.get("portfolio") else None,
         )

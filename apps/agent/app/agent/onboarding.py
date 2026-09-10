@@ -92,7 +92,9 @@ async def classify_confirmation(reply: str) -> ConfirmationDecision:
 # ── phase 3: the execution — what actually hits the API, after the yes ─────
 
 
-async def create_portfolio_with_wallets(source, addresses: list[str], token: str) -> dict:
+async def create_portfolio_with_wallets(
+    source, addresses: list[str], token: str | None
+) -> dict:
     """Create the portfolio and add every address, through the public API.
 
     Two failure grades on purpose. The portfolio POST failing fails the whole
@@ -100,16 +102,43 @@ async def create_portfolio_with_wallets(source, addresses: list[str], token: str
     later yes can retry). A single wallet failing does NOT: the portfolio
     exists, the rest were added, and the result says exactly which address was
     refused and why — the honest partial outcome, not all-or-nothing theater.
+
+    Two doors, one action. With a token the portfolio is created owned, empty,
+    and every address is added to it. Without one it goes through the host's
+    ownerless door, which differs in a way that matters here: that POST takes
+    the FIRST address and returns a portfolio already holding it — find-or-
+    create, so a wallet somebody already opened anonymously is joined rather
+    than duplicated. The remaining addresses are added exactly as above, with
+    no token, because an ownerless portfolio accepts a wallet from anyone.
+
+    `anonymous` in the result is what the caller relays: a portfolio that
+    belongs to nobody is public and claimable, and a person should be told
+    that before they treat it as theirs.
     """
-    created = await source.create_portfolio(token)
+    # Falsy, not `is None`: an empty header is a caller with no token, and
+    # the rest of the graph already reads absent-or-empty the same way.
+    anonymous = not token
+    if anonymous:
+        if not addresses:
+            # The owned door can make an empty portfolio and the person can
+            # fill it later; the ownerless one is opened BY an address, so
+            # there is nothing to open here. Fail the action rather than
+            # inventing a wallet — the caller relays this as "nothing created".
+            raise ValueError("an anonymous portfolio needs at least one address")
+        # The first address is spent on the create and is therefore already in.
+        created = await source.create_anonymous_portfolio(addresses[0])
+        seeded, rest = addresses[:1], addresses[1:]
+    else:
+        created = await source.create_portfolio(token)
+        seeded, rest = [], addresses
     slug = created.get("slug", "")
-    added: list[str] = []
+    added: list[str] = list(seeded)
     failed: list[dict] = []
-    for address in addresses:
+    for address in rest:
         try:
             await source.add_wallet(slug, address, token)
             added.append(address)
         except Exception as error:  # noqa: BLE001 — one bad address must not sink the rest
             logger.warning("add_wallet failed for %s: %r", address, error)
             failed.append({"address": address, "error": str(error)})
-    return {"slug": slug, "added": added, "failed": failed}
+    return {"slug": slug, "added": added, "failed": failed, "anonymous": anonymous}

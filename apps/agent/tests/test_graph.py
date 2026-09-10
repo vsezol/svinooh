@@ -5,7 +5,7 @@ these tests pin the routes rather than the wording of any answer.
 """
 import app.agent.graph as graph
 from app.agent.intent import IntentLabel
-from app.agent.onboarding import ConfirmationDecision
+from app.agent.onboarding import ConfirmationDecision, create_portfolio_with_wallets
 from tests import fixtures as fx
 
 import pytest
@@ -22,6 +22,12 @@ class Api:
         self.me_fails = me_fails
         self.created = 0
         self.wallets = []
+        # The ownerless door, kept apart from `created` so a test can say which
+        # one a turn went through rather than only that something was made.
+        self.created_anonymous = []
+        # Who each wallet was added as. None is the interesting value: it is
+        # what proves the visitor's path never borrowed a token.
+        self.wallet_tokens = []
 
     async def me(self, token):
         self.calls.append(("me", token))
@@ -42,8 +48,13 @@ class Api:
         self.created += 1
         return {"slug": "new-pf"}
 
+    async def create_anonymous_portfolio(self, address):
+        self.created_anonymous.append(address)
+        return {"slug": "anon-pf"}
+
     async def add_wallet(self, slug, address, token):
         self.wallets.append((slug, address))
+        self.wallet_tokens.append(token)
         return {"id": "w"}
 
 
@@ -180,6 +191,85 @@ class TestTools:
         assert model.bound == 0
 
 
+class TestAVisitorWithNoAccount:
+    """The front door's premise: an answer, and a portfolio, without signing up."""
+
+    async def test_a_visitor_is_proposed_to_rather_than_turned_away(self, wired):
+        # This branch used to answer and stop, so a visitor's addresses went
+        # nowhere. Now the tool is bound for them too, and the turn ends with a
+        # proposal waiting on their confirmation.
+        model = Model(tool_calls=[{"name": "ProposePortfolio",
+                                   "args": {"addresses": ["0xAAA"]}, "id": "c"}])
+        api, _ = wired(api=Api(owned=[]), model=model)
+        out = await run()
+        assert out["pending_set"] == ["0xAAA"]
+        assert api.created == 0 and api.created_anonymous == [], "still only a proposal"
+
+    async def test_the_visitor_is_told_the_portfolio_will_be_public(self, wired):
+        # The disclosure has to reach the turn BEFORE the write, because after
+        # it the portfolio is already public. The confirmation prompt is that
+        # turn, so the fact belongs in it rather than in the created message.
+        model = Model(tool_calls=[{"name": "ProposePortfolio",
+                                   "args": {"addresses": ["0xAAA", "sol1"]}, "id": "c"}])
+        wired(api=Api(owned=[]), model=model)
+        await run()
+        confirmation = model.prompts[-1]
+        assert "public" in confirmation
+        assert "held together" in confirmation, "two wallets are linked in the open"
+
+    async def test_an_account_is_not_told_its_portfolio_is_public(self, wired):
+        # The owned door makes a private portfolio, so the same caveat there
+        # would be a false warning.
+        model = Model(tool_calls=[{"name": "ProposePortfolio",
+                                   "args": {"addresses": ["0xAAA"]}, "id": "c"}])
+        wired(api=Api(owned=[]), model=model)
+        await run(authorization="Bearer T")
+        assert "public" not in model.prompts[-1]
+
+
+class TestTheExecutionItself:
+    """`create_portfolio_with_wallets` directly — the two doors, up close."""
+
+    async def test_the_result_says_which_door_it_went_through(self):
+        # The caller relays this: a portfolio nobody owns needs saying so, and
+        # the answer can only say it if the result carries it.
+        api = Api()
+        owned = await create_portfolio_with_wallets(api, ["0xAAA"], "Bearer T")
+        visitor = await create_portfolio_with_wallets(api, ["0xBBB"], None)
+        assert owned["anonymous"] is False and owned["slug"] == "new-pf"
+        assert visitor["anonymous"] is True and visitor["slug"] == "anon-pf"
+
+    async def test_the_address_that_opened_it_counts_as_added(self):
+        # The ownerless POST both creates and holds the first wallet. Reporting
+        # only the ones that went through add_wallet would tell a visitor their
+        # first address was dropped.
+        api = Api()
+        result = await create_portfolio_with_wallets(api, ["0xAAA", "sol1"], None)
+        assert result["added"] == ["0xAAA", "sol1"]
+        assert api.wallets == [("anon-pf", "sol1")], "only the rest are POSTed"
+
+    async def test_an_empty_proposal_makes_nothing_rather_than_guessing(self):
+        # The owned door can make an empty portfolio; the ownerless one is
+        # opened BY an address, so there is nothing to open. Failing is the
+        # honest outcome — the alternative is an IndexError read as a mystery.
+        api = Api()
+        with pytest.raises(ValueError):
+            await create_portfolio_with_wallets(api, [], None)
+        assert api.created_anonymous == []
+
+    async def test_one_refused_wallet_does_not_sink_the_visitors_portfolio(self):
+        class Picky(Api):
+            async def add_wallet(self, slug, address, token):
+                if address == "bad":
+                    raise RuntimeError("unsupported network")
+                return await super().add_wallet(slug, address, token)
+
+        result = await create_portfolio_with_wallets(Picky(), ["0xAAA", "bad", "sol1"], None)
+        assert result["added"] == ["0xAAA", "sol1"]
+        assert [f["address"] for f in result["failed"]] == ["bad"]
+        assert result["slug"] == "anon-pf", "the portfolio still exists"
+
+
 class TestWrites:
     async def test_a_proposal_creates_nothing_by_itself(self, wired):
         model = Model(tool_calls=[{"name": "ProposePortfolio",
@@ -207,11 +297,36 @@ class TestWrites:
         assert api.created == 0
         assert not out.get("pending_clear") and not out.get("pending_set")
 
-    async def test_a_yes_without_a_token_cannot_write(self, wired):
-        api, model = wired(confirmation="confirm")
-        out = await run(pending_addresses=["0xAAA"])
-        assert api.created == 0 and out["route"] == "onboard"
-        assert "not signed" in model.prompts[0]
+    async def test_a_yes_without_a_token_writes_through_the_ownerless_door(self, wired):
+        # The rule this replaces was "a yes without a token cannot write", and
+        # it was the sign-in wall the front door exists to remove. A visitor
+        # confirms and gets a portfolio; what their missing token changes is
+        # WHICH door, never whether the confirmed action happens.
+        api, _ = wired(confirmation="confirm")
+        out = await run(pending_addresses=["0xAAA", "sol1"])
+        assert api.created == 0, "the owned door needs a token and was not used"
+        assert api.created_anonymous == ["0xAAA"], "opened by its first address"
+        assert out["pending_clear"] is True
+        # Named for the route layer to remember on the conversation. Without it
+        # the next question re-onboards a visitor who already has a portfolio,
+        # because nobody can ask the host what a nameless caller owns.
+        assert out["portfolio_created"] == "anon-pf"
+
+    async def test_the_visitors_remaining_wallets_are_added_without_a_token(self, wired):
+        # The create spends the first address; the rest go through the host's
+        # optional-auth add-wallet, and as nobody — borrowing a token here
+        # would file a visitor's wallets under somebody else's account.
+        api, _ = wired(confirmation="confirm")
+        await run(pending_addresses=["0xAAA", "sol1", "btc1"])
+        assert api.wallets == [("anon-pf", "sol1"), ("anon-pf", "btc1")]
+        assert api.wallet_tokens == [None, None]
+
+    async def test_a_signed_in_yes_still_takes_the_owned_door(self, wired):
+        # The other half of the same rule: a token means the portfolio lands
+        # owned, and the ownerless door is not touched.
+        api, _ = wired(confirmation="confirm")
+        await run(authorization="Bearer T", pending_addresses=["0xAAA"])
+        assert api.created == 1 and api.created_anonymous == []
 
     async def test_an_unreadable_confirmation_never_writes(self, wired, monkeypatch):
         api, _ = wired(intent="general")

@@ -22,8 +22,21 @@ from app.agent.streaming import turn_events
 ANSWER = "Impermanent loss is a drop against holding."
 
 
+class FakeChatModel(GenericFakeChatModel):
+    """The stand-in, plus the one thing the graph does to a real model.
+
+    The onboarding branch binds a tool before it asks — for a visitor as well
+    as for an account, since #180 — and `GenericFakeChatModel` raises on
+    `bind_tools`. Without this, a turn that lands on onboarding fails here for
+    a reason that exists only in the fake.
+    """
+
+    def bind_tools(self, _tools):
+        return self
+
+
 def fake_model(text: str):
-    return GenericFakeChatModel(messages=iter([AIMessage(content=text)]))
+    return FakeChatModel(messages=iter([AIMessage(content=text)]))
 
 
 def cached(value):

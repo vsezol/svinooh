@@ -93,6 +93,9 @@ class AgentState(TypedDict, total=False):
     # one. The graph stays pure — it never touches the store itself.
     pending_set: list[str]
     pending_clear: bool
+    #: The slug just created, for the route layer to remember on the
+    #: conversation — the graph names it and never stores it itself.
+    portfolio_created: str
 
 
 async def pending_gate(state: AgentState) -> AgentState:
@@ -114,9 +117,9 @@ async def pending_gate(state: AgentState) -> AgentState:
         return {"route": "classify_intent"}
     logger.info("confirmation: %s (%s)", verdict.decision, verdict.reason)
     if verdict.decision == "confirm":
-        # A yes without a token cannot be acted on — back to onboarding, where
-        # the signed-out prompt explains; the proposal stays for later.
-        return {"route": "create_portfolio" if state.get("authorization") else "onboard"}
+        # A yes is a yes with or without a token: the write node picks the door
+        # (owned, or the host's ownerless one) from the token it is handed.
+        return {"route": "create_portfolio"}
     if verdict.decision == "cancel":
         return {"route": "cancel_creation"}
     return {"route": "classify_intent"}
@@ -270,12 +273,14 @@ async def onboard_node(state: AgentState) -> AgentState:
     docstrings for the machine. A tool call here does not create anything: it
     becomes the session's pending action plus a confirmation question, and the
     write waits for the gate on a later turn.
+
+    Signed out is the same branch, not a wall. It used to answer and stop —
+    the visitor was told to sign in, which is the one thing the front door
+    exists to avoid. What sign-in changes now is only WHICH portfolio gets
+    made, and therefore what the prompts have to disclose before making it.
     """
     signed_in = bool(state.get("authorization"))
     system = onboarding_prompt(system_prompt(), signed_in)
-    if not signed_in:
-        return await _answer(system, state)
-
     messages = [
         SystemMessage(content=system),
         *state.get("history", []),
@@ -297,7 +302,7 @@ async def onboard_node(state: AgentState) -> AgentState:
 
     logger.info("onboarding: proposing %d wallet(s)", len(addresses))
     confirmation = await _answer(
-        confirmation_request_prompt(system_prompt(), addresses), state
+        confirmation_request_prompt(system_prompt(), addresses, not signed_in), state
     )
     return {**confirmation, "pending_set": addresses}
 
@@ -308,6 +313,10 @@ async def create_portfolio_node(state: AgentState) -> AgentState:
     The portfolio create failing keeps the proposal (a later yes retries); a
     single wallet failing does not sink the rest, and the answer relays the
     partial result honestly.
+
+    The token decides which door: an owned portfolio, or the host's ownerless
+    one for a visitor with no account. Absent is a value here, so it is passed
+    down rather than checked for — this node does not branch on it.
     """
     addresses = state.get("pending_addresses") or []
     try:
@@ -326,7 +335,9 @@ async def create_portfolio_node(state: AgentState) -> AgentState:
         result.get("slug"), len(result.get("added", [])), len(result.get("failed", [])),
     )
     answered = await _answer(created_prompt(system_prompt(), result), state)
-    return {**answered, "pending_clear": True}
+    slug = result.get("slug") or ""
+    created = {"portfolio_created": slug} if slug else {}
+    return {**answered, **created, "pending_clear": True}
 
 
 async def cancel_creation_node(state: AgentState) -> AgentState:
@@ -386,7 +397,6 @@ def agent_graph():
             "classify_intent": "classify_intent",
             "create_portfolio": "create_portfolio",
             "cancel_creation": "cancel_creation",
-            "onboard": "onboard",
         },
     )
     builder.add_conditional_edges(

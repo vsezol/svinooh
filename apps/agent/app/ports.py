@@ -64,3 +64,17 @@ class RateLimiter(Protocol):
 
     async def retry_after(self, key: str) -> int | None:
         """Charge one attempt; None means allowed, a number is seconds to wait."""
+
+
+class Allowance(Protocol):
+    """How many questions a caller gets for free before they need an account.
+
+    A separate port from RateLimiter although the arithmetic is the same, because
+    the two answer different questions and are allowed to diverge: one is a cost
+    lock charged to a shared bucket, the other is a product limit charged to one
+    visitor. Keeping them apart is what lets the allowance be per-identity while
+    the cost lock stays deliberately not.
+    """
+
+    async def charge(self, key: str) -> bool:
+        """Spend one question; True while there are any left."""

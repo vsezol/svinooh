@@ -15,6 +15,7 @@ the store became durable (app/store.py): a conversation is a server object now,
 so it has an address, and reading one is authorized to whoever it belongs to.
 """
 import json
+import logging
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Header, HTTPException
@@ -23,7 +24,7 @@ from fastapi.responses import StreamingResponse
 from .. import remote_config
 from ..agent.graph import agent_graph
 from ..agent.streaming import turn_events
-from ..composition import limiter, sessions
+from ..composition import allowance, limiter, sessions
 from ..config import settings
 from ..domain.conversation import Chat
 from ..domain.identity import ANON_HEADER, Owner
@@ -35,8 +36,11 @@ from .schemas import (
     ChatResponse,
     ChatSummary,
     ChatTurn,
+    SignInBlock,
     TextBlock,
 )
+
+logger = logging.getLogger("svinooh-ai")
 
 router = APIRouter()
 
@@ -123,7 +127,10 @@ async def _admit(
     state = {
         "question": text,
         "history": sessions.context(chat),
-        "portfolio": body.portfolio,
+        # The widget's hint wins — it is what is on screen right now. Behind it,
+        # the portfolio this conversation created, so a visitor who has one is
+        # grounded in it rather than onboarded a second time.
+        "portfolio": body.portfolio or (chat.portfolio if chat else None),
         "authorization": authorization,
         "pending_addresses": list(chat.pending) if chat and chat.pending else None,
     }
@@ -141,12 +148,61 @@ async def _remember(session_id: str, owner: Owner, question: str, state: dict) -
         await sessions.set_pending(session_id, owner.key, state["pending_set"])
     if state.get("pending_clear"):
         await sessions.clear_pending(session_id)
+    if state.get("portfolio_created"):
+        await sessions.set_portfolio(session_id, owner.key, state["portfolio_created"])
     # The blocks are stored with the turn, so reopening the conversation shows
     # what was on screen rather than a reconstruction of it.
     await sessions.append(
         session_id, owner.key, question, answer, [TextBlock(text=answer).model_dump()]
     )
     return answer
+
+
+async def _sign_in_wall(owner: Owner, question: str) -> SignInBlock | None:
+    """The free allowance, and what replaces an answer once it is spent.
+
+    Not a refusal: it is a 200 carrying a different block, because the person
+    did nothing wrong and there is something for them to do. It rides the same
+    wire as an answer for the same reason every widget does — a new block kind
+    rather than a new status code or a new endpoint.
+
+    An account never meets this. The allowance exists to say where one starts,
+    so charging somebody who already has one would be charging them for the
+    thing they already did.
+    """
+    if owner.signed_in:
+        return None
+    if await allowance.charge(owner.key):
+        return None
+    logger.info("allowance spent for %s — the answer is the sign-in card", owner.key)
+    return SignInBlock(
+        title="Sign in to keep asking",
+        sub=(
+            "That is the free questions used up. An account continues this "
+            "conversation — and claims a portfolio made here, which until then "
+            "belongs to nobody."
+        ),
+        # The question travels with the card so the widget can ask it again
+        # itself once the auth flow returns. They typed it and got a door.
+        pending_question=question,
+    )
+
+
+async def _remember_wall(
+    session_id: str, owner: Owner, question: str, wall: SignInBlock
+) -> None:
+    """Record the turn where the answer was a door.
+
+    Recorded rather than skipped for two reasons. It happened — the question
+    was asked and the card is what came back, so a conversation reopened later
+    shows what was on screen, exactly as any other turn does. And the client
+    takes this turn's id for the conversation's address: a turn that stored
+    nothing would leave `/ai/c/<id>` pointing at a conversation the server has
+    never heard of, which reads as somebody else's 404.
+    """
+    await sessions.append(
+        session_id, owner.key, question, wall.sub, [wall.model_dump(by_alias=True)]
+    )
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -156,6 +212,10 @@ async def chat(
     anon_id: str | None = Header(default=None, alias=ANON_HEADER),
 ) -> ChatResponse:
     question, session_id, owner, state = await _admit(body, authorization, anon_id)
+    wall = await _sign_in_wall(owner, question)
+    if wall is not None:
+        await _remember_wall(session_id, owner, question, wall)
+        return ChatResponse(blocks=[wall], reply=wall.sub, session_id=session_id)
     answer = await _remember(session_id, owner, question, await agent_graph().ainvoke(state))
     return ChatResponse(blocks=[TextBlock(text=answer)], reply=answer, session_id=session_id)
 
@@ -194,9 +254,19 @@ async def chat_stream(
     contract to keep in step.
     """
     question, session_id, owner, state = await _admit(body, authorization, anon_id)
+    # Charged before the stream opens, like every other admission decision, so
+    # the allowance cannot be spent twice by a client that never reads the body.
+    wall = await _sign_in_wall(owner, question)
 
     async def events() -> AsyncIterator[str]:
         yield _event("start", {"session_id": session_id})
+        if wall is not None:
+            # No steps and no tokens: nothing ran. The card is the whole turn,
+            # delivered in the one event a client is told to render.
+            await _remember_wall(session_id, owner, question, wall)
+            walled = ChatResponse(blocks=[wall], reply=wall.sub, session_id=session_id)
+            yield _event("done", walled.model_dump(by_alias=True))
+            return
         async for name, data in turn_events(state):
             if name != "done":
                 yield _event(name, data)

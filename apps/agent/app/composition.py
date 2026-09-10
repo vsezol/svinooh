@@ -18,8 +18,8 @@ import logging
 
 from .adapters import memory
 from .config import settings
-from .ports import ConversationStore, RateLimiter
-from .services.limits import WindowRateLimiter
+from .ports import Allowance, ConversationStore, RateLimiter
+from .services.limits import WindowAllowance, WindowRateLimiter
 from .services.sessions import SessionStore
 
 logger = logging.getLogger("svinooh-ai")
@@ -71,4 +71,19 @@ sessions = SessionStore(
 #: The cost lock.
 limiter = rate_limiter(
     settings.redis_url, settings.rate_limit_requests, settings.rate_limit_window_s
+)
+
+
+def free_allowance(redis_url: str, max_questions: int, window_s: int) -> Allowance:
+    if not redis_url:
+        logger.info("REDIS_URL not set — the free allowance is counted per-process")
+        return WindowAllowance(max_questions, window_s, memory.rate_limit_storage())
+    from .adapters.redis import rate_limit
+
+    return WindowAllowance(max_questions, window_s, rate_limit.storage(redis_url))
+
+
+#: The product limit — what a visitor gets before the answer is the sign-in card.
+allowance = free_allowance(
+    settings.redis_url, settings.free_questions, settings.free_window_s
 )
