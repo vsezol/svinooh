@@ -11,6 +11,7 @@ number, is only ever summed to be displayed, and is rounded to cents by the
 renderer. Decimal would buy an exactness this service never spends.
 """
 
+import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Literal
@@ -95,13 +96,24 @@ class Position:
         alone: "uniswap" found nothing in a portfolio holding three Uniswap
         pools, because the protocol is in `platform` and nobody asks about a
         pool by its LP token symbol.
+
+        A word has to START with the needle, rather than merely contain it.
+        Asked for "Thena" in a real portfolio, a plain substring match also
+        returned two **Ethena** positions and told the model six positions
+        were worth $345,137 when the four Thena ones were worth $288,518 —
+        a wrong number handed to the one thing that turns numbers into
+        sentences. The model read the rows and corrected it that time.
+
+        A boundary rather than `\b` because a protocol is written
+        `bsc_venus`, and `_` is a word character: "venus" has to keep finding
+        it. So the rule is only that a letter or a digit may not come first.
         """
         haystack = " ".join(
             word
             for word in (self.symbol, self.name, self.platform, self.network, self.category)
             if word
         )
-        return needle in haystack.lower()
+        return re.search(rf"(?<![a-z0-9]){re.escape(needle)}", haystack.lower()) is not None
 
 
 @dataclass(frozen=True)

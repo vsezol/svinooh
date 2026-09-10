@@ -201,7 +201,11 @@ def created_prompt(base: str, created: Created) -> str:
     return (
         f"{base}\n\nThe portfolio was just created. Facts to relay, in the "
         f"user's language:\n- link: /p/{created.slug}\n"
-        f"Wallets added:\n{added}{failure_note}{claim_note}\n\nTell them it "
+        f"Wallets added:\n{added}{failure_note}{claim_note}\n\nWrite the "
+        "link out in full, exactly as given above. Never abbreviate it, never "
+        "replace any part of it with an ellipsis, and never promise to send "
+        "it later — this message is the only place it appears, and for a "
+        "portfolio nobody owns it is the only way back to it.\n\nTell them it "
         "is scanning now and they can ask about it here once the first sync "
         "lands. Relay failures honestly — do not soften a refused address "
         "into a success."

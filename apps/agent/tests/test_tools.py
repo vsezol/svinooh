@@ -111,6 +111,26 @@ class TestSearch:
         out = find_positions(fx.as_portfolio(fx.two_wallet_portfolio()), "sol")
         assert "1 position(s)" in out and "SOL" in out
 
+    def test_a_headline_the_model_could_quote_is_the_right_number(self):
+        # The tool's first line is a total, and a total that counted the
+        # wrong positions is the one thing this file exists to prevent.
+        held = fx.as_portfolio(
+            fx.portfolio(
+                [
+                    fx.wallet(
+                        fx.EVM_ADDRESS,
+                        [
+                            fx.position("Thena", 100.0, platform="bsc_thena"),
+                            fx.position("Ethena", 900.0, platform="ethena"),
+                        ],
+                    )
+                ]
+            )
+        )
+        out = find_positions(held, "Thena")
+        assert out.startswith('1 position(s) match "Thena", $100.00 in total')
+        assert "Ethena" not in out
+
     def test_a_miss_names_the_protocols_that_are_there(self):
         out = find_positions(fx.as_portfolio(), "curve")
         assert "No position matches" in out and "uniswap3" in out and "aave3" in out
