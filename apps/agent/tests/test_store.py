@@ -10,8 +10,8 @@ import time
 
 import pytest
 
-from app.sessions import SessionStore, title_of
-from app.store import CHAT_TTL_S, MemoryBackend, backend_for
+from app.services.sessions import SessionStore, title_of
+from app.adapters.store import CHAT_TTL_S, MemoryBackend, backend_for
 
 
 @pytest.fixture

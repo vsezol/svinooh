@@ -20,11 +20,11 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
 
-from . import remote_config
-from .config import settings
-from .graph import agent_graph
-from .limits import RateLimiter
-from .owner import ANON_HEADER, Owner, resolve_owner
+from .. import remote_config
+from ..config import settings
+from ..agent.graph import agent_graph
+from ..services.limits import RateLimiter
+from ..domain.identity import ANON_HEADER, Owner, resolve_owner
 from .schemas import (
     ChatDetail,
     ChatList,
@@ -34,9 +34,9 @@ from .schemas import (
     ChatTurn,
     TextBlock,
 )
-from .sessions import NotYours, SessionStore
-from .store import Chat, backend_for
-from .streaming import turn_events
+from ..services.sessions import NotYours, SessionStore
+from ..adapters.store import Chat, backend_for
+from ..agent.streaming import turn_events
 
 router = APIRouter()
 sessions = SessionStore(

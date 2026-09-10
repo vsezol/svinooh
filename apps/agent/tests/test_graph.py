@@ -3,9 +3,9 @@
 The graph decides what the model sees and whether anything is written, so
 these tests pin the routes rather than the wording of any answer.
 """
-import app.graph as graph
-from app.intent import IntentLabel
-from app.onboarding import ConfirmationDecision
+import app.agent.graph as graph
+from app.agent.intent import IntentLabel
+from app.agent.onboarding import ConfirmationDecision
 from tests import fixtures as fx
 
 import pytest

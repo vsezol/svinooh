@@ -14,10 +14,10 @@ from dataclasses import replace
 
 import pytest
 
-import app.intent as intent
-import app.llm as llm
+import app.agent.intent as intent
+import app.agent.llm as llm
 from app.config import Role
-from app.intent import IntentLabel
+from app.agent.intent import IntentLabel
 
 NO_ENDPOINTS = (
     "Error code: 404 - {'error': {'message': 'No endpoints found that can handle "

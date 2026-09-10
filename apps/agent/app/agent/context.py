@@ -13,7 +13,7 @@ has exactly one home.
 """
 from collections.abc import Callable
 
-from .config import context_max_positions
+from ..config import context_max_positions
 
 MAX_CHARS = 6000
 

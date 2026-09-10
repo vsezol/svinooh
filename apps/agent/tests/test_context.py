@@ -3,7 +3,7 @@
 These assertions are the anti-hallucination contract: every one of them exists
 because a missing or wrong line here became a wrong answer in a chat.
 """
-from app.context import portfolio_context, position_line, usd
+from app.agent.context import portfolio_context, position_line, usd
 from tests import fixtures as fx
 
 

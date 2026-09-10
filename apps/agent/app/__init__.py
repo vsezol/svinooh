@@ -21,8 +21,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import remote_config
 from .config import settings
-from .owner import ANON_HEADER
-from .routes import router
+from .domain.identity import ANON_HEADER
+from .api.routes import router
 
 
 class _Below(logging.Filter):

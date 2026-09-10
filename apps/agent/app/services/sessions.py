@@ -23,7 +23,7 @@ import uuid
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
-from .store import Backend, Chat, Turn, now_ms
+from ..adapters.store import Backend, Chat, Turn, now_ms
 
 TITLE_MAX = 60
 

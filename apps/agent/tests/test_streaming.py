@@ -13,11 +13,11 @@ import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
-import app.graph as graph
-import app.intent as intent
-import app.streaming as streaming
-from app.intent import IntentLabel
-from app.streaming import turn_events
+import app.agent.graph as graph
+import app.agent.intent as intent
+import app.agent.streaming as streaming
+from app.agent.intent import IntentLabel
+from app.agent.streaming import turn_events
 
 ANSWER = "Impermanent loss is a drop against holding."
 

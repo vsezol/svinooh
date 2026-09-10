@@ -28,7 +28,7 @@ that changes.
 import re
 from dataclasses import dataclass
 
-from .auth import authenticate
+from ..services.auth import authenticate
 
 #: What the browser sends its id on. Named, not guessed at, in one place.
 ANON_HEADER = "X-Svinooh-Anon-Id"

@@ -10,15 +10,15 @@ import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
-import app.graph as graph
-import app.intent as intent
-import app.owner as owner_module
-import app.routes as routes
+import app.agent.graph as graph
+import app.agent.intent as intent
+import app.domain.identity as owner_module
+import app.api.routes as routes
 from app import create_app
-from app.auth import Caller
-from app.intent import IntentLabel
-from app.owner import ANON_HEADER
-from app.store import backend_for
+from app.services.auth import Caller
+from app.agent.intent import IntentLabel
+from app.domain.identity import ANON_HEADER
+from app.adapters.store import backend_for
 
 ANSWER = "A health factor is a safety margin."
 ANON = "a" * 32

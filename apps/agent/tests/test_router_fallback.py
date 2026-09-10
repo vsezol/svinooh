@@ -13,9 +13,9 @@ import logging
 
 import pytest
 
-import app.intent as intent
+import app.agent.intent as intent
 from app.config import Role
-from app.intent import IntentLabel
+from app.agent.intent import IntentLabel
 
 
 def role(model: str) -> Role:

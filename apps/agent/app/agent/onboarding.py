@@ -21,7 +21,7 @@ from typing import Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from .config import labelling
+from ..config import labelling
 from .llm import ask, get_router_model, structured
 
 logger = logging.getLogger("svinooh-ai")

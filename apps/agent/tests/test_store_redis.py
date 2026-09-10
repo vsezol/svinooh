@@ -28,8 +28,8 @@ import uuid
 
 import pytest
 
-from app.sessions import SessionStore
-from app.store import CHAT_TTL_S, RedisBackend
+from app.services.sessions import SessionStore
+from app.adapters.store import CHAT_TTL_S, RedisBackend
 
 URL = os.getenv("AGENT_TEST_REDIS_URL", "redis://localhost:6399/0")
 

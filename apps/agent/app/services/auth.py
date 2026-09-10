@@ -28,8 +28,8 @@ from dataclasses import dataclass
 import httpx
 from fastapi import HTTPException
 
-from .config import settings
-from .datasources import PortfolioApiSource
+from ..config import settings
+from ..adapters.portfolio import PortfolioApiSource
 
 logger = logging.getLogger("svinooh-ai")
 portfolio_source = PortfolioApiSource(settings.portfolio_api_url)

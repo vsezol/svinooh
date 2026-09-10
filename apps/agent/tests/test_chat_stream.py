@@ -13,12 +13,12 @@ import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
-import app.graph as graph
-import app.intent as intent
-import app.routes as routes
+import app.agent.graph as graph
+import app.agent.intent as intent
+import app.api.routes as routes
 from app import create_app
-from app.store import backend_for
-from app.intent import IntentLabel
+from app.adapters.store import backend_for
+from app.agent.intent import IntentLabel
 
 ANSWER = "A health factor is a safety margin."
 
