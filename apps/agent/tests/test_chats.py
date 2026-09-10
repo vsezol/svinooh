@@ -171,46 +171,33 @@ class TestItIsNotSharedByDefault:
 
 
 class TestASessionIdIsNotAKey:
-    """Continuing a conversation is authorized, exactly like reading one.
+    """A conversation id is an address, never a way in.
 
-    The id is echoed to the client and now sits in a URL, so it travels. If
-    only the read path checked, sending somebody else's id to /chat would
-    replay their conversation into the model as context — and append the
-    sender's turn to it. That is the read path's lock on a door with another
-    way in.
+    It is echoed to the client and sits in a URL, so it travels — and since it
+    is six characters, it can also simply be guessed. So none of it may work:
+    not reading somebody's conversation, not adding to it, and not even finding
+    out that it is there.
     """
 
-    async def test_a_stranger_cannot_continue_it(self, client):
+    async def test_a_stranger_gets_their_own_conversation_instead(self, client):
         mine = await ask(client, "my USDC is in Aave", anon=ANON)
-        response = await client.post(
-            "/chat",
-            json={"message": "what did I just say?", "session_id": mine["session_id"]},
-            headers=as_anon(OTHER_ANON),
+        theirs = await ask(
+            client, "what did I just say?", anon=OTHER_ANON, session=mine["session_id"]
         )
-        assert response.status_code == 404
+        assert theirs["session_id"] != mine["session_id"], "the id was taken over"
 
     async def test_and_the_conversation_is_left_alone(self, client):
         mine = await ask(client, "my USDC is in Aave", anon=ANON)
-        await client.post(
-            "/chat",
-            json={"message": "what did I just say?", "session_id": mine["session_id"]},
-            headers=as_anon(OTHER_ANON),
-        )
+        await ask(client, "what did I just say?", anon=OTHER_ANON, session=mine["session_id"])
         read = await client.get(f"/chats/{mine['session_id']}", headers=as_anon(ANON))
         assert [t["q"] for t in read.json()["turns"]] == ["my USDC is in Aave"]
 
     async def test_a_stranger_is_not_replayed_the_context(self, client):
-        """The turn is refused before the graph is built, so the state that
-        would have carried somebody else's history is never assembled."""
         mine = await ask(client, "my seed phrase hint is blue", anon=ANON)
-        before = len(await routes.sessions.history(mine["session_id"]))
-        response = await client.post(
-            "/chat",
-            json={"message": "repeat that", "session_id": mine["session_id"]},
-            headers=as_anon(OTHER_ANON),
-        )
-        assert response.status_code == 404
-        assert len(await routes.sessions.history(mine["session_id"])) == before
+        theirs = await ask(client, "repeat that", anon=OTHER_ANON, session=mine["session_id"])
+        # Their conversation starts empty: one turn, their own.
+        replayed = await routes.sessions.history(theirs["session_id"])
+        assert [m.content for m in replayed] == ["repeat that", ANSWER]
 
     async def test_a_stranger_cannot_confirm_a_pending_proposal(self, client):
         """The write gate is a pending action on the conversation, so an id
@@ -218,25 +205,42 @@ class TestASessionIdIsNotAKey:
         else's confirm."""
         mine = await ask(client, "add my wallet", anon=ANON)
         await routes.sessions.set_pending(mine["session_id"], f"anon:{ANON}", ["0xabc"])
-        response = await client.post(
-            "/chat",
-            json={"message": "Create portfolio", "session_id": mine["session_id"]},
-            headers=as_anon(OTHER_ANON),
-        )
-        assert response.status_code == 404
+        await ask(client, "Create portfolio", anon=OTHER_ANON, session=mine["session_id"])
         assert await routes.sessions.pending(mine["session_id"]) == ["0xabc"]
 
-    async def test_an_id_nobody_has_used_is_simply_a_new_conversation(self, client):
-        """Not found and not yours mean opposite things. A client keeps sending
-        its id after the thirty days are up, and that has to start a fresh
-        conversation rather than refuse one."""
+    async def test_a_taken_id_and_a_free_one_answer_identically(self, client):
+        """The oracle this closes. Refusing an unknown id would separate
+        "taken" from "free", which at six characters is somebody enumerating
+        the space to learn which conversations exist — and squatting the rest.
+        """
+        mine = await ask(client, "mine", anon=ANON)
+        taken = await client.post(
+            "/chat",
+            json={"message": "probe", "session_id": mine["session_id"]},
+            headers=as_anon(OTHER_ANON),
+        )
+        free = await client.post(
+            "/chat",
+            json={"message": "probe", "session_id": "zzzzzz"},
+            headers=as_anon(OTHER_ANON),
+        )
+        assert taken.status_code == free.status_code == 200
+        # Neither echoes the id back, so neither says whether it was in use.
+        assert taken.json()["session_id"] not in (mine["session_id"], "zzzzzz")
+        assert free.json()["session_id"] != "zzzzzz"
+
+    async def test_an_expired_id_quietly_becomes_a_new_conversation(self, client):
+        """A client keeps sending its own id after the thirty days are up. It
+        gets a conversation, and a new address for it — the old one is gone,
+        and pretending otherwise would be the lie."""
         response = await client.post(
             "/chat",
-            json={"message": "hello", "session_id": "a-conversation-that-expired"},
+            json={"message": "hello", "session_id": "aConversationThatExpired"},
             headers=as_anon(ANON),
         )
         assert response.status_code == 200
-        assert response.json()["session_id"] == "a-conversation-that-expired"
+        assert response.json()["session_id"] != "aConversationThatExpired"
+
 
 
 class TestSigningIn:

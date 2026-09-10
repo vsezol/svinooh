@@ -14,6 +14,7 @@ import pytest
 from app.adapters.memory import MemoryConversationStore
 from app.composition import conversation_store, rate_limiter
 from app.domain.conversation import CHAT_TTL_S, title_of
+from app.domain.ids import new_chat_id
 from app.services.sessions import SessionStore
 
 
@@ -244,3 +245,34 @@ def _index(store: SessionStore, owner: str) -> dict:
 
 def _index_deadline(store: SessionStore, owner: str) -> float:
     return _backend(store)._index[owner][0]  # noqa: SLF001
+
+
+class TestTheIdIsAnAddress:
+    """Six characters, because the id's whole job is to be a URL somebody
+    sees, copies and occasionally reads out. Safe to shorten because it is not
+    a secret: reading a conversation checks who is asking, so a guessed id
+    answers exactly like an invented one."""
+
+    def test_it_is_short_enough_to_be_a_name(self):
+        assert len(new_chat_id()) == 6
+
+    def test_it_leaves_out_the_characters_people_confuse(self):
+        """Six characters is short enough that somebody will read one aloud."""
+        seen = {c for _ in range(2000) for c in new_chat_id()}
+        assert not (seen & set("0O1lI")), "a confusable character got in"
+
+    def test_it_is_not_a_counter(self):
+        """Predictable ids would make one conversation's address say something
+        about the next one's."""
+        assert len({new_chat_id() for _ in range(1000)}) == 1000
+
+    async def test_a_taken_id_is_not_handed_out_again(self, store, monkeypatch):
+        """The arithmetic only has to make this rare; the store still asks."""
+        await store.append("TAKEN", "user:1", "q", "a", [])
+        handed = iter(["TAKEN", "TAKEN", "FRESH1"])
+        monkeypatch.setattr("app.services.sessions.new_chat_id", lambda: next(handed))
+        assert await store.new_id() == "FRESH1"
+
+    async def test_a_fresh_id_is_used_as_it_is(self, store, monkeypatch):
+        monkeypatch.setattr("app.services.sessions.new_chat_id", lambda: "FRESH1")
+        assert await store.new_id() == "FRESH1"

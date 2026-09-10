@@ -8,17 +8,16 @@ from ..domain.identity import Owner, clean_anon_id
 from .auth import authenticate
 
 
-async def resolve_owner(
-    authorization: str | None,
-    anon_id: str | None,
-    session_id: str,
-) -> Owner:
-    """Name the caller for storage.
+async def resolve_owner(authorization: str | None, anon_id: str | None) -> Owner | None:
+    """Name the caller for storage, or None when they have no identity at all.
 
     An account wins over a browser id: signing in on a shared machine must not
     file the new account's chats under the id the previous person left behind.
 
-    `session_id` is the fallback and only the fallback — see Owner.for_session.
+    None rather than a stand-in, because a caller who sent neither has nothing
+    that outlives one conversation — their conversation is its own owner, and
+    that cannot be decided here, before the conversation has an id. See
+    SessionStore.open_turn, which is where it is decided.
     """
     caller = await authenticate(authorization)
     anon = clean_anon_id(anon_id)
@@ -26,4 +25,4 @@ async def resolve_owner(
         return Owner.for_user(caller.user_id, anon)
     if anon:
         return Owner.for_browser(anon)
-    return Owner.for_session(session_id)
+    return None

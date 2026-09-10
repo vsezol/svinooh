@@ -28,7 +28,6 @@ from ..config import settings
 from ..domain.conversation import Chat
 from ..domain.identity import ANON_HEADER, Owner
 from ..services.identity import resolve_owner
-from ..services.sessions import NotYours
 from .schemas import (
     ChatDetail,
     ChatList,
@@ -47,7 +46,7 @@ def health() -> dict:
     return {"ok": True}
 
 
-def _budget(owner: Owner) -> str:
+def _budget(owner: Owner | None) -> str:
     """Whose meter this turn is charged to.
 
     Deliberately NOT the owner key. Storage keys on the browser's anonymous id
@@ -59,10 +58,10 @@ def _budget(owner: Owner) -> str:
     per-visitor is step 3 part 5's problem, and it needs something harder than
     this id to be worth doing.
     """
-    return f"user:{owner.user_id}" if owner.signed_in else "anonymous"
+    return f"user:{owner.user_id}" if owner and owner.signed_in else "anonymous"
 
 
-async def _claim_anonymous_chats(owner: Owner) -> None:
+async def _claim_anonymous_chats(owner: Owner | None) -> None:
     """Move a visitor's conversations onto the account they just signed into.
 
     Lazy and self-limiting rather than an endpoint the client has to remember
@@ -72,8 +71,10 @@ async def _claim_anonymous_chats(owner: Owner) -> None:
     matters because the product asks somebody to sign in underneath their first
     answer — the exact moment the conversation became worth keeping.
     """
+    if owner is None or not owner.signed_in:
+        return
     source = owner.anonymous_key
-    if not owner.signed_in or source is None:
+    if source is None:
         return
     if await sessions.owns_any(source):
         await sessions.reassign(source, owner.key)
@@ -95,14 +96,10 @@ async def _admit(
     # settings poll. This turn runs on what is already in hand.
     remote_config.refresh_soon()
 
-    # The id the conversation will be stored under, decided before the caller
-    # is named because the fallback owner is derived from it (app/owner.py).
-    session_id = body.session_id or sessions.new_id()
-
     # The lock on the door: name the caller (401 only when the host rejects
     # the token outright), then charge the turn against their budget.
-    owner = await resolve_owner(authorization, anon_id, session_id)
-    retry_after = await limiter.retry_after(_budget(owner))
+    identity = await resolve_owner(authorization, anon_id)
+    retry_after = await limiter.retry_after(_budget(identity))
     if retry_after is not None:
         raise HTTPException(
             status_code=429,
@@ -110,17 +107,14 @@ async def _admit(
             headers={"Retry-After": str(retry_after)},
         )
 
-    await _claim_anonymous_chats(owner)
+    await _claim_anonymous_chats(identity)
 
-    # Continuing a conversation is authorized, exactly like reading one. The id
-    # is echoed to the client and now lives in a URL, so it travels — and
-    # without this, sending somebody else's would replay their conversation
-    # into the model and append this turn to it. A 404 for the same reason the
-    # read path gives one: saying "not yours" confirms it exists.
-    try:
-        chat = await sessions.resume(session_id, owner.key)
-    except NotYours as error:
-        raise HTTPException(status_code=404, detail="no such conversation") from error
+    # Which conversation this turn runs in, what to call it, and whose it is.
+    # A caller's own live conversation is continued; anything else — no id, an
+    # expired one, somebody else's — quietly becomes a new conversation under a
+    # new id. That is what keeps a guessable id from being a way to read,
+    # extend, or even detect a conversation that is not yours. See open_turn.
+    session_id, chat, owner = await sessions.open_turn(body.session_id, identity)
 
     # The session's history and its pending proposal ride into the graph, which
     # is what makes "as we discussed" — and "yes, create it" — work across
@@ -228,7 +222,7 @@ async def chat_stream(
 # ── the conversations, read rather than continued ───────────────────────────
 
 
-async def _reader(authorization: str | None, anon_id: str | None) -> Owner:
+async def _reader(authorization: str | None, anon_id: str | None) -> Owner | None:
     """Who is asking, for a read.
 
     No session id to fall back on here, and none is wanted: a read with no
@@ -241,7 +235,7 @@ async def _reader(authorization: str | None, anon_id: str | None) -> Owner:
     this that list comes back empty, and the conversation they just decided was
     worth keeping looks lost at exactly the moment they acted to keep it.
     """
-    owner = await resolve_owner(authorization, anon_id, session_id="")
+    owner = await resolve_owner(authorization, anon_id)
     await _claim_anonymous_chats(owner)
     return owner
 
@@ -262,7 +256,7 @@ async def list_chats(
     because the key a listing is built from is the caller's own.
     """
     owner = await _reader(authorization, anon_id)
-    if not owner.listable:
+    if owner is None:
         return ChatList(chats=[])
     return ChatList(chats=_summaries(await sessions.list(owner.key, settings.chat_list_limit)))
 
@@ -282,7 +276,7 @@ async def read_chat(
     on the conversation later, not a link that happens to work.
     """
     owner = await _reader(authorization, anon_id)
-    chat = await sessions.chat(chat_id, owner.key)
+    chat = await sessions.chat(chat_id, owner.key) if owner else None
     if chat is None:
         raise HTTPException(status_code=404, detail="no such conversation")
     return ChatDetail(
@@ -300,5 +294,5 @@ async def delete_chat(
     anon_id: str | None = Header(default=None, alias=ANON_HEADER),
 ) -> None:
     owner = await _reader(authorization, anon_id)
-    if not await sessions.delete(chat_id, owner.key):
+    if owner is None or not await sessions.delete(chat_id, owner.key):
         raise HTTPException(status_code=404, detail="no such conversation")

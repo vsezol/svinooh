@@ -18,21 +18,19 @@ It depends on ports.ConversationStore and never on an adapter, which is what
 lets Redis be swapped for a database or an HTTP service without a line moving
 in this file.
 """
-import uuid
+import logging
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from ..domain.conversation import Chat
+from ..domain.identity import Owner
+from ..domain.ids import new_chat_id
 from ..ports import ConversationStore
 
+logger = logging.getLogger("svinooh-ai")
 
-class NotYours(Exception):
-    """A session id that names somebody else's conversation.
-
-    Its own type rather than a None the caller might read as "not found":
-    those two mean opposite things here. Nothing is created for an id that is
-    not found, and nothing at all happens for one that is not yours.
-    """
+#: How many times a colliding id is retried before one is used regardless.
+_ID_ATTEMPTS = 5
 
 
 class SessionStore:
@@ -46,8 +44,62 @@ class SessionStore:
         # window: the reader scrolls back further than the model is replayed.
         self._max_turns = max(self._max_turns_in_context, max_turns)
 
-    def new_id(self) -> str:
-        return uuid.uuid4().hex
+    async def new_id(self) -> str:
+        """An id nothing is stored under yet.
+
+        Short ids are short enough to collide eventually, so the store is asked
+        rather than trusted to luck. A handful of tries is generous: at
+        56^6 the first one is free until this product has billions of
+        conversations, and the loop is here so that "eventually" never becomes
+        somebody's conversation being overwritten by a stranger's.
+
+        The last attempt is returned unchecked, because failing to name a chat
+        is a worse answer than a collision this improbable.
+        """
+        for _ in range(_ID_ATTEMPTS - 1):
+            candidate = new_chat_id()
+            if await self._store.load(candidate) is None:
+                return candidate
+            logger.warning("chat id collision on %s — trying another", candidate)
+        return new_chat_id()
+
+    async def open_turn(
+        self, session_id: str | None, identity: Owner | None
+    ) -> tuple[str, Chat | None, Owner]:
+        """Which conversation this turn runs in, under which id, for whom.
+
+        A caller's own live conversation is continued. Anything else — no id,
+        an id whose thirty days are up, an id belonging to somebody else —
+        quietly becomes a new conversation under a freshly minted id, and the
+        client learns which from the id that comes back.
+
+        Refusing an unknown id instead would be an existence oracle, and short
+        ids are guessable enough for that to matter: probing would separate
+        "taken" from "free", let somebody squat the free ones, and say that a
+        conversation exists at an address. Minting makes every probe look the
+        same, and it is the honest outcome anyway — a conversation whose id no
+        longer resolves is gone, and the new one is not at the old address.
+
+        `identity` is None for a caller with neither a token nor a browser id.
+        Their conversation is its own owner, so the owner cannot be settled
+        until the id is — which is the whole reason this returns all three.
+        """
+        if identity is not None:
+            if session_id:
+                chat = await self._store.load(session_id)
+                if chat is not None and chat.owner == identity.key:
+                    return session_id, chat, identity
+            return await self.new_id(), None, identity
+
+        # No identity: the conversation owns itself, and "is it mine" means
+        # "was it started this same way, under this same id".
+        if session_id:
+            owner = Owner.for_session(session_id)
+            chat = await self._store.load(session_id)
+            if chat is not None and chat.owner == owner.key:
+                return session_id, chat, owner
+        fresh = await self.new_id()
+        return fresh, None, Owner.for_session(fresh)
 
     def context(self, chat: Chat | None) -> list[BaseMessage]:
         """The model's context, derived from the stored turns.
@@ -67,29 +119,9 @@ class SessionStore:
             messages += [HumanMessage(content=turn.q), AIMessage(content=turn.a)]
         return messages
 
-    async def resume(self, session_id: str, owner: str) -> Chat | None:
-        """The conversation a turn continues, checked against who is asking.
-
-        None when there is nothing at that id — a conversation whose thirty
-        days are up, or one this caller is about to start — and either is
-        theirs to begin.
-
-        `NotYours` when the id names somebody ELSE's conversation, which is the
-        case this method exists for. A session id is echoed back to the client
-        and now sits in a URL, so it travels: without this check, sending
-        somebody else's id would replay their conversation into the model as
-        context and append the sender's turn to it. Reading a conversation is
-        authorized on the read path; continuing one has to be authorized on
-        this one, or the read path's lock is on a door with another way in.
-        """
-        chat = await self._store.load(session_id)
-        if chat is not None and chat.owner != owner:
-            raise NotYours(session_id)
-        return chat
-
     async def history(self, session_id: str) -> list[BaseMessage]:
         """The context at an id, with no owner check — tests and callers that
-        have already done one. A turn goes through `resume`."""
+        have already done one. A turn goes through `start_or_resume`."""
         return self.context(await self._store.load(session_id))
 
     async def append(
