@@ -83,19 +83,23 @@ function DemoBlock({ scene }: { scene: DemoScene }) {
   }
 
   if (scene.range) {
-    const { name, ...band } = scene.range;
+    const { name, inRange, ...band } = scene.range;
     // The scale the portfolio draws for a liquidity position, drawn here by
     // the same component — see RangeBar, and rule one of the redesign: what
-    // the assistant shows you is the thing itself, not a picture of it.
+    // the assistant shows you is the thing itself, not a picture of it. The
+    // verdict above it is worded and coloured the way WalletRow words it.
     return (
       <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-md)', background: 'var(--surf2)', padding: '13px 2px 4px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, padding: '0 14px' }}>
           <span style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--fs-body)' }}>{name}</span>
-          <span className="mono" style={{ fontSize: 'var(--fs-micro)', letterSpacing: 'var(--tr-tag)', color: 'var(--down)' }}>
-            OUT OF RANGE
+          <span
+            className="mono"
+            style={{ fontSize: 'var(--fs-micro)', letterSpacing: 'var(--tr-tag)', color: inRange ? 'var(--up)' : 'var(--down)' }}
+          >
+            {inRange ? 'IN RANGE' : 'OUT OF RANGE'}
           </span>
         </div>
-        <RangeBar band={band} inRange={false} />
+        <RangeBar band={band} inRange={inRange} />
       </div>
     );
   }
@@ -237,8 +241,8 @@ export function HeroComposer({ onSend, handle }: Props) {
     <div style={{ maxWidth: 640, width: '100%', margin: '0 auto', padding: 'clamp(22px,3.5vw,34px) clamp(14px,3.5vw,28px) 0' }}>
       <div
         ref={card}
+        className="sv-l-composer"
         style={{
-          border: '1px solid var(--line2)',
           borderRadius: 26,
           background: 'var(--surf)',
           // The one glow on the page, under the one thing it is asking you to

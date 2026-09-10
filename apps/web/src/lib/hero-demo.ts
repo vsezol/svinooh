@@ -27,11 +27,13 @@ export interface DemoCard {
 
 /** A pool's bounds and where the price is, as the portfolio's own scale reads them. */
 export interface DemoRange {
-  /** How the position is named on screen: "Orca · SOL/USDC" */
+  /** How the position is named on screen: "Meteora · SOL/USDC" */
   name: string;
   lower: number;
   upper: number;
   current: number;
+  /** Which verdict the card carries, and which colour the whole scale takes. */
+  inRange: boolean;
 }
 
 export interface DemoScene {
@@ -61,8 +63,9 @@ export const SCENES: readonly DemoScene[] = [
   {
     q: 'any of my LPs out of range?',
     steps: ['Scanning 3 pools', 'Checking tick ranges'],
-    answer: 'One. `Orca SOL/USDC` left its range 4 hours ago and has earned `$0` since.',
-    range: { name: 'Orca · SOL/USDC', lower: 142, upper: 196, current: 214.6 },
+    answer:
+      'None — all three are in range. `Meteora SOL/USDC` is the closest to its edge, `$188.40` against an upper bound of `$196.00`.',
+    range: { name: 'Meteora · SOL/USDC', lower: 142, upper: 196, current: 188.4, inRange: true },
   },
   {
     q: 'put my idle 4,200 USDC to work, low risk',

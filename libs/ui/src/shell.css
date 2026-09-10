@@ -208,6 +208,12 @@ body[data-theme='light'] .on-dark {
   background: var(--surf2);
 }
 
+/* Full width inside a scroller that clips it — the ring goes inside. */
+.rail-history:focus-visible,
+.rail-new:focus-visible {
+  outline-offset: -2px;
+}
+
 .rail-history:hover {
   background: var(--surf2);
 }

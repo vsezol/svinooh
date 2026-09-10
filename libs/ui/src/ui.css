@@ -11,6 +11,44 @@
    optical nudge, or a shape (a 50% circle) — not because it is a size. */
 
 /* ═══════════════════════════════════════════════════════════════════════
+   Keyboard focus — one ring, everywhere, in the product's own colour
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Every surface loads this file, so a person moving through any of them with
+   a keyboard sees the same mark. Before it there was none: focus was handled
+   per component where it was handled at all — the select borders, the
+   checkbox borders — and everything else fell through to the browser's own
+   ring, which on a dark green product is a blue box that belongs to nobody.
+
+   :focus-visible rather than :focus, so a pressed button does not keep a ring
+   nobody asked for; the browser decides, and it decides on the keyboard.
+   Outline rather than a border or a shadow because an outline takes no room
+   in the layout and follows a border-radius on its own — a pill gets a pill.
+   Offset so it reads as a ring around the control rather than a second edge
+   drawn on it. */
+:focus-visible {
+  /* --acc-text, not --acc: they are the same green on the dark theme, and on
+     the light one this is the darker variant that reads as a foreground
+     against a near-white page. A ring is foreground. */
+  outline: 2px solid var(--acc-text);
+  outline-offset: 2px;
+}
+
+/* An accent ring around an accent fill is one green against another, with two
+   pixels of ground between them doing all the work. These take the text
+   colour, which reads on the fill and on whatever is behind it. */
+.ui-btn[data-variant='accent']:focus-visible {
+  outline-color: var(--text);
+}
+
+/* A row that fills its container to the edge is clipped by it, so its ring is
+   drawn inside itself rather than around itself — otherwise a card with
+   overflow:hidden shows two horizontal lines and no sides at all. */
+.ui-menu-item:focus-visible {
+  outline-offset: -2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    Button — the sans-set actions
    ═══════════════════════════════════════════════════════════════════════ */
 
