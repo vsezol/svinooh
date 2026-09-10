@@ -5,7 +5,8 @@
   "scripts": {
     "build": "webpack --mode production",
     "watch": "webpack --mode production --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@svinooh/ui": "*",

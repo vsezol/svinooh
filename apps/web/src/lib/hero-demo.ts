@@ -79,6 +79,19 @@ export const sceneMs = (scene: DemoScene): number => typeMs(scene) + workMs(scen
 
 const CYCLE_MS = SCENES.reduce((sum, scene) => sum + sceneMs(scene), 0);
 
+/**
+ * Where the cycle starts, which is not where it begins.
+ *
+ * At its own zero the first question has not been typed yet, so the panel
+ * under the field would be showing the LAST scene's answer — the proposed
+ * transaction, the tallest card here — for the first second and a half of
+ * everybody's first visit, and then swapping it. So the clock is offset to
+ * land on the first scene answered and holding: the page opens on a finished
+ * question with its answer under it, and the second question is the first
+ * thing that moves.
+ */
+const ORIGIN_MS = typeMs(SCENES[0]) + workMs(SCENES[0]);
+
 export type StepState = 'waiting' | 'running' | 'done';
 
 export interface DemoFrame {
@@ -129,7 +142,9 @@ function at(t: number, pick?: { index: number; at: number }): { index: number; l
  * somebody pressed and when they pressed it.
  */
 export function demoFrame(t: number, pick?: { index: number; at: number }): DemoFrame {
-  const { index, local } = at(t, pick);
+  // Both are moved into cycle time together, so a pick's own window stays the
+  // length of its scene rather than being shifted by the offset.
+  const { index, local } = at(t + ORIGIN_MS, pick && { ...pick, at: pick.at + ORIGIN_MS });
   const scene = SCENES[index];
   const typing = local < typeMs(scene);
   const working = !typing && local < typeMs(scene) + workMs(scene);
@@ -155,13 +170,13 @@ export function demoFrame(t: number, pick?: { index: number; at: number }): Demo
 }
 
 /**
- * Where the cycle sits still.
+ * Where the cycle sits still: zero, now that zero is the first answer.
  *
- * For a reader who has asked for less movement: scene one, answered, holding.
- * A frozen frame of a half-typed question with a spinner in it would be worse
- * than no animation — it would look broken rather than calm.
+ * For a reader who has asked their system for less movement. A frozen frame of
+ * a half-typed question with a spinner in it would look broken rather than
+ * calm, which is what the offset above already fixed for everybody else.
  */
-export const DEMO_AT_REST = typeMs(SCENES[0]) + workMs(SCENES[0]);
+export const DEMO_AT_REST = 0;
 
 /**
  * An answer split into what reads as prose and what reads as a figure.

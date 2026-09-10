@@ -107,7 +107,8 @@ async def pending_gate(state: AgentState) -> AgentState:
     if not state.get("pending_addresses"):
         return {"route": "classify_intent"}
     try:
-        verdict = await classify_confirmation(state["question"])
+        async with step("confirm", "Reading your reply"):
+            verdict = await classify_confirmation(state["question"])
     except Exception as error:  # noqa: BLE001 — an unreadable reply must not write
         logger.warning("confirmation classifier failed (%r) — keeping the proposal", error)
         return {"route": "classify_intent"}
@@ -179,7 +180,13 @@ async def _answer(system: str, state: AgentState) -> AgentState:
         *state.get("history", []),
         HumanMessage(content=state["question"]),
     ]
-    reply = await ask(get_model, messages, answering())
+    # The model call is an operation like any other, and until it was reported
+    # it was the longest unlit stretch of a turn: everything a reader could see
+    # finished, and then several seconds of nothing while the answer was being
+    # written. The words arrive during this step and fold it, which is the
+    # better spinner — but the wait before the first of them is this line.
+    async with step("answer", "Writing the answer"):
+        reply = await ask(get_model, messages, answering())
     return {"answer": extract_text(reply)}
 
 
@@ -235,14 +242,23 @@ async def grounded_node(state: AgentState) -> AgentState:
         nonlocal bound
         bound = get_model().bind_tools(tools)
 
-    for _ in range(tool_hops()):
-        reply = await ask(lambda: bound, messages, answering(), rebind)
+    for hop in range(tool_hops()):
+        # Every hop is the model reading what it has and deciding what is next,
+        # and none of them produced a word until now: a turn that called three
+        # tools showed three lines and three silences between them. The first
+        # hop is thinking about the question; the ones after it are thinking
+        # about what the tools came back with, which is what they say.
+        async with step(
+            f"think-{hop}", "Thinking" if hop == 0 else "Reading what came back"
+        ):
+            reply = await ask(lambda: bound, messages, answering(), rebind)
         calls = getattr(reply, "tool_calls", None) or []
         if not calls:
             return {"answer": extract_text(reply)}
         messages.append(reply)
         messages.extend(await run_tools(calls, tools))
-    final = await get_model().ainvoke(messages)
+    async with step("answer", "Writing the answer"):
+        final = await get_model().ainvoke(messages)
     return {"answer": extract_text(final)}
 
 
@@ -265,7 +281,8 @@ async def onboard_node(state: AgentState) -> AgentState:
         *state.get("history", []),
         HumanMessage(content=state["question"]),
     ]
-    reply = await get_model().bind_tools([ProposePortfolio]).ainvoke(messages)
+    async with step("think-0", "Thinking"):
+        reply = await get_model().bind_tools([ProposePortfolio]).ainvoke(messages)
 
     calls = getattr(reply, "tool_calls", None) or []
     if not calls:
@@ -294,9 +311,13 @@ async def create_portfolio_node(state: AgentState) -> AgentState:
     """
     addresses = state.get("pending_addresses") or []
     try:
-        result = await create_portfolio_with_wallets(
-            portfolio_source, addresses, state.get("authorization")
-        )
+        # The slowest thing in this turn — a portfolio POST and one per wallet
+        # — and it was the only action the reader could not watch happening.
+        wallets = f"{len(addresses)} wallet" + ("" if len(addresses) == 1 else "s")
+        async with step("create", f"Creating the portfolio · {wallets}"):
+            result = await create_portfolio_with_wallets(
+                portfolio_source, addresses, state.get("authorization")
+            )
     except Exception as error:  # noqa: BLE001 — nothing was created; say so
         logger.warning("portfolio creation failed: %r", error)
         return await _answer(creation_failed_prompt(system_prompt()), state)

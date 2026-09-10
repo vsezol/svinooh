@@ -25,30 +25,39 @@ describe('WhatThePanelUnderTheFieldIsDoing', () => {
     }
   });
 
-  test('shows the previous answer while the next question types', () => {
-    // One character in: the question has started, and what is on screen is
-    // still the answer before it.
-    const frame = demoFrame(60);
+  test('opens on the first answer rather than on the last one', () => {
+    // t=0 is what the server renders, what the browser hydrates against, and
+    // what somebody sees for the first second and a half of their first visit.
+    // It is scene one, answered and holding — see ORIGIN_MS.
+    const frame = demoFrame(0);
     assert.equal(frame.index, 0);
-    assert.equal(frame.typed, 'w');
-    assert.equal(frame.fading, true);
-    assert.equal(frame.shown, SCENES[SCENES.length - 1]);
+    assert.equal(frame.typed, SCENES[0].q);
+    assert.equal(frame.working, false);
+    assert.equal(frame.fading, false);
+    assert.equal(frame.shown, SCENES[0]);
   });
 
-  test('starts full rather than blank', () => {
-    // t=0 is what the server renders and the browser hydrates against.
-    const frame = demoFrame(0);
-    assert.equal(frame.typed, '');
-    assert.equal(frame.working, false);
-    assert.equal(frame.shown, SCENES[SCENES.length - 1]);
+  test('shows the previous answer while the next question types', () => {
+    // The first instant scene two is being typed: what is on screen is still
+    // scene one's answer, on its way out.
+    const t = everyFrame().find((at) => {
+      const f = demoFrame(at);
+      return f.index === 1 && f.typed.length > 0 && f.typed !== SCENES[1].q;
+    });
+    assert.ok(t !== undefined, 'scene two never types');
+    const frame = demoFrame(t);
+    assert.equal(frame.fading, true);
+    assert.equal(frame.shown, SCENES[0]);
   });
 
   test('has the question fully typed before the trace starts', () => {
     for (const [i, scene] of SCENES.entries()) {
-      let before = 0;
-      for (let k = 0; k < i; k += 1) before += sceneMs(SCENES[k]);
-      // The first instant the trace is running for this scene.
-      const t = everyFrame().find((at) => at >= before && demoFrame(at).working && demoFrame(at).index === i);
+      // The first instant the trace is running for this scene, anywhere in
+      // the cycle — each scene runs exactly once per turn of it.
+      const t = everyFrame().find((at) => {
+        const f = demoFrame(at);
+        return f.working && f.index === i;
+      });
       assert.ok(t !== undefined, `${scene.q} never runs`);
       assert.equal(demoFrame(t).typed, scene.q);
     }
@@ -82,11 +91,10 @@ describe('WhatThePanelUnderTheFieldIsDoing', () => {
   });
 
   test('rests on a finished first answer for a reader who asked for less movement', () => {
-    const frame = demoFrame(DEMO_AT_REST);
-    assert.equal(frame.index, 0);
-    assert.equal(frame.working, false);
-    assert.equal(frame.fading, false);
-    assert.equal(frame.shown, SCENES[0]);
+    // Which is the same frame as the opening one, now that the cycle is
+    // offset to start there.
+    assert.deepEqual(demoFrame(DEMO_AT_REST), demoFrame(0));
+    assert.equal(demoFrame(DEMO_AT_REST).shown, SCENES[0]);
   });
 });
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatItem, Conversation, MountOptions, PortfolioRef, SignInBlock, TraceBlock } from './types';
 import { useDesktop } from './useDesktop';
 import { WireError, streamChat, type StepEvent } from './wire';
+import { traceOf } from './trace';
 import * as history from './history';
 import { AgentHeader } from '../components/AgentHeader';
 import { AgentMessage } from '../components/AgentMessage';
@@ -53,24 +54,23 @@ function blank(): Conversation {
 }
 
 /**
- * The steps a turn reported, as a block.
+ * A clock that runs only while a turn does.
  *
- * Every row here is an operation that ran: the id is the one the service used,
- * the label is what that operation said about itself, and the time is what it
- * actually took. Nothing is added to make the list look busier.
+ * Ten times a second, which is slower than the re-renders a streaming answer
+ * already causes and only runs when there is something to count.
  */
-function traceOf(steps: StepEvent[], collapsed: boolean): TraceBlock {
-  const ms = steps.reduce((sum, step) => sum + (step.ms ?? 0), 0);
-  return {
-    kind: 'trace',
-    collapsed,
-    summary: `${steps.length} ${steps.length === 1 ? 'step' : 'steps'} · ${(ms / 1000).toFixed(1)}s`,
-    steps: steps.map((step) => ({
-      label: step.label ?? step.id,
-      state: step.state === 'running' ? 'running' : 'done',
-      time: step.ms === undefined ? undefined : `${(step.ms / 1000).toFixed(1)}s`,
-    })),
-  };
+function useTicking(on: boolean): number {
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    if (!on) {
+      setNow(0);
+      return;
+    }
+    setNow(Date.now());
+    const id = window.setInterval(() => setNow(Date.now()), 100);
+    return () => window.clearInterval(id);
+  }, [on]);
+  return now;
 }
 
 function notesFor(err: unknown, question: string): ChatItem[] {
@@ -212,7 +212,9 @@ export function App(props: AppProps) {
               if (activeRef.current.id !== asked) return;
               setSteps((sofar) => {
                 const at = sofar.findIndex((s) => s.id === event.id);
-                const next = at === -1 ? [...sofar, event] : sofar.slice();
+                // The first time a step is heard of is when its line appears,
+                // which is what a running one counts up from.
+                const next = at === -1 ? [...sofar, { ...event, startedAt: Date.now() }] : sofar.slice();
                 if (at !== -1) next[at] = { ...next[at], ...event };
                 stepsRef.current = next;
                 return next;
@@ -235,7 +237,9 @@ export function App(props: AppProps) {
           {
             id: uid(),
             role: 'agent',
-            blocks: receipt.length > 0 ? [traceOf(receipt, true), ...res.blocks] : res.blocks,
+            // Every step in a finished receipt has its own time, so there is
+            // nothing left for a clock to count.
+            blocks: receipt.length > 0 ? [traceOf(receipt, true, 0), ...res.blocks] : res.blocks,
           },
         ]);
       } catch (err) {
@@ -388,7 +392,8 @@ export function App(props: AppProps) {
 
   // The live trace, built from what the turn reported about itself. It folds
   // as soon as the answer starts: the steps mattered while they ran.
-  const traceBlock = traceOf(steps, !traceOpen || streamed !== null);
+  const now = useTicking(busy);
+  const traceBlock = traceOf(steps, !traceOpen || streamed !== null, now);
 
   const meta =
     portfolio && portfolio.wallets != null && portfolio.totalUsd != null

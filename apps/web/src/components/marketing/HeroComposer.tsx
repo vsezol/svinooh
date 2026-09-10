@@ -28,6 +28,10 @@ const ICON = {
   strokeLinejoin: 'round',
 } as const;
 
+/** The design's floor under the panel, and the padding it draws inside it. */
+const FLOOR = 186;
+const PANEL_PADDING = 16 + 18;
+
 const MONO_IN_TEXT = {
   fontFamily: 'var(--mono)',
   fontSize: 'var(--fs-body)',
@@ -133,21 +137,11 @@ function DemoBlock({ scene }: { scene: DemoScene }) {
           ARBITRUM
         </span>
       </div>
-      <div style={{ display: 'flex', borderTop: '1px solid var(--line)' }}>
-        {[
-          { label: 'SUPPLY APY', value: '6.8%' },
-          { label: 'WITHDRAW', value: 'Any time' },
-        ].map((cell, i) => (
-          <div key={cell.label} style={{ flex: 1, padding: '10px 15px', borderLeft: i ? '1px solid var(--line)' : undefined }}>
-            <div className="mono" style={{ fontSize: 'var(--fs-eyebrow)', letterSpacing: 'var(--tr-micro)', color: 'var(--mut)' }}>
-              {cell.label}
-            </div>
-            <div className="mono" style={{ fontSize: 'var(--fs-control)', fontWeight: 'var(--fw-medium)', marginTop: 4 }}>
-              {cell.value}
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* No grid of figures under the title. The answer above the card already
+          says the rate and that it is withdrawable any time, and repeating it
+          here in two cells is what made this scene half again as tall as the
+          other two — which is a panel that changes height under a field
+          somebody is typing in. */}
       {/* Signing is what the agent is growing towards and is not wired yet, so
           the card says so rather than offering a button that does nothing. */}
       <div style={{ borderTop: '1px solid var(--line)', padding: '11px 15px', display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -186,6 +180,40 @@ export function HeroComposer({ onSend, handle }: Props) {
   const [pick, setPick] = useState<{ index: number; at: number } | undefined>();
   const input = useRef<HTMLInputElement>(null);
   const card = useRef<HTMLDivElement>(null);
+  /**
+   * How tall the panel is: as tall as its tallest scene, at this width.
+   *
+   * Not the scene on screen. The three answers are different heights — a row
+   * of stat cards, a range bar, a proposed transaction — and a box that took
+   * each one's height in turn would resize under the field every few seconds.
+   * So all three are laid out once, invisibly and at the panel's own width
+   * (the gauge below), the tallest wins, and after that nothing moves at all.
+   *
+   * Measured rather than written down because the answer is different at every
+   * width: three stat cards are one row at 640 and two at 375. Re-measured
+   * when the width changes, and the change glides — see .sv-l-demo.
+   */
+  const gauge = useRef<HTMLDivElement>(null);
+  const [tallest, setTallest] = useState(FLOOR);
+  useEffect(() => {
+    const el = gauge.current;
+    if (!el) return;
+    const measure = () =>
+      setTallest(
+        Math.max(FLOOR, ...Array.from(el.children, (c) => (c as HTMLElement).offsetHeight + PANEL_PADDING)),
+      );
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    // The scenes are watched, not the box holding them. That box is a
+    // zero-height absolute strip whose own size only changes with the width —
+    // so watching it missed the thing that actually changes these heights,
+    // which is the web font arriving and text re-wrapping under it. The panel
+    // then sat at its floor for the rest of the visit and grew the first time
+    // a scrollbar happened to narrow the page.
+    const watch = new ResizeObserver(measure);
+    for (const scene of el.children) watch.observe(scene);
+    return () => watch.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!handle) return;
@@ -200,12 +228,28 @@ export function HeroComposer({ onSend, handle }: Props) {
     };
   }, [handle]);
 
+  /**
+   * Whether the demo is running at all.
+   *
+   * It stops the moment somebody types. An answer to a question they are not
+   * asking, sitting under the question they are, is the panel disagreeing with
+   * the field — so the panel empties and the chips stop pointing at anything
+   * until the field is theirs no longer.
+   */
+  const demo = !text;
   const frame = demoFrame(t, pick);
   // The ghost is the demo speaking through the field, so it goes the moment
   // the field is somebody else's — focused, or with anything in it.
-  const ghost = !focused && !text;
+  const ghost = demo && !focused;
+  /**
+   * What pressing send would ask.
+   *
+   * The typed question when there is one, and otherwise the question the ghost
+   * is showing — which is a real question, sitting in the field, next to an
+   * arrow. Pressing that and having nothing happen is the arrow lying.
+   */
+  const question = text.trim() || (ghost ? SCENES[frame.index].q : '');
   const send = () => {
-    const question = text.trim();
     if (question) onSend(question);
   };
 
@@ -264,12 +308,13 @@ export function HeroComposer({ onSend, handle }: Props) {
               justifyContent: 'center',
               flexShrink: 0,
               padding: 0,
-              // Lit only when there is something to send: the button is the
-              // page's one call to action and it earns that by being off until
-              // it has a job.
-              background: text ? 'var(--acc)' : 'var(--surf2)',
-              color: text ? 'var(--acc-ink)' : 'var(--mut)',
-              border: `1px solid ${text ? 'var(--acc)' : 'var(--line2)'}`,
+              // Lit when pressing it will do something, which is whenever
+              // there is a question in the field — typed, or the one the ghost
+              // is showing. Focused and empty it goes out, because then there
+              // genuinely is nothing to send.
+              background: question ? 'var(--acc)' : 'var(--surf2)',
+              color: question ? 'var(--acc-ink)' : 'var(--mut)',
+              border: `1px solid ${question ? 'var(--acc)' : 'var(--line2)'}`,
               transition: 'background var(--ease-settle), color var(--ease-settle)',
             }}
           >
@@ -280,11 +325,29 @@ export function HeroComposer({ onSend, handle }: Props) {
           </button>
         </div>
 
-        {/* The demo's answer. A fixed floor under it, because this is the panel
-            directly under the field: a height that follows the content would
-            move the field between scenes. */}
-        <div style={{ padding: '16px 18px 18px', textAlign: 'left', minHeight: 186 }} aria-live="off">
-          {frame.working ? (
+        {/* The demo's answer, in a box as tall as the tallest thing it can
+            hold — so it is one height for the whole visit. This is the panel
+            directly under the field, and a panel that resizes moves the field
+            somebody is typing in. */}
+        <div className="sv-l-demo" style={{ height: tallest }} aria-live="off">
+          {/* The gauge: every answer this panel can show, laid out at its width
+              and never drawn. It is what the height above is measured from.
+              Nothing in a scene is focusable or announced, so it costs the
+              reader nothing to have it here. */}
+          <div
+            ref={gauge}
+            aria-hidden="true"
+            style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 0, overflow: 'hidden', visibility: 'hidden', pointerEvents: 'none' }}
+          >
+            {SCENES.map((scene) => (
+              <div key={scene.q} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '0 18px' }}>
+                <div style={{ fontSize: 'var(--fs-read)', lineHeight: 1.6 }}>{scene.answer.replace(/`/g, '')}</div>
+                <DemoBlock scene={scene} />
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: '16px 18px 18px', textAlign: 'left' }}>
+          {!demo ? null : frame.working ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
               {frame.steps.map((step) => (
                 <div
@@ -321,6 +384,7 @@ export function HeroComposer({ onSend, handle }: Props) {
               <DemoBlock scene={frame.shown} />
             </div>
           )}
+          </div>
         </div>
 
         {/* Three real questions. Pressing one plays its scene rather than
@@ -334,15 +398,21 @@ export function HeroComposer({ onSend, handle }: Props) {
             <button
               key={scene.q}
               type="button"
-              onClick={() => setPick({ index: i, at: t })}
+              onClick={() => {
+                // The field goes back to the demo so the scene it plays is
+                // visible in it — pressing TRY with your own half-written
+                // question still in the box would answer neither.
+                setText('');
+                setPick({ index: i, at: t });
+              }}
               className="mono"
               style={{
                 fontSize: 'var(--fs-tag)',
                 padding: '6px 11px',
                 borderRadius: 'var(--r-full)',
-                border: `1px solid ${i === frame.index ? 'var(--mut)' : 'var(--line2)'}`,
-                background: i === frame.index ? 'var(--surf)' : 'transparent',
-                color: i === frame.index ? 'var(--text)' : 'var(--mut)',
+                border: `1px solid ${demo && i === frame.index ? 'var(--mut)' : 'var(--line2)'}`,
+                background: demo && i === frame.index ? 'var(--surf)' : 'transparent',
+                color: demo && i === frame.index ? 'var(--text)' : 'var(--mut)',
                 whiteSpace: 'nowrap',
                 flexShrink: 0,
                 transition: 'color var(--ease-settle), border-color var(--ease-settle)',
