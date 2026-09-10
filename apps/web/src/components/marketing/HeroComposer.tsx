@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Stat, StatGrid } from '@svinooh/ui';
+import { RangeBar } from '../RangeBar';
 import { useWallClock } from '../../lib/clock';
 import { DEMO_AT_REST, SCENES, demoFrame, parts, type DemoScene, type StepState } from '../../lib/hero-demo';
 
@@ -67,55 +69,33 @@ function StepMark({ state }: { state: StepState }) {
 /** The card that comes with an answer — at most one per scene. */
 function DemoBlock({ scene }: { scene: DemoScene }) {
   if (scene.cards) {
+    // The kit's readings, not a second drawing of them — the same card the
+    // assistant puts under an answer and the same one the portfolio's own
+    // headline uses. `columns` is overridden because this grid is inside a
+    // 640px card rather than across a page: it takes as many as fit.
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(112px,1fr))', gap: 8 }}>
+      <StatGrid columns={scene.cards.length} style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(112px,1fr))' }}>
         {scene.cards.map((card) => (
-          <div
-            key={card.label}
-            style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-md)', background: 'var(--surf2)', padding: '11px 13px', minWidth: 0 }}
-          >
-            <div className="mono" style={{ fontSize: 'var(--fs-eyebrow)', letterSpacing: 'var(--tr-micro)', color: 'var(--mut)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {card.label}
-            </div>
-            <div className="mono" style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--fs-title)', marginTop: 5, whiteSpace: 'nowrap' }}>
-              {card.value}
-            </div>
-            <div
-              className="mono"
-              style={{
-                fontSize: 'var(--fs-tag)',
-                marginTop: 4,
-                whiteSpace: 'nowrap',
-                color: card.tone === 'up' ? 'var(--up)' : card.tone === 'down' ? 'var(--down)' : 'var(--mut)',
-              }}
-            >
-              {card.delta}
-            </div>
-          </div>
+          <Stat key={card.label} label={card.label} value={card.value} delta={card.delta} tone={card.tone} />
         ))}
-      </div>
+      </StatGrid>
     );
   }
 
   if (scene.range) {
+    const { name, ...band } = scene.range;
+    // The scale the portfolio draws for a liquidity position, drawn here by
+    // the same component — see RangeBar, and rule one of the redesign: what
+    // the assistant shows you is the thing itself, not a picture of it.
     return (
-      <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-md)', background: 'var(--surf2)', padding: '13px 14px' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-          <span style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--fs-body)' }}>Orca · SOL/USDC</span>
+      <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-md)', background: 'var(--surf2)', padding: '13px 2px 4px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, padding: '0 14px' }}>
+          <span style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--fs-body)' }}>{name}</span>
           <span className="mono" style={{ fontSize: 'var(--fs-micro)', letterSpacing: 'var(--tr-tag)', color: 'var(--down)' }}>
             OUT OF RANGE
           </span>
         </div>
-        {/* Where the pool's range sits, and where the price has got to. */}
-        <div style={{ position: 'relative', height: 4, borderRadius: 'var(--r-full)', background: 'var(--line2)', margin: '14px 0 9px' }}>
-          <div style={{ position: 'absolute', left: '22%', right: '16%', top: 0, bottom: 0, borderRadius: 'var(--r-full)', background: 'color-mix(in srgb, var(--acc) 55%, transparent)' }} />
-          <div style={{ position: 'absolute', left: '88%', top: -4, width: 3, height: 12, borderRadius: 2, background: 'var(--down)' }} />
-        </div>
-        <div className="mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--fs-tag)', color: 'var(--mut)' }}>
-          <span>$142.00</span>
-          <span style={{ color: 'var(--down)' }}>$214.60 now</span>
-          <span>$196.00</span>
-        </div>
+        <RangeBar band={band} inRange={false} />
       </div>
     );
   }
@@ -366,6 +346,9 @@ export function HeroComposer({ onSend, handle }: Props) {
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 12,
+                // Everything in here is a card inside a card, so it lifts off
+                // --surf2 rather than off the page — see .ui-stat.
+                ['--ui-stat-surface' as string]: 'var(--surf2)',
                 // Dimmed on the way out, and it arrives rather than appears.
                 // The animation is off while it is leaving so the fade-in does
                 // not fight the fade-out.

@@ -21,7 +21,17 @@ export interface DemoCard {
   label: string;
   value: string;
   delta: string;
-  tone: 'up' | 'down' | 'mut';
+  /** The kit's own tones — these are drawn by Stat, not by a copy of it. */
+  tone: 'up' | 'down' | 'flat';
+}
+
+/** A pool's bounds and where the price is, as the portfolio's own scale reads them. */
+export interface DemoRange {
+  /** How the position is named on screen: "Orca · SOL/USDC" */
+  name: string;
+  lower: number;
+  upper: number;
+  current: number;
 }
 
 export interface DemoScene {
@@ -33,7 +43,7 @@ export interface DemoScene {
   answer: string;
   /** The block that comes with the answer — at most one, per scene. */
   cards?: DemoCard[];
-  range?: boolean;
+  range?: DemoRange;
   action?: boolean;
 }
 
@@ -45,14 +55,14 @@ export const SCENES: readonly DemoScene[] = [
     cards: [
       { label: 'TOTAL', value: '$131,902', delta: '+6.05% · 7D', tone: 'up' },
       { label: 'CLAIMABLE', value: '$612', delta: '+$88', tone: 'up' },
-      { label: 'DEBT', value: '−$7,800', delta: '5.8% APY', tone: 'mut' },
+      { label: 'DEBT', value: '−$7,800', delta: '5.8% APY', tone: 'flat' },
     ],
   },
   {
     q: 'any of my LPs out of range?',
     steps: ['Scanning 3 pools', 'Checking tick ranges'],
     answer: 'One. `Orca SOL/USDC` left its range 4 hours ago and has earned `$0` since.',
-    range: true,
+    range: { name: 'Orca · SOL/USDC', lower: 142, upper: 196, current: 214.6 },
   },
   {
     q: 'put my idle 4,200 USDC to work, low risk',
