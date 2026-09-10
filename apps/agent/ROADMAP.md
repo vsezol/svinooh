@@ -31,7 +31,7 @@ them.
 | 7 | Hardening: one pooled HTTP client, a cap on in-flight model calls, a per-turn deadline, limits on the wire, `/ready`, graceful shutdown, a bounded token cache | where an async service actually breaks under load |
 | 8 | Observability: JSON logs with request ids, `/metrics`, the Prometheus job, a Grafana dashboard | the three signals; cardinality; what to measure on an LLM service |
 | 9 | Load test: locust against a fake model and a real Redis; p50/p95; the pool and the cap tuned on numbers | measure before tuning |
-| 10 | Optional: OpenTelemetry traces to Tempo, a span per node and per model call | distributed tracing |
+| 10 | ~~OpenTelemetry traces to Tempo~~ — not taken. The metrics and the request id answer the questions this service actually asks of itself | |
 
 ## Landed
 
@@ -48,3 +48,27 @@ them.
 | [#199](https://github.com/vsezol/svinooh/pull/199) | Step 8, observability: JSON logs with a request id, `/metrics`, the Prometheus job |
 | [#200](https://github.com/vsezol/svinooh/pull/200) | The other HTTP client is quiet too — `httpx2` was logging every model call |
 | [#201](https://github.com/vsezol/svinooh/pull/201) | Step 9, the load test: a fake upstream, locust, and the first setting moved onto evidence |
+| [#202](https://github.com/vsezol/svinooh/pull/202) | A search that does not find Ethena — a substring match was handing the model a wrong total |
+| [#203](https://github.com/vsezol/svinooh/pull/203) | The link is not the model's to lose, and an ownerless portfolio is not private |
+| [#204](https://github.com/vsezol/svinooh/pull/204) | A yes with nothing behind it — the branch that cannot write was saying it had |
+
+## What the check afterwards found
+
+Every step above is merged and deployed. Then every scenario was run against
+production and its answers checked against the raw API — and three defects
+turned up that no test had, because each one is a sentence rather than a
+signature.
+
+They share a shape worth remembering: **the model ignored positive
+instructions.** A prompt said "do not claim anything was created" and the
+answer said "Done, the portfolio is live". A prompt said "write the link out
+in full" and the next answer left it out entirely. What worked instead was
+a negative instruction naming the exact wrong word, and, better, taking the
+fact out of the model's hands — the link is appended by the node now, and a
+bare "yes" with nothing behind it is answered from a fact rather than
+improvised.
+
+The lesson for the next branch: a prompt is where you ask, not where you
+guarantee. Read `/chat/stream`'s step trace to see what actually ran — it is
+written by the code that ran it, and it is the only part of an answer that
+cannot be fluent and wrong.
