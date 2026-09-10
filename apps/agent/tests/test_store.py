@@ -118,6 +118,23 @@ class TestThePendingProposal:
         assert len((await store.chat("c1", "user:1")).turns) == 1
 
 
+class TestThePortfolioAConversationMade:
+    """For a visitor, the conversation is the only record that they have one."""
+
+    async def test_it_survives_between_turns(self, store):
+        await store.set_portfolio("c1", "anon:deadbeef", "pf-1")
+        assert (await store.resume("c1", "anon:deadbeef")).portfolio == "pf-1"
+
+    async def test_a_later_turn_does_not_drop_it(self, store):
+        await store.set_portfolio("c1", "anon:deadbeef", "pf-1")
+        await store.append("c1", "anon:deadbeef", "how much is it worth", "a", [])
+        assert (await store.resume("c1", "anon:deadbeef")).portfolio == "pf-1"
+
+    async def test_a_conversation_that_made_nothing_remembers_nothing(self, store):
+        await store.append("c1", "anon:deadbeef", "q", "a", [])
+        assert (await store.resume("c1", "anon:deadbeef")).portfolio is None
+
+
 class TestSigningIn:
     async def test_an_anonymous_visitors_chats_become_theirs(self, store):
         await store.append("c1", "anon:deadbeef", "q1", "a", [])

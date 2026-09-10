@@ -238,17 +238,28 @@ def onboarding_prompt(base: str, signed_in: bool) -> str:
     """For a portfolio question with no portfolio to ground in.
 
     One rule across both cases: never pretend to see holdings that do not
-    exist. Signed in, the conversation itself is the onboarding: the model
-    collects wallet addresses and PROPOSES creation through the tool — the
-    proposal is all it can do; the write happens only after the user confirms
-    on a later turn (see app/onboarding.py).
+    exist. Otherwise the conversation itself is the onboarding, signed in or
+    not: the model collects wallet addresses and PROPOSES creation through the
+    tool — the proposal is all it can do; the write happens only after the user
+    confirms on a later turn (see app/onboarding.py).
+
+    What differs without an account is not whether a portfolio can be made but
+    what is made: an ownerless one, which is public and which anybody holding
+    the link can read. That is a thing to say before it exists, not after, so
+    it is in the offer as well as in the confirmation.
     """
     if not signed_in:
         return (
             f"{base}\n\nThe user asks about their portfolio but is not signed "
-            "in, so you cannot see any holdings. Say that portfolio questions "
-            "need sign-in (via Telegram in the svinooh app), then answer "
-            "whatever general part of the question you can."
+            "in, so you cannot see any holdings. Say so plainly, and offer to "
+            "track wallets right here without an account: ask for the wallet "
+            "addresses (EVM 0x…, Solana, TRON or Bitcoin). Say plainly that a "
+            "portfolio made this way belongs to nobody and is public — anyone "
+            "with the link can see it — and that signing in later claims it. "
+            "When — and only when — they have shared addresses and want to "
+            "proceed, call the ProposePortfolio tool with the addresses "
+            "exactly as written. Never invent or complete an address, and do "
+            "not claim anything was created — they will be asked to confirm."
         )
     return (
         f"{base}\n\nThe user asks about their portfolio but does not own one "
@@ -262,19 +273,39 @@ def onboarding_prompt(base: str, signed_in: bool) -> str:
     )
 
 
-def confirmation_request_prompt(base: str, addresses: list[str]) -> str:
+def confirmation_request_prompt(
+    base: str, addresses: list[str], anonymous: bool
+) -> str:
     """Ask the user to confirm the proposed creation — the model phrases it.
 
     Phrased by the model rather than a template so the question lands in the
     user's own language; the addresses are injected verbatim so nothing is
     reworded where precision matters.
+
+    Without an account the consent being asked for is a wider one, so the
+    question says what it is: the portfolio will be public, and listing two
+    addresses in it associates them in a place anybody can read. This is the
+    turn where that has to be said — it is the last one before the write.
     """
     listed = "\n".join(f"- {address}" for address in addresses)
+    caveat = ""
+    if anonymous:
+        caveat = (
+            "\n\nThey have no account, so this portfolio will belong to "
+            "nobody and be publicly visible: anyone with the link, or "
+            "searching that address, can see it."
+        )
+        if len(addresses) > 1:
+            caveat += (
+                " Listing these wallets in one portfolio also shows publicly "
+                "that they are held together."
+            )
+        caveat += " Say that plainly, and that signing in later claims it."
     return (
         f"{base}\n\nYou proposed creating a portfolio with these wallets:\n"
-        f"{listed}\n\nAsk the user, in their language, to confirm or decline "
-        "(a plain yes/no). List the addresses exactly as above. Do not claim "
-        "anything was created yet."
+        f"{listed}{caveat}\n\nAsk the user, in their language, to confirm or "
+        "decline (a plain yes/no). List the addresses exactly as above. Do not "
+        "claim anything was created yet."
     )
 
 
@@ -284,12 +315,22 @@ def created_prompt(base: str, result: dict) -> str:
     failed = result.get("failed", [])
     failed_lines = "\n".join(f"- {f['address']}: {f['error']}" for f in failed)
     failure_note = f"\nThese were refused:\n{failed_lines}" if failed else ""
+    # An ownerless portfolio is the one thing here a person can lose by not
+    # acting: nobody holds it, so the link IS the only way back to it.
+    claim_note = (
+        "\n\nThis portfolio belongs to nobody and is public. Tell them to "
+        "keep the link — it is the only way back to it — and that signing in "
+        "claims it as theirs."
+        if result.get("anonymous")
+        else ""
+    )
     return (
         f"{base}\n\nThe portfolio was just created. Facts to relay, in the "
         f"user's language:\n- link: /p/{result.get('slug', '')}\n"
-        f"Wallets added:\n{added}{failure_note}\n\nTell them it is scanning "
-        "now and they can ask about it here once the first sync lands. Relay "
-        "failures honestly — do not soften a refused address into a success."
+        f"Wallets added:\n{added}{failure_note}{claim_note}\n\nTell them it "
+        "is scanning now and they can ask about it here once the first sync "
+        "lands. Relay failures honestly — do not soften a refused address "
+        "into a success."
     )
 
 

@@ -120,6 +120,12 @@ class SessionStore:
         chat.pending = list(addresses)
         await self._store.save(chat)
 
+    async def set_portfolio(self, session_id: str, owner: str, slug: str) -> None:
+        """Remember the portfolio this conversation created (see Chat.portfolio)."""
+        chat = await self._load_or_start(session_id, owner)
+        chat.portfolio = slug
+        await self._store.save(chat)
+
     async def clear_pending(self, session_id: str) -> None:
         chat = await self._store.load(session_id)
         if chat is None or chat.pending is None:

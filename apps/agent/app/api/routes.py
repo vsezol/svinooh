@@ -129,7 +129,10 @@ async def _admit(
     state = {
         "question": text,
         "history": sessions.context(chat),
-        "portfolio": body.portfolio,
+        # The widget's hint wins — it is what is on screen right now. Behind it,
+        # the portfolio this conversation created, so a visitor who has one is
+        # grounded in it rather than onboarded a second time.
+        "portfolio": body.portfolio or (chat.portfolio if chat else None),
         "authorization": authorization,
         "pending_addresses": list(chat.pending) if chat and chat.pending else None,
     }
@@ -147,6 +150,8 @@ async def _remember(session_id: str, owner: Owner, question: str, state: dict) -
         await sessions.set_pending(session_id, owner.key, state["pending_set"])
     if state.get("pending_clear"):
         await sessions.clear_pending(session_id)
+    if state.get("portfolio_created"):
+        await sessions.set_portfolio(session_id, owner.key, state["portfolio_created"])
     # The blocks are stored with the turn, so reopening the conversation shows
     # what was on screen rather than a reconstruction of it.
     await sessions.append(
