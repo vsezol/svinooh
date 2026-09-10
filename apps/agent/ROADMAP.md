@@ -42,3 +42,4 @@ them.
 | [#192](https://github.com/vsezol/svinooh/pull/192) | Step 3, the container: built once in `create_app`, handed down through `Depends`; tests build one over fakes |
 | [#194](https://github.com/vsezol/svinooh/pull/194) | The agent deploys again — the cache mount Railway would not take (with [#193](https://github.com/vsezol/svinooh/pull/193)) |
 | [#195](https://github.com/vsezol/svinooh/pull/195) | Step 4, the portfolio stops being a dict: a typed domain behind an anti-corruption layer |
+| [#196](https://github.com/vsezol/svinooh/pull/196) | Step 5, the use cases move out of the route handlers; refusals become domain errors |
