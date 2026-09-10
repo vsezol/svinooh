@@ -40,6 +40,23 @@ class TestWhatAPositionIs:
         assert pool.matches("base") and pool.matches("liquidity") and pool.matches("uni-v3")
         assert not pool.matches("aave")
 
+    def test_a_word_has_to_start_with_it_rather_than_merely_contain_it(self):
+        # Found in production: asked for Thena, a plain substring match also
+        # returned Ethena, and told the model six positions were worth
+        # $345,137 when the four Thena ones were worth $288,518.
+        assert not position("Ethena", 1.0, platform="ethena").matches("thena")
+        assert position("Thena", 1.0, platform="bsc_thena").matches("thena")
+        # The other half of the same mistake, from the token side.
+        assert not position("WETH", 1.0).matches("eth")
+        assert position("ETH", 1.0).matches("eth")
+
+    def test_and_a_protocol_is_still_found_through_its_prefix(self):
+        # Protocols are written `bsc_venus`, and `_` is a word character, so
+        # the rule is only that a letter or a digit may not come first.
+        assert position("Venus", 1.0, platform="bsc_venus").matches("venus")
+        assert position("LP", 1.0, platform="arb_pancakeswap").matches("pancakeswap")
+        assert position("USDC", 1.0, name="cbBTC/USDC pool").matches("usdc")
+
 
 class TestWhereTheMoneyIs:
     def test_a_breakdown_covers_every_position_and_is_largest_first(self):
