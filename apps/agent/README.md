@@ -16,6 +16,17 @@ cp .env.example .env                        # then fill in AGENT_MODEL_API_KEY
 uv run --env-file .env uvicorn main:app --reload --port 3000
 ```
 
+## Is it reaching anything
+
+`/health` says the process is up — it is what the platform restarts on.
+`/ready` says what this instance can actually reach, and answers 503 when a
+Redis is configured and not answering, which is the failure that otherwise
+looks like nothing at all:
+
+```bash
+curl -s localhost:3000/ready
+```
+
 ## Check it
 
 The gates CI runs on every PR that touches `apps/agent`:

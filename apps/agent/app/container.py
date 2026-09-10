@@ -14,8 +14,9 @@ fakes in the same shape).
 import logging
 from dataclasses import dataclass
 
+import httpx
 from limits.aio.storage import Storage
-from redis.asyncio import ConnectionPool
+from redis.asyncio import ConnectionPool, Redis
 
 from .adapters import memory
 from .adapters.panel import RemotePanel
@@ -57,16 +58,37 @@ class Container:
     #: The one Redis pool, shared by the store and the counters; None without
     #: a REDIS_URL, when both live in this process.
     redis: ConnectionPool | None = None
+    #: The one HTTP client, and therefore the one connection pool, every call
+    #: to the host goes through. None in a test that never reaches one.
+    http: httpx.AsyncClient | None = None
 
     async def start(self) -> None:
         """What must run before the first request: the panel is heard once."""
         await self.panel.start()
 
     async def stop(self) -> None:
-        """What must run after the last: the refresh stops, the pool lets go."""
+        """What must run after the last: the refresh stops, the pools let go."""
         await self.panel.stop()
+        if self.http is not None:
+            await self.http.aclose()
         if self.redis is not None:
             await self.redis.disconnect()
+
+    async def store_state(self) -> str:
+        """Where conversations are being kept, right now.
+
+        "in-process" is the honest name for the fallback, and "unreachable"
+        is the one worth waking up for: a Redis that is configured and not
+        answering means conversations are being lost silently.
+        """
+        if self.redis is None:
+            return "in-process"
+        try:
+            await Redis(connection_pool=self.redis).ping()
+        except Exception as error:  # noqa: BLE001 — the answer IS the state
+            logger.warning("redis did not answer a ping (%r)", error)
+            return "unreachable"
+        return "shared"
 
 
 def build(settings: Settings) -> Container:
@@ -82,11 +104,14 @@ def build(settings: Settings) -> Container:
         store = RedisConversationStore(redis)
         counters = rate_limit.storage(settings.redis_url, redis)
 
-    panel = RemotePanel(settings.portfolio_api_url, settings.context_timeout_s)
+    http = _http(settings)
+    panel = RemotePanel(settings.portfolio_api_url, http)
     config = Config(settings, panel)
-    portfolio = PortfolioApiSource(settings.portfolio_api_url, settings.context_timeout_s)
+    portfolio = PortfolioApiSource(settings.portfolio_api_url, http)
     models = Models(settings)
-    identity = Identity(Authenticator(portfolio, settings.auth_cache_ttl_s))
+    identity = Identity(
+        Authenticator(portfolio, settings.auth_cache_ttl_s, settings.auth_cache_max)
+    )
     sessions = SessionStore(store, settings.history_max_messages, settings.chat_max_turns)
     limiter = WindowRateLimiter(
         settings.rate_limit_requests, settings.rate_limit_window_s, counters
@@ -110,9 +135,34 @@ def build(settings: Settings) -> Container:
         limiter=limiter,
         allowance=allowance,
         agent=agent,
-        turns=Turns(sessions, identity, limiter, allowance, agent),
+        turns=Turns(
+            sessions,
+            identity,
+            limiter,
+            allowance,
+            agent,
+            settings.turn_timeout_s,
+            settings.message_max_chars,
+        ),
         chats=Chats(sessions, identity, settings.chat_list_limit),
         redis=redis,
+        http=http,
+    )
+
+
+def _http(settings: Settings) -> httpx.AsyncClient:
+    """The one client every call to the host shares.
+
+    Connecting is not reading: a host that is down should be found out in
+    seconds, while a slow answer gets the whole context budget. The pool caps
+    are what keeps a burst of turns from opening a socket each.
+    """
+    return httpx.AsyncClient(
+        timeout=httpx.Timeout(settings.context_timeout_s, connect=settings.http_connect_timeout_s),
+        limits=httpx.Limits(
+            max_connections=settings.http_max_connections,
+            max_keepalive_connections=settings.http_keepalive_connections,
+        ),
     )
 
 

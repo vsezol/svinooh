@@ -7,11 +7,17 @@ afterwards — happens here, once. A door that only one of them checks is a
 door.
 """
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
-from ..domain.errors import EmptyMessageError, RateLimitedError
+from ..domain.errors import (
+    EmptyMessageError,
+    MessageTooLongError,
+    RateLimitedError,
+    TurnTimedOutError,
+)
 from ..domain.identity import Caller, Owner
 from ..ports import Agent, Allowance, Ask, Finished, Progress, RateLimiter, Reply
 from .identity import Identity
@@ -52,12 +58,16 @@ class Turns:
         limiter: RateLimiter,
         allowance: Allowance,
         agent: Agent,
+        deadline_s: int,
+        message_max_chars: int,
     ) -> None:
         self._sessions = sessions
         self._identity = identity
         self._limiter = limiter
         self._allowance = allowance
         self._agent = agent
+        self._deadline_s = deadline_s
+        self._message_max_chars = message_max_chars
 
     async def admit(self, caller: Caller, asked: Question) -> Admitted:
         """Check the caller in, and build the state one turn runs on.
@@ -68,6 +78,9 @@ class Turns:
         question = asked.message.strip()
         if not question:
             raise EmptyMessageError
+        if len(question) > self._message_max_chars:
+            # Refused before it is read by anything we pay per token.
+            raise MessageTooLongError(self._message_max_chars)
 
         # The lock on the door: name the caller, then charge the turn against
         # their budget.
@@ -108,8 +121,19 @@ class Turns:
         )
 
     async def answer(self, admitted: Admitted) -> str:
-        """Run the turn, apply what it decided, and hand back the answer."""
-        return await self._applied(await self._agent.run(admitted.ask), admitted)
+        """Run the turn, apply what it decided, and hand back the answer.
+
+        Under a deadline, because a turn is several model calls and a tool
+        loop: past it the caller is given an ending rather than a connection
+        held open on work nobody is waiting for any more.
+        """
+        try:
+            async with asyncio.timeout(self._deadline_s):
+                reply = await self._agent.run(admitted.ask)
+        except TimeoutError as expired:
+            logger.warning("turn %s ran past %ss", admitted.session_id, self._deadline_s)
+            raise TurnTimedOutError from expired
+        return await self._applied(reply, admitted)
 
     async def watch(self, admitted: Admitted) -> AsyncIterator[tuple[str, dict]]:
         """The same turn, reported while it happens.
@@ -117,14 +141,21 @@ class Turns:
         Every event but the last passes through untouched; `done` carries the
         finished answer, once the turn's decisions have been applied.
         """
-        async for update in self._agent.watch(admitted.ask):
-            match update:
-                case Progress(kind, payload):
-                    yield kind, payload
-                case Finished(reply):
-                    yield "done", {"text": await self._applied(reply, admitted)}
-                case _:
-                    yield "error", {"message": update.message}
+        try:
+            async with asyncio.timeout(self._deadline_s):
+                async for update in self._agent.watch(admitted.ask):
+                    match update:
+                        case Progress(kind, payload):
+                            yield kind, payload
+                        case Finished(reply):
+                            yield "done", {"text": await self._applied(reply, admitted)}
+                        case _:
+                            yield "error", {"message": update.message}
+        except TimeoutError:
+            # The stream is already open, so the deadline is an event rather
+            # than a status code — the reader still gets an ending.
+            logger.warning("turn %s ran past %ss", admitted.session_id, self._deadline_s)
+            yield "error", {"message": "the answer took too long"}
 
     async def remember(self, admitted: Admitted, answer: str, blocks: list[dict]) -> None:
         """Record a finished turn, drawn the way the caller drew it.

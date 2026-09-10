@@ -202,7 +202,9 @@ def container(
         limiter=meter,
         allowance=purse,
         agent=bot,
-        turns=Turns(sessions, who, meter, purse, bot),
+        turns=Turns(
+            sessions, who, meter, purse, bot, settings.turn_timeout_s, settings.message_max_chars
+        ),
         chats=Chats(sessions, who, settings.chat_list_limit),
     )
 

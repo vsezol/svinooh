@@ -14,6 +14,7 @@ The cache keys by token digest, so a memory dump names nobody's credentials.
 import hashlib
 import logging
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 
 from ..adapters.portfolio import PortfolioApiSource
@@ -30,13 +31,16 @@ class Caller:
 class Authenticator:
     """Names a caller from their token, asking the host and remembering briefly."""
 
-    def __init__(self, portfolio: PortfolioApiSource, ttl_s: int) -> None:
+    def __init__(self, portfolio: PortfolioApiSource, ttl_s: int, max_entries: int) -> None:
         self._portfolio = portfolio
         # Short on purpose: a validation only names the caller; data calls
         # always carry the live token to the host.
         self._ttl_s = ttl_s
+        # Bounded, and oldest first: an expiry alone is not a bound, because a
+        # flood of distinct tokens fills this faster than a TTL empties it.
+        self._max_entries = max_entries
         # token digest -> (expires at, caller)
-        self._cache: dict[str, tuple[float, Caller]] = {}
+        self._cache: OrderedDict[str, tuple[float, Caller]] = OrderedDict()
 
     async def authenticate(self, token: str | None) -> Caller | None:
         """Name the caller, or None for the anonymous.
@@ -62,6 +66,8 @@ class Authenticator:
 
         caller = Caller(user_id=me.user_id)
         self._cache[key] = (time.time() + self._ttl_s, caller)
+        while len(self._cache) > self._max_entries:
+            self._cache.popitem(last=False)
         return caller
 
     def _evict(self) -> None:

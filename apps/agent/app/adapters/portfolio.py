@@ -32,9 +32,13 @@ class DataSource(Protocol):
 class PortfolioApiSource:
     """The svinooh portfolio API, spoken to over plain public HTTP."""
 
-    def __init__(self, base_url: str, timeout_s: float) -> None:
+    def __init__(self, base_url: str, client: httpx.AsyncClient) -> None:
         self._base = base_url.rstrip("/")
-        self._timeout_s = timeout_s
+        # One client, and therefore one connection pool, for every turn this
+        # process serves. A client per call was a fresh TCP connection and a
+        # fresh TLS handshake on each one — invisible at one request a minute
+        # and the first thing to fall over at a hundred.
+        self._client = client
 
     @staticmethod
     def _headers(token: str | None) -> dict:
@@ -44,21 +48,16 @@ class PortfolioApiSource:
         return {"authorization": token} if token else {}
 
     async def _get(self, path: str, token: str | None) -> object:
-        # A client per call is deliberate at this traffic (one fetch per chat
-        # turn); a pooled client is an optimization to make when it shows up in
-        # a profile, not before.
-        async with httpx.AsyncClient(timeout=self._timeout_s) as client:
-            response = await client.get(f"{self._base}{path}", headers=self._headers(token))
-            response.raise_for_status()
-            return response.json()
+        response = await self._client.get(f"{self._base}{path}", headers=self._headers(token))
+        response.raise_for_status()
+        return response.json()
 
     async def _post(self, path: str, token: str | None, body: dict) -> object:
-        async with httpx.AsyncClient(timeout=self._timeout_s) as client:
-            response = await client.post(
-                f"{self._base}{path}", headers=self._headers(token), json=body
-            )
-            response.raise_for_status()
-            return response.json()
+        response = await self._client.post(
+            f"{self._base}{path}", headers=self._headers(token), json=body
+        )
+        response.raise_for_status()
+        return response.json()
 
     async def me(self, token: str) -> Me:
         # The host's identity oracle (DESIGN.md, one identity, two doors): one

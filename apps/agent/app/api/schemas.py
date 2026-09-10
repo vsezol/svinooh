@@ -12,14 +12,18 @@ from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
+    # The message is capped by the use case, against a live setting; these
+    # two are capped here because their shapes are fixed by construction —
+    # a chat id is six characters and a slug is a slug, and neither has any
+    # business being a megabyte on the way to a storage key.
     message: str
     # Continues an earlier conversation. Absent — a new session is started and
     # its id returned, so holding context is the caller's choice, not a demand.
-    session_id: str | None = None
+    session_id: str | None = Field(default=None, max_length=64)
     # The portfolio slug the user is looking at. With it (and the caller's
     # Authorization header) the answer is grounded in that portfolio's live
     # numbers; without it the agent answers generally.
-    portfolio: str | None = None
+    portfolio: str | None = Field(default=None, max_length=128)
 
 
 class TextBlock(BaseModel):

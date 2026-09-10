@@ -100,7 +100,10 @@ class Host:
 
 
 def panel(host: Host, every_s: float = 60.0) -> RemotePanel:
-    return RemotePanel("http://host", 1, every_s=every_s, transport=host.transport())
+    # The client is the service's own, shared with the portfolio reads; here
+    # it is one over a transport that answers from the payloads above.
+    client = httpx.AsyncClient(transport=host.transport(), timeout=1)
+    return RemotePanel("http://host", client, every_s=every_s)
 
 
 class TestKeepingItFresh:
