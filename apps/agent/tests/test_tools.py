@@ -6,7 +6,7 @@ reached when something is missing or refused.
 """
 import pytest
 
-from app.tools import (
+from app.agent.tools import (
     MAX_MATCHES,
     find_positions,
     portfolio_tools,

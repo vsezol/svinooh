@@ -44,7 +44,7 @@ from typing import TypedDict
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
-from .config import answering, settings, system_prompt, tool_hops
+from ..config import answering, settings, system_prompt, tool_hops
 from .context import (
     cancelled_prompt,
     confirmation_request_prompt,
@@ -54,7 +54,7 @@ from .context import (
     grounded_prompt,
     onboarding_prompt,
 )
-from .datasources import PortfolioApiSource
+from ..adapters.portfolio import PortfolioApiSource
 from .intent import classify
 from .steps import step
 from .llm import ask, extract_text, get_model

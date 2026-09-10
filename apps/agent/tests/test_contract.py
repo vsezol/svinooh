@@ -92,7 +92,7 @@ class TestPortfolioShape:
 
     def test_the_agent_can_read_it_at_all(self, live_portfolio):
         # The whole point, end to end: real data through the real renderer.
-        from app.context import portfolio_context
+        from app.agent.context import portfolio_context
 
         block = portfolio_context(live_portfolio)
         assert "By network" in block and "position(s)" in block
@@ -112,7 +112,7 @@ class TestHistoryShape:
     def test_the_window_slice_reads_the_timestamps_it_is_given(self, live_portfolio):
         # window_of parses `t`; a format change would silently widen every
         # period back to the whole series.
-        from app.tools import _epoch_ms
+        from app.agent.tools import _epoch_ms
 
         with httpx.Client(base_url=API, timeout=60) as client:
             series = client.get(f"/portfolios/{live_portfolio['slug']}/history",

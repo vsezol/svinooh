@@ -19,7 +19,7 @@ from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 
-from .config import Role, answering, labelling, settings
+from ..config import Role, answering, labelling, settings
 
 logger = logging.getLogger("svinooh-ai")
 

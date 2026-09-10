@@ -8,8 +8,9 @@ contract does not change with them.
 
 Structured the way a production service is, even while small, so each concern
 has a home before it grows: config.py (settings, later fetched remotely),
-llm.py (the provider-neutral model seam), sessions.py (conversation memory),
-routes.py (the HTTP surface), schemas.py (the wire types).
+llm.py (the provider-neutral model seam), sessions.py (conversations, and the
+context derived from them) over store.py (where they are kept), owner.py (who
+is asking), routes.py (the HTTP surface), schemas.py (the wire types).
 """
 import logging
 import sys
@@ -20,7 +21,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import remote_config
 from .config import settings
-from .routes import router
+from .domain.identity import ANON_HEADER
+from .api.routes import router
 
 
 class _Below(logging.Filter):
@@ -84,8 +86,15 @@ def create_app(cors_origins: Sequence[str] | None = None) -> FastAPI:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=list(origins),
-            allow_methods=["GET", "POST"],
-            allow_headers=["authorization", "content-type"],
+            # DELETE is here for /chats/{id}: a conversation is a server object
+            # now, so removing one is a request rather than a line dropped from
+            # a browser's own list.
+            allow_methods=["GET", "POST", "DELETE"],
+            # The anonymous id rides on a header of ours, and a custom request
+            # header a browser sends is a header CORS has to be told about —
+            # otherwise the preflight refuses it and every call from the widget
+            # arrives with no identity at all.
+            allow_headers=["authorization", "content-type", ANON_HEADER.lower()],
             max_age=3600,
         )
     @app.on_event("startup")

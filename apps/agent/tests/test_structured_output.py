@@ -19,7 +19,7 @@ import pytest
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
-from app.llm import structured
+from app.agent.llm import structured
 
 
 class Shape(BaseModel):

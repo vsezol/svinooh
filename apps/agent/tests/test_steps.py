@@ -12,11 +12,11 @@ import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 
-import app.graph as graph
-import app.intent as intent
-from app.intent import IntentLabel
-from app.steps import step, tool_label
-from app.streaming import turn_events
+import app.agent.graph as graph
+import app.agent.intent as intent
+from app.agent.intent import IntentLabel
+from app.agent.steps import step, tool_label
+from app.agent.streaming import turn_events
 
 ANSWER = "Everything else is unlevered."
 
@@ -80,7 +80,7 @@ class TestWhatIsReported:
                 raise RuntimeError("no")
 
         seen = []
-        import app.steps as steps
+        import app.agent.steps as steps
 
         # The writer is the graph's; outside one there is none, so this test
         # supplies its own and asserts the same events reach it.
@@ -132,7 +132,7 @@ class TestReportingIsNeverLoadBearing:
         assert state["answer"] == ANSWER
 
     async def test_a_broken_channel_does_not_fail_the_turn(self, monkeypatch):
-        import app.steps as steps
+        import app.agent.steps as steps
 
         def angry(_event):
             raise RuntimeError("pipe closed")

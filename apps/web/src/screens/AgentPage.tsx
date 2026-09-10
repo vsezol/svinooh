@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { AppHeader, Button } from '../ui';
 import { AccountMenu } from '../components/AccountMenu';
 import { AgentEmbed, type AgentControl, type ConversationRef } from '../components/agent/AgentEmbed';
@@ -50,9 +50,32 @@ const ICON = {
 
 export function AgentPage({ conversationId }: { conversationId?: string } = {}) {
   const router = useRouter();
+  const pathname = usePathname();
   const { me, loading: authLoading, logout } = useAuth();
   const [conversations, setConversations] = useState<ConversationRef[]>([]);
   const agent = useRef<AgentControl | null>(null);
+  /**
+   * The conversation on screen, as the chat reports it — and whether the chat
+   * is up at all, which is the same signal: it says so once on mount, with
+   * null, before anything has been asked.
+   */
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+  /**
+   * Whether a conversation we asked the chat to open is still being fetched.
+   *
+   * The chat answers by reporting which conversation is on screen — the one we
+   * named, or a fresh blank one when that id is not ours. Until it does, the
+   * URL must not be touched: the address on screen is a link somebody
+   * followed, and rewriting it from the not-yet-loaded state would bounce them
+   * to /ai and back.
+   */
+  const awaitingOpen = useRef(false);
+  const onConversationId = useCallback((id: string | null) => {
+    awaitingOpen.current = false;
+    setReady(true);
+    setActiveId(id);
+  }, []);
   const [authOpen, setAuthOpen] = useState(false);
   /** Which of the three the strip is pointing at. */
   const [view, setView] = useState<Tab>('agent');
@@ -101,21 +124,57 @@ export function AgentPage({ conversationId }: { conversationId?: string } = {}) 
   /**
    * The conversation a /ai/c/<id> link names, opened once the chat is up.
    *
-   * Reopenable rather than shareable: conversations live in this browser, so a
-   * link to one is a link back to your own. Somebody else's id finds nothing
-   * and they get a new chat, which is the honest outcome until conversations
-   * are kept on the server.
+   * Read from the server rather than from this browser, so the same link opens
+   * the same conversation on a phone. Still not shareable: the service answers
+   * 404 for somebody else's id — a chat names positions and amounts, and the
+   * privacy rule is that nothing identifying somebody reaches anybody else by
+   * default. Following one that is not yours is a new chat, and the effect
+   * below moves the URL to match.
+   *
+   * Keyed on the id rather than fired once, so a back or forward through two
+   * conversations opens each of them rather than leaving the chat on whichever
+   * was opened first.
    */
-  const opened = useRef(false);
+  const opened = useRef<string | null>(null);
   useEffect(() => {
-    if (opened.current || !conversationId) return;
-    if (!conversations.some((c) => c.id === conversationId)) return;
-    // Once. The list changes again the moment this lands — the conversation it
-    // opens becomes the active one — and without the guard that would drag
-    // somebody back here every time they opened a different one.
-    opened.current = true;
+    if (!ready || !conversationId || opened.current === conversationId) return;
+    opened.current = conversationId;
+    // Already the one on screen — the usual case, when this page put the id in
+    // the URL a moment ago. Re-opening it would be a wasted fetch.
+    if (activeId === conversationId) return;
+    awaitingOpen.current = true;
     agent.current?.openConversation(conversationId);
-  }, [conversationId, conversations]);
+  }, [ready, conversationId, activeId]);
+
+  /**
+   * The address of the conversation on screen.
+   *
+   * Every chat has one from its first turn, the way every portfolio does,
+   * rather than from a share button that mints one.
+   *
+   * `history.replaceState` rather than `router.replace`, and that is not a
+   * detail. `/ai` and `/ai/c/<id>` are two route files rendering this same
+   * screen, so a router navigation between them unmounts one page subtree and
+   * mounts the other — which unmounts the chat, at the exact moment its first
+   * answer arrives and gives it an address. The native call moves the address
+   * bar without navigating, and Next patches it to keep `usePathname` in step,
+   * so the URL becomes the conversation's without the conversation being
+   * thrown away to say so. It is the same reason AgentEmbed revises the widget
+   * in place instead of remounting it.
+   *
+   * Replace rather than push either way: which conversation is open is the
+   * chat's state, not a stack of pages somebody walked through, and a history
+   * entry per answer would make the back button undo a turn.
+   */
+  useEffect(() => {
+    if (!ready) return;
+    // Don't move the URL out from under a link that has not been opened yet,
+    // or one that is still loading — see awaitingOpen.
+    if (conversationId && opened.current !== conversationId) return;
+    if (awaitingOpen.current) return;
+    const target = activeId ? `/ai/c/${activeId}` : '/ai';
+    if (pathname !== target) window.history.replaceState(null, '', target);
+  }, [ready, activeId, conversationId, pathname]);
 
   /**
    * The chat asking for a sign-in — the card under the first answer.
@@ -238,6 +297,7 @@ export function AgentPage({ conversationId }: { conversationId?: string } = {}) 
                 portfolios={me?.portfolios}
                 initialQuestion={known ? parked : undefined}
                 onConversations={setConversations}
+                onConversationId={onConversationId}
                 control={agent}
               />
             )}

@@ -105,10 +105,26 @@ class Settings:
     provider_require_parameters: bool = os.getenv("AGENT_PROVIDER_REQUIRE_PARAMETERS", "0") == "1"
     system_prompt: str = os.getenv("AGENT_SYSTEM", DEFAULT_SYSTEM_PROMPT)
     request_timeout_s: int = int(os.getenv("AGENT_TIMEOUT_S", "60"))
-    # Conversation memory: how many messages a session keeps, and for how long
-    # a silent session survives before it is forgotten.
+    # Conversation memory: how many messages the model is replayed. A turn is
+    # two of them, so 40 is the last twenty exchanges.
+    #
+    # AGENT_HISTORY_TTL_S retired with the in-memory store. It described how
+    # long a silent session survived in RAM, and a conversation's life is now a
+    # promise about a product rather than a property of a process — thirty
+    # days, in app/store.py, where the thing it describes lives.
     history_max_messages: int = int(os.getenv("AGENT_HISTORY_MAX_MESSAGES", "40"))
-    history_ttl_s: int = int(os.getenv("AGENT_HISTORY_TTL_S", "1800"))
+    # How many turns a stored conversation keeps at all. Larger than the
+    # context window on purpose: somebody scrolls back further than the model
+    # is replayed, and the transcript is the same record either way.
+    chat_max_turns: int = int(os.getenv("AGENT_CHAT_MAX_TURNS", "100"))
+    # How many conversations a listing returns, newest first.
+    chat_list_limit: int = int(os.getenv("AGENT_CHAT_LIST_LIMIT", "50"))
+    # The agent's own store — conversations (app/store.py) and the rate
+    # limiter's counters (app/limits.py). Its own keyspace prefix, never the
+    # portfolio's database: D1 in DESIGN.md is about not being a tenant of the
+    # portfolio's Postgres, and a Redis with its own prefix keeps that true.
+    # Unset (locally) and both fall back to in-process storage.
+    redis_url: str = os.getenv("REDIS_URL", "")
     # The portfolio public API — DataSource #1 (see app/datasources.py). The
     # agent speaks to it over plain HTTP with the caller's token, like any
     # third-party client. On Railway this is the api service's private domain.

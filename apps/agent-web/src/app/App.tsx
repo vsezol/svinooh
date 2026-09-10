@@ -117,10 +117,15 @@ export function App(props: AppProps) {
     demoConversation,
     demoHistoryList,
     onConversations,
+    onConversationId,
     control,
     onToggleTheme,
   } = props;
   const demo = demoConversation != null;
+  // What every call to the conversation store needs. Rebuilt when the token
+  // arrives, which is also when the list is worth asking for again: signing in
+  // hands somebody their own conversations rather than this browser's.
+  const chats = useMemo(() => ({ agentUrl, token }), [agentUrl, token]);
 
   // Grounding can change from the switcher without a remount, so the prop
   // only seeds it.
@@ -131,9 +136,7 @@ export function App(props: AppProps) {
   );
   const noPortfolio = signedIn && !slug && (props.portfolios?.length ?? 0) === 0;
 
-  const [conversations, setConversations] = useState<Conversation[]>(
-    () => demoHistoryList ?? history.list(),
-  );
+  const [conversations, setConversations] = useState<Conversation[]>(() => demoHistoryList ?? []);
   const [active, setActive] = useState<Conversation>(() => demoConversation ?? blank());
   const activeRef = useRef(active);
   const [busy, setBusy] = useState(false);
@@ -158,24 +161,36 @@ export function App(props: AppProps) {
   const desktop = useDesktop();
   const logRef = useRef<HTMLDivElement>(null);
 
-  const push = useCallback(
-    (items: ChatItem[]) => {
-      const cur = activeRef.current;
-      const next: Conversation = { ...cur, at: Date.now(), items: [...cur.items, ...items] };
-      activeRef.current = next;
-      setActive(next);
-      if (!demo) {
-        const saved = history.save(next);
-        // Empty read-back means storage is unavailable: keep at least the
-        // live conversation in the in-memory list.
-        const stored = history.list();
-        setConversations((prev) =>
-          stored.length > 0 ? stored : [saved, ...prev.filter((c) => c.id !== saved.id)],
-        );
-      }
-    },
-    [demo],
-  );
+  /**
+   * Put items in the conversation on screen.
+   *
+   * Only on screen: the turn itself is stored by the service, as part of
+   * answering it. This used to write to localStorage here, which is precisely
+   * the two-copies-of-one-conversation the durable store removed — the log you
+   * were looking at and the context the model was replayed were different
+   * records, and only one of them survived a restart.
+   */
+  const push = useCallback((items: ChatItem[]) => {
+    const cur = activeRef.current;
+    const next: Conversation = { ...cur, at: Date.now(), items: [...cur.items, ...items] };
+    activeRef.current = next;
+    setActive(next);
+  }, []);
+
+  /** The rail's list, re-read from the service — the only thing that has it. */
+  const refresh = useCallback(async () => {
+    if (demo) return;
+    setConversations(await history.list(chats));
+  }, [demo, chats]);
+
+  // The list on load, and again whenever the token changes: signing in makes
+  // the same browser a different caller, with conversations of its own.
+  useEffect(() => {
+    // The browser-local store this replaced. Dropped rather than migrated —
+    // see the note in history.ts about whose records those would be.
+    history.retireLocalHistory();
+    void refresh();
+  }, [refresh]);
 
   const ask = useCallback(
     async (text: string) => {
@@ -223,7 +238,13 @@ export function App(props: AppProps) {
           },
         );
         if (activeRef.current.id !== asked) return;
-        activeRef.current = { ...activeRef.current, sessionId: res.sessionId };
+        // The conversation takes the service's id for its own, which is what
+        // gives it an address from its first turn. Safe to change here and
+        // nowhere earlier: every guard above compares against `asked`, and
+        // this runs once they have all passed. Until now a fresh chat was
+        // known only by a local handle, which is why the rail could not tell
+        // which row was the one on screen.
+        activeRef.current = { ...activeRef.current, id: res.sessionId, sessionId: res.sessionId };
         // The finished blocks replace the text that was being watched, rather
         // than the text being kept: what arrived as pieces was a preview, and
         // an answer can be more than the words in it — a sign-in prompt, a
@@ -242,6 +263,10 @@ export function App(props: AppProps) {
             blocks: receipt.length > 0 ? [traceOf(receipt, true, 0), ...res.blocks] : res.blocks,
           },
         ]);
+        // The rail learns about the conversation from the service rather than
+        // from a copy kept here — including its name, which the service
+        // derives from the first question the same way this used to.
+        void refresh();
       } catch (err) {
         if (activeRef.current.id !== asked) return;
         push(notesFor(err, text));
@@ -253,7 +278,7 @@ export function App(props: AppProps) {
         setStatusText(null);
       }
     },
-    [agentUrl, token, slug, push],
+    [agentUrl, token, slug, push, refresh],
   );
 
   const send = useCallback(
@@ -336,16 +361,60 @@ export function App(props: AppProps) {
     );
   }, [conversations, active.id, onConversations]);
 
+  /**
+   * The conversation's address, for the host to put in the URL.
+   *
+   * Null until the first turn has been answered: a chat nobody has spoken to
+   * has nothing at its address yet, and `/ai` is the right place to be while
+   * that is true.
+   *
+   * Watches `active.id` as well as the address, and that is load-bearing
+   * rather than tidy. Opening a conversation that turns out not to be ours
+   * ends on a fresh blank chat — an address of null, which is what it already
+   * was — so on the address alone this would not fire, and the host would be
+   * left waiting forever for an answer to a question it had asked. The id
+   * changes on every new chat, so "the conversation on screen changed" is the
+   * event, and its address is what the event carries.
+   */
+  useEffect(() => {
+    onConversationId?.(active.sessionId ?? null);
+  }, [active.id, active.sessionId, onConversationId]);
+
+  /**
+   * Which conversation is being fetched, so a slower earlier one cannot land
+   * on top of it. Opening two rows quickly used to be free — they were both
+   * already in memory — and is a race now that a transcript is a request.
+   */
+  const opening = useRef<string | null>(null);
+
   const selectConversation = useCallback(
     (id: string) => {
-      const found = conversations.find((c) => c.id === id);
-      if (found) {
-        activeRef.current = found;
-        setActive(found);
-      }
       setHistoryOpen(false);
+      if (activeRef.current.id === id) return;
+      if (demo) {
+        const found = conversations.find((c) => c.id === id);
+        if (found) {
+          activeRef.current = found;
+          setActive(found);
+        }
+        return;
+      }
+      opening.current = id;
+      void (async () => {
+        const opened = await history.read(chats, id);
+        if (opening.current !== id) return;
+        opening.current = null;
+        // Somebody else's id finds nothing — the service answers 404 rather
+        // than confirming it exists — and so does one whose thirty days are
+        // up. Both are a new chat rather than an error page: the link no
+        // longer leads anywhere, and there is nothing to explain about a
+        // conversation we are not allowed to say anything about.
+        const next = opened ?? blank();
+        activeRef.current = next;
+        setActive(next);
+      })();
     },
-    [conversations],
+    [demo, conversations, chats],
   );
 
   // The handle the host holds. Assigned rather than returned, because mount()

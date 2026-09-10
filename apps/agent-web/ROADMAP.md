@@ -35,6 +35,7 @@ Three rules run through all of it:
 | [#148](https://github.com/vsezol/svinooh/pull/148) | The chat shows its work | The trace, the links, the typography — and the real step events behind them |
 | [#151](https://github.com/vsezol/svinooh/pull/151) | The chart in a chat is the chart | Rule 1, made true for the first widget |
 | [#178](https://github.com/vsezol/svinooh/pull/178) | The landing is the front door, and `/ai` is the app's home | Step 3, most of it — see what is left of it below |
+| [#179](https://github.com/vsezol/svinooh/pull/179) | A conversation is kept, and it has an address | Step 3 parts 2 and 3 — the store the other three parts key on |
 
 ## Next
 
@@ -73,22 +74,28 @@ a server that knows who is asking before it knows their name.
 hands it the first question, and `/ai/c/<id>` is a route
 ([#178](https://github.com/vsezol/svinooh/pull/178)).
 
+Then the store underneath all of it ([#179](https://github.com/vsezol/svinooh/pull/179)).
+A conversation is kept once, as its turns, in the agent's own Redis for thirty days from
+its last one — and the context replayed into the model is a projection of those turns
+rather than a second record beside them. `SessionStore` kept its interface and changed
+what is behind it, so Postgres later is a swap. The rate limiter moved to the same Redis
+in the same change, because in-process counting was not a smaller limit but the limit
+multiplied by the replica count. `history.ts` is wire calls and its localStorage key is
+retired. Every chat has its address from its first turn, `/ai` redirects to it, and
+`/ai/c/<id>` reads from the server — so the same link opens the same conversation on a
+phone, and somebody else's id is a 404 rather than a 403, because confirming one exists
+is itself the thing being kept private.
+
 **What is not true yet.**
 
-*Nothing is stored anywhere.* The transcript you see in the rail lives in the browser
-that had it (`app/history.ts`, localStorage). The context the model is replayed lives in
-the agent's RAM (`SessionStore`, keyed by an opaque `session_id`, capped and expiring) —
-per instance, gone on restart, and a second replica has never heard of it. There is no
-database behind either, for anyone, signed in or not.
-
-*So the URL reopens rather than shares.* `/ai/c/<id>` finds nothing for anybody else —
-including the same person on their phone — and clearing site data loses everything.
-Which is also why the canvas's "Saved · svinooh.com/ai/c/<id>" line is not built yet:
-it would promise what the storage cannot keep.
-
-*And a visitor cannot be onboarded.* Creating a portfolio needs a token
+*A visitor still cannot be onboarded.* Creating a portfolio needs a token
 (`create_portfolio_with_wallets`), so a visitor who pastes an address is told to sign in
 — where the landing's whole premise is that they should not have to.
+
+*And the identity underneath it all is half-built.* The server seam is in place
+(`app/owner.py`, and `agent-web/src/app/identity.ts` in the browser) because parts 2 and
+3 could not key anything without one, but it was built beside part 1 rather than by it —
+see below.
 
 **The shape.**
 
@@ -97,17 +104,26 @@ it would promise what the storage cannot keep.
    soft identity by construction — clearing storage or opening a private window is a new
    person — so it is what history hangs on, not what a limit is enforced by. A limit
    wants an address behind it too.
-2. **Durable history in the agent's own store**, keyed by that identity and re-keyed to
-   the account when one is made. Its own small database, never the portfolio's, so the
-   service stays independent — the note at the top of `sessions.py` has said this from
-   the start. `history.ts` becomes wire calls and its localStorage key retires, and the
-   same store holds the session context, which is what stops a restart from losing the
-   thread.
-3. **A URL per conversation, from the first turn.** Not a share button that mints one —
-   every chat has an address the way every portfolio does, and `/ai` redirects to it.
-   Sharing is then a decision on the conversation rather than a link that happens to
-   work: a chat names positions and amounts, and the privacy rule is that nothing
-   identifying somebody reaches anybody else by default.
+
+   *Half done, and deliberately small.* #179 needed an owner key before this branch
+   landed, so the seam exists: header `X-Svinooh-Anon-Id`, and one resolver turning a
+   token and that header into `user:<id>` / `anon:<id>` / `sess:<id>`. It lives in two
+   files of its own so this part can take it over rather than fight it in `auth.py`. The
+   id is validated before it becomes part of a key, and the rate limit still charges
+   every anonymous caller to one shared bucket — the id is too soft to meter with.
+2. ~~**Durable history in the agent's own store**~~ — done in
+   [#179](https://github.com/vsezol/svinooh/pull/179). Redis with its own `agent:` prefix,
+   never the portfolio's database, so D1 holds. The one thing worth carrying forward: an
+   owner's index is a ZSET with the *same* TTL as the chats in it, refreshed on every
+   write, *and* reads prune the ids whose chat has gone. Either half alone leaves a list
+   showing rows that resolve to nothing, and keyspace notifications cannot be the fix —
+   they are at-most-once.
+3. ~~**A URL per conversation, from the first turn.**~~ — done in
+   [#179](https://github.com/vsezol/svinooh/pull/179). The stream's `start` event already
+   named the conversation, so the address exists before the first answer finishes.
+   Sharing stays a decision to make on the conversation rather than a link that happens
+   to work — which is also what makes the canvas's "Saved · svinooh.com/ai/c/<id>" line
+   buildable now: the storage can keep what it would promise.
 4. **The agent creates a portfolio for a visitor.** With 1 in place, the anonymous POST
    the API already has (`POST /portfolios/anonymous` — ownerless, claimable later) can be
    what onboarding calls when there is no token, and a visit ends with a live portfolio

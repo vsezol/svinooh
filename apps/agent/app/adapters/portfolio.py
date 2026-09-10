@@ -14,7 +14,7 @@ from typing import Protocol
 
 import httpx
 
-from .config import settings
+from ..config import settings
 
 
 class DataSource(Protocol):

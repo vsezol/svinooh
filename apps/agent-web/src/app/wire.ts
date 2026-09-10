@@ -1,3 +1,4 @@
+import { identityHeaders } from './identity';
 import { WIRE_SCHEMA } from './types';
 import type { AgentBlock, ChatWire } from './types';
 
@@ -32,9 +33,20 @@ export interface SendChatResult {
   sessionId: string;
 }
 
+/**
+ * What every call to the service carries: who is asking, in both the ways it
+ * can be answered. The token names an account; the anonymous id names a
+ * browser that has not made one, which is what a conversation is filed under
+ * until it does. See app/identity.ts.
+ */
+export function agentHeaders(token?: string): Record<string, string> {
+  const headers: Record<string, string> = { ...identityHeaders() };
+  if (token) headers.authorization = `Bearer ${token}`;
+  return headers;
+}
+
 export async function sendChat(input: SendChatInput): Promise<SendChatResult> {
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
-  if (input.token) headers.authorization = `Bearer ${input.token}`;
+  const headers = { ...agentHeaders(input.token), 'content-type': 'application/json' };
 
   let res: Response;
   try {
@@ -123,8 +135,7 @@ export async function streamChat(
   input: SendChatInput,
   handlers: StreamHandlers,
 ): Promise<SendChatResult> {
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
-  if (input.token) headers.authorization = `Bearer ${input.token}`;
+  const headers = { ...agentHeaders(input.token), 'content-type': 'application/json' };
 
   let res: Response;
   try {

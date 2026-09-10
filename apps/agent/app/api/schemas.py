@@ -33,6 +33,45 @@ class TextBlock(BaseModel):
     text: str
 
 
+class ChatSummary(BaseModel):
+    """A conversation as a row in a list — what a rail needs to draw one."""
+
+    id: str
+    title: str
+    #: When it was last spoken to, epoch ms. The client formats it relatively.
+    at: int
+
+
+class ChatTurn(BaseModel):
+    """One exchange, as both things it is.
+
+    `blocks` is what the reader saw; `a` is the same answer as the text the
+    model is replayed. One record with two projections rather than two records
+    — see app/store.py. The client renders `blocks` and never has to rebuild
+    them from `a`, which would be a layer guessing what to draw.
+    """
+
+    q: str
+    a: str
+    at: int
+    blocks: list[dict] = Field(default_factory=list)
+
+
+class ChatDetail(BaseModel):
+    """One conversation, whole, for reopening it from its URL."""
+
+    schema_version: int = Field(default=1, serialization_alias="schema")
+    id: str
+    title: str
+    at: int
+    turns: list[ChatTurn]
+
+
+class ChatList(BaseModel):
+    schema_version: int = Field(default=1, serialization_alias="schema")
+    chats: list[ChatSummary]
+
+
 class ChatResponse(BaseModel):
     # The contract's version stamp, so a widget can refuse a wire it does not
     # speak instead of rendering garbage. (Named schema_version in code only

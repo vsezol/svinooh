@@ -37,6 +37,8 @@ interface AgentMount {
       /** Asked as soon as the chat is up, as if it had been typed. */
       initialQuestion?: string;
       onConversations?: (list: ConversationRef[]) => void;
+      /** Which conversation is on screen, so the page can be its address. */
+      onConversationId?: (id: string | null) => void;
     },
   ): AgentHandle;
 }
@@ -148,6 +150,14 @@ interface Props {
   initialQuestion?: string;
   /** The chat's own conversations, for a host that draws them in its rail. */
   onConversations?: (list: ConversationRef[]) => void;
+  /**
+   * The conversation on screen, whenever it changes.
+   *
+   * A conversation is a server object now, so it has an address; this is how
+   * the page learns which one it is showing. Null while a fresh chat has not
+   * been spoken to — there is nothing at an address that does not exist yet.
+   */
+  onConversationId?: (id: string | null) => void;
   /** Filled in once the widget is up, so the rail can drive it. */
   control?: { current: AgentControl | null };
 }
@@ -175,6 +185,7 @@ export function AgentEmbed({
   portfolios,
   initialQuestion,
   onConversations,
+  onConversationId,
   control,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
@@ -251,6 +262,7 @@ export function AgentEmbed({
           signedIn: Boolean(now.token),
           initialQuestion: asked.current ? undefined : now.initialQuestion,
           onConversations,
+          onConversationId,
         });
         asked.current = true;
         handle.current = mounted;
@@ -275,7 +287,7 @@ export function AgentEmbed({
     // over throws away the conversation on screen. Which is exactly what
     // happened at the worst moment: the product asks somebody to sign in under
     // their first answer, and signing in swapped the token.
-  }, [widgetUrl, agentUrl, onConversations, control, remounts]);
+  }, [widgetUrl, agentUrl, onConversations, onConversationId, control, remounts]);
 
   /**
    * Keep the running chat in step with who is asking and what they are looking
