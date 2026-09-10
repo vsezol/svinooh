@@ -8,42 +8,19 @@ actually ran, and says what it actually was".
 """
 
 import pytest
-from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage
 
-import app.agent.graph as graph
-import app.agent.intent as intent
-from app.agent.intent import IntentLabel
 from app.agent.steps import step, tool_label
-from app.agent.streaming import turn_events
+from tests.support import agent, fake_model
 
 ANSWER = "Everything else is unlevered."
 
 
-def cached(value):
-    factory = lambda: value  # noqa: E731 — one expression, named by assignment
-    factory.cache_clear = lambda: None
-    return factory
-
-
-class Labeller:
-    async def ainvoke(self, _messages):
-        return IntentLabel(intent="general", reason="stubbed")
-
-
-@pytest.fixture(autouse=True)
-def a_turn(monkeypatch):
-    monkeypatch.setattr(intent, "_labeler", cached(Labeller()))
-    monkeypatch.setattr(
-        graph, "get_model", lambda: GenericFakeChatModel(messages=iter([AIMessage(content=ANSWER)]))
-    )
-    graph.agent_graph.cache_clear()
-    yield
-    graph.agent_graph.cache_clear()
+def a_turn():
+    return agent(model=fake_model(ANSWER))
 
 
 async def steps_of(state: dict) -> list[dict]:
-    return [data async for name, data in turn_events(state) if name == "step"]
+    return [data async for name, data in a_turn().watch(state) if name == "step"]
 
 
 class TestWhatIsReported:
@@ -119,7 +96,7 @@ class TestNoPartOfTheWaitIsUnaccountedFor:
 
     async def test_the_answer_is_still_the_answer(self):
         # The step is a wrapper around the call, not a change to it.
-        state = await graph.agent_graph().ainvoke({"question": "q"})
+        state = await a_turn().run({"question": "q"})
         assert state["answer"] == ANSWER
 
 
@@ -127,7 +104,7 @@ class TestReportingIsNeverLoadBearing:
     async def test_a_turn_runs_the_same_with_nobody_watching(self):
         # /chat does not stream, so there is no writer at all. A step must then
         # be an ordinary timer that tells nobody, not an error.
-        state = await graph.agent_graph().ainvoke({"question": "q"})
+        state = await a_turn().run({"question": "q"})
         assert state["answer"] == ANSWER
 
     async def test_a_broken_channel_does_not_fail_the_turn(self, monkeypatch):

@@ -3,23 +3,22 @@
 POST /chat takes a message, runs it through the graph with the conversation's
 history, and answers in blocks. The layers: app/domain is what a conversation
 is, app/services what is done with one, app/adapters where it is kept and
-where the portfolio comes from, app/agent the graph and the model, app/api the
-wire.
+where the portfolio comes from, app/agent the graph and the model, app/api
+the wire — and app/container.py the one place they are introduced.
 """
 
-import asyncio
 import logging
 import sys
-from collections.abc import AsyncIterator, Sequence
-from contextlib import asynccontextmanager, suppress
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import composition
 from .api.routes import router
+from .container import Container, build
 from .domain.identity import ANON_HEADER
-from .settings import settings
+from .settings import Settings
 
 
 class _Below(logging.Filter):
@@ -73,27 +72,26 @@ def _configure_logging() -> None:
 
 
 @asynccontextmanager
-async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Startup before the yield, shutdown after it."""
-    # The panel is heard once before the first turn, then kept fresh in the
-    # background: a turn never waits on it, and an outage costs only freshness.
-    await composition.panel.fetch()
-    refreshing = asyncio.create_task(composition.panel.keep_fresh())
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Startup before the yield, shutdown after it — both the container's."""
+    container: Container = app.state.container
+    await container.start()
     try:
         yield
     finally:
-        refreshing.cancel()
-        with suppress(asyncio.CancelledError):
-            await refreshing
+        await container.stop()
 
 
-def create_app(cors_origins: Sequence[str] | None = None) -> FastAPI:
+def create_app(container: Container | None = None) -> FastAPI:
+    """The service, wired from the environment unless handed a container."""
     _configure_logging()
+    wired = container if container is not None else build(Settings())
     app = FastAPI(title="svinooh-ai", lifespan=_lifespan)
+    app.state.container = wired
     # The browser door: which origins may call this service directly. An
     # explicit allowlist, never "*" — the wildcard forbids credentialed
     # requests anyway, and this API is nothing but credentialed requests.
-    origins = settings.cors_origins if cors_origins is None else tuple(cors_origins)
+    origins = wired.settings.cors_origins
     if origins:
         app.add_middleware(
             CORSMiddleware,

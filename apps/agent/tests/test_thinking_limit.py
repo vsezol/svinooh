@@ -13,10 +13,9 @@ swallows a failure and routes everything to the portfolio branch.
 
 import pytest
 
-import app.agent.intent as intent
-import app.agent.llm as llm
 from app.adapters.memory import StaticPanel
-from app.agent.intent import IntentLabel
+from app.agent.intent import IntentClassifier, IntentLabel
+from app.agent.llm import Models, is_thinking_setting_rejected
 from app.config import Config, Role
 from app.settings import Settings
 
@@ -26,6 +25,7 @@ NO_ENDPOINTS = (
     "'Filter by Parameters'}}}"
 )
 MANDATORY = "Reasoning is mandatory for this endpoint and cannot be disabled"
+AGGREGATOR = "https://openrouter.ai/api/v1"
 
 
 def role(model: str = "openai:m", effort: str = "low", sort: str = "throughput") -> Role:
@@ -38,49 +38,35 @@ def role(model: str = "openai:m", effort: str = "low", sort: str = "throughput")
     )
 
 
+class Labeler:
+    """A client that refuses the setting the first time, then labels."""
+
+    def __init__(self, refusals=1, saying=MANDATORY, label="general"):
+        self.refusals = refusals
+        self.saying = saying
+        self.label = label
+        self.attempts = 0
+
+    def with_structured_output(self, _schema, **_kwargs):
+        return self
+
+    async def ainvoke(self, _messages):
+        self.attempts += 1
+        if self.refusals > 0:
+            self.refusals -= 1
+            raise Exception(self.saying)
+        return IntentLabel(intent=self.label, reason="stubbed")
+
+
+def models(client=None, **env) -> Models:
+    """Models on an aggregator by default, whose every client is `client`."""
+    settings = Settings(**{"model_base_url": AGGREGATOR, **env})
+    return Models(settings, factory=lambda _name, **_kwargs: client)
+
+
 def body_for(effort: str = "low", model: str = "openai:m", sort: str = "throughput") -> dict:
     """What actually goes on the wire for a role shaped like this."""
-    return llm._wire_options(role(model=model, effort=effort, sort=sort)).get("extra_body", {})
-
-
-AGGREGATOR = "https://openrouter.ai/api/v1"
-
-
-def wire(monkeypatch, **env) -> None:
-    """Hand both modules one set of dials, built from this environment alone.
-
-    Settings is frozen on purpose — configuration does not change under a
-    running service — so a test builds a whole object rather than poking one
-    field of the live one.
-    """
-    dials = Config(Settings(**env), StaticPanel())
-    monkeypatch.setattr(llm, "config", dials)
-    monkeypatch.setattr(intent, "config", dials)
-
-
-def on_wire(monkeypatch, base_url: str) -> None:
-    """Point the service at an aggregator, or at a provider directly."""
-    wire(monkeypatch, model_base_url=base_url)
-
-
-@pytest.fixture(autouse=True)
-def on_the_aggregator(monkeypatch):
-    """Thinking settings and provider policies only exist on the OpenAI wire.
-
-    Talking to a provider directly there is nothing to choose between and no
-    extra_body to put it in, so every test about either has to say which wire
-    it is on.
-    """
-    on_wire(monkeypatch, AGGREGATOR)
-
-
-@pytest.fixture(autouse=True)
-def clean_caches():
-    llm._models_we_no_longer_ask_to_think.clear()
-    llm.model_for.cache_clear()
-    intent._labeler.cache_clear()
-    yield
-    llm._models_we_no_longer_ask_to_think.clear()
+    return models().wire_options(role(model=model, effort=effort, sort=sort)).get("extra_body", {})
 
 
 class TestThinkingSetting:
@@ -93,144 +79,103 @@ class TestThinkingSetting:
         assert "reasoning" not in body_for(effort="", model="m")
 
     def test_a_refused_model_is_never_asked_again(self):
-        llm.stop_asking_it_to_think(role(model="stubborn"))
-        assert "reasoning" not in body_for(model="stubborn")
-        assert "reasoning" in body_for(model="other")
+        ours = models()
+        ours.stop_asking_it_to_think(role(model="stubborn"))
+        assert "reasoning" not in ours.wire_options(role(model="stubborn"))["extra_body"]
+        assert "reasoning" in ours.wire_options(role(model="other"))["extra_body"]
 
     def test_giving_up_twice_reports_that_we_already_had(self):
-        assert llm.stop_asking_it_to_think(role()) is True
-        assert llm.stop_asking_it_to_think(role()) is False, "the second failure is the caller's"
+        ours = models()
+        assert ours.stop_asking_it_to_think(role()) is True
+        assert ours.stop_asking_it_to_think(role()) is False, "the second failure is the caller's"
 
     def test_a_role_that_sends_no_setting_has_nothing_to_give_up(self):
         # Otherwise a 404 about some other parameter would be "cured" by
         # dropping a setting that was never in the request.
-        assert llm.stop_asking_it_to_think(role(effort="")) is False
-        assert "m" not in llm._models_we_no_longer_ask_to_think
+        ours = models()
+        assert ours.stop_asking_it_to_think(role(effort="")) is False
+        assert "m" not in ours.no_longer_asked_to_think
 
     def test_both_refusals_are_recognised_by_what_they_say(self):
-        assert llm.is_thinking_setting_rejected(Exception(MANDATORY)) is True
-        assert llm.is_thinking_setting_rejected(Exception(NO_ENDPOINTS)) is True
-        assert llm.is_thinking_setting_rejected(Exception("429 rate limited")) is False
+        assert is_thinking_setting_rejected(Exception(MANDATORY)) is True
+        assert is_thinking_setting_rejected(Exception(NO_ENDPOINTS)) is True
+        assert is_thinking_setting_rejected(Exception("429 rate limited")) is False
+
+    def test_giving_up_forgets_the_client_built_with_the_setting(self):
+        built = []
+        ours = Models(
+            Settings(model_base_url=AGGREGATOR),
+            factory=lambda name, **kwargs: built.append(kwargs) or Labeler(),
+        )
+        asking = role(model="openai:m")
+        ours.for_role(asking)
+        ours.stop_asking_it_to_think(asking)
+        ours.for_role(asking)
+        assert len(built) == 2, "a fresh client, without the setting"
+        assert "reasoning" not in built[1]["extra_body"]
 
 
-class Labeler:
-    """A structured-output runnable that refuses the setting the first time."""
-
-    def __init__(self, refusals=1, saying=MANDATORY):
-        self.refusals = refusals
-        self.saying = saying
-        self.attempts = 0
-
-    async def ainvoke(self, _messages):
-        self.attempts += 1
-        if self.refusals > 0:
-            self.refusals -= 1
-            raise Exception(self.saying)
-        return IntentLabel(intent="general", reason="stubbed")
-
-
-def cached(labeler):
-    """A stand-in for the cached factory, cache_clear and all.
-
-    The retry clears the cache before rebuilding, so a double that cannot be
-    cleared is a double that does not honour the contract under test.
-    """
-    factory = lambda: labeler  # noqa: E731 — one expression, named by assignment
-    factory.cache_clear = lambda: None
-    return factory
-
-
-@pytest.fixture
-def asking_for_thought(monkeypatch):
-    """A labelling role that does send a setting — the only kind that retries."""
-    wire(
-        monkeypatch,
-        model_base_url=AGGREGATOR,
-        router_model="openai:router",
-        router_reasoning_effort="low",
-    )
-
-
-@pytest.fixture
-def no_understudy(monkeypatch):
-    """Take the answering model away, so a refusal has nowhere left to go.
-
-    classify() falls back to the answering model when the labelling one cannot
-    be reached (see app/intent.py). These tests are about what the retry does,
-    not about that fallback, so they need the fallback to be unavailable —
-    which is what a deployment where both roles run one model looks like.
-    """
-    wire(
-        monkeypatch,
-        model_base_url=AGGREGATOR,
-        model="openai:router",
-        reasoning_effort="low",
-        router_model="openai:router",
-        router_reasoning_effort="low",
-    )
+def classifier(client, **env) -> IntentClassifier:
+    """The classifier over one client, with a labelling role that asks for thought."""
+    ours = models(client, router_model="openai:router", router_reasoning_effort="low", **env)
+    return IntentClassifier(ours, Config(ours._settings, StaticPanel()))
 
 
 class TestClassifierRecovery:
     @pytest.mark.parametrize("refusal", [MANDATORY, NO_ENDPOINTS], ids=["mandatory", "filtered"])
-    async def test_a_refused_setting_still_produces_a_label(
-        self, monkeypatch, asking_for_thought, refusal
-    ):
+    async def test_a_refused_setting_still_produces_a_label(self, refusal):
         labeler = Labeler(refusals=1, saying=refusal)
-        monkeypatch.setattr(intent, "_labeler", cached(labeler))
-        label = await intent.classify("what is a health factor?")
+        label = await classifier(labeler).classify("what is a health factor?")
         assert label.intent == "general"
         assert labeler.attempts == 2, "one retry, not a loop"
-        assert "openai:router" in llm._models_we_no_longer_ask_to_think
 
-    async def test_a_second_refusal_is_raised_rather_than_retried_forever(
-        self, monkeypatch, asking_for_thought, no_understudy
-    ):
+    async def test_the_model_is_remembered_as_one_that_will_not_think(self):
+        labeler = Labeler(refusals=1)
+        ours = models(labeler, router_model="openai:router", router_reasoning_effort="low")
+        await IntentClassifier(ours, Config(ours._settings, StaticPanel())).classify("q")
+        assert "openai:router" in ours.no_longer_asked_to_think
+
+    async def test_a_second_refusal_is_raised_rather_than_retried_forever(self):
+        # No understudy: the answering model IS the labelling model, so a
+        # refusal has nowhere left to go (see test_router_fallback).
         labeler = Labeler(refusals=99)
-        monkeypatch.setattr(intent, "_labeler", cached(labeler))
         with pytest.raises(Exception, match="Reasoning is mandatory"):
-            await intent.classify("q")
+            await classifier(labeler, model="openai:router", reasoning_effort="low").classify("q")
         assert labeler.attempts == 2
 
-    async def test_an_unrelated_failure_is_not_swallowed_by_the_retry(
-        self, monkeypatch, asking_for_thought, no_understudy
-    ):
+    async def test_an_unrelated_failure_is_not_swallowed_by_the_retry(self):
         class Broken:
             attempts = 0
+
+            def with_structured_output(self, _schema, **_kwargs):
+                return self
 
             async def ainvoke(self, _messages):
                 Broken.attempts += 1
                 raise RuntimeError("429 rate limited")
 
-        monkeypatch.setattr(intent, "_labeler", cached(Broken()))
         with pytest.raises(RuntimeError, match="429"):
-            await intent.classify("q")
+            await classifier(Broken(), model="openai:router", reasoning_effort="low").classify("q")
         assert Broken.attempts == 1, "only a refused setting is worth a second try"
 
-    async def test_a_role_that_asks_for_nothing_does_not_retry(self, monkeypatch, no_understudy):
+    async def test_a_role_that_asks_for_nothing_does_not_retry(self):
         # The shipped labelling role. A 404 here is about something we are not
         # willing to give up, so it goes to the caller on the first failure.
-        wire(
-            monkeypatch,
-            model_base_url=AGGREGATOR,
-            model="openai:instruct",
-            reasoning_effort="",
-            router_model="openai:instruct",
-        )
         labeler = Labeler(refusals=99, saying=NO_ENDPOINTS)
-        monkeypatch.setattr(intent, "_labeler", cached(labeler))
+        quiet = models(labeler, model="openai:instruct", reasoning_effort="")
         with pytest.raises(Exception, match="No endpoints"):
-            await intent.classify("q")
+            await IntentClassifier(quiet, Config(quiet._settings, StaticPanel())).classify("q")
         assert labeler.attempts == 1
 
 
 class TestProviderPolicy:
     """Which of an aggregator's providers may serve our prompts."""
 
-    def test_nothing_is_sent_to_a_provider_we_talk_to_directly(self, monkeypatch):
+    def test_nothing_is_sent_to_a_provider_we_talk_to_directly(self):
         # extra_body is an OpenAI-client field; on the Anthropic client it is
         # not a parameter at all.
-        on_wire(monkeypatch, "")
-        assert llm._wire_options(role(model="anthropic:claude-haiku-4-5")) == {}
+        direct = models(model_base_url="")
+        assert direct.wire_options(role(model="anthropic:claude-haiku-4-5")) == {}
 
     def test_an_aggregator_gets_the_whole_policy(self):
         body = body_for(model="openai:deepseek/deepseek-v4-flash")
@@ -247,10 +192,11 @@ class TestProviderPolicy:
         assert "require_parameters" not in body_for()["provider"]
 
     def test_dropping_a_thinking_setting_leaves_the_rest_of_the_policy_standing(self):
-        body = body_for()
+        ours = models()
+        body = ours.wire_options(role())["extra_body"]
         assert "reasoning" in body and body["provider"]["data_collection"] == "deny"
-        llm.stop_asking_it_to_think(role(model="openai:m"))
-        body = body_for()
+        ours.stop_asking_it_to_think(role())
+        body = ours.wire_options(role())["extra_body"]
         assert "reasoning" not in body and body["provider"]["data_collection"] == "deny"
 
     def test_each_role_asks_for_the_provider_its_own_job_wants(self):

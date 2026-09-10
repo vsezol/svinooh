@@ -14,10 +14,11 @@ import time
 import pytest
 
 from app.adapters.memory import MemoryConversationStore
-from app.composition import conversation_store, rate_limiter
+from app.container import build
 from app.domain.conversation import CHAT_TTL_S, title_of
 from app.domain.ids import new_chat_id
 from app.services.sessions import SessionStore
+from app.settings import Settings
 
 
 @pytest.fixture
@@ -232,26 +233,21 @@ class TestExpiry:
 
 class TestTheFallback:
     def test_no_redis_url_is_the_in_memory_backend(self):
-        assert isinstance(conversation_store(""), MemoryConversationStore)
+        wired = build(Settings())
+        assert isinstance(wired.store, MemoryConversationStore)
+        assert wired.redis is None
 
     def test_and_it_says_so_loudly_enough_to_be_heard(self, caplog):
         """The fallback is silent by nature — everything still answers — so the
         only thing standing between a production deploy with no REDIS_URL and
-        nobody noticing is this line.
-
-        WARNING and not INFO, and that is the whole test. These factories run
-        while app/api/routes.py is being imported, which is before create_app()
-        configures logging; until it has, logging's last-resort handler prints
-        WARNING and above and drops everything below. At info level the notice
-        that the durable store is not durable appears nowhere at all — which is
-        exactly what happened on the first deploy of it.
+        nobody noticing is this line. WARNING and not INFO, which is the whole
+        test: it is the notice that the durable store is not durable.
         """
         with caplog.at_level(logging.WARNING, logger="svinooh-ai"):
-            conversation_store("")
-            rate_limiter("", 20, 300)
+            build(Settings())
         said = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
         assert any("REDIS_URL" in m for m in said), "the fallback went quiet"
-        assert sum("REDIS_URL" in m for m in said) == 2, "both halves say so"
+        assert any("counters" in m for m in said), "it names both halves"
 
 
 # ── reaching into the dev backend, so expiry can be tested without waiting ──

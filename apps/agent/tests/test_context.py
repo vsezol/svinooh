@@ -9,19 +9,19 @@ from tests import fixtures as fx
 
 
 def test_header_counts_wallets_and_positions():
-    block = portfolio_context(fx.rich_portfolio(tail=20))
+    block = portfolio_context(fx.rich_portfolio(tail=20), 12)
     assert 'Portfolio "Main portfolio"' in block
     assert "1 wallet(s), 25 position(s)" in block
 
 
 def test_falls_back_to_the_slug_when_a_portfolio_is_unnamed():
     data = fx.portfolio([fx.wallet(fx.EVM_ADDRESS, [fx.ETH])], slug="abc123")
-    assert 'Portfolio "abc123"' in portfolio_context(data)
+    assert 'Portfolio "abc123"' in portfolio_context(data, 12)
 
 
 def test_breakdowns_cover_every_position_not_just_the_printed_ones():
     # 40 dust positions past the cap: their networks must still be counted.
-    block = portfolio_context(fx.rich_portfolio(tail=40))
+    block = portfolio_context(fx.rich_portfolio(tail=40), 12)
     by_network = next(row for row in block.splitlines() if row.startswith("By network"))
     # eth: ETH + UNI + AAVE + all 40 dust ones; base and bsc from the fixtures.
     assert "eth" in by_network and "base" in by_network and "bsc" in by_network
@@ -32,7 +32,7 @@ def test_breakdowns_cover_every_position_not_just_the_printed_ones():
 def test_protocol_line_excludes_plain_wallet_holdings():
     line = next(
         row
-        for row in portfolio_context(fx.rich_portfolio()).splitlines()
+        for row in portfolio_context(fx.rich_portfolio(), 12).splitlines()
         if row.startswith("In protocols")
     )
     assert "wallet" not in line
@@ -40,9 +40,9 @@ def test_protocol_line_excludes_plain_wallet_holdings():
 
 def test_the_hidden_tail_carries_its_value():
     data = fx.rich_portfolio(tail=30)
-    block = portfolio_context(data)
+    block = portfolio_context(data, 12)
     positions = data["wallets"][0]["positions"]
-    shown = 12  # settings.context_max_positions
+    shown = 12  # the cap handed in above
     expected = sum(p["valueUsd"] for p in sorted(positions, key=lambda p: -p["valueUsd"])[shown:])
     assert f"…and {len(positions) - shown} smaller positions worth {usd(expected)}" in block
 
@@ -51,20 +51,20 @@ def test_positions_are_printed_largest_first():
     # Asserted on the symbols, whose order the fixtures fix, rather than by
     # parsing dollars back out of a sentence: a test that re-implements the
     # formatter to check the formatter passes when both are wrong together.
-    block = portfolio_context(fx.rich_portfolio(tail=5))
+    block = portfolio_context(fx.rich_portfolio(tail=5), 12)
     printed = [line for line in block.splitlines() if line.startswith("  - ")]
     symbols = [line.removeprefix("  - ").split(":")[0].split(" ")[0] for line in printed]
     assert symbols[:4] == ["ETH", "MICRO", "TRUE", "AAVE-V3"]
 
 
 def test_every_wallet_appears_with_its_chain_and_status():
-    block = portfolio_context(fx.two_wallet_portfolio())
+    block = portfolio_context(fx.two_wallet_portfolio(), 12)
     assert "[EVM]" in block and "[SOL]" in block and "status ok" in block
 
 
 def test_stale_data_is_flagged():
     data = fx.portfolio([fx.wallet(fx.EVM_ADDRESS, [fx.ETH], stale=True)])
-    assert "stale data" in portfolio_context(data)
+    assert "stale data" in portfolio_context(data, 12)
 
 
 class TestPositionLine:

@@ -1,15 +1,11 @@
 """The conversation as a graph — the routing and identity decisions of
 DESIGN.md, made runnable.
 
-The first version was a straight line — every turn fetched portfolio context
-and answered.
-The line became a graph the moment turns stopped being alike: a question about
-DeFi in general has no business paying a portfolio fetch, and a question about
-the user's money deserves one. LangGraph is the tool for exactly this shape:
-nodes are steps, a typed state flows through them, and conditional edges pick
-the branch. The graph itself still has no cycles; the one loop lives inside
-the grounded node — the agentic tool loop — and the graph grows branches
-without the route handler ever changing.
+The line became a graph the moment turns stopped being alike: a question
+about DeFi in general has no business paying a portfolio fetch, and a
+question about the user's money deserves one. Nodes are steps, a typed state
+flows through them, conditional edges pick the branch. The graph has no
+cycles; the one loop lives inside the grounded node, the agentic tool loop.
 
     START -> pending_gate -> [proposal waiting?]
               | no                \\-> yes+confirmed -> create_portfolio ► END
@@ -19,35 +15,31 @@ without the route handler ever changing.
                                                     \\-> onboard ───────► END
                                                     \\-> unavailable ───► END
 
-The identity node resolves WHOSE portfolio a money question is about (the
-one-identity rule in DESIGN.md): the widget's slug is a hint that
-short-circuits the lookup; without it, GET /auth/me answers both who the
-caller is and what they own, and the conditional edge routes on the outcome.
-Two failure modes are kept deliberately distinct: an EMPTY portfolio list
-means onboarding, while an identity lookup ERROR means the degraded answer —
-a hiccuping API must never tell a person they own nothing.
+The identity node resolves WHOSE portfolio a money question is about: the
+widget's slug is a hint that short-circuits the lookup; without it, the host
+says who the caller is and what they own. An EMPTY portfolio list means
+onboarding; an identity lookup ERROR means the degraded answer — a hiccuping
+API must never tell a person they own nothing.
 
 The pending gate is the write gate: creating a portfolio takes two turns by
-construction — the onboarding branch can only PROPOSE (the proposal parks in
-the session), and only this gate, reading a clear yes on a later turn, reaches
-the one node that writes.
+construction. The onboarding branch can only PROPOSE, and only this gate,
+reading a clear yes on a later turn, reaches the one node that writes.
 
-The classifier's failure mode is chosen, not accidental: on any error the turn
-routes to the identity branch — money questions land where money is handled —
-and a broken classifier degrades to yesterday's behavior, never to a worse
-answer about money.
+The classifier's failure mode is chosen: on any error the turn routes to the
+identity branch, so a broken classifier degrades to yesterday's behaviour and
+never to a worse answer about money.
 """
 
 import logging
-from functools import cache
-from typing import TypedDict
+from collections.abc import AsyncIterator
+from typing import Any, TypedDict
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 from ..adapters.portfolio import PortfolioApiSource
-from ..composition import config
-from ..settings import settings
+from ..config import Config
 from .context import (
     cancelled_prompt,
     confirmation_request_prompt,
@@ -57,19 +49,19 @@ from .context import (
     grounded_prompt,
     onboarding_prompt,
 )
-from .intent import classify
-from .llm import ask, extract_text, get_model
+from .intent import IntentClassifier
+from .llm import Models, extract_text
 from .onboarding import (
+    ConfirmationClassifier,
     ProposePortfolio,
-    classify_confirmation,
     create_portfolio_with_wallets,
     sanitize_addresses,
 )
 from .steps import step
+from .streaming import turn_events
 from .tools import portfolio_tools, run_tools
 
 logger = logging.getLogger("svinooh-ai")
-portfolio_source = PortfolioApiSource(settings.portfolio_api_url, settings.context_timeout_s)
 
 
 class AgentState(TypedDict, total=False):
@@ -83,9 +75,9 @@ class AgentState(TypedDict, total=False):
     authorization: str | None
     # The session's proposed-but-unconfirmed action, loaded by the route layer.
     pending_addresses: list[str] | None
-    # Written by classify_intent_node; the first conditional edge routes on it.
+    # Written by classify_intent; the first conditional edge routes on it.
     intent: str
-    # Written by identity_node: where the portfolio branch goes, and in which
+    # Written by identity: where the portfolio branch goes, and in which
     # portfolio to ground when it goes to `grounded`.
     route: str
     target_portfolio: str
@@ -100,267 +92,10 @@ class AgentState(TypedDict, total=False):
     portfolio_created: str
 
 
-async def pending_gate(state: AgentState) -> AgentState:
-    """The graph's front door once a proposal is waiting (the write gate).
-
-    With no pending action this is a pass-through to classification. With one,
-    the user's reply is read as an answer to "create it?": a clear yes goes to
-    the create-portfolio node — the only node that writes — a clear no cancels,
-    and anything else keeps the proposal waiting and lets the turn flow
-    normally, so a question asked mid-confirmation still gets its answer.
-    """
-    if not state.get("pending_addresses"):
-        return {"route": "classify_intent"}
-    try:
-        async with step("confirm", "Reading your reply"):
-            verdict = await classify_confirmation(state["question"])
-    except Exception as error:  # noqa: BLE001 — an unreadable reply must not write
-        logger.warning("confirmation classifier failed (%r) — keeping the proposal", error)
-        return {"route": "classify_intent"}
-    logger.info("confirmation: %s (%s)", verdict.decision, verdict.reason)
-    if verdict.decision == "confirm":
-        # A yes is a yes with or without a token: the write node picks the door
-        # (owned, or the host's ownerless one) from the token it is handed.
-        return {"route": "create_portfolio"}
-    if verdict.decision == "cancel":
-        return {"route": "cancel_creation"}
-    return {"route": "classify_intent"}
-
-
-async def classify_intent_node(state: AgentState) -> AgentState:
-    """Label the turn; on any failure, route where money questions are safe."""
-    try:
-        async with step("route", "Reading the question"):
-            label = await classify(state["question"])
-        logger.info("intent: %s (%s) q=%.80s", label.intent, label.reason, state["question"])
-        return {"intent": label.intent}
-    except Exception as error:  # noqa: BLE001 — the fail-safe IS the handling
-        logger.warning("intent classifier failed (%r) — routing to portfolio", error)
-        return {"intent": "portfolio"}
-
-
-async def identity_node(state: AgentState) -> AgentState:
-    """Whose portfolio is this conversation about?
-
-    Identity is data in the state, not a guard in a handler: this node writes
-    `route` and the second conditional edge acts on it. The widget's slug is a
-    hint that skips the lookup; otherwise /auth/me says what the caller owns.
-    """
-    hint = state.get("portfolio")
-    if hint:
-        # A portfolio on screen is the portfolio the question is about, signed
-        # in or not: the fetch carries whatever token the caller has, and the
-        # API decides what that caller may read. A public portfolio answers a
-        # visitor; a private one refuses, and the branch degrades honestly.
-        return {"route": "grounded", "target_portfolio": hint}
-
-    auth = state.get("authorization")
-    if not auth:
-        # Nothing on screen and nobody to look up. The onboarding prompt
-        # carries the sign-in variant.
-        logger.info("identity: no token, no portfolio -> onboard")
-        return {"route": "onboard"}
-
-    try:
-        async with step("account", "Checking your account"):
-            me = await portfolio_source.me(auth)
-    except Exception as error:  # noqa: BLE001 — an error is NOT an empty list
-        logger.warning("identity lookup failed: %r", error)
-        return {"route": "unavailable"}
-
-    owned = me.get("portfolios") or []
-    if not owned:
-        logger.info("identity: owns none -> onboard")
-        return {"route": "onboard"}
-    # Their first portfolio stands in for "theirs" until the conversation can
-    # pick between several — a refinement the state already has room for.
-    target = owned[0].get("slug", "")
-    logger.info("identity: owns %d -> grounded in %s", len(owned), target)
-    return {"route": "grounded", "target_portfolio": target}
-
-
-async def _answer(system: str, state: AgentState) -> AgentState:
-    messages = [
-        SystemMessage(content=system),
-        *state.get("history", []),
-        HumanMessage(content=state["question"]),
-    ]
-    # The model call is an operation like any other, and until it was reported
-    # it was the longest unlit stretch of a turn: everything a reader could see
-    # finished, and then several seconds of nothing while the answer was being
-    # written. The words arrive during this step and fold it, which is the
-    # better spinner — but the wait before the first of them is this line.
-    async with step("answer", "Writing the answer"):
-        reply = await ask(get_model, messages, config.answering())
-    return {"answer": extract_text(reply)}
-
-
-async def general_node(state: AgentState) -> AgentState:
-    """A general question: answer directly — no portfolio fetch, by design.
-
-    This branch is the graph's first dividend: before the router, every 'what
-    is a health factor' paid a portfolio round trip it never used.
-    """
-    return await _answer(config.system_prompt(), state)
-
-
-async def grounded_node(state: AgentState) -> AgentState:
-    """Ground the answer in the target portfolio — and let the model drill down.
-
-    This node runs the agentic loop: the model answers with the context block,
-    or calls a read-only tool (history over a period it picks, position
-    search); the service executes the call and the result returns as a
-    message, until the model answers in text or the hop cap ends the loop.
-    The cap ends it gently — one last call with no tools bound, so the turn
-    ends in an answer, never in an error about loops.
-
-    Degrades honestly, as the context fetch always has: a slow or down API
-    makes the answer general, not absent — and with no data there are no
-    tools, so the model cannot drill into what could not be fetched.
-    """
-    system = config.system_prompt()
-    tools = []
-    target = state["target_portfolio"]
-    try:
-        async with step("portfolio", f"Reading portfolio · {target}"):
-            data = await portfolio_source.portfolio(target, state.get("authorization"))
-        system = grounded_prompt(system, data)
-        tools = portfolio_tools(portfolio_source, target, state.get("authorization"), data)
-    except Exception as error:  # noqa: BLE001 — any fetch failure degrades the same way
-        logger.warning(
-            "portfolio context fetch failed for %s: %r", state.get("target_portfolio"), error
-        )
-        system = degraded_prompt(system)
-    if not tools:
-        return await _answer(system, state)
-
-    messages = [
-        SystemMessage(content=system),
-        *state.get("history", []),
-        HumanMessage(content=state["question"]),
-    ]
-    # Bound once for the turn, not once per hop. The retry path rebinds,
-    # because letting a model think again builds a new client underneath it.
-    bound = get_model().bind_tools(tools)
-
-    def rebind() -> None:
-        nonlocal bound
-        bound = get_model().bind_tools(tools)
-
-    for hop in range(config.tool_hops()):
-        # Every hop is the model reading what it has and deciding what is next,
-        # and none of them produced a word until now: a turn that called three
-        # tools showed three lines and three silences between them. The first
-        # hop is thinking about the question; the ones after it are thinking
-        # about what the tools came back with, which is what they say.
-        async with step(f"think-{hop}", "Thinking" if hop == 0 else "Reading what came back"):
-            reply = await ask(lambda: bound, messages, config.answering(), rebind)
-        calls = getattr(reply, "tool_calls", None) or []
-        if not calls:
-            return {"answer": extract_text(reply)}
-        messages.append(reply)
-        messages.extend(await run_tools(calls, tools))
-    async with step("answer", "Writing the answer"):
-        final = await get_model().ainvoke(messages)
-    return {"answer": extract_text(final)}
-
-
-async def onboard_node(state: AgentState) -> AgentState:
-    """A portfolio question with no portfolio behind it: onboard in the chat.
-
-    The model converses with the ProposePortfolio tool bound. Its docstring and
-    schema ARE the instructions the model sees — the promised payoff of writing
-    docstrings for the machine. A tool call here does not create anything: it
-    becomes the session's pending action plus a confirmation question, and the
-    write waits for the gate on a later turn.
-
-    Signed out is the same branch, not a wall. It used to answer and stop —
-    the visitor was told to sign in, which is the one thing the front door
-    exists to avoid. What sign-in changes now is only WHICH portfolio gets
-    made, and therefore what the prompts have to disclose before making it.
-    """
-    signed_in = bool(state.get("authorization"))
-    system = onboarding_prompt(config.system_prompt(), signed_in)
-    messages = [
-        SystemMessage(content=system),
-        *state.get("history", []),
-        HumanMessage(content=state["question"]),
-    ]
-    async with step("think-0", "Thinking"):
-        reply = await get_model().bind_tools([ProposePortfolio]).ainvoke(messages)
-
-    calls = getattr(reply, "tool_calls", None) or []
-    if not calls:
-        # No proposal yet — this is the conversation still collecting addresses.
-        return {"answer": extract_text(reply)}
-
-    addresses = sanitize_addresses(calls[0].get("args", {}).get("addresses", []))
-    if not addresses:
-        # The model called the tool with nothing usable; ask again rather than
-        # propose an empty portfolio.
-        return await _answer(system, state)
-
-    logger.info("onboarding: proposing %d wallet(s)", len(addresses))
-    confirmation = await _answer(
-        confirmation_request_prompt(config.system_prompt(), addresses, not signed_in), state
-    )
-    return {**confirmation, "pending_set": addresses}
-
-
-async def create_portfolio_node(state: AgentState) -> AgentState:
-    """The one node that writes — reachable only through a confirmed gate.
-
-    The portfolio create failing keeps the proposal (a later yes retries); a
-    single wallet failing does not sink the rest, and the answer relays the
-    partial result honestly.
-
-    The token decides which door: an owned portfolio, or the host's ownerless
-    one for a visitor with no account. Absent is a value here, so it is passed
-    down rather than checked for — this node does not branch on it.
-    """
-    addresses = state.get("pending_addresses") or []
-    try:
-        # The slowest thing in this turn — a portfolio POST and one per wallet
-        # — and it was the only action the reader could not watch happening.
-        wallets = f"{len(addresses)} wallet" + ("" if len(addresses) == 1 else "s")
-        async with step("create", f"Creating the portfolio · {wallets}"):
-            result = await create_portfolio_with_wallets(
-                portfolio_source, addresses, state.get("authorization")
-            )
-    except Exception as error:  # noqa: BLE001 — nothing was created; say so
-        logger.warning("portfolio creation failed: %r", error)
-        return await _answer(creation_failed_prompt(config.system_prompt()), state)
-    logger.info(
-        "onboarding: created %s (+%d wallets, %d refused)",
-        result.get("slug"),
-        len(result.get("added", [])),
-        len(result.get("failed", [])),
-    )
-    answered = await _answer(created_prompt(config.system_prompt(), result), state)
-    outcome: AgentState = {**answered, "pending_clear": True}
-    if result.get("slug"):
-        outcome["portfolio_created"] = str(result["slug"])
-    return outcome
-
-
-async def cancel_creation_node(state: AgentState) -> AgentState:
-    """A declined proposal: drop it and say so — nothing was created."""
-    answered = await _answer(cancelled_prompt(config.system_prompt()), state)
-    return {**answered, "pending_clear": True}
-
-
-async def unavailable_node(state: AgentState) -> AgentState:
-    """Identity could not be resolved: answer, and say the numbers are out of reach."""
-    return await _answer(degraded_prompt(config.system_prompt()), state)
-
-
-#: The nodes a turn can end on — and therefore the only nodes whose tokens are
-#: the answer somebody is reading.
-#:
-#: The two facts are the same fact. A leaf is where the turn stops, which is
-#: where the reply gets written; everything upstream also talks to a model
-#: (labelling a question, checking a reply for a yes) and none of that is for
-#: the reader. One tuple rather than two lists, so a branch added below is
+#: The nodes a turn can end on, and therefore the only nodes whose tokens are
+#: the answer somebody is reading. A leaf is where the turn stops, which is
+#: where the reply gets written; everything upstream also talks to a model and
+#: none of that is for the reader. One tuple, so a branch added below is
 #: streamed without anybody remembering to say so.
 ANSWERING_NODES = (
     "general",
@@ -372,46 +107,292 @@ ANSWERING_NODES = (
 )
 
 
-@cache  # built and compiled once per process, like the model clients
-def agent_graph():
-    builder = StateGraph(AgentState)
-    # Node names carry the domain, not the mechanism: "create_portfolio", never
-    # "execute" — a mechanism name stops meaning anything once the graph has
-    # many branches. Registration order is irrelevant; the edges below are the
-    # topology, and compile() checks that every referenced name exists.
-    builder.add_node("pending_gate", pending_gate)
-    builder.add_node("classify_intent", classify_intent_node)
-    builder.add_node("identity", identity_node)
-    builder.add_node("general", general_node)
-    builder.add_node("grounded", grounded_node)
-    builder.add_node("onboard", onboard_node)
-    builder.add_node("create_portfolio", create_portfolio_node)
-    builder.add_node("cancel_creation", cancel_creation_node)
-    builder.add_node("unavailable", unavailable_node)
+class Agent:
+    """The graph, built once with everything its nodes need.
 
-    builder.add_edge(START, "pending_gate")
-    # Each conditional edge is a router: it reads what the previous node wrote
-    # and names the next one. The mappings are explicit so a value nobody wired
-    # fails loudly here instead of wandering the graph.
-    builder.add_conditional_edges(
-        "pending_gate",
-        lambda state: state["route"],
-        {
-            "classify_intent": "classify_intent",
-            "create_portfolio": "create_portfolio",
-            "cancel_creation": "cancel_creation",
-        },
-    )
-    builder.add_conditional_edges(
-        "classify_intent",
-        lambda state: state["intent"],
-        {"portfolio": "identity", "general": "general"},
-    )
-    builder.add_conditional_edges(
-        "identity",
-        lambda state: state["route"],
-        {"grounded": "grounded", "onboard": "onboard", "unavailable": "unavailable"},
-    )
-    for leaf in ANSWERING_NODES:
-        builder.add_edge(leaf, END)
-    return builder.compile()
+    Nothing in a node reaches for a global: the dials, the portfolio API, the
+    model clients and the two classifiers arrive through the constructor.
+    That is what lets a test run the real graph over fakes, and the container
+    (app/container.py) build one per process.
+    """
+
+    def __init__(
+        self,
+        config: Config,
+        portfolio: PortfolioApiSource,
+        models: Models,
+        intents: IntentClassifier,
+        confirmations: ConfirmationClassifier,
+    ) -> None:
+        self._config = config
+        self._portfolio = portfolio
+        self._models = models
+        self._intents = intents
+        self._confirmations = confirmations
+        self.graph = self._build()
+
+    async def run(self, state: AgentState) -> dict[str, Any]:
+        """One turn, awaited: the final state, answer included."""
+        return await self.graph.ainvoke(state)
+
+    def watch(self, state: AgentState) -> AsyncIterator[tuple[str, dict]]:
+        """The same turn, reported while it happens (app/agent/streaming.py)."""
+        return turn_events(self.graph, dict(state), answering=ANSWERING_NODES)
+
+    # ── the nodes ───────────────────────────────────────────────────────────
+
+    async def _pending_gate(self, state: AgentState) -> AgentState:
+        """The front door once a proposal is waiting: the write gate.
+
+        With no pending action, a pass-through to classification. With one,
+        the user's reply is read as an answer to "create it?": a clear yes goes
+        to the one node that writes, a clear no cancels, and anything else
+        keeps the proposal waiting and lets the turn flow normally, so a
+        question asked mid-confirmation still gets its answer.
+        """
+        if not state.get("pending_addresses"):
+            return {"route": "classify_intent"}
+        try:
+            async with step("confirm", "Reading your reply"):
+                verdict = await self._confirmations.classify(state["question"])
+        except Exception as error:  # noqa: BLE001 — an unreadable reply must not write
+            logger.warning("confirmation classifier failed (%r) — keeping the proposal", error)
+            return {"route": "classify_intent"}
+        logger.info("confirmation: %s (%s)", verdict.decision, verdict.reason)
+        if verdict.decision == "confirm":
+            # A yes is a yes with or without a token: the write node picks the
+            # door (owned, or the host's ownerless one) from the token it has.
+            return {"route": "create_portfolio"}
+        if verdict.decision == "cancel":
+            return {"route": "cancel_creation"}
+        return {"route": "classify_intent"}
+
+    async def _classify_intent(self, state: AgentState) -> AgentState:
+        """Label the turn; on any failure, route where money questions are safe."""
+        try:
+            async with step("route", "Reading the question"):
+                label = await self._intents.classify(state["question"])
+            logger.info("intent: %s (%s) q=%.80s", label.intent, label.reason, state["question"])
+            return {"intent": label.intent}
+        except Exception as error:  # noqa: BLE001 — the fail-safe IS the handling
+            logger.warning("intent classifier failed (%r) — routing to portfolio", error)
+            return {"intent": "portfolio"}
+
+    async def _identity(self, state: AgentState) -> AgentState:
+        """Whose portfolio is this conversation about?
+
+        Identity is data in the state, not a guard in a handler: this node
+        writes `route` and the conditional edge acts on it.
+        """
+        hint = state.get("portfolio")
+        if hint:
+            # A portfolio on screen is the portfolio the question is about,
+            # signed in or not: the fetch carries whatever token the caller
+            # has, and the API decides what that caller may read.
+            return {"route": "grounded", "target_portfolio": hint}
+
+        auth = state.get("authorization")
+        if not auth:
+            logger.info("identity: no token, no portfolio -> onboard")
+            return {"route": "onboard"}
+
+        try:
+            async with step("account", "Checking your account"):
+                me = await self._portfolio.me(auth)
+        except Exception as error:  # noqa: BLE001 — an error is NOT an empty list
+            logger.warning("identity lookup failed: %r", error)
+            return {"route": "unavailable"}
+
+        owned = me.get("portfolios") or []
+        if not owned:
+            logger.info("identity: owns none -> onboard")
+            return {"route": "onboard"}
+        # Their first portfolio stands in for "theirs" until the conversation
+        # can pick between several — a refinement the state has room for.
+        target = owned[0].get("slug", "")
+        logger.info("identity: owns %d -> grounded in %s", len(owned), target)
+        return {"route": "grounded", "target_portfolio": target}
+
+    async def _general(self, state: AgentState) -> AgentState:
+        """A general question: answer directly, with no portfolio fetch."""
+        return await self._answer(self._config.system_prompt(), state)
+
+    async def _grounded(self, state: AgentState) -> AgentState:
+        """Ground the answer in the target portfolio, and let the model drill down.
+
+        The agentic loop: the model answers with the context block, or calls a
+        read-only tool; the service executes it and the result returns as a
+        message, until the model answers in text or the hop cap ends the loop
+        — gently, with one last call and no tools bound.
+
+        Degrades honestly: a slow or down API makes the answer general, not
+        absent, and with no data there are no tools to drill into it with.
+        """
+        system = self._config.system_prompt()
+        tools: list = []
+        target = state["target_portfolio"]
+        token = state.get("authorization")
+        try:
+            async with step("portfolio", f"Reading portfolio · {target}"):
+                data = await self._portfolio.portfolio(target, token)
+            system = grounded_prompt(system, data, self._config.context_max_positions())
+            tools = portfolio_tools(self._portfolio, target, token, data)
+        except Exception as error:  # noqa: BLE001 — any fetch failure degrades the same way
+            logger.warning("portfolio context fetch failed for %s: %r", target, error)
+            system = degraded_prompt(system)
+        if not tools:
+            return await self._answer(system, state)
+
+        messages = self._messages(system, state)
+        role = self._config.answering()
+        for hop in range(self._config.tool_hops()):
+            # The first hop is thinking about the question; the ones after it
+            # are thinking about what the tools came back with.
+            async with step(f"think-{hop}", "Thinking" if hop == 0 else "Reading what came back"):
+                reply = await self._models.ask(
+                    role, messages, prepare=lambda model: model.bind_tools(tools)
+                )
+            calls = getattr(reply, "tool_calls", None) or []
+            if not calls:
+                return {"answer": extract_text(reply)}
+            messages.append(reply)
+            messages.extend(await run_tools(calls, tools))
+        async with step("answer", "Writing the answer"):
+            final = await self._models.ask(role, messages)
+        return {"answer": extract_text(final)}
+
+    async def _onboard(self, state: AgentState) -> AgentState:
+        """A portfolio question with no portfolio behind it: onboard in the chat.
+
+        The model converses with the ProposePortfolio tool bound; its docstring
+        IS the instruction the model reads. A tool call here creates nothing:
+        it becomes the session's pending action plus a confirmation question,
+        and the write waits for the gate on a later turn. Signed out is the
+        same branch, not a wall: what sign-in changes is only WHICH portfolio
+        gets made, and so what the prompts must disclose before making it.
+        """
+        signed_in = bool(state.get("authorization"))
+        system = onboarding_prompt(self._config.system_prompt(), signed_in)
+        messages = self._messages(system, state)
+        async with step("think-0", "Thinking"):
+            reply = await self._models.ask(
+                self._config.answering(),
+                messages,
+                prepare=lambda model: model.bind_tools([ProposePortfolio]),
+            )
+
+        calls = getattr(reply, "tool_calls", None) or []
+        if not calls:
+            # No proposal yet: the conversation is still collecting addresses.
+            return {"answer": extract_text(reply)}
+
+        addresses = sanitize_addresses(calls[0].get("args", {}).get("addresses", []))
+        if not addresses:
+            # The model called the tool with nothing usable; ask again rather
+            # than propose an empty portfolio.
+            return await self._answer(system, state)
+
+        logger.info("onboarding: proposing %d wallet(s)", len(addresses))
+        confirmation = await self._answer(
+            confirmation_request_prompt(self._config.system_prompt(), addresses, not signed_in),
+            state,
+        )
+        return {**confirmation, "pending_set": addresses}
+
+    async def _create_portfolio(self, state: AgentState) -> AgentState:
+        """The one node that writes — reachable only through a confirmed gate.
+
+        The create failing keeps the proposal, so a later yes retries; a single
+        wallet failing does not sink the rest, and the answer relays the
+        partial result honestly. The token decides which door: an owned
+        portfolio, or the host's ownerless one for a visitor.
+        """
+        addresses = state.get("pending_addresses") or []
+        try:
+            wallets = f"{len(addresses)} wallet" + ("" if len(addresses) == 1 else "s")
+            async with step("create", f"Creating the portfolio · {wallets}"):
+                result = await create_portfolio_with_wallets(
+                    self._portfolio, addresses, state.get("authorization")
+                )
+        except Exception as error:  # noqa: BLE001 — nothing was created; say so
+            logger.warning("portfolio creation failed: %r", error)
+            return await self._answer(creation_failed_prompt(self._config.system_prompt()), state)
+        logger.info(
+            "onboarding: created %s (+%d wallets, %d refused)",
+            result.get("slug"),
+            len(result.get("added", [])),
+            len(result.get("failed", [])),
+        )
+        answered = await self._answer(created_prompt(self._config.system_prompt(), result), state)
+        outcome: AgentState = {**answered, "pending_clear": True}
+        if result.get("slug"):
+            outcome["portfolio_created"] = str(result["slug"])
+        return outcome
+
+    async def _cancel_creation(self, state: AgentState) -> AgentState:
+        """A declined proposal: drop it and say so — nothing was created."""
+        answered = await self._answer(cancelled_prompt(self._config.system_prompt()), state)
+        return {**answered, "pending_clear": True}
+
+    async def _unavailable(self, state: AgentState) -> AgentState:
+        """Identity could not be resolved: answer, and say the numbers are out of reach."""
+        return await self._answer(degraded_prompt(self._config.system_prompt()), state)
+
+    # ── shared by the nodes ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _messages(system: str, state: AgentState) -> list[BaseMessage]:
+        return [
+            SystemMessage(content=system),
+            *state.get("history", []),
+            HumanMessage(content=state["question"]),
+        ]
+
+    async def _answer(self, system: str, state: AgentState) -> AgentState:
+        # The model call is an operation like any other, and until it was
+        # reported it was the longest unlit stretch of a turn.
+        async with step("answer", "Writing the answer"):
+            reply = await self._models.ask(self._config.answering(), self._messages(system, state))
+        return {"answer": extract_text(reply)}
+
+    def _build(self) -> CompiledStateGraph:
+        builder = StateGraph(AgentState)
+        # Node names carry the domain, not the mechanism: "create_portfolio",
+        # never "execute". The edges below are the topology, and compile()
+        # checks that every referenced name exists.
+        builder.add_node("pending_gate", self._pending_gate)
+        builder.add_node("classify_intent", self._classify_intent)
+        builder.add_node("identity", self._identity)
+        builder.add_node("general", self._general)
+        builder.add_node("grounded", self._grounded)
+        builder.add_node("onboard", self._onboard)
+        builder.add_node("create_portfolio", self._create_portfolio)
+        builder.add_node("cancel_creation", self._cancel_creation)
+        builder.add_node("unavailable", self._unavailable)
+
+        builder.add_edge(START, "pending_gate")
+        # Each conditional edge is a router: it reads what the previous node
+        # wrote and names the next one. The mappings are explicit so a value
+        # nobody wired fails loudly here instead of wandering the graph.
+        builder.add_conditional_edges(
+            "pending_gate",
+            lambda state: state["route"],
+            {
+                "classify_intent": "classify_intent",
+                "create_portfolio": "create_portfolio",
+                "cancel_creation": "cancel_creation",
+            },
+        )
+        builder.add_conditional_edges(
+            "classify_intent",
+            lambda state: state["intent"],
+            {"portfolio": "identity", "general": "general"},
+        )
+        builder.add_conditional_edges(
+            "identity",
+            lambda state: state["route"],
+            {"grounded": "grounded", "onboard": "onboard", "unavailable": "unavailable"},
+        )
+        for leaf in ANSWERING_NODES:
+            builder.add_edge(leaf, END)
+        return builder.compile()
