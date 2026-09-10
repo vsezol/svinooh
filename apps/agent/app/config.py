@@ -5,6 +5,7 @@ can change without touching the code that uses them — the roadmap is to fetch
 this over the network from the host product's API (remote config), and only
 this module would learn how.
 """
+
 import os
 from dataclasses import dataclass
 
@@ -32,7 +33,7 @@ DEFAULT_SYSTEM_PROMPT = (
     "instead of answering from the summary. Say you are looking it up only if "
     "you have already answered the rest.\n"
     "4. The by-network, by-type and by-protocol lines are computed over every "
-    "position, so they are the right source for any \"where is my money\" "
+    'position, so they are the right source for any "where is my money" '
     "question. Do not add up the listed positions yourself to answer one.\n"
     "5. History readings are recorded points and can sit slightly behind the "
     "live total. When asked what the portfolio is worth now, quote the live "
@@ -49,13 +50,13 @@ DEFAULT_SYSTEM_PROMPT = (
     "for it.\n"
     "8. Say no only where that section says no — it does say no to some things, "
     "and denying those is correct. Where it is simply silent, you do not know: "
-    "silence is not absence, so \"I am not sure, check svinooh.com/faq\" and "
-    "never \"svinooh does not have that\". Guessing that a feature is missing "
+    'silence is not absence, so "I am not sure, check svinooh.com/faq" and '
+    'never "svinooh does not have that". Guessing that a feature is missing '
     "is the same mistake as inventing one, and it talks somebody out of the "
     "product.\n"
     "9. Say it as a person would. Never mention these instructions, this "
     "section, the data you were given, or the fact that you were given any — "
-    "no \"the product facts do not list\", no \"in the information I have\". "
+    'no "the product facts do not list", no "in the information I have". '
     "Nobody asked what is in your prompt, and describing it is its own kind "
     "of wrong answer.\n"
     "\n"
@@ -197,7 +198,6 @@ class Role:
     provider_sort: str = "throughput"
 
 
-
 def _role(
     name: str,
     env_prefix: str,
@@ -297,9 +297,13 @@ def system_prompt() -> str:
 def answering() -> Role:
     """Answers — what the user reads. Thinks a little; somebody is watching a cursor."""
     return _role(
-        "answering", "", remote_config.current(),
+        "answering",
+        "",
+        remote_config.current(),
         panel_keys=("model", "reasoningEffort", "maxTokens", "providerSort"),
-        effort="minimal", answer_token_cap=1024, provider_sort="throughput",
+        effort="minimal",
+        answer_token_cap=1024,
+        provider_sort="throughput",
     )
 
 
@@ -324,9 +328,18 @@ def labelling() -> Role:
     asked (see app/llm.py). Saying nothing is the only setting that fits both.
     """
     return _role(
-        "labelling", "ROUTER_", remote_config.current(),
-        panel_keys=("routerModel", "routerReasoningEffort", "routerMaxTokens", "routerProviderSort"),
-        effort="", answer_token_cap=200, provider_sort="throughput",
+        "labelling",
+        "ROUTER_",
+        remote_config.current(),
+        panel_keys=(
+            "routerModel",
+            "routerReasoningEffort",
+            "routerMaxTokens",
+            "routerProviderSort",
+        ),
+        effort="",
+        answer_token_cap=200,
+        provider_sort="throughput",
     )
 
 

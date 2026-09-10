@@ -12,6 +12,7 @@ to import a base to inherit from and the dependency really does point one way.
 Runtime type checks are not the point — the point is that a reader of
 app/services can see the whole contract without opening an adapter.
 """
+
 from typing import Protocol
 
 from .domain.conversation import Chat

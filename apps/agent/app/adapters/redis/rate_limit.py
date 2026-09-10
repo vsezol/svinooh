@@ -19,6 +19,7 @@ Two details worth stating, because both look like details and are not:
   so this is the difference between sharing our pool and quietly opening a
   second one to the same instance.
 """
+
 from limits.aio.storage import RedisStorage
 
 from . import client as redis_client

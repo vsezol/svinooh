@@ -20,6 +20,7 @@ The cache keys by token digest, not the token: a memory dump of this map
 should name nobody's credentials. TTL is short (~60 s) because a validation
 is only a name — data calls always carry the live token to the host.
 """
+
 import hashlib
 import logging
 import time
@@ -28,8 +29,8 @@ from dataclasses import dataclass
 import httpx
 from fastapi import HTTPException
 
-from ..config import settings
 from ..adapters.portfolio import PortfolioApiSource
+from ..config import settings
 
 logger = logging.getLogger("svinooh-ai")
 portfolio_source = PortfolioApiSource(settings.portfolio_api_url)

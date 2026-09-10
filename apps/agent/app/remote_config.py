@@ -11,6 +11,7 @@ reads whatever is already in hand. And it must never let a settings outage
 become a chat outage, so every failure leaves the previous values standing —
 or, if none were ever fetched, the environment the service booted with.
 """
+
 import asyncio
 import logging
 import time
@@ -45,7 +46,9 @@ async def _fetch() -> None:
     global _values, _fetched_at, _refreshing
     try:
         async with httpx.AsyncClient(timeout=settings.context_timeout_s) as client:
-            response = await client.get(f"{settings.portfolio_api_url.rstrip('/')}/api/agent/config")
+            response = await client.get(
+                f"{settings.portfolio_api_url.rstrip('/')}/api/agent/config"
+            )
             response.raise_for_status()
             incoming = response.json()
         if not isinstance(incoming, dict):

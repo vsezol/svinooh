@@ -13,6 +13,7 @@ branch" — but it is a poor thing to fall back on, because it is not "no
 answer", it is a confident wrong turn taken on every question. So this module
 exhausts its options first.
 """
+
 import logging
 from functools import cache
 from typing import Literal
@@ -72,7 +73,7 @@ async def classify(question: str) -> IntentLabel:
     messages = [SystemMessage(content=CLASSIFIER_PROMPT), HumanMessage(content=question)]
     try:
         return await ask(_labeler, messages, labelling(), _labeler.cache_clear)
-    except Exception as error:  # noqa: BLE001 — whatever it was, there is still a way
+    except Exception as error:
         if labelling().model == answering().model:
             raise
         logger.warning(

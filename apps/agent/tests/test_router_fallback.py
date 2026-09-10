@@ -9,13 +9,14 @@ A wrong turn taken confidently on every question is worse than a slow one. So
 the answering model, which is demonstrably reachable, does the labelling
 instead, and the failure is loud rather than silent.
 """
+
 import logging
 
 import pytest
 
 import app.agent.intent as intent
-from app.config import Role
 from app.agent.intent import IntentLabel
+from app.config import Role
 
 
 def role(model: str) -> Role:

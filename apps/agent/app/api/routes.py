@@ -14,6 +14,7 @@ because a door that only one of them checks is a door.
 the store became durable (app/store.py): a conversation is a server object now,
 so it has an address, and reading one is authorized to whoever it belongs to.
 """
+
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -188,9 +189,7 @@ async def _sign_in_wall(owner: Owner, question: str) -> SignInBlock | None:
     )
 
 
-async def _remember_wall(
-    session_id: str, owner: Owner, question: str, wall: SignInBlock
-) -> None:
+async def _remember_wall(session_id: str, owner: Owner, question: str, wall: SignInBlock) -> None:
     """Record the turn where the answer was a door.
 
     Recorded rather than skipped for two reasons. It happened — the question

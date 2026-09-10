@@ -14,6 +14,7 @@ Nothing above app/adapters imports this. The layers above name the ports in
 app/ports.py, and app/composition.py is the only place that knows a vendor was
 chosen at all.
 """
+
 import logging
 
 from redis.asyncio import ConnectionPool, Redis

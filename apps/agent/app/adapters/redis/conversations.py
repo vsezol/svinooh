@@ -32,6 +32,7 @@ cover different failures — the second is the one that does the work:
 Keyspace notifications are deliberately not used for this: they are
 at-most-once, so a missed event would leave the skew in place permanently.
 """
+
 import json
 
 from ...domain.conversation import CHAT_TTL_S, Chat

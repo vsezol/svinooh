@@ -9,6 +9,7 @@ a model given nothing does not say nothing.
 The facts now arrive with the config, from the same array the FAQ page renders,
 so the page and the assistant cannot answer the same question differently.
 """
+
 import pytest
 
 from app import remote_config
@@ -24,6 +25,7 @@ FACTS = [
 def panel_says(monkeypatch):
     def set(values):
         monkeypatch.setattr(remote_config, "_values", values)
+
     return set
 
 
@@ -59,9 +61,7 @@ class TestWhenThereAreNoFacts:
         panel_says({})
         assert system_prompt() == settings.system_prompt
 
-    @pytest.mark.parametrize(
-        "value", [None, "", [], "a string", {"not": "a list"}, 42], ids=str
-    )
+    @pytest.mark.parametrize("value", [None, "", [], "a string", {"not": "a list"}, 42], ids=str)
     def test_a_shape_we_did_not_expect_is_ignored_rather_than_rendered(self, panel_says, value):
         # The config is fetched over HTTP from another service; a bad payload
         # must cost the facts, never the conversation.

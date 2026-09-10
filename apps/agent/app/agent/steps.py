@@ -16,6 +16,7 @@ somewhere to write when the turn is being streamed; on the plain /chat path,
 and in tests, there is no writer and `step` is an ordinary timer that tells
 nobody. That is why every node can use it without asking which path it is on.
 """
+
 import logging
 import time
 from contextlib import asynccontextmanager, contextmanager

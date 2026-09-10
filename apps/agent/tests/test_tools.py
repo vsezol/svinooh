@@ -4,7 +4,7 @@ A tool is the one place where a wrong number becomes a confident sentence, so
 every branch of every tool is pinned here — including the ones that are only
 reached when something is missing or refused.
 """
-import pytest
+
 
 from app.agent.tools import (
     MAX_MATCHES,
@@ -60,18 +60,21 @@ class TestHistory:
         assert "Not enough history" in out
 
     def test_unreadable_and_missing_values_are_skipped(self):
-        series = {"points": [
-            {"t": "2026-09-01T00:00:00Z", "usd": None},
-            {"t": "not-a-date", "usd": 10.0},
-            {"t": "2026-09-05T00:00:00Z", "usd": 100.0},
-            {"t": "2026-09-07T00:00:00Z", "usd": 110.0},
-        ]}
+        series = {
+            "points": [
+                {"t": "2026-09-01T00:00:00Z", "usd": None},
+                {"t": "not-a-date", "usd": 10.0},
+                {"t": "2026-09-05T00:00:00Z", "usd": 100.0},
+                {"t": "2026-09-07T00:00:00Z", "usd": 110.0},
+            ]
+        }
         out = summarize_history(series, "7d")
         assert "+10.00 USD" in out and "n/a" not in out
 
     def test_a_zero_start_does_not_divide_by_zero(self):
-        out = summarize_history(fx.history([("2026-09-06T00:00:00Z", 0.0),
-                                            ("2026-09-07T00:00:00Z", 50.0)]), "7d")
+        out = summarize_history(
+            fx.history([("2026-09-06T00:00:00Z", 0.0), ("2026-09-07T00:00:00Z", 50.0)]), "7d"
+        )
         assert "+0.0%" in out
 
     def test_window_of_keeps_order_and_bounds(self):
@@ -189,7 +192,9 @@ class TestHowACallReadsToWhoeverAsked:
         # The whole point of the trace is that it can be checked against what
         # ran, so two different calls must not produce one sentence — that
         # would be worse than the function name it replaced.
-        said = [tool_phrase("history_summary", {"period": p}) for p in ("1h", "24h", "7d", "30d", "all")]
+        said = [
+            tool_phrase("history_summary", {"period": p}) for p in ("1h", "24h", "7d", "30d", "all")
+        ]
         assert len(set(said)) == len(said)
         assert all(s is not None for s in said)
 

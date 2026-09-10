@@ -3,6 +3,7 @@
 These assertions are the anti-hallucination contract: every one of them exists
 because a missing or wrong line here became a wrong answer in a chat.
 """
+
 from app.agent.context import portfolio_context, position_line, usd
 from tests import fixtures as fx
 
@@ -29,8 +30,11 @@ def test_breakdowns_cover_every_position_not_just_the_printed_ones():
 
 
 def test_protocol_line_excludes_plain_wallet_holdings():
-    line = next(l for l in portfolio_context(fx.rich_portfolio()).splitlines()
-                if l.startswith("In protocols"))
+    line = next(
+        l
+        for l in portfolio_context(fx.rich_portfolio()).splitlines()
+        if l.startswith("In protocols")
+    )
     assert "wallet" not in line
 
 

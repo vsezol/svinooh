@@ -16,6 +16,7 @@ The events are named for what the reader is doing, not for what the transport
 is: something is coming, here is a piece of it, that was all of it, that went
 wrong.
 """
+
 import logging
 from collections.abc import AsyncIterator
 from typing import Any

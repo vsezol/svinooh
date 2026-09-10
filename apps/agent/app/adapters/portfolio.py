@@ -10,6 +10,7 @@ answer something the agent needs, the fix is to extend the public API.
 the agent holds no credentials of its own, so it can never read more than the
 person asking.
 """
+
 from typing import Protocol
 
 import httpx

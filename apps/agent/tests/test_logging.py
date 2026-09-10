@@ -6,6 +6,7 @@ a refused endpoint looked the same, "show me the errors" showed all of it, and
 two production outages this week sat in plain sight in a list where nothing
 stood out.
 """
+
 import io
 import logging
 import sys
@@ -84,5 +85,5 @@ class TestWhatIsStillHeard:
         # Its own handlers are all on stderr; leaving them attached would put
         # its access lines back where they were.
         out, _ = streams
-        logging.getLogger("uvicorn.access").info('GET /health 200')
+        logging.getLogger("uvicorn.access").info("GET /health 200")
         assert "GET /health 200" in out.getvalue()

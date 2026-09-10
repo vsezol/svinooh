@@ -6,7 +6,7 @@ knows nothing, and an invented step lies confidently. So the property under
 test is not "a trace appears" but "every line corresponds to an operation that
 actually ran, and says what it actually was".
 """
-import asyncio
+
 
 import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel

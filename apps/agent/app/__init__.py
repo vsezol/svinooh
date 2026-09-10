@@ -12,6 +12,7 @@ llm.py (the provider-neutral model seam), sessions.py (conversations, and the
 context derived from them) over store.py (where they are kept), owner.py (who
 is asking), routes.py (the HTTP surface), schemas.py (the wire types).
 """
+
 import logging
 import sys
 from collections.abc import Sequence
@@ -20,9 +21,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import remote_config
+from .api.routes import router
 from .config import settings
 from .domain.identity import ANON_HEADER
-from .api.routes import router
 
 
 class _Below(logging.Filter):
@@ -97,6 +98,7 @@ def create_app(cors_origins: Sequence[str] | None = None) -> FastAPI:
             allow_headers=["authorization", "content-type", ANON_HEADER.lower()],
             max_age=3600,
         )
+
     @app.on_event("startup")
     async def _load_settings() -> None:
         # So the first turn already runs on what the panel says rather than on

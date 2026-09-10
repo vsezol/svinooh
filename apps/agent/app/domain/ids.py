@@ -26,6 +26,7 @@ retries rare, and at any scale this product will see, it does.
 Existing 32-character ids keep working — nothing looks at an id's shape, only
 at whether the store has one. They age out on their own thirty days.
 """
+
 import secrets
 
 #: Digits and letters, minus the ones that read as each other.

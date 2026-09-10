@@ -7,6 +7,7 @@ two in front of every answer.
 Resolution is the product's own order, admin panel then environment then the
 shipped default, so these tests pin all three layers and which one wins.
 """
+
 import pytest
 
 from app import remote_config
@@ -32,25 +33,44 @@ def env(monkeypatch):
 class TestReadingARole:
     def test_a_role_without_a_model_of_its_own_uses_the_answering_one(self, env):
         env.setenv("AGENT_MODEL", "openai:answers")
-        critic = _role("critic", "CRITIC_", {}, panel_keys=("criticModel", "criticEffort", "criticMaxTokens", "criticSort"))
+        critic = _role(
+            "critic",
+            "CRITIC_",
+            {},
+            panel_keys=("criticModel", "criticEffort", "criticMaxTokens", "criticSort"),
+        )
         assert critic.model == "openai:answers", "a new role runs before it is configured"
 
     def test_a_role_can_be_pointed_at_its_own_model(self, env):
         env.setenv("AGENT_MODEL", "openai:answers")
         env.setenv("AGENT_CRITIC_MODEL", "openai:critic")
-        critic = _role("critic", "CRITIC_", {}, panel_keys=("criticModel", "criticEffort", "criticMaxTokens", "criticSort"))
+        critic = _role(
+            "critic",
+            "CRITIC_",
+            {},
+            panel_keys=("criticModel", "criticEffort", "criticMaxTokens", "criticSort"),
+        )
         assert critic.model == "openai:critic"
 
     def test_each_role_carries_its_own_thinking_and_writing_limits(self, env):
         env.setenv("AGENT_CRITIC_REASONING_EFFORT", "high")
         env.setenv("AGENT_CRITIC_MAX_TOKENS", "4096")
-        critic = _role("critic", "CRITIC_", {}, panel_keys=("criticModel", "criticEffort", "criticMaxTokens", "criticSort"), effort="low", answer_token_cap=200)
+        critic = _role(
+            "critic",
+            "CRITIC_",
+            {},
+            panel_keys=("criticModel", "criticEffort", "criticMaxTokens", "criticSort"),
+            effort="low",
+            answer_token_cap=200,
+        )
         assert critic.reasoning_effort == "high" and critic.answer_token_cap == 4096
 
     def test_defaults_belong_to_the_role_not_to_the_service(self, env):
         keys = ("m", "e", "t", "s")
         cheap = _role("labels", "ROUTER_", {}, panel_keys=keys, effort="low", answer_token_cap=200)
-        thorough = _role("critic", "CRITIC_", {}, panel_keys=keys, effort="high", answer_token_cap=4096)
+        thorough = _role(
+            "critic", "CRITIC_", {}, panel_keys=keys, effort="high", answer_token_cap=4096
+        )
         assert (cheap.reasoning_effort, cheap.answer_token_cap) == ("low", 200)
         assert (thorough.reasoning_effort, thorough.answer_token_cap) == ("high", 4096)
 
@@ -58,7 +78,13 @@ class TestReadingARole:
         # AGENT_REASONING_EFFORT named the only role there was; deployments
         # that set it must keep working.
         env.setenv("AGENT_REASONING_EFFORT", "medium")
-        role = _role("answering", "", {}, panel_keys=("model", "reasoningEffort", "maxTokens", "providerSort"), effort="minimal")
+        role = _role(
+            "answering",
+            "",
+            {},
+            panel_keys=("model", "reasoningEffort", "maxTokens", "providerSort"),
+            effort="minimal",
+        )
         assert role.reasoning_effort == "medium"
 
     def test_a_role_is_frozen(self):
@@ -128,8 +154,9 @@ class TestWhereTheDialsComeFrom:
         assert answering().model == "openai:from-env"
 
     def test_a_labelling_model_left_blank_falls_back_to_answering(self, env, monkeypatch):
-        monkeypatch.setattr(remote_config, "_values",
-                            {"model": "openai:answers", "routerModel": ""})
+        monkeypatch.setattr(
+            remote_config, "_values", {"model": "openai:answers", "routerModel": ""}
+        )
         assert labelling().model == "openai:answers"
 
     def test_numbers_come_through_the_same_way(self, env, monkeypatch):

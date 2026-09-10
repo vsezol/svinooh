@@ -23,14 +23,15 @@ Every test works in its own randomly named keys and removes them afterwards, so
 pointing this at a Redis that holds other things is safe — nothing here flushes
 anything.
 """
+
 import os
 import uuid
 
 import pytest
 
-from app.services.sessions import SessionStore
 from app.adapters.redis.conversations import RedisConversationStore
 from app.domain.conversation import CHAT_TTL_S
+from app.services.sessions import SessionStore
 
 URL = os.getenv("AGENT_TEST_REDIS_URL", "redis://localhost:6399/0")
 
@@ -65,7 +66,7 @@ async def redis_store():
         return owner, chat_id
 
     yield store, backend, track
-    raw = backend._redis  # noqa: SLF001 — cleaning up exactly what was made
+    raw = backend._redis
     keys = [f"agent:chat:{cid}" for cid in chat_ids] + [f"agent:owner:{o}" for o in owners]
     if keys:
         await raw.delete(*keys)
@@ -112,7 +113,7 @@ class TestTheTtl:
         store, backend, track = redis_store
         owner, chat_id = track(*_ids())
         await store.append(chat_id, owner, "q", "a", [])
-        ttl = await backend._redis.ttl(f"agent:chat:{chat_id}")  # noqa: SLF001
+        ttl = await backend._redis.ttl(f"agent:chat:{chat_id}")
         assert 0 < ttl <= CHAT_TTL_S
 
     async def test_the_index_carries_it_too(self, redis_store):
@@ -121,14 +122,14 @@ class TestTheTtl:
         store, backend, track = redis_store
         owner, chat_id = track(*_ids())
         await store.append(chat_id, owner, "q", "a", [])
-        ttl = await backend._redis.ttl(f"agent:owner:{owner}")  # noqa: SLF001
+        ttl = await backend._redis.ttl(f"agent:owner:{owner}")
         assert 0 < ttl <= CHAT_TTL_S
 
     async def test_a_later_turn_pushes_the_index_deadline_back_out(self, redis_store):
         store, backend, track = redis_store
         owner, chat_id = track(*_ids())
         await store.append(chat_id, owner, "q", "a", [])
-        raw = backend._redis  # noqa: SLF001
+        raw = backend._redis
         # Age the index as if the last turn had been a fortnight ago.
         await raw.expire(f"agent:owner:{owner}", 60)
         assert await raw.ttl(f"agent:owner:{owner}") <= 60
@@ -150,7 +151,7 @@ class TestTheSkew:
         await store.append(kept, owner, "q", "a", [])
         # Exactly what expiry looks like to a reader: the chat key is gone and
         # the id is still sitting in the index.
-        await backend._redis.delete(f"agent:chat:{gone}")  # noqa: SLF001
+        await backend._redis.delete(f"agent:chat:{gone}")
         assert [c.id for c in await store.list(owner)] == [kept]
 
     async def test_and_the_dead_id_is_pruned_from_the_index(self, redis_store):
@@ -160,7 +161,7 @@ class TestTheSkew:
         track(owner, gone)
         await store.append(gone, owner, "q", "a", [])
         await store.append(kept, owner, "q", "a", [])
-        raw = backend._redis  # noqa: SLF001
+        raw = backend._redis
         await raw.delete(f"agent:chat:{gone}")
         await store.list(owner)
         # Filtering alone would re-read the dead id on every listing forever.
@@ -173,7 +174,7 @@ class TestTheSkew:
         store, backend, track = redis_store
         owner, chat_id = track(*_ids())
         await store.append(chat_id, owner, "q", "a", [])
-        await backend._redis.delete(f"agent:chat:{chat_id}")  # noqa: SLF001
+        await backend._redis.delete(f"agent:chat:{chat_id}")
         assert await store.list(owner) == []
 
 
@@ -201,7 +202,7 @@ class TestSigningIn:
         track(target, chat_id)
         await store.append(chat_id, anon, "q", "a", [])
         await store.reassign(anon, target)
-        ttl = await backend._redis.ttl(f"agent:owner:{target}")  # noqa: SLF001
+        ttl = await backend._redis.ttl(f"agent:owner:{target}")
         assert 0 < ttl <= CHAT_TTL_S
 
     async def test_owns_any_is_false_once_they_have_moved(self, redis_store):

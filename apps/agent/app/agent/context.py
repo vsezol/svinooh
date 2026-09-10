@@ -11,6 +11,7 @@ This module owns everything the model is told, including the two system-prompt
 variants the portfolio branch picks between — so "what do we say to the model"
 has exactly one home.
 """
+
 from collections.abc import Callable
 
 from ..config import context_max_positions
@@ -145,7 +146,9 @@ def position_line(position: dict, detail: bool = False) -> str:
     return f"{line} — {composition}" if composition else line
 
 
-def _totals_by(positions: list[dict], key: str, skip: set[str] = frozenset()) -> list[tuple[str, float]]:
+def _totals_by(
+    positions: list[dict], key: str, skip: set[str] = frozenset()
+) -> list[tuple[str, float]]:
     """Value grouped by one field, largest first."""
     sums: dict[str, float] = {}
     for position in positions:
@@ -156,7 +159,9 @@ def _totals_by(positions: list[dict], key: str, skip: set[str] = frozenset()) ->
     return sorted(sums.items(), key=lambda pair: -pair[1])
 
 
-def _breakdown(label: str, totals: list[tuple[str, float]], total: float, limit: int = 8) -> str | None:
+def _breakdown(
+    label: str, totals: list[tuple[str, float]], total: float, limit: int = 8
+) -> str | None:
     """One line of "where the money is", with shares that add up."""
     if not totals:
         return None
@@ -273,9 +278,7 @@ def onboarding_prompt(base: str, signed_in: bool) -> str:
     )
 
 
-def confirmation_request_prompt(
-    base: str, addresses: list[str], anonymous: bool
-) -> str:
+def confirmation_request_prompt(base: str, addresses: list[str], anonymous: bool) -> str:
     """Ask the user to confirm the proposed creation — the model phrases it.
 
     Phrased by the model rather than a template so the question lands in the

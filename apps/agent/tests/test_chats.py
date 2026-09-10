@@ -5,6 +5,7 @@ address and an owner. These tests are about the second half — the store's own
 tests prove it keeps turns, and these prove the HTTP surface only ever hands
 one to whoever it belongs to.
 """
+
 import httpx
 import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
@@ -12,14 +13,14 @@ from langchain_core.messages import AIMessage
 
 import app.agent.graph as graph
 import app.agent.intent as intent
-import app.services.identity as identity_service
 import app.api.routes as routes
+import app.services.identity as identity_service
 from app import create_app
-from app.services.auth import Caller
-from app.agent.intent import IntentLabel
-from app.domain.identity import ANON_HEADER
 from app.adapters import memory
 from app.adapters.memory import MemoryConversationStore
+from app.agent.intent import IntentLabel
+from app.domain.identity import ANON_HEADER
+from app.services.auth import Caller
 
 ANSWER = "A health factor is a safety margin."
 ANON = "a" * 32
@@ -246,7 +247,6 @@ class TestASessionIdIsNotAKey:
         assert response.json()["session_id"] != "aConversationThatExpired"
 
 
-
 class TestSigningIn:
     async def test_the_visitors_chats_follow_them_into_the_account(self, client, monkeypatch):
         started = await ask(client, "asked before signing in", anon=ANON)
@@ -303,7 +303,9 @@ class TestSigningIn:
         monkeypatch.setattr(identity_service, "authenticate", _nobody)
         # The browser id is still in the header, but the chat was the account's.
         assert (await client.get("/chats", headers=as_anon(ANON))).json()["chats"] == []
-        assert (await client.get(f"/chats/{answered['session_id']}", headers=as_anon(ANON))).status_code == 404
+        assert (
+            await client.get(f"/chats/{answered['session_id']}", headers=as_anon(ANON))
+        ).status_code == 404
 
 
 class TestTheIdIsCheckedBeforeItIsTrusted:
@@ -377,9 +379,7 @@ class TestTheFreeAllowance:
 
     async def test_it_is_a_200_because_nobody_did_anything_wrong(self, client):
         self._allow(0)
-        response = await client.post(
-            "/chat", json={"message": "q"}, headers={ANON_HEADER: ANON}
-        )
+        response = await client.post("/chat", json={"message": "q"}, headers={ANON_HEADER: ANON})
         assert response.status_code == 200
 
     async def test_one_visitor_running_out_does_not_spend_anothers(self, client):
@@ -412,9 +412,7 @@ class TestTheFreeAllowance:
         # that stored nothing would leave /ai/c/<id> pointing at a 404.
         self._allow(0)
         walled = await ask(client, "what is my health factor?", anon=ANON)
-        opened = await client.get(
-            f"/chats/{walled['session_id']}", headers={ANON_HEADER: ANON}
-        )
+        opened = await client.get(f"/chats/{walled['session_id']}", headers={ANON_HEADER: ANON})
         assert opened.status_code == 200, opened.text
         turns = opened.json()["turns"]
         assert turns[-1]["q"] == "what is my health factor?"

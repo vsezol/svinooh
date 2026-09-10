@@ -50,8 +50,14 @@ def position(
     }
 
 
-def wallet(address: str, positions: list[dict], *, chain: str = "EVM", status: str = "ok",
-           stale: bool = False) -> dict:
+def wallet(
+    address: str,
+    positions: list[dict],
+    *,
+    chain: str = "EVM",
+    status: str = "ok",
+    stale: bool = False,
+) -> dict:
     return {
         "id": f"w-{address[-4:]}",
         "address": address,
@@ -86,8 +92,20 @@ AAVE = position(
     health=2.14,
     borrow_apy=0.032,
     tokens=[
-        {"role": "supply", "symbol": "WETH", "amount": 5.0, "priceUsd": 2_500.0, "valueUsd": 12_500.0},
-        {"role": "borrow", "symbol": "USDC", "amount": 5_200.0, "priceUsd": 1.0, "valueUsd": 5_200.0},
+        {
+            "role": "supply",
+            "symbol": "WETH",
+            "amount": 5.0,
+            "priceUsd": 2_500.0,
+            "valueUsd": 12_500.0,
+        },
+        {
+            "role": "borrow",
+            "symbol": "USDC",
+            "amount": 5_200.0,
+            "priceUsd": 1.0,
+            "valueUsd": 5_200.0,
+        },
     ],
 )
 
@@ -100,11 +118,29 @@ UNISWAP = position(
     category="defi",
     apy=0.478,
     range_="in",
-    band={"pair": "cbBTC/USDC", "feePct": 0.05, "lower": 90_000.0, "upper": 110_000.0,
-          "current": 96_200.0, "chainLabel": "Ethereum"},
+    band={
+        "pair": "cbBTC/USDC",
+        "feePct": 0.05,
+        "lower": 90_000.0,
+        "upper": 110_000.0,
+        "current": 96_200.0,
+        "chainLabel": "Ethereum",
+    },
     tokens=[
-        {"role": "supply", "symbol": "cbBTC", "amount": 0.02, "priceUsd": 96_200.0, "valueUsd": 1_924.0},
-        {"role": "supply", "symbol": "USDC", "amount": 1_676.0, "priceUsd": 1.0, "valueUsd": 1_676.0},
+        {
+            "role": "supply",
+            "symbol": "cbBTC",
+            "amount": 0.02,
+            "priceUsd": 96_200.0,
+            "valueUsd": 1_924.0,
+        },
+        {
+            "role": "supply",
+            "symbol": "USDC",
+            "amount": 1_676.0,
+            "priceUsd": 1.0,
+            "valueUsd": 1_676.0,
+        },
     ],
 )
 

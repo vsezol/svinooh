@@ -18,6 +18,7 @@ It depends on ports.ConversationStore and never on an adapter, which is what
 lets Redis be swapped for a database or an HTTP service without a line moving
 in this file.
 """
+
 import logging
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage

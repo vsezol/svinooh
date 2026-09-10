@@ -14,6 +14,7 @@ A wiring framework would be the alternative and would buy nothing here: there
 is one composition, it is picked from one setting, and a test that wants a
 different one re-initialises these two objects in place.
 """
+
 import logging
 
 from .adapters import memory
@@ -84,6 +85,4 @@ def free_allowance(redis_url: str, max_questions: int, window_s: int) -> Allowan
 
 
 #: The product limit — what a visitor gets before the answer is the sign-in card.
-allowance = free_allowance(
-    settings.redis_url, settings.free_questions, settings.free_window_s
-)
+allowance = free_allowance(settings.redis_url, settings.free_questions, settings.free_window_s)
