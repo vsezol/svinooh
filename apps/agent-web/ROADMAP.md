@@ -36,6 +36,7 @@ Three rules run through all of it:
 | [#151](https://github.com/vsezol/svinooh/pull/151) | The chart in a chat is the chart | Rule 1, made true for the first widget |
 | [#178](https://github.com/vsezol/svinooh/pull/178) | The landing is the front door, and `/ai` is the app's home | Step 3, most of it — see what is left of it below |
 | [#179](https://github.com/vsezol/svinooh/pull/179) | A conversation is kept, and it has an address | Step 3 parts 2 and 3 — the store the other three parts key on |
+| [#183](https://github.com/vsezol/svinooh/pull/183) | A visitor gets a portfolio, not a sign-in wall | Step 3 part 4 — the front door's premise, finally true |
 
 ## Next
 
@@ -88,9 +89,8 @@ is itself the thing being kept private.
 
 **What is not true yet.**
 
-*A visitor still cannot be onboarded.* Creating a portfolio needs a token
-(`create_portfolio_with_wallets`), so a visitor who pastes an address is told to sign in
-— where the landing's whole premise is that they should not have to.
+*There is no allowance yet.* Every question a visitor asks is free, so part 5 — the
+five that are, and the sign-in card after them — is the whole of what is left.
 
 *And the identity underneath it all is half-built.* The server seam is in place
 (`app/owner.py`, and `agent-web/src/app/identity.ts` in the browser) because parts 2 and
@@ -124,10 +124,16 @@ see below.
    Sharing stays a decision to make on the conversation rather than a link that happens
    to work — which is also what makes the canvas's "Saved · svinooh.com/ai/c/<id>" line
    buildable now: the storage can keep what it would promise.
-4. **The agent creates a portfolio for a visitor.** With 1 in place, the anonymous POST
-   the API already has (`POST /portfolios/anonymous` — ownerless, claimable later) can be
-   what onboarding calls when there is no token, and a visit ends with a live portfolio
-   instead of a sign-in wall.
+4. ~~**The agent creates a portfolio for a visitor.**~~ — done in
+   [#183](https://github.com/vsezol/svinooh/pull/183). The token picks the door and the
+   write gate is untouched: still a proposal, still a confirmation on a later turn. Two
+   things worth carrying forward. The ownerless POST is find-or-create and returns a
+   portfolio *already holding* the first address, so that address counts as added rather
+   than being POSTed again. And an ownerless portfolio is public — `listPublic` matches
+   on address — so two wallets in one of them show publicly that they are held together;
+   that is disclosed in the turn BEFORE the write, because after it the fact is already
+   true. A conversation also remembers the portfolio it made, since nobody can ask the
+   host what a nameless caller owns.
 5. **A free allowance, then the account.** Around five questions a session, then the
    answer is the sign-in card. Counted against the identity from 1 for the copy, and
    against something harder for the enforcement.
