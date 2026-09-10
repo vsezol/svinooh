@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import type { TelegramStartDto, XStartDto } from '@svinooh/shared';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { parkReturn } from '../lib/after-signin';
 import { pendingTgToken, pollTelegramLogin } from '../lib/telegram';
 import { Button, Dialog, IconButton, Input, Note, Spinner, Title } from '../ui';
 import { Logo } from './Logo';
@@ -18,8 +19,23 @@ const TG_ICON = (
  * `notice` — why the modal opened by itself rather than because the visitor
  * pressed something. An expired sign-in link is the case it exists for: landing
  * signed out with no explanation is how people conclude the thing is broken.
+ *
+ * `returnTo` — where the visitor already is, when leaving would lose something.
+ * Absent, a completed sign-in goes to the new account's portfolio, which is
+ * what the landing wants. The chat passes its own address instead: it asks for
+ * an account underneath a first answer, and taking somebody away from the
+ * conversation at that exact moment is taking away the thing they signed in
+ * to keep.
  */
-export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: string }) {
+export function AuthModal({
+  onClose,
+  notice,
+  returnTo,
+}: {
+  onClose: () => void;
+  notice?: string;
+  returnTo?: string;
+}) {
   const { config, loginDev, applyAuth } = useAuth();
   const router = useRouter();
   const [devName, setDevName] = useState('');
@@ -54,7 +70,7 @@ export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: s
         onResult: (res) => {
           void applyAuth(res, 'telegram').then((authed) => {
             onClose();
-            router.push(`/p/${authed.portfolioSlug}`);
+            if (!returnTo) router.push(`/p/${authed.portfolioSlug}`);
           });
         },
         onError: (message) => {
@@ -81,6 +97,8 @@ export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: s
     setError(null);
     try {
       const { url } = await api<XStartDto>('/auth/x/start', { method: 'POST' });
+      // Before the departure, because nothing in this closure survives it.
+      if (returnTo) parkReturn(returnTo);
       window.location.assign(url);
       // busy stays 'x': the page is leaving; releasing the button now would
       // invite a second start while the first is mid-navigation
@@ -98,7 +116,7 @@ export function AuthModal({ onClose, notice }: { onClose: () => void; notice?: s
     try {
       const authed = await loginDev(devName.trim());
       onClose();
-      router.push(`/p/${authed.portfolioSlug}`);
+      if (!returnTo) router.push(`/p/${authed.portfolioSlug}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed');
       setBusy(null);
