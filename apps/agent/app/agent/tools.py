@@ -153,7 +153,7 @@ def find_positions(data: dict, query: str) -> str:
     return "\n".join([head, *lines])
 
 
-def portfolio_tools(source, slug: str, token: str, data: dict) -> list:
+def portfolio_tools(source, slug: str, token: str | None, data: dict) -> list:
     """Build this request's tools around this caller's portfolio.
 
     The docstrings below are not documentation — they are the instructions the

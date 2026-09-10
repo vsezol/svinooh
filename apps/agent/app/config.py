@@ -244,7 +244,13 @@ def _role(
     # number of model tokens, and a value that is not a positive whole number
     # is not a decision.
     cap_from_panel = decided.get(cap_key)
-    cap_is_usable = isinstance(cap_from_panel, int) and not isinstance(cap_from_panel, bool)
+    panel_cap = (
+        cap_from_panel
+        if isinstance(cap_from_panel, int)
+        and not isinstance(cap_from_panel, bool)
+        and cap_from_panel > 0
+        else None
+    )
 
     return Role(
         name=name,
@@ -254,8 +260,8 @@ def _role(
         # the only role there was; with an empty prefix it is still the
         # answering role's variable, and only that role's.
         reasoning_effort=thinking(f"{env_prefix}REASONING_EFFORT", effort),
-        answer_token_cap=cap_from_panel
-        if cap_is_usable and cap_from_panel > 0
+        answer_token_cap=panel_cap
+        if panel_cap is not None
         else int(os.getenv(f"AGENT_{env_prefix}MAX_TOKENS", str(answer_token_cap))),
         provider_sort=decided_or_env(sort_key, f"{env_prefix}PROVIDER_SORT", provider_sort),
     )

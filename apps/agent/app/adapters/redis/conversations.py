@@ -34,6 +34,7 @@ at-most-once, so a missed event would leave the skew in place permanently.
 """
 
 import json
+from typing import cast
 
 from ...domain.conversation import CHAT_TTL_S, Chat
 from . import client as redis_client
@@ -42,7 +43,7 @@ _CHAT = "agent:chat:"
 _OWNER = "agent:owner:"
 
 
-def _parse(raw: str | None) -> Chat | None:
+def _parse(raw: str | bytes | None) -> Chat | None:
     if not raw:
         return None
     try:
@@ -75,7 +76,8 @@ class RedisConversationStore:
 
     async def for_owner(self, owner: str, limit: int) -> list[Chat]:
         index = f"{_OWNER}{owner}"
-        ids = await self._redis.zrevrange(index, 0, limit - 1)
+        # decode_responses is on (client.py), so these are str; the stub is wider.
+        ids = cast(list[str], await self._redis.zrevrange(index, 0, limit - 1))
         if not ids:
             return []
         raws = await self._redis.mget([f"{_CHAT}{chat_id}" for chat_id in ids])
@@ -103,7 +105,7 @@ class RedisConversationStore:
         return bool(await self._redis.exists(f"{_OWNER}{owner}"))
 
     async def reassign(self, source: str, target: str) -> int:
-        ids = await self._redis.zrange(f"{_OWNER}{source}", 0, -1)
+        ids = cast(list[str], await self._redis.zrange(f"{_OWNER}{source}", 0, -1))
         moved = 0
         for chat_id in ids:
             chat = _parse(await self._redis.get(f"{_CHAT}{chat_id}"))

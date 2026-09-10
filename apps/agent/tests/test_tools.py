@@ -5,7 +5,6 @@ every branch of every tool is pinned here — including the ones that are only
 reached when something is missing or refused.
 """
 
-
 from app.agent.tools import (
     MAX_MATCHES,
     find_positions,

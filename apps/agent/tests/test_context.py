@@ -22,7 +22,7 @@ def test_falls_back_to_the_slug_when_a_portfolio_is_unnamed():
 def test_breakdowns_cover_every_position_not_just_the_printed_ones():
     # 40 dust positions past the cap: their networks must still be counted.
     block = portfolio_context(fx.rich_portfolio(tail=40))
-    by_network = next(l for l in block.splitlines() if l.startswith("By network"))
+    by_network = next(row for row in block.splitlines() if row.startswith("By network"))
     # eth: ETH + UNI + AAVE + all 40 dust ones; base and bsc from the fixtures.
     assert "eth" in by_network and "base" in by_network and "bsc" in by_network
     assert "By type" in block and "token" in block and "defi" in block
@@ -31,9 +31,9 @@ def test_breakdowns_cover_every_position_not_just_the_printed_ones():
 
 def test_protocol_line_excludes_plain_wallet_holdings():
     line = next(
-        l
-        for l in portfolio_context(fx.rich_portfolio()).splitlines()
-        if l.startswith("In protocols")
+        row
+        for row in portfolio_context(fx.rich_portfolio()).splitlines()
+        if row.startswith("In protocols")
     )
     assert "wallet" not in line
 

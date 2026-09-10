@@ -8,6 +8,8 @@ Resolution is the product's own order, admin panel then environment then the
 shipped default, so these tests pin all three layers and which one wins.
 """
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from app import remote_config
@@ -88,7 +90,7 @@ class TestReadingARole:
         assert role.reasoning_effort == "medium"
 
     def test_a_role_is_frozen(self):
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             answering().model = "openai:something-else"
 
 

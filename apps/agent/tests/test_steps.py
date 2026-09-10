@@ -7,7 +7,6 @@ test is not "a trace appears" but "every line corresponds to an operation that
 actually ran, and says what it actually was".
 """
 
-
 import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage

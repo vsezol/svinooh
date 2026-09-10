@@ -7,6 +7,7 @@ half of this that can actually go wrong in production — an index outliving wha
 it points at — is a property of Redis keys rather than of a dict.
 """
 
+import asyncio
 import logging
 import time
 
@@ -83,9 +84,9 @@ class TestTheListing:
         # The scores are epoch milliseconds and a turn here costs microseconds,
         # so without this the "later" turn lands in the same millisecond as the
         # others and there is nothing for the ordering to be about.
-        time.sleep(0.002)
+        await asyncio.sleep(0.002)
         await store.append("a", "user:1", "again", "a", [])
-        assert [c.id for c in await store.list("user:1")][0] == "a"
+        assert next(c.id for c in await store.list("user:1")) == "a"
 
     async def test_one_owner_never_sees_another(self, store):
         await store.append("mine", "user:1", "q", "a", [])
@@ -133,16 +134,16 @@ class TestThePortfolioAConversationMade:
 
     async def test_it_survives_between_turns(self, store):
         await store.set_portfolio("c1", "anon:deadbeef", "pf-1")
-        assert (await store.resume("c1", "anon:deadbeef")).portfolio == "pf-1"
+        assert (await store.chat("c1", "anon:deadbeef")).portfolio == "pf-1"
 
     async def test_a_later_turn_does_not_drop_it(self, store):
         await store.set_portfolio("c1", "anon:deadbeef", "pf-1")
         await store.append("c1", "anon:deadbeef", "how much is it worth", "a", [])
-        assert (await store.resume("c1", "anon:deadbeef")).portfolio == "pf-1"
+        assert (await store.chat("c1", "anon:deadbeef")).portfolio == "pf-1"
 
     async def test_a_conversation_that_made_nothing_remembers_nothing(self, store):
         await store.append("c1", "anon:deadbeef", "q", "a", [])
-        assert (await store.resume("c1", "anon:deadbeef")).portfolio is None
+        assert (await store.chat("c1", "anon:deadbeef")).portfolio is None
 
 
 class TestSigningIn:
@@ -209,7 +210,7 @@ class TestExpiry:
     async def test_a_write_pushes_the_deadline_out_again(self, store):
         await store.append("c1", "user:1", "q", "a", [])
         first = _deadline(store, "c1")
-        time.sleep(0.01)
+        await asyncio.sleep(0.01)
         await store.append("c1", "user:1", "q2", "a2", [])
         assert _deadline(store, "c1") > first
 
@@ -217,7 +218,7 @@ class TestExpiry:
         """An index that expired first would strand every conversation in it."""
         await store.append("c1", "user:1", "q", "a", [])
         first = _index_deadline(store, "user:1")
-        time.sleep(0.01)
+        await asyncio.sleep(0.01)
         await store.append("c1", "user:1", "q2", "a2", [])
         assert _index_deadline(store, "user:1") > first
 

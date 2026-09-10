@@ -336,9 +336,10 @@ async def create_portfolio_node(state: AgentState) -> AgentState:
         len(result.get("failed", [])),
     )
     answered = await _answer(created_prompt(system_prompt(), result), state)
-    slug = result.get("slug") or ""
-    created = {"portfolio_created": slug} if slug else {}
-    return {**answered, **created, "pending_clear": True}
+    outcome: AgentState = {**answered, "pending_clear": True}
+    if result.get("slug"):
+        outcome["portfolio_created"] = str(result["slug"])
+    return outcome
 
 
 async def cancel_creation_node(state: AgentState) -> AgentState:

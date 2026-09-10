@@ -159,12 +159,12 @@ class TestRouting:
 
     async def test_a_refused_portfolio_degrades_instead_of_guessing(self, wired):
         _, model = wired(api=Api(refuse=True))
-        out = await run(portfolio="not-mine", authorization="Bearer T")
+        await run(portfolio="not-mine", authorization="Bearer T")
         assert "could not be fetched" in model.prompts[0]
         assert "By network" not in model.prompts[0]
 
     async def test_a_broken_classifier_routes_where_money_is_handled(self, wired, monkeypatch):
-        api, _ = wired()
+        wired()
 
         async def boom(_q):
             raise RuntimeError("classifier down")
@@ -180,7 +180,7 @@ class TestTools:
         model = Model(
             tool_calls=[{"name": "position_details", "args": {"query": "uniswap"}, "id": "c1"}]
         )
-        api, _ = wired(model=model)
+        wired(model=model)
         out = await run(portfolio="p", authorization="Bearer T")
         assert out["answer"] == "answered"
         assert model.bound == 1, "tools are offered once per turn"
@@ -260,7 +260,7 @@ class TestTheExecutionItself:
         # opened BY an address, so there is nothing to open. Failing is the
         # honest outcome — the alternative is an IndexError read as a mystery.
         api = Api()
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="at least one address"):
             await create_portfolio_with_wallets(api, [], None)
         assert api.created_anonymous == []
 

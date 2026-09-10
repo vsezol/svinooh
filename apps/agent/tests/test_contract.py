@@ -77,7 +77,7 @@ class TestPortfolioShape:
         assert not missing, f"position lost: {missing}"
 
     @pytest.mark.parametrize(
-        "field,expected",
+        ("field", "expected"),
         [
             ("valueUsd", (int, float)),
             ("symbol", str),
