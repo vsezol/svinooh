@@ -70,6 +70,17 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 
 
+#: The rule the branches that can act are told, and the ones that cannot are
+#: not: a question about a health factor is billed for every character of the
+#: base prompt, and cannot claim to have created anything.
+NOTHING_IS_DONE_UNTIL_IT_IS = (
+    "Never say that something was created, changed or saved unless this "
+    "prompt says it was. Anything else is at most a proposal, and a proposal "
+    "described as finished sends somebody looking for a thing that does not "
+    "exist."
+)
+
+
 def system_prompt(config: Config) -> str:
     """The instructions, plus what the product currently says about itself.
 
@@ -133,23 +144,20 @@ def onboarding_prompt(base: str, signed_in: bool) -> str:
             "addresses (EVM 0x…, Solana, TRON or Bitcoin). Say plainly that a "
             "portfolio made this way belongs to nobody and is public — anyone "
             "with the link can see it — and that signing in later claims it. "
-            "When — and only when — they have shared addresses and want to "
-            "proceed, call the ProposePortfolio tool with the addresses "
-            "exactly as written — in that same reply, rather than asking "
-            "whether to. Never invent or complete an address. And never say a "
-            "portfolio was created, is live or is ready: calling the tool "
-            "proposes one, the user confirms on the next turn, and only then "
-            "does anything exist."
+            "Once they have shared addresses and want to proceed, call the "
+            "ProposePortfolio tool with the addresses exactly as written: the "
+            "call IS the offer, so make it in that reply rather than asking "
+            f"again. Never invent or complete an address. {NOTHING_IS_DONE_UNTIL_IT_IS}"
         )
     return (
         f"{base}\n\nThe user asks about their portfolio but does not own one "
         "yet, so there are no holdings to see. Say so plainly, and offer to "
         "create their first portfolio right here: ask them to share the wallet "
         "addresses to track (EVM 0x…, Solana, TRON or Bitcoin). When — and "
-        "only when — they have shared addresses and want to proceed, call the "
-        "ProposePortfolio tool with the addresses exactly as written. Never "
-        "invent or complete an address, and do not claim anything was created "
-        "— the user will be asked to confirm first."
+        "they have shared addresses and want to proceed, call the "
+        "ProposePortfolio tool with the addresses exactly as written: the call "
+        "IS the offer, so make it in that reply rather than asking again. "
+        f"Never invent or complete an address. {NOTHING_IS_DONE_UNTIL_IT_IS}"
     )
 
 
@@ -198,11 +206,9 @@ def created_prompt(base: str, created: Created) -> str:
     # production answer said "it's private by default" with this very note in
     # front of it, which is why the instruction is now a negative one.
     claim_note = (
-        "\n\nThis portfolio belongs to NOBODY and is PUBLIC — anyone with the "
-        "link can see it. Say that plainly, and that signing in claims it as "
-        "theirs. Never call it private, and never say it is private by "
-        "default: it is not, and telling somebody their balances are hidden "
-        "when they are not is worse than saying nothing."
+        "\n\nThis portfolio belongs to nobody and is public — anyone with the "
+        "link can see it, and it is private in no sense. Say that plainly, "
+        "and that signing in claims it as theirs."
         if created.anonymous
         else ""
     )
@@ -210,10 +216,10 @@ def created_prompt(base: str, created: Created) -> str:
         f"{base}\n\nThe portfolio was just created. Facts to relay, in the "
         f"user's language:\n- link: /p/{created.slug}\n"
         f"Wallets added:\n{added}{failure_note}{claim_note}\n\nThe link is "
-        "appended to your reply for you, so do not write it out yourself and "
-        "do not promise to send it later.\n\nTell them it is scanning now and "
-        "they can ask about it here once the first sync lands. Relay failures "
-        "honestly — do not soften a refused address into a success."
+        "added to your reply automatically, so do not write it yourself."
+        "\n\nTell them it is scanning now and they can ask about it here once "
+        "the first sync lands. Relay failures honestly — do not soften a "
+        "refused address into a success."
     )
 
 
@@ -228,10 +234,9 @@ def nothing_proposed_prompt(base: str) -> str:
     """
     return (
         f"{base}\n\nThe user just agreed to something, but no portfolio was "
-        "ever proposed and NOTHING has been created. Say so plainly, in their "
-        "language: nothing exists yet. Then ask them to send the wallet "
-        "addresses so you can propose one. Never say a portfolio was created, "
-        "is live, or is ready — none of that is true."
+        "ever proposed and nothing has been created. Say so plainly, in their "
+        "language, and ask them to send the wallet addresses so you can "
+        f"propose one. {NOTHING_IS_DONE_UNTIL_IT_IS}"
     )
 
 

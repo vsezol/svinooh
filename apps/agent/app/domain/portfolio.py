@@ -97,16 +97,15 @@ class Position:
         pools, because the protocol is in `platform` and nobody asks about a
         pool by its LP token symbol.
 
-        A word has to START with the needle, rather than merely contain it.
-        Asked for "Thena" in a real portfolio, a plain substring match also
-        returned two **Ethena** positions and told the model six positions
-        were worth $345,137 when the four Thena ones were worth $288,518 —
-        a wrong number handed to the one thing that turns numbers into
-        sentences. The model read the rows and corrected it that time.
+        A word has to START with the needle rather than merely contain it.
+        Protocol names collide at the end — one is another with a letter in
+        front — and a plain substring match reports the wrong one's value in
+        the total it hands the model, which is the one place a wrong number
+        becomes a confident sentence.
 
-        A boundary rather than `\b` because a protocol is written
-        `bsc_venus`, and `_` is a word character: "venus" has to keep finding
-        it. So the rule is only that a letter or a digit may not come first.
+        Not `\b`, because a platform is written with an underscore and `_` is
+        a word character: the rule is only that a letter or a digit may not
+        come first.
         """
         haystack = " ".join(
             word
