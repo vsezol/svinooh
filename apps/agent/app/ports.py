@@ -16,6 +16,7 @@ app/services can see the whole contract without opening an adapter.
 from typing import Protocol
 
 from .domain.conversation import Chat
+from .panel import PanelValues
 
 
 class ConversationStore(Protocol):
@@ -79,3 +80,14 @@ class Allowance(Protocol):
 
     async def charge(self, key: str) -> bool:
         """Spend one question; True while there are any left."""
+
+
+class Panel(Protocol):
+    """Where the admin panel's decisions come from (app/panel.py has the values).
+
+    A port because a turn must never wait on the host for them: the adapter
+    keeps them fresh in the background, and this only ever answers from hand.
+    """
+
+    def current(self) -> PanelValues:
+        """The values as last heard; NOTHING_DECIDED until anything was."""

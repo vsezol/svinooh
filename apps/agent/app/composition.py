@@ -18,10 +18,12 @@ different one re-initialises these two objects in place.
 import logging
 
 from .adapters import memory
-from .config import settings
+from .adapters.panel import RemotePanel
+from .config import Config
 from .ports import Allowance, ConversationStore, RateLimiter
 from .services.limits import WindowAllowance, WindowRateLimiter
 from .services.sessions import SessionStore
+from .settings import settings
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -86,3 +88,10 @@ def free_allowance(redis_url: str, max_questions: int, window_s: int) -> Allowan
 
 #: The product limit — what a visitor gets before the answer is the sign-in card.
 allowance = free_allowance(settings.redis_url, settings.free_questions, settings.free_window_s)
+
+#: The admin panel, heard once before the first turn and kept fresh by the
+#: lifespan (app/__init__.py).
+panel = RemotePanel(settings.portfolio_api_url, settings.context_timeout_s)
+
+#: The dials a turn runs on: the panel over the environment over the defaults.
+config = Config(settings, panel)

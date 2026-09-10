@@ -15,7 +15,7 @@ has exactly one home.
 from collections.abc import Callable, Collection
 from typing import Any
 
-from ..config import context_max_positions
+from ..composition import config
 
 MAX_CHARS = 6000
 
@@ -187,7 +187,7 @@ def _wallet_lines(wallet: dict) -> list[str]:
     # Largest first — sorted here, not trusted from the wire — so the cap below
     # can only ever drop the tail, which is dust by construction. (Wallets
     # themselves arrive value-sorted from the API; positions we order ourselves.)
-    cap = context_max_positions()
+    cap = config.context_max_positions()
     lines = [header] + [f"  - {position_line(p)}" for p in positions[:cap]]
     rest = positions[cap:]
     if rest:

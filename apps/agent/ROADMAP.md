@@ -23,7 +23,7 @@ them.
 | # | step | lesson |
 | --- | --- | --- |
 | 1 | Toolchain: `pyproject.toml` + `uv.lock`, ruff, mypy, CI, a non-root multi-stage image, lifespan | reproducible builds; `>=` in production is a bug |
-| 2 | Settings: pydantic-settings; a `Knobs` port for the panel's values instead of module globals | configuration as an object; fail fast at boot |
+| 2 | Settings: pydantic-settings; a `Panel` port for the admin panel's values instead of module globals | configuration as an object; fail fast at boot |
 | 3 | Composition root: a `Container` built in lifespan, `Depends`, no import-time singletons; tests that build a container instead of patching internals | dependency injection without a framework; import-time side effects |
 | 4 | Domain: a typed portfolio (frozen dataclasses) behind an anti-corruption layer; the arithmetic moves to `domain/` with unit tests | value objects; parse, don't validate |
 | 5 | Application: use cases out of `routes.py`; domain errors mapped to HTTP at the edge; `auth` without FastAPI, `sessions` without LangChain | the use case as the unit of behaviour; error translation at the boundary |
@@ -38,3 +38,4 @@ them.
 | | what |
 | --- | --- |
 | [#189](https://github.com/vsezol/svinooh/pull/189) | Step 1, the toolchain: a lockfile, three gates, CI, a non-root image |
+| [#191](https://github.com/vsezol/svinooh/pull/191) | Step 2, configuration as objects: `Settings`, the `Panel` port, `Config` |

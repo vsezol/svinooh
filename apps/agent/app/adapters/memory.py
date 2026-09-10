@@ -15,6 +15,7 @@ import time
 from limits.aio.storage import MemoryStorage
 
 from ..domain.conversation import CHAT_TTL_S, Chat
+from ..panel import NOTHING_DECIDED, PanelValues
 
 
 class MemoryConversationStore:
@@ -113,3 +114,13 @@ class MemoryConversationStore:
 def rate_limit_storage() -> MemoryStorage:
     """Counters for one process — right for one process, and only that."""
     return MemoryStorage()
+
+
+class StaticPanel:
+    """ports.Panel with nothing behind it: the values it was given, for good."""
+
+    def __init__(self, values: PanelValues = NOTHING_DECIDED) -> None:
+        self._values = values
+
+    def current(self) -> PanelValues:
+        return self._values

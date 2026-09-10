@@ -30,10 +30,10 @@ import httpx
 from fastapi import HTTPException
 
 from ..adapters.portfolio import PortfolioApiSource
-from ..config import settings
+from ..settings import settings
 
 logger = logging.getLogger("svinooh-ai")
-portfolio_source = PortfolioApiSource(settings.portfolio_api_url)
+portfolio_source = PortfolioApiSource(settings.portfolio_api_url, settings.context_timeout_s)
 
 
 @dataclass(frozen=True)

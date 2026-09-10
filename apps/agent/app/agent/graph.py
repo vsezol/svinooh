@@ -46,7 +46,8 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
 from ..adapters.portfolio import PortfolioApiSource
-from ..config import answering, settings, system_prompt, tool_hops
+from ..composition import config
+from ..settings import settings
 from .context import (
     cancelled_prompt,
     confirmation_request_prompt,
@@ -68,7 +69,7 @@ from .steps import step
 from .tools import portfolio_tools, run_tools
 
 logger = logging.getLogger("svinooh-ai")
-portfolio_source = PortfolioApiSource(settings.portfolio_api_url)
+portfolio_source = PortfolioApiSource(settings.portfolio_api_url, settings.context_timeout_s)
 
 
 class AgentState(TypedDict, total=False):
@@ -190,7 +191,7 @@ async def _answer(system: str, state: AgentState) -> AgentState:
     # written. The words arrive during this step and fold it, which is the
     # better spinner — but the wait before the first of them is this line.
     async with step("answer", "Writing the answer"):
-        reply = await ask(get_model, messages, answering())
+        reply = await ask(get_model, messages, config.answering())
     return {"answer": extract_text(reply)}
 
 
@@ -200,7 +201,7 @@ async def general_node(state: AgentState) -> AgentState:
     This branch is the graph's first dividend: before the router, every 'what
     is a health factor' paid a portfolio round trip it never used.
     """
-    return await _answer(system_prompt(), state)
+    return await _answer(config.system_prompt(), state)
 
 
 async def grounded_node(state: AgentState) -> AgentState:
@@ -217,7 +218,7 @@ async def grounded_node(state: AgentState) -> AgentState:
     makes the answer general, not absent — and with no data there are no
     tools, so the model cannot drill into what could not be fetched.
     """
-    system = system_prompt()
+    system = config.system_prompt()
     tools = []
     target = state["target_portfolio"]
     try:
@@ -246,14 +247,14 @@ async def grounded_node(state: AgentState) -> AgentState:
         nonlocal bound
         bound = get_model().bind_tools(tools)
 
-    for hop in range(tool_hops()):
+    for hop in range(config.tool_hops()):
         # Every hop is the model reading what it has and deciding what is next,
         # and none of them produced a word until now: a turn that called three
         # tools showed three lines and three silences between them. The first
         # hop is thinking about the question; the ones after it are thinking
         # about what the tools came back with, which is what they say.
         async with step(f"think-{hop}", "Thinking" if hop == 0 else "Reading what came back"):
-            reply = await ask(lambda: bound, messages, answering(), rebind)
+            reply = await ask(lambda: bound, messages, config.answering(), rebind)
         calls = getattr(reply, "tool_calls", None) or []
         if not calls:
             return {"answer": extract_text(reply)}
@@ -279,7 +280,7 @@ async def onboard_node(state: AgentState) -> AgentState:
     made, and therefore what the prompts have to disclose before making it.
     """
     signed_in = bool(state.get("authorization"))
-    system = onboarding_prompt(system_prompt(), signed_in)
+    system = onboarding_prompt(config.system_prompt(), signed_in)
     messages = [
         SystemMessage(content=system),
         *state.get("history", []),
@@ -301,7 +302,7 @@ async def onboard_node(state: AgentState) -> AgentState:
 
     logger.info("onboarding: proposing %d wallet(s)", len(addresses))
     confirmation = await _answer(
-        confirmation_request_prompt(system_prompt(), addresses, not signed_in), state
+        confirmation_request_prompt(config.system_prompt(), addresses, not signed_in), state
     )
     return {**confirmation, "pending_set": addresses}
 
@@ -328,14 +329,14 @@ async def create_portfolio_node(state: AgentState) -> AgentState:
             )
     except Exception as error:  # noqa: BLE001 — nothing was created; say so
         logger.warning("portfolio creation failed: %r", error)
-        return await _answer(creation_failed_prompt(system_prompt()), state)
+        return await _answer(creation_failed_prompt(config.system_prompt()), state)
     logger.info(
         "onboarding: created %s (+%d wallets, %d refused)",
         result.get("slug"),
         len(result.get("added", [])),
         len(result.get("failed", [])),
     )
-    answered = await _answer(created_prompt(system_prompt(), result), state)
+    answered = await _answer(created_prompt(config.system_prompt(), result), state)
     outcome: AgentState = {**answered, "pending_clear": True}
     if result.get("slug"):
         outcome["portfolio_created"] = str(result["slug"])
@@ -344,13 +345,13 @@ async def create_portfolio_node(state: AgentState) -> AgentState:
 
 async def cancel_creation_node(state: AgentState) -> AgentState:
     """A declined proposal: drop it and say so — nothing was created."""
-    answered = await _answer(cancelled_prompt(system_prompt()), state)
+    answered = await _answer(cancelled_prompt(config.system_prompt()), state)
     return {**answered, "pending_clear": True}
 
 
 async def unavailable_node(state: AgentState) -> AgentState:
     """Identity could not be resolved: answer, and say the numbers are out of reach."""
-    return await _answer(degraded_prompt(system_prompt()), state)
+    return await _answer(degraded_prompt(config.system_prompt()), state)
 
 
 #: The nodes a turn can end on — and therefore the only nodes whose tokens are

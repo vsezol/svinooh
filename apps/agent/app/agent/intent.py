@@ -21,7 +21,7 @@ from typing import Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from ..config import answering, labelling
+from ..composition import config
 from .llm import ask, get_model, get_router_model, structured
 
 logger = logging.getLogger("svinooh-ai")
@@ -72,14 +72,14 @@ async def classify(question: str) -> IntentLabel:
     """
     messages = [SystemMessage(content=CLASSIFIER_PROMPT), HumanMessage(content=question)]
     try:
-        return await ask(_labeler, messages, labelling(), _labeler.cache_clear)
+        return await ask(_labeler, messages, config.labelling(), _labeler.cache_clear)
     except Exception as error:
-        if labelling().model == answering().model:
+        if config.labelling().model == config.answering().model:
             raise
         logger.warning(
             "labelling model %s unusable (%r) — labelling on %s instead",
-            labelling().model,
+            config.labelling().model,
             error,
-            answering().model,
+            config.answering().model,
         )
-        return await ask(_understudy, messages, answering(), _understudy.cache_clear)
+        return await ask(_understudy, messages, config.answering(), _understudy.cache_clear)

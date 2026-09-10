@@ -15,16 +15,19 @@ import logging
 import pytest
 
 import app.agent.intent as intent
+from app.adapters.memory import StaticPanel
 from app.agent.intent import IntentLabel
-from app.config import Role
+from app.config import Config
+from app.settings import Settings
+
+CHEAP = "openai:cheap-labeller"
+GOOD = "openai:the-one-that-answers"
 
 
-def role(model: str) -> Role:
-    return Role(name="r", model=model, reasoning_effort="", answer_token_cap=200)
-
-
-CHEAP = role("openai:cheap-labeller")
-GOOD = role("openai:the-one-that-answers")
+def wire(monkeypatch, *, answering: str, labelling: str = "") -> None:
+    """The dials for these models, and nothing from the shell."""
+    dials = Config(Settings(model=answering, router_model=labelling), StaticPanel())
+    monkeypatch.setattr(intent, "config", dials)
 
 
 class Stub:
@@ -51,8 +54,7 @@ def cached(stub):
 @pytest.fixture
 def two_models(monkeypatch):
     """The shape this is about: a cheap labeller and a separate answering model."""
-    monkeypatch.setattr(intent, "labelling", lambda: CHEAP)
-    monkeypatch.setattr(intent, "answering", lambda: GOOD)
+    wire(monkeypatch, answering=GOOD, labelling=CHEAP)
 
 
 @pytest.fixture(autouse=True)
@@ -86,7 +88,7 @@ class TestWhenTheCheapModelCannotBeReached:
         monkeypatch.setattr(intent, "_understudy", cached(Stub()))
         with caplog.at_level(logging.WARNING, logger="svinooh-ai"):
             await intent.classify("q")
-        assert CHEAP.model in caplog.text and GOOD.model in caplog.text
+        assert CHEAP in caplog.text and GOOD in caplog.text
 
     async def test_both_failing_is_the_caller_problem(self, monkeypatch, two_models):
         monkeypatch.setattr(intent, "_labeler", cached(Stub(refusing="404 no endpoints")))
@@ -99,8 +101,7 @@ class TestWhenOneModelDoesBothJobs:
     async def test_there_is_nothing_to_fall_back_to(self, monkeypatch):
         # The shipped default: no labelling model of its own. Trying the same
         # model a second time would only pay twice for the same failure.
-        monkeypatch.setattr(intent, "labelling", lambda: GOOD)
-        monkeypatch.setattr(intent, "answering", lambda: GOOD)
+        wire(monkeypatch, answering=GOOD)
         only = Stub(refusing="429 rate limited")
         understudy = Stub()
         monkeypatch.setattr(intent, "_labeler", cached(only))
