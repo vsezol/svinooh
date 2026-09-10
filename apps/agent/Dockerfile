@@ -20,8 +20,13 @@ ENV UV_PYTHON_DOWNLOADS=never \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 # Dependencies before code, so a code change does not reinstall them.
+#
+# The cache mount needs an explicit `id`. BuildKit defaults it to the target
+# path and builds this happily without one; Railway's builder does not, and
+# refuses the whole file with "flag is missing an id argument" — a build that
+# fails in production and passes on a laptop.
 COPY apps/agent/pyproject.toml apps/agent/uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv \
+RUN --mount=type=cache,id=agent-uv,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 COPY apps/agent/main.py ./
 COPY apps/agent/app ./app
