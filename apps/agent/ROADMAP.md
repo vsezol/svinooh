@@ -38,3 +38,4 @@ them.
 | | what |
 | --- | --- |
 | [#189](https://github.com/vsezol/svinooh/pull/189) | Step 1, the toolchain: a lockfile, three gates, CI, a non-root image |
+| [#191](https://github.com/vsezol/svinooh/pull/191) | Step 2, configuration as objects: `Settings`, the `Panel` port, `Config` |
