@@ -70,9 +70,11 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 
 
-#: The rule the branches that can act are told, and the ones that cannot are
-#: not: a question about a health factor is billed for every character of the
-#: base prompt, and cannot claim to have created anything.
+#: The rule every branch where nothing has happened yet is told, and no other:
+#: a question about a health factor is billed for every character of the base
+#: prompt and cannot claim to have created anything, while the turn that
+#: proposes, the turn that finds nothing to confirm, the turn that failed and
+#: the turn that was declined can all describe a portfolio that does not exist.
 NOTHING_IS_DONE_UNTIL_IT_IS = (
     "Never say that something was created, changed or saved unless this "
     "prompt says it was. Anything else is at most a proposal, and a proposal "
@@ -190,8 +192,8 @@ def confirmation_request_prompt(base: str, addresses: list[str], anonymous: bool
     return (
         f"{base}\n\nYou proposed creating a portfolio with these wallets:\n"
         f"{listed}{caveat}\n\nAsk the user, in their language, to confirm or "
-        "decline (a plain yes/no). List the addresses exactly as above. Do not "
-        "claim anything was created yet."
+        "decline (a plain yes/no). List the addresses exactly as above. "
+        f"{NOTHING_IS_DONE_UNTIL_IT_IS}"
     )
 
 
@@ -245,7 +247,7 @@ def creation_failed_prompt(base: str) -> str:
     return (
         f"{base}\n\nCreating the portfolio just failed — nothing was created. "
         "Tell the user honestly, in their language, and that answering yes "
-        "again in a moment will retry."
+        f"again in a moment will retry. {NOTHING_IS_DONE_UNTIL_IT_IS}"
     )
 
 
@@ -253,5 +255,5 @@ def cancelled_prompt(base: str) -> str:
     return (
         f"{base}\n\nThe user declined the portfolio-creation proposal. "
         "Acknowledge briefly in their language — nothing was created — and "
-        "offer to help with whatever else."
+        f"offer to help with whatever else. {NOTHING_IS_DONE_UNTIL_IT_IS}"
     )
