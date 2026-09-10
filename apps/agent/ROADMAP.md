@@ -46,3 +46,5 @@ them.
 | [#197](https://github.com/vsezol/svinooh/pull/197) | Step 6, the agent gets a port: `Ask` in, `Reply` out, and the prompts in a module of their own |
 | [#198](https://github.com/vsezol/svinooh/pull/198) | Step 7, hardening: one pool, a cap on model calls, a deadline, limits on the wire, `/ready` |
 | [#199](https://github.com/vsezol/svinooh/pull/199) | Step 8, observability: JSON logs with a request id, `/metrics`, the Prometheus job |
+| [#200](https://github.com/vsezol/svinooh/pull/200) | The other HTTP client is quiet too — `httpx2` was logging every model call |
+| [#201](https://github.com/vsezol/svinooh/pull/201) | Step 9, the load test: a fake upstream, locust, and the first setting moved onto evidence |
