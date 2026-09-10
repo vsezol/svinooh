@@ -9,6 +9,7 @@ the feature actually depends on: that the tokens of an answer can be told apart
 from the tokens of a label, and that watching a turn still ends in the same
 state as awaiting one.
 """
+
 import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage

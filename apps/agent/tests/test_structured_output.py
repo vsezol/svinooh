@@ -13,6 +13,7 @@ and failed every classification in production.
 The library's default is the narrow one, and it changed to that under us. So
 the way we ask is pinned here rather than inherited.
 """
+
 from typing import Literal
 
 import pytest
@@ -51,7 +52,9 @@ class TestTheWayWeAsk:
 
     def test_the_model_is_left_no_choice_about_calling_it(self, model):
         kwargs = bound(structured(model, Shape))
-        assert kwargs.get("tool_choice"), "a label that the model may decline to give is not a label"
+        assert kwargs.get("tool_choice"), (
+            "a label that the model may decline to give is not a label"
+        )
 
     def test_the_library_default_is_still_the_narrow_one(self, model):
         # The reason this file exists. If this ever fails, the default moved and

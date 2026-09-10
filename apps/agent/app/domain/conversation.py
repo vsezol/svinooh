@@ -11,6 +11,7 @@ the model is derived from them (app/services/sessions.py) and so is the
 transcript the reader sees — two projections of one record, never two records.
 That split, kept as two stores, is the bug this whole step existed to remove.
 """
+
 import time
 from dataclasses import dataclass, field
 

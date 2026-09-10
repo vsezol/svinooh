@@ -21,6 +21,7 @@ own so part 1 can take it over. If part 1 lands a different header or id
 format, this module and services/identity.py are the only things that change.
 -----------------------------------------------------------------------------
 """
+
 import re
 from dataclasses import dataclass
 
@@ -74,7 +75,6 @@ class Owner:
         rather than to a broken one.
         """
         return Owner(key=f"sess:{session_id}")
-
 
 
 def clean_anon_id(raw: str | None) -> str | None:

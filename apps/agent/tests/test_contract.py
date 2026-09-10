@@ -21,6 +21,7 @@ It needs the network, so it is opt-in:
 Point it at a public portfolio (AGENT_CONTRACT_PORTFOLIO) or let it create an
 anonymous one from a public address.
 """
+
 import os
 
 import httpx
@@ -75,18 +76,25 @@ class TestPortfolioShape:
         missing = ours - set(positions[0])
         assert not missing, f"position lost: {missing}"
 
-    @pytest.mark.parametrize("field,expected", [
-        ("valueUsd", (int, float)),
-        ("symbol", str),
-        ("network", str),
-        ("platform", str),
-        ("category", str),
-    ])
+    @pytest.mark.parametrize(
+        ("field", "expected"),
+        [
+            ("valueUsd", (int, float)),
+            ("symbol", str),
+            ("network", str),
+            ("platform", str),
+            ("category", str),
+        ],
+    )
     def test_the_fields_we_group_by_keep_their_types(self, live_portfolio, field, expected):
         # Grouping on a field that turned into a dict would produce a
         # breakdown of nonsense rather than an error.
-        values = [p[field] for w in live_portfolio["wallets"] for p in (w.get("positions") or [])
-                  if p.get(field) is not None]
+        values = [
+            p[field]
+            for w in live_portfolio["wallets"]
+            for p in (w.get("positions") or [])
+            if p.get(field) is not None
+        ]
         assert values, f"nothing carries {field} any more"
         assert all(isinstance(v, expected) for v in values)
 
@@ -101,7 +109,9 @@ class TestPortfolioShape:
 class TestHistoryShape:
     def test_history_points_are_a_time_and_a_total(self, live_portfolio):
         with httpx.Client(base_url=API, timeout=60) as client:
-            answer = client.get(f"/portfolios/{live_portfolio['slug']}/history", params={"range": "7d"})
+            answer = client.get(
+                f"/portfolios/{live_portfolio['slug']}/history", params={"range": "7d"}
+            )
             answer.raise_for_status()
             series = answer.json()
         assert set(fx.history([])) <= set(series)
@@ -115,8 +125,9 @@ class TestHistoryShape:
         from app.agent.tools import _epoch_ms
 
         with httpx.Client(base_url=API, timeout=60) as client:
-            series = client.get(f"/portfolios/{live_portfolio['slug']}/history",
-                                params={"range": "7d"}).json()
+            series = client.get(
+                f"/portfolios/{live_portfolio['slug']}/history", params={"range": "7d"}
+            ).json()
         points = series.get("points") or []
         if not points:
             pytest.skip("no history recorded yet for this portfolio")

@@ -12,6 +12,7 @@ still pending degrades to "chat errors" instead of a crash loop. One client
 instance is then reused for every request: what is per-request is the API
 *call*, not the client.
 """
+
 import logging
 from functools import cache
 
@@ -188,7 +189,7 @@ async def ask(build, messages, role: Role, forget=None):
     """
     try:
         return await build().ainvoke(messages)
-    except Exception as error:  # noqa: BLE001 — one specific cause is recoverable
+    except Exception as error:
         if not (is_thinking_setting_rejected(error) and stop_asking_it_to_think(role)):
             raise
         if forget is not None:

@@ -5,6 +5,7 @@ describe the HTTP contract. FastAPI validates every request body against them
 (a bad body is a 422 before our code runs), serializes responses through them,
 and generates the OpenAPI docs (/docs) from them.
 """
+
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -46,9 +47,7 @@ class SignInBlock(BaseModel):
     title: str
     sub: str
     #: camelCase on the wire, like every other multi-word field the widget reads.
-    pending_question: str | None = Field(
-        default=None, serialization_alias="pendingQuestion"
-    )
+    pending_question: str | None = Field(default=None, serialization_alias="pendingQuestion")
 
 
 class ChatSummary(BaseModel):

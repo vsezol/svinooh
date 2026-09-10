@@ -10,6 +10,7 @@ counting happens is an adapter: app/adapters/redis/rate_limit.py shares the
 instance, app/adapters/memory.py counts in this process. This class never
 learns which it was given.
 """
+
 import logging
 import time
 

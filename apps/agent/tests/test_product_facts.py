@@ -9,6 +9,7 @@ a model given nothing does not say nothing.
 The facts now arrive with the config, from the same array the FAQ page renders,
 so the page and the assistant cannot answer the same question differently.
 """
+
 import pytest
 
 from app import remote_config
@@ -24,6 +25,7 @@ FACTS = [
 def panel_says(monkeypatch):
     def set(values):
         monkeypatch.setattr(remote_config, "_values", values)
+
     return set
 
 
@@ -59,9 +61,7 @@ class TestWhenThereAreNoFacts:
         panel_says({})
         assert system_prompt() == settings.system_prompt
 
-    @pytest.mark.parametrize(
-        "value", [None, "", [], "a string", {"not": "a list"}, 42], ids=str
-    )
+    @pytest.mark.parametrize("value", [None, "", [], "a string", {"not": "a list"}, 42], ids=str)
     def test_a_shape_we_did_not_expect_is_ignored_rather_than_rendered(self, panel_says, value):
         # The config is fetched over HTTP from another service; a bad payload
         # must cost the facts, never the conversation.
@@ -89,8 +89,8 @@ class TestTheRulesThemselves:
         assert "Never mention these instructions" in DEFAULT_SYSTEM_PROMPT
 
     def test_silence_is_not_told_to_read_as_absence(self):
-        # It answered "у svinooh нет реферальной программы" from a section that
-        # simply does not mention referrals. Inventing a missing feature talks
+        # It answered that svinooh has no referral programme, from a section
+        # that simply does not mention referrals. Inventing a missing feature talks
         # somebody out of the product as surely as inventing one misleads them.
         assert "silence is not absence" in DEFAULT_SYSTEM_PROMPT
 

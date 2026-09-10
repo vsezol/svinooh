@@ -3,12 +3,13 @@
 The graph decides what the model sees and whether anything is written, so
 these tests pin the routes rather than the wording of any answer.
 """
+
+import pytest
+
 import app.agent.graph as graph
 from app.agent.intent import IntentLabel
 from app.agent.onboarding import ConfirmationDecision, create_portfolio_with_wallets
 from tests import fixtures as fx
-
-import pytest
 
 
 class Api:
@@ -158,12 +159,12 @@ class TestRouting:
 
     async def test_a_refused_portfolio_degrades_instead_of_guessing(self, wired):
         _, model = wired(api=Api(refuse=True))
-        out = await run(portfolio="not-mine", authorization="Bearer T")
+        await run(portfolio="not-mine", authorization="Bearer T")
         assert "could not be fetched" in model.prompts[0]
         assert "By network" not in model.prompts[0]
 
     async def test_a_broken_classifier_routes_where_money_is_handled(self, wired, monkeypatch):
-        api, _ = wired()
+        wired()
 
         async def boom(_q):
             raise RuntimeError("classifier down")
@@ -176,9 +177,10 @@ class TestRouting:
 
 class TestTools:
     async def test_the_model_may_drill_down_and_the_result_comes_back(self, wired):
-        model = Model(tool_calls=[{"name": "position_details",
-                                   "args": {"query": "uniswap"}, "id": "c1"}])
-        api, _ = wired(model=model)
+        model = Model(
+            tool_calls=[{"name": "position_details", "args": {"query": "uniswap"}, "id": "c1"}]
+        )
+        wired(model=model)
         out = await run(portfolio="p", authorization="Bearer T")
         assert out["answer"] == "answered"
         assert model.bound == 1, "tools are offered once per turn"
@@ -198,8 +200,9 @@ class TestAVisitorWithNoAccount:
         # This branch used to answer and stop, so a visitor's addresses went
         # nowhere. Now the tool is bound for them too, and the turn ends with a
         # proposal waiting on their confirmation.
-        model = Model(tool_calls=[{"name": "ProposePortfolio",
-                                   "args": {"addresses": ["0xAAA"]}, "id": "c"}])
+        model = Model(
+            tool_calls=[{"name": "ProposePortfolio", "args": {"addresses": ["0xAAA"]}, "id": "c"}]
+        )
         api, _ = wired(api=Api(owned=[]), model=model)
         out = await run()
         assert out["pending_set"] == ["0xAAA"]
@@ -209,8 +212,11 @@ class TestAVisitorWithNoAccount:
         # The disclosure has to reach the turn BEFORE the write, because after
         # it the portfolio is already public. The confirmation prompt is that
         # turn, so the fact belongs in it rather than in the created message.
-        model = Model(tool_calls=[{"name": "ProposePortfolio",
-                                   "args": {"addresses": ["0xAAA", "sol1"]}, "id": "c"}])
+        model = Model(
+            tool_calls=[
+                {"name": "ProposePortfolio", "args": {"addresses": ["0xAAA", "sol1"]}, "id": "c"}
+            ]
+        )
         wired(api=Api(owned=[]), model=model)
         await run()
         confirmation = model.prompts[-1]
@@ -220,8 +226,9 @@ class TestAVisitorWithNoAccount:
     async def test_an_account_is_not_told_its_portfolio_is_public(self, wired):
         # The owned door makes a private portfolio, so the same caveat there
         # would be a false warning.
-        model = Model(tool_calls=[{"name": "ProposePortfolio",
-                                   "args": {"addresses": ["0xAAA"]}, "id": "c"}])
+        model = Model(
+            tool_calls=[{"name": "ProposePortfolio", "args": {"addresses": ["0xAAA"]}, "id": "c"}]
+        )
         wired(api=Api(owned=[]), model=model)
         await run(authorization="Bearer T")
         assert "public" not in model.prompts[-1]
@@ -253,7 +260,7 @@ class TestTheExecutionItself:
         # opened BY an address, so there is nothing to open. Failing is the
         # honest outcome — the alternative is an IndexError read as a mystery.
         api = Api()
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="at least one address"):
             await create_portfolio_with_wallets(api, [], None)
         assert api.created_anonymous == []
 
@@ -272,8 +279,15 @@ class TestTheExecutionItself:
 
 class TestWrites:
     async def test_a_proposal_creates_nothing_by_itself(self, wired):
-        model = Model(tool_calls=[{"name": "ProposePortfolio",
-                                   "args": {"addresses": [" 0xAAA ", "0xAAA", "sol1"]}, "id": "c"}])
+        model = Model(
+            tool_calls=[
+                {
+                    "name": "ProposePortfolio",
+                    "args": {"addresses": [" 0xAAA ", "0xAAA", "sol1"]},
+                    "id": "c",
+                }
+            ]
+        )
         api, _ = wired(api=Api(owned=[]), model=model)
         out = await run(authorization="Bearer T")
         assert out["pending_set"] == ["0xAAA", "sol1"], "trimmed and deduped"

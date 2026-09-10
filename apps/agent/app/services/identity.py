@@ -4,6 +4,7 @@ The half of identity that does I/O. `auth.authenticate` is the only authority
 on a token — the host API — and everything else about what an owner is lives
 in app/domain/identity.py, which imports nothing.
 """
+
 from ..domain.identity import Owner, clean_anon_id
 from .auth import authenticate
 

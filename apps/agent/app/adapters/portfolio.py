@@ -10,6 +10,7 @@ answer something the agent needs, the fix is to extend the public API.
 the agent holds no credentials of its own, so it can never read more than the
 person asking.
 """
+
 from typing import Protocol
 
 import httpx
@@ -20,7 +21,7 @@ from ..config import settings
 class DataSource(Protocol):
     async def portfolio(self, ref: str, token: str | None) -> dict: ...
 
-    async def history(self, ref: str, range_: str, token: str) -> dict: ...
+    async def history(self, ref: str, range_: str, token: str | None) -> dict: ...
 
 
 class PortfolioApiSource:
@@ -87,7 +88,7 @@ class PortfolioApiSource:
     async def portfolio(self, ref: str, token: str | None) -> dict:
         return await self._get(f"/api/portfolios/{ref}", token)
 
-    async def history(self, ref: str, range_: str, token: str) -> dict:
+    async def history(self, ref: str, range_: str, token: str | None) -> dict:
         # range_ is the product's own HistoryRange: 1h | 24h | 7d | 30d | all —
         # the same values the charts use. No branch calls this yet: it is the
         # raw material the planned drill-down tools wrap, with the model

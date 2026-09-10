@@ -10,21 +10,22 @@ a positive setting, and asking for it filtered every provider away — 404 on
 every classification. Both were invisible, because the classifier's fail-safe
 swallows a failure and routes everything to the portfolio branch.
 """
+
 from dataclasses import replace
 
 import pytest
 
 import app.agent.intent as intent
 import app.agent.llm as llm
-from app.config import Role
 from app.agent.intent import IntentLabel
+from app.config import Role
 
 NO_ENDPOINTS = (
     "Error code: 404 - {'error': {'message': 'No endpoints found that can handle "
     "the requested parameters.', 'code': 404, 'metadata': {'failed_routing_step': "
     "'Filter by Parameters'}}}"
 )
-MANDATORY = 'Reasoning is mandatory for this endpoint and cannot be disabled'
+MANDATORY = "Reasoning is mandatory for this endpoint and cannot be disabled"
 
 
 def role(model: str = "openai:m", effort: str = "low", sort: str = "throughput") -> Role:

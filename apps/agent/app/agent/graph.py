@@ -37,6 +37,7 @@ routes to the identity branch â€” money questions land where money is handled â€
 and a broken classifier degrades to yesterday's behavior, never to a worse
 answer about money.
 """
+
 import logging
 from functools import cache
 from typing import TypedDict
@@ -44,6 +45,7 @@ from typing import TypedDict
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
+from ..adapters.portfolio import PortfolioApiSource
 from ..config import answering, settings, system_prompt, tool_hops
 from .context import (
     cancelled_prompt,
@@ -54,17 +56,16 @@ from .context import (
     grounded_prompt,
     onboarding_prompt,
 )
-from ..adapters.portfolio import PortfolioApiSource
 from .intent import classify
-from .steps import step
 from .llm import ask, extract_text, get_model
-from .tools import portfolio_tools, run_tools
 from .onboarding import (
     ProposePortfolio,
     classify_confirmation,
     create_portfolio_with_wallets,
     sanitize_addresses,
 )
+from .steps import step
+from .tools import portfolio_tools, run_tools
 
 logger = logging.getLogger("svinooh-ai")
 portfolio_source = PortfolioApiSource(settings.portfolio_api_url)
@@ -251,9 +252,7 @@ async def grounded_node(state: AgentState) -> AgentState:
         # tools showed three lines and three silences between them. The first
         # hop is thinking about the question; the ones after it are thinking
         # about what the tools came back with, which is what they say.
-        async with step(
-            f"think-{hop}", "Thinking" if hop == 0 else "Reading what came back"
-        ):
+        async with step(f"think-{hop}", "Thinking" if hop == 0 else "Reading what came back"):
             reply = await ask(lambda: bound, messages, answering(), rebind)
         calls = getattr(reply, "tool_calls", None) or []
         if not calls:
@@ -332,12 +331,15 @@ async def create_portfolio_node(state: AgentState) -> AgentState:
         return await _answer(creation_failed_prompt(system_prompt()), state)
     logger.info(
         "onboarding: created %s (+%d wallets, %d refused)",
-        result.get("slug"), len(result.get("added", [])), len(result.get("failed", [])),
+        result.get("slug"),
+        len(result.get("added", [])),
+        len(result.get("failed", [])),
     )
     answered = await _answer(created_prompt(system_prompt(), result), state)
-    slug = result.get("slug") or ""
-    created = {"portfolio_created": slug} if slug else {}
-    return {**answered, **created, "pending_clear": True}
+    outcome: AgentState = {**answered, "pending_clear": True}
+    if result.get("slug"):
+        outcome["portfolio_created"] = str(result["slug"])
+    return outcome
 
 
 async def cancel_creation_node(state: AgentState) -> AgentState:

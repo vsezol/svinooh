@@ -19,6 +19,7 @@ Two details worth stating, because both look like details and are not:
   so this is the difference between sharing our pool and quietly opening a
   second one to the same instance.
 """
+
 from limits.aio.storage import RedisStorage
 
 from . import client as redis_client
@@ -36,5 +37,7 @@ def storage(url: str) -> RedisStorage:
         uri,
         implementation="redispy",
         key_prefix=KEY_PREFIX,
-        connection_pool=redis_client.pool(url),
+        # Forwarded to the client untouched; the stub types **options narrower
+        # than what the library actually passes through.
+        connection_pool=redis_client.pool(url),  # type: ignore[arg-type]
     )

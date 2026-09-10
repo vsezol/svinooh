@@ -1,28 +1,24 @@
-"""svinooh-ai — the AI agent microservice.
+"""svinooh-ai, the AI agent microservice.
 
-An internal service behind the api gateway (the gateway forwards /ai/* here,
-the way /auth/* goes to auth): POST /chat takes a message, runs it through the
-model with the session's history, and returns the reply. Portfolio context,
-tools and a graph grow behind this surface one layer at a time — the outward
-contract does not change with them.
-
-Structured the way a production service is, even while small, so each concern
-has a home before it grows: config.py (settings, later fetched remotely),
-llm.py (the provider-neutral model seam), sessions.py (conversations, and the
-context derived from them) over store.py (where they are kept), owner.py (who
-is asking), routes.py (the HTTP surface), schemas.py (the wire types).
+POST /chat takes a message, runs it through the graph with the conversation's
+history, and answers in blocks. The layers: app/domain is what a conversation
+is, app/services what is done with one, app/adapters where it is kept and
+where the portfolio comes from, app/agent the graph and the model, app/api the
+wire.
 """
+
 import logging
 import sys
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import remote_config
+from .api.routes import router
 from .config import settings
 from .domain.identity import ANON_HEADER
-from .api.routes import router
 
 
 class _Below(logging.Filter):
@@ -75,9 +71,18 @@ def _configure_logging() -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Startup before the yield, shutdown after it."""
+    # So the first turn already runs on what the panel says rather than on
+    # the environment the container booted with.
+    await remote_config.prime()
+    yield
+
+
 def create_app(cors_origins: Sequence[str] | None = None) -> FastAPI:
     _configure_logging()
-    app = FastAPI(title="svinooh-ai")
+    app = FastAPI(title="svinooh-ai", lifespan=_lifespan)
     # The browser door: which origins may call this service directly. An
     # explicit allowlist, never "*" — the wildcard forbids credentialed
     # requests anyway, and this API is nothing but credentialed requests.
@@ -97,12 +102,5 @@ def create_app(cors_origins: Sequence[str] | None = None) -> FastAPI:
             allow_headers=["authorization", "content-type", ANON_HEADER.lower()],
             max_age=3600,
         )
-    @app.on_event("startup")
-    async def _load_settings() -> None:
-        # So the first turn already runs on what the panel says rather than on
-        # the environment the container booted with.
-        await remote_config.prime()
-
     app.include_router(router)
-
     return app

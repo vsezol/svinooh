@@ -6,6 +6,8 @@ The Redis backend has its own file (tests/test_store_redis.py), because the
 half of this that can actually go wrong in production — an index outliving what
 it points at — is a property of Redis keys rather than of a dict.
 """
+
+import asyncio
 import logging
 import time
 
@@ -43,7 +45,14 @@ class TestOneRepresentation:
         for n in range(5):
             await store.append("c1", "user:1", f"q{n}", f"a{n}", [])
         # Three turns of context, out of five kept.
-        assert [m.content for m in await store.history("c1")] == ["q2", "a2", "q3", "a3", "q4", "a4"]
+        assert [m.content for m in await store.history("c1")] == [
+            "q2",
+            "a2",
+            "q3",
+            "a3",
+            "q4",
+            "a4",
+        ]
         assert len((await store.chat("c1", "user:1")).turns) == 5
 
     async def test_a_conversation_stops_growing_forever(self, store):
@@ -75,9 +84,9 @@ class TestTheListing:
         # The scores are epoch milliseconds and a turn here costs microseconds,
         # so without this the "later" turn lands in the same millisecond as the
         # others and there is nothing for the ordering to be about.
-        time.sleep(0.002)
+        await asyncio.sleep(0.002)
         await store.append("a", "user:1", "again", "a", [])
-        assert [c.id for c in await store.list("user:1")][0] == "a"
+        assert next(c.id for c in await store.list("user:1")) == "a"
 
     async def test_one_owner_never_sees_another(self, store):
         await store.append("mine", "user:1", "q", "a", [])
@@ -208,7 +217,7 @@ class TestExpiry:
     async def test_a_write_pushes_the_deadline_out_again(self, store):
         await store.append("c1", "user:1", "q", "a", [])
         first = _deadline(store, "c1")
-        time.sleep(0.01)
+        await asyncio.sleep(0.01)
         await store.append("c1", "user:1", "q2", "a2", [])
         assert _deadline(store, "c1") > first
 
@@ -216,7 +225,7 @@ class TestExpiry:
         """An index that expired first would strand every conversation in it."""
         await store.append("c1", "user:1", "q", "a", [])
         first = _index_deadline(store, "user:1")
-        time.sleep(0.01)
+        await asyncio.sleep(0.01)
         await store.append("c1", "user:1", "q2", "a2", [])
         assert _index_deadline(store, "user:1") > first
 
@@ -249,26 +258,26 @@ class TestTheFallback:
 
 
 def _backend(store: SessionStore) -> MemoryConversationStore:
-    return store._store  # noqa: SLF001 — the point of the test is what is inside
+    return store._store
 
 
 def _expire_chat(store: SessionStore, chat_id: str) -> None:
     """Age one chat out while leaving its id in the index — the skew, exactly."""
     backend = _backend(store)
-    _, chat = backend._chats[chat_id]  # noqa: SLF001
-    backend._chats[chat_id] = (time.time() - 1, chat)  # noqa: SLF001
+    _, chat = backend._chats[chat_id]
+    backend._chats[chat_id] = (time.time() - 1, chat)
 
 
 def _deadline(store: SessionStore, chat_id: str) -> float:
-    return _backend(store)._chats[chat_id][0]  # noqa: SLF001
+    return _backend(store)._chats[chat_id][0]
 
 
 def _index(store: SessionStore, owner: str) -> dict:
-    return _backend(store)._index[owner][1]  # noqa: SLF001
+    return _backend(store)._index[owner][1]
 
 
 def _index_deadline(store: SessionStore, owner: str) -> float:
-    return _backend(store)._index[owner][0]  # noqa: SLF001
+    return _backend(store)._index[owner][0]
 
 
 class TestTheIdIsAnAddress:

@@ -18,6 +18,7 @@ Two rules hold everywhere here:
   receives five computed lines, never the raw points — cheaper, and immune to
   LLM arithmetic.
 """
+
 import logging
 from datetime import datetime
 from typing import Literal
@@ -125,12 +126,17 @@ def find_positions(data: dict, query: str) -> str:
     if not matches:
         return (
             f'No position matches "{query}". The portfolio holds: '
-            + ", ".join(sorted({
-                str(p.get("platform"))
-                for w in (data.get("wallets") or [])
-                for p in (w.get("positions") or [])
-                if p.get("platform") and p.get("platform") != "wallet"
-            }) or ["no protocol positions"])
+            + ", ".join(
+                sorted(
+                    {
+                        str(p.get("platform"))
+                        for w in (data.get("wallets") or [])
+                        for p in (w.get("positions") or [])
+                        if p.get("platform") and p.get("platform") != "wallet"
+                    }
+                )
+                or ["no protocol positions"]
+            )
             + " — and plain token holdings."
         )
     matches.sort(key=lambda row: -row[0])
@@ -147,7 +153,7 @@ def find_positions(data: dict, query: str) -> str:
     return "\n".join([head, *lines])
 
 
-def portfolio_tools(source, slug: str, token: str, data: dict) -> list:
+def portfolio_tools(source, slug: str, token: str | None, data: dict) -> list:
     """Build this request's tools around this caller's portfolio.
 
     The docstrings below are not documentation — they are the instructions the

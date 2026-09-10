@@ -14,6 +14,7 @@ the execution (what actually hits the API). The graph only orchestrates these.
 When the agent grows a second action, this file becomes actions/<name>.py —
 one module per action, each in this same three-phase shape.
 """
+
 import logging
 from functools import cache
 from typing import Literal
@@ -92,9 +93,7 @@ async def classify_confirmation(reply: str) -> ConfirmationDecision:
 # ── phase 3: the execution — what actually hits the API, after the yes ─────
 
 
-async def create_portfolio_with_wallets(
-    source, addresses: list[str], token: str | None
-) -> dict:
+async def create_portfolio_with_wallets(source, addresses: list[str], token: str | None) -> dict:
     """Create the portfolio and add every address, through the public API.
 
     Two failure grades on purpose. The portfolio POST failing fails the whole

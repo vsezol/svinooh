@@ -6,6 +6,7 @@ expects, that a refusal is a status code rather than a stream that opens and
 apologises, and that a turn watched leaves the session exactly as a turn
 awaited does.
 """
+
 import json
 
 import httpx

@@ -11,7 +11,9 @@ This module owns everything the model is told, including the two system-prompt
 variants the portfolio branch picks between — so "what do we say to the model"
 has exactly one home.
 """
-from collections.abc import Callable
+
+from collections.abc import Callable, Collection
+from typing import Any
 
 from ..config import context_max_positions
 
@@ -38,7 +40,7 @@ def _is_word(value) -> bool:
 # it). The renderer walks this table, so teaching the context a new fact is one
 # entry here rather than another if-branch. The two rates arrive as fractions
 # (0.42 is 42%); range is a plain word ("in"/"out").
-_POSITION_FACTS: list[tuple[str, Callable[[object], bool], Callable[[object], str]]] = [
+_POSITION_FACTS: list[tuple[str, Callable[[Any], bool], Callable[[Any], str]]] = [
     ("apy", _is_number, lambda v: f"APY {v * 100:.1f}%"),
     ("healthRate", _is_number, lambda v: f"health {v:.2f}"),
     ("borrowApy", _is_number, lambda v: f"borrow {v * 100:.1f}%"),
@@ -145,7 +147,9 @@ def position_line(position: dict, detail: bool = False) -> str:
     return f"{line} — {composition}" if composition else line
 
 
-def _totals_by(positions: list[dict], key: str, skip: set[str] = frozenset()) -> list[tuple[str, float]]:
+def _totals_by(
+    positions: list[dict], key: str, skip: Collection[str] = ()
+) -> list[tuple[str, float]]:
     """Value grouped by one field, largest first."""
     sums: dict[str, float] = {}
     for position in positions:
@@ -156,7 +160,9 @@ def _totals_by(positions: list[dict], key: str, skip: set[str] = frozenset()) ->
     return sorted(sums.items(), key=lambda pair: -pair[1])
 
 
-def _breakdown(label: str, totals: list[tuple[str, float]], total: float, limit: int = 8) -> str | None:
+def _breakdown(
+    label: str, totals: list[tuple[str, float]], total: float, limit: int = 8
+) -> str | None:
     """One line of "where the money is", with shares that add up."""
     if not totals:
         return None
@@ -199,7 +205,8 @@ def _wallet_lines(wallet: dict) -> list[str]:
 def portfolio_context(data: dict) -> str:
     wallets = data.get("wallets") or []
     positions = [p for w in wallets for p in (w.get("positions") or [])]
-    total = data.get("totalUsd") if isinstance(data.get("totalUsd"), (int, float)) else 0.0
+    raw_total = data.get("totalUsd")
+    total = raw_total if isinstance(raw_total, (int, float)) else 0.0
     lines = [
         f'Portfolio "{data.get("name") or data.get("slug")}" — '
         f"total {usd(data.get('totalUsd'))}, {len(wallets)} wallet(s), "
@@ -273,9 +280,7 @@ def onboarding_prompt(base: str, signed_in: bool) -> str:
     )
 
 
-def confirmation_request_prompt(
-    base: str, addresses: list[str], anonymous: bool
-) -> str:
+def confirmation_request_prompt(base: str, addresses: list[str], anonymous: bool) -> str:
     """Ask the user to confirm the proposed creation — the model phrases it.
 
     Phrased by the model rather than a template so the question lands in the
