@@ -6,6 +6,7 @@ started on first use, so the service is warming up from the moment it boots and
 """
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -17,10 +18,18 @@ from .catalog import catalog
 from .config import settings
 from .routes import router
 
+# stdout, not the default stderr: Railway reads the stream a line arrived on
+# as its severity, so logging INFO to stderr paints every ordinary line in the
+# dashboard red and leaves nothing to notice when something is actually wrong.
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    stream=sys.stdout,
 )
+# httpx logs a line per request at INFO. A refresh makes forty-five of them
+# every five minutes, which buries the two lines that say what the refresh
+# actually produced.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 @asynccontextmanager
