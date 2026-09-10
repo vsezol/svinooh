@@ -733,7 +733,12 @@ button.ui-tag[data-variant='soft']:not(:disabled):hover {
 .ui-stat {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
-  background: var(--surf);
+  /* A card lifts off whatever it is on. Standing on the page that is --surf,
+     which is the assistant's answers and the portfolio's headline; nested
+     inside a card that is already --surf it would be the same colour as its
+     own ground, so a container that IS a card sets this to --surf2 and the
+     card lifts off that instead. One hook rather than one more component. */
+  background: var(--ui-stat-surface, var(--surf));
   padding: 12px 14px;
   min-width: 0;
 }
