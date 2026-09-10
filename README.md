@@ -24,6 +24,11 @@ apps/
             queue: an address in, what it holds out
   web/    — Next.js (App Router): the landing is prerendered, the portfolio
             page is a client render. Charts, Telegram login
+  earn/   — where a token can be put to work (FastAPI): a catalog of
+            single-token yield — Kamino vaults and reserves on Solana today —
+            served from a snapshot refreshed in the background. Read-only,
+            no database, no auth. Layered domain/application/infrastructure/api,
+            with the dependency arrow enforced by a test
 libs/
   shared/ — the API contract (types only, nothing to build)
   db/     — Prisma schema, migrations and PrismaService, shared by the services

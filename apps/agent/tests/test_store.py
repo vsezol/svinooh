@@ -130,7 +130,14 @@ class TestThePendingProposal:
 
 
 class TestThePortfolioAConversationMade:
-    """For a visitor, the conversation is the only record that they have one."""
+    """For a visitor, the conversation is the only record that they have one.
+
+    Read through `chat`, as the rest of this file does. These were written
+    against `resume`, on a branch that started before the one which split that
+    method into `open_turn` and `chat` — two changes that never touched the
+    same file, merged cleanly, and left three tests calling something that no
+    longer exists.
+    """
 
     async def test_it_survives_between_turns(self, store):
         await store.set_portfolio("c1", "anon:deadbeef", "pf-1")

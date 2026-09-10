@@ -8,9 +8,10 @@ node_modules
 .beads
 .claude
 *.log
-# Python: a local venv and tool caches must never ride into an image.
+# Python build and tool artefacts — never part of an image, and a local
+# `docker build` would otherwise copy a virtualenv into the context.
 **/.venv
 **/__pycache__
 **/.pytest_cache
-**/.ruff_cache
 **/.mypy_cache
+**/.ruff_cache
