@@ -21,15 +21,14 @@ Two details worth stating, because both look like details and are not:
 """
 
 from limits.aio.storage import RedisStorage
-
-from . import client as redis_client
+from redis.asyncio import ConnectionPool
 
 #: Keeps the counters out of the way of everything else on the instance — the
 #: portfolio cache included. See adapters/redis/conversations.py on sharing.
 KEY_PREFIX = "agent:rl"
 
 
-def storage(url: str) -> RedisStorage:
+def storage(url: str, pool: ConnectionPool) -> RedisStorage:
     # The library picks its client from the scheme, and its async Redis storage
     # speaks `async+redis://`.
     uri = url if url.startswith("async+") else f"async+{url}"
@@ -39,5 +38,5 @@ def storage(url: str) -> RedisStorage:
         key_prefix=KEY_PREFIX,
         # Forwarded to the client untouched; the stub types **options narrower
         # than what the library actually passes through.
-        connection_pool=redis_client.pool(url),  # type: ignore[arg-type]
+        connection_pool=pool,  # type: ignore[arg-type]
     )

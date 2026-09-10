@@ -14,9 +14,9 @@ import logging
 
 import pytest
 
-import app.agent.intent as intent
 from app.adapters.memory import StaticPanel
-from app.agent.intent import IntentLabel
+from app.agent.intent import IntentClassifier, IntentLabel
+from app.agent.llm import Models
 from app.config import Config
 from app.settings import Settings
 
@@ -24,19 +24,16 @@ CHEAP = "openai:cheap-labeller"
 GOOD = "openai:the-one-that-answers"
 
 
-def wire(monkeypatch, *, answering: str, labelling: str = "") -> None:
-    """The dials for these models, and nothing from the shell."""
-    dials = Config(Settings(model=answering, router_model=labelling), StaticPanel())
-    monkeypatch.setattr(intent, "config", dials)
-
-
 class Stub:
-    """A structured-output runnable that either labels or refuses, and counts."""
+    """A client that either labels or refuses, and counts."""
 
     def __init__(self, label: str | None = "general", refusing: str | None = None):
         self.label = label
         self.refusing = refusing
         self.calls = 0
+
+    def with_structured_output(self, _schema, **_kwargs):
+        return self
 
     async def ainvoke(self, _messages):
         self.calls += 1
@@ -45,67 +42,55 @@ class Stub:
         return IntentLabel(intent=self.label, reason="stubbed")
 
 
-def cached(stub):
-    factory = lambda: stub  # noqa: E731 — one expression, named by assignment
-    factory.cache_clear = lambda: None
-    return factory
+def classifier(*, answering: Stub, labelling: Stub | None = None) -> IntentClassifier:
+    """The shape this is about: a cheap labeller and a separate answering model.
 
-
-@pytest.fixture
-def two_models(monkeypatch):
-    """The shape this is about: a cheap labeller and a separate answering model."""
-    wire(monkeypatch, answering=GOOD, labelling=CHEAP)
-
-
-@pytest.fixture(autouse=True)
-def clean(monkeypatch):
-    intent._labeler.cache_clear()
-    intent._understudy.cache_clear()
+    Without a labelling stub, the answering model does both jobs — the
+    shipped default.
+    """
+    clients = {GOOD: answering, CHEAP: labelling}
+    settings = Settings(model=GOOD, router_model=CHEAP if labelling else "")
+    models = Models(settings, factory=lambda name, **_kwargs: clients[name])
+    return IntentClassifier(models, Config(settings, StaticPanel()))
 
 
 class TestWhenTheCheapModelWorks:
-    async def test_the_answering_model_is_not_troubled(self, monkeypatch, two_models):
+    async def test_the_answering_model_is_not_troubled(self):
         cheap, good = Stub(label="portfolio"), Stub()
-        monkeypatch.setattr(intent, "_labeler", cached(cheap))
-        monkeypatch.setattr(intent, "_understudy", cached(good))
-        label = await intent.classify("how much do I have?")
+        label = await classifier(answering=good, labelling=cheap).classify("how much do I have?")
         assert label.intent == "portfolio"
         assert (cheap.calls, good.calls) == (1, 0), "the cheap one is the point"
 
 
 class TestWhenTheCheapModelCannotBeReached:
-    async def test_the_question_is_still_labelled(self, monkeypatch, two_models):
+    async def test_the_question_is_still_labelled(self):
         cheap = Stub(refusing="404 No endpoints found that can handle the requested parameters")
         good = Stub(label="general")
-        monkeypatch.setattr(intent, "_labeler", cached(cheap))
-        monkeypatch.setattr(intent, "_understudy", cached(good))
-        label = await intent.classify("what is impermanent loss?")
+        label = await classifier(answering=good, labelling=cheap).classify(
+            "what is impermanent loss?"
+        )
         assert label.intent == "general", "the label is right, which is the whole point"
         assert good.calls == 1
 
-    async def test_it_says_so_where_somebody_will_see_it(self, monkeypatch, two_models, caplog):
-        monkeypatch.setattr(intent, "_labeler", cached(Stub(refusing="404 no endpoints")))
-        monkeypatch.setattr(intent, "_understudy", cached(Stub()))
+    async def test_it_says_so_where_somebody_will_see_it(self, caplog):
+        ours = classifier(answering=Stub(), labelling=Stub(refusing="404 no endpoints"))
         with caplog.at_level(logging.WARNING, logger="svinooh-ai"):
-            await intent.classify("q")
+            await ours.classify("q")
         assert CHEAP in caplog.text and GOOD in caplog.text
 
-    async def test_both_failing_is_the_caller_problem(self, monkeypatch, two_models):
-        monkeypatch.setattr(intent, "_labeler", cached(Stub(refusing="404 no endpoints")))
-        monkeypatch.setattr(intent, "_understudy", cached(Stub(refusing="500 upstream")))
+    async def test_both_failing_is_the_caller_problem(self):
+        ours = classifier(
+            answering=Stub(refusing="500 upstream"), labelling=Stub(refusing="404 no endpoints")
+        )
         with pytest.raises(RuntimeError, match="500 upstream"):
-            await intent.classify("q")
+            await ours.classify("q")
 
 
 class TestWhenOneModelDoesBothJobs:
-    async def test_there_is_nothing_to_fall_back_to(self, monkeypatch):
+    async def test_there_is_nothing_to_fall_back_to(self):
         # The shipped default: no labelling model of its own. Trying the same
         # model a second time would only pay twice for the same failure.
-        wire(monkeypatch, answering=GOOD)
         only = Stub(refusing="429 rate limited")
-        understudy = Stub()
-        monkeypatch.setattr(intent, "_labeler", cached(only))
-        monkeypatch.setattr(intent, "_understudy", cached(understudy))
         with pytest.raises(RuntimeError, match="429"):
-            await intent.classify("q")
-        assert understudy.calls == 0
+            await classifier(answering=only).classify("q")
+        assert only.calls == 1

@@ -10,64 +10,20 @@ from the tokens of a label, and that watching a turn still ends in the same
 state as awaiting one.
 """
 
-import pytest
-from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage
-
-import app.agent.graph as graph
-import app.agent.intent as intent
-import app.agent.streaming as streaming
-from app.agent.intent import IntentLabel
+from app.agent.graph import ANSWERING_NODES
 from app.agent.streaming import turn_events
+from tests.support import agent, fake_model
 
 ANSWER = "Impermanent loss is a drop against holding."
 
 
-class FakeChatModel(GenericFakeChatModel):
-    """The stand-in, plus the one thing the graph does to a real model.
-
-    The onboarding branch binds a tool before it asks — for a visitor as well
-    as for an account, since #180 — and `GenericFakeChatModel` raises on
-    `bind_tools`. Without this, a turn that lands on onboarding fails here for
-    a reason that exists only in the fake.
-    """
-
-    def bind_tools(self, _tools):
-        return self
+def watching(**overrides):
+    """The simplest complete turn, or one shaped by the overrides."""
+    return agent(model=fake_model(ANSWER), **overrides)
 
 
-def fake_model(text: str):
-    return FakeChatModel(messages=iter([AIMessage(content=text)]))
-
-
-def cached(value):
-    factory = lambda: value  # noqa: E731 — one expression, named by assignment
-    factory.cache_clear = lambda: None
-    return factory
-
-
-class Labeller:
-    """Stands in for the classifier, which does not stream to anybody."""
-
-    def __init__(self, label="general"):
-        self.label = label
-
-    async def ainvoke(self, _messages):
-        return IntentLabel(intent=self.label, reason="stubbed")
-
-
-@pytest.fixture(autouse=True)
-def a_general_question(monkeypatch):
-    """The simplest complete turn: label it, answer it."""
-    monkeypatch.setattr(intent, "_labeler", cached(Labeller()))
-    monkeypatch.setattr(graph, "get_model", lambda: fake_model(ANSWER))
-    graph.agent_graph.cache_clear()
-    yield
-    graph.agent_graph.cache_clear()
-
-
-async def collect(state: dict) -> tuple[list[str], list[tuple[str, dict]]]:
-    events = [event async for event in turn_events(state)]
+async def collect(state: dict, bot=None) -> tuple[list[str], list[tuple[str, dict]]]:
+    events = [event async for event in (bot or watching()).watch(state)]
     return [data["text"] for name, data in events if name == "token"], events
 
 
@@ -88,11 +44,10 @@ class TestWatchingATurn:
         assert [name for name, _ in events].count("done") == 1
         assert events[-1][0] == "done"
 
-    async def test_the_label_is_not_streamed_at_the_reader(self, monkeypatch):
+    async def test_the_label_is_not_streamed_at_the_reader(self):
         # The classifier runs a model too. Its output is a routing decision and
         # was never for anybody to read.
-        monkeypatch.setattr(intent, "_labeler", cached(Labeller(label="general")))
-        tokens, _ = await collect({"question": "q"})
+        tokens, _ = await collect({"question": "q"}, watching(intent="general"))
         assert "general" not in tokens
 
 
@@ -111,44 +66,43 @@ class Failing:
 
 
 class TestWhenItGoesWrong:
-    async def test_a_failure_ends_the_stream_rather_than_hanging(self, monkeypatch):
+    async def test_a_failure_ends_the_stream_rather_than_hanging(self):
         # A reader owed an answer is owed an ending; a connection that simply
         # stops leaves a spinner turning forever.
-        monkeypatch.setattr(graph, "get_model", lambda: Failing())
-        graph.agent_graph.cache_clear()
-        _, events = await collect({"question": "q"})
+        _, events = await collect({"question": "q"}, agent(model=Failing()))
         name, data = events[-1]
         assert name == "error"
         assert "could not be finished" in data["message"]
 
-    async def test_the_failure_is_not_handed_to_the_reader_verbatim(self, monkeypatch):
-        monkeypatch.setattr(
-            graph, "get_model", lambda: Failing("api_key=sk-or-v1-secret refused by provider")
-        )
-        graph.agent_graph.cache_clear()
-        _, events = await collect({"question": "q"})
+    async def test_the_failure_is_not_handed_to_the_reader_verbatim(self):
+        refusing = Failing("api_key=sk-or-v1-secret refused by provider")
+        _, events = await collect({"question": "q"}, agent(model=refusing))
         assert "sk-or-v1" not in str(events), "an upstream message is not ours to forward"
 
-    async def test_a_broken_labeller_is_not_a_broken_turn(self, monkeypatch):
+    async def test_a_broken_labeller_is_not_a_broken_turn(self):
         # Deliberately not an error: a classifier that cannot be reached routes
         # to the portfolio branch rather than failing the question, which is
         # the fail-safe two production outages were hiding behind. The turn
         # still has to end in an answer.
         class Broken:
-            async def ainvoke(self, _messages):
+            async def classify(self, _question):
                 raise RuntimeError("no endpoints")
 
-        monkeypatch.setattr(intent, "_labeler", cached(Broken()))
-        graph.agent_graph.cache_clear()
-        _, events = await collect({"question": "q"})
+        class PublicPortfolio:
+            async def portfolio(self, _ref, _token):
+                raise RuntimeError("not today")
+
+        bot = agent(model=fake_model(ANSWER), intents=Broken(), portfolio=PublicPortfolio())
+        _, events = await collect({"question": "q", "portfolio": "p"}, bot)
         assert events[-1][0] == "done"
 
-    async def test_a_turn_with_no_answer_still_ends(self, monkeypatch):
+    async def test_a_turn_with_no_answer_still_ends(self):
         async def silent(_state):
             return {"answer": ""}
 
-        monkeypatch.setattr(streaming, "agent_graph", lambda: _OneNode(silent))
-        _, events = await collect({"question": "q"})
+        events = [
+            event async for event in turn_events(_OneNode(silent), {"question": "q"}, answering=())
+        ]
         assert events[-1][0] == "error"
 
 
@@ -166,6 +120,6 @@ class TestTheNodesThatSpeak:
     def test_every_leaf_is_one_the_reader_hears(self):
         # A node that ends a turn writes the reply, so the two lists are the
         # same list — which is why there is only one of them.
-        edges = graph.agent_graph().get_graph().edges
+        edges = watching().graph.get_graph().edges
         ends_a_turn = {edge.source for edge in edges if edge.target == "__end__"}
-        assert ends_a_turn == set(graph.ANSWERING_NODES)
+        assert ends_a_turn == set(ANSWERING_NODES)

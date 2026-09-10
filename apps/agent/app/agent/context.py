@@ -15,8 +15,6 @@ has exactly one home.
 from collections.abc import Callable, Collection
 from typing import Any
 
-from ..composition import config
-
 MAX_CHARS = 6000
 
 
@@ -176,7 +174,7 @@ def _breakdown(
     return f"{label}: {', '.join(parts)}"
 
 
-def _wallet_lines(wallet: dict) -> list[str]:
+def _wallet_lines(wallet: dict, cap: int) -> list[str]:
     stale = ", stale data" if wallet.get("stale") else ""
     positions = sorted(wallet.get("positions") or [], key=lambda p: -(p.get("valueUsd") or 0))
     header = (
@@ -184,10 +182,9 @@ def _wallet_lines(wallet: dict) -> list[str]:
         f"[{wallet.get('chain')}] — {usd(wallet.get('totalUsd'))}, "
         f"{len(positions)} position(s), status {wallet.get('status')}{stale}:"
     )
-    # Largest first — sorted here, not trusted from the wire — so the cap below
-    # can only ever drop the tail, which is dust by construction. (Wallets
+    # Largest first — sorted here, not trusted from the wire — so the cap can
+    # only ever drop the tail, which is dust by construction. (Wallets
     # themselves arrive value-sorted from the API; positions we order ourselves.)
-    cap = config.context_max_positions()
     lines = [header] + [f"  - {position_line(p)}" for p in positions[:cap]]
     rest = positions[cap:]
     if rest:
@@ -202,7 +199,7 @@ def _wallet_lines(wallet: dict) -> list[str]:
     return lines
 
 
-def portfolio_context(data: dict) -> str:
+def portfolio_context(data: dict, max_positions: int) -> str:
     wallets = data.get("wallets") or []
     positions = [p for w in wallets for p in (w.get("positions") or [])]
     raw_total = data.get("totalUsd")
@@ -223,13 +220,14 @@ def portfolio_context(data: dict) -> str:
         if line:
             lines.append(line)
     for wallet in wallets:
-        lines.extend(_wallet_lines(wallet))
+        lines.extend(_wallet_lines(wallet, max_positions))
     return "\n".join(lines)[:MAX_CHARS]
 
 
-def grounded_prompt(base: str, data: dict) -> str:
+def grounded_prompt(base: str, data: dict, max_positions: int) -> str:
     """The base prompt plus the live portfolio — the portfolio branch's happy path."""
-    return f"{base}\n\nThe user is looking at this portfolio right now:\n{portfolio_context(data)}"
+    shown = portfolio_context(data, max_positions)
+    return f"{base}\n\nThe user is looking at this portfolio right now:\n{shown}"
 
 
 def degraded_prompt(base: str) -> str:

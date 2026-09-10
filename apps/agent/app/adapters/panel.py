@@ -8,6 +8,7 @@ at a time: a bad value costs that value, never the conversation.
 
 import asyncio
 import logging
+from contextlib import suppress
 from typing import Any
 
 import httpx
@@ -92,6 +93,7 @@ class RemotePanel:
         self._every_s = every_s
         self._transport = transport
         self._values = NOTHING_DECIDED
+        self._refreshing: asyncio.Task[None] | None = None
 
     def current(self) -> PanelValues:
         return self._values
@@ -115,7 +117,20 @@ class RemotePanel:
         self._values = incoming
 
     async def keep_fresh(self) -> None:
-        """Ask again every interval, until cancelled. Started by the lifespan."""
+        """Ask again every interval, until cancelled."""
         while True:
             await asyncio.sleep(self._every_s)
             await self.fetch()
+
+    async def start(self) -> None:
+        """Hear the panel once before the first turn, then in the background."""
+        await self.fetch()
+        self._refreshing = asyncio.create_task(self.keep_fresh())
+
+    async def stop(self) -> None:
+        if self._refreshing is None:
+            return
+        self._refreshing.cancel()
+        with suppress(asyncio.CancelledError):
+            await self._refreshing
+        self._refreshing = None

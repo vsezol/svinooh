@@ -36,8 +36,9 @@ at-most-once, so a missed event would leave the skew in place permanently.
 import json
 from typing import cast
 
+from redis.asyncio import ConnectionPool, Redis
+
 from ...domain.conversation import CHAT_TTL_S, Chat
-from . import client as redis_client
 
 _CHAT = "agent:chat:"
 _OWNER = "agent:owner:"
@@ -59,8 +60,9 @@ class RedisConversationStore:
     already treats an index entry with no chat behind it as a miss, which is
     the same state a half-applied write would leave."""
 
-    def __init__(self, url: str) -> None:
-        self._redis = redis_client.client(url)
+    def __init__(self, pool: ConnectionPool) -> None:
+        # A client is cheap; the pool it shares is the expensive part.
+        self._redis = Redis(connection_pool=pool)
 
     async def load(self, chat_id: str) -> Chat | None:
         return _parse(await self._redis.get(f"{_CHAT}{chat_id}"))
@@ -118,6 +120,3 @@ class RedisConversationStore:
             moved += 1
         await self._redis.delete(f"{_OWNER}{source}")
         return moved
-
-    async def close(self) -> None:
-        await redis_client.close()

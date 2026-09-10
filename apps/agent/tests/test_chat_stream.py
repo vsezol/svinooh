@@ -9,52 +9,37 @@ awaited does.
 
 import json
 
-import httpx
 import pytest
-from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage
 
-import app.agent.graph as graph
-import app.agent.intent as intent
-import app.api.routes as routes
-from app import create_app
-from app.adapters.memory import MemoryConversationStore
-from app.agent.intent import IntentLabel
+from tests.support import Meter, client_for, container, fake_model
 
 ANSWER = "A health factor is a safety margin."
 
 
-def cached(value):
-    factory = lambda: value  # noqa: E731 — one expression, named by assignment
-    factory.cache_clear = lambda: None
-    return factory
+class Failing:
+    """A model that refuses, however it is called."""
 
+    async def ainvoke(self, _messages, **_kwargs):
+        raise RuntimeError("upstream is on fire")
 
-class Labeller:
-    async def ainvoke(self, _messages):
-        return IntentLabel(intent="general", reason="stubbed")
-
-
-@pytest.fixture(autouse=True)
-def a_working_turn(monkeypatch):
-    monkeypatch.setattr(intent, "_labeler", cached(Labeller()))
-    monkeypatch.setattr(
-        graph, "get_model", lambda: GenericFakeChatModel(messages=iter([AIMessage(content=ANSWER)]))
-    )
-    graph.agent_graph.cache_clear()
-    # A fresh store per test: these assert on what a session remembers. An
-    # empty url is the in-memory backend, so the suite stays offline.
-    routes.sessions.__init__(MemoryConversationStore(), 40, 100)
-    yield
-    graph.agent_graph.cache_clear()
+    async def astream(self, _messages, **_kwargs):
+        raise RuntimeError("upstream is on fire")
+        yield  # pragma: no cover — makes this an async generator
 
 
 @pytest.fixture
-async def client():
-    app = create_app(cors_origins=[])
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://agent"
-    ) as client:
+def meter():
+    return Meter()
+
+
+@pytest.fixture
+def wired(meter):
+    return container(model=fake_model(ANSWER), limiter=meter)
+
+
+@pytest.fixture
+async def client(wired):
+    async with client_for(wired) as client:
         yield client
 
 
@@ -93,7 +78,6 @@ class TestTheStream:
         # One wire, two deliveries. A second shape here would be a second
         # contract to keep in step with the first.
         streamed = parse((await client.post("/chat/stream", json={"message": "q"})).text)[-1][1]
-        graph.agent_graph.cache_clear()
         whole = (await client.post("/chat", json={"message": "q"})).json()
         assert streamed["schema"] == whole["schema"]
         assert streamed["blocks"] == whole["blocks"]
@@ -106,18 +90,17 @@ class TestTheStream:
 
 
 class TestItIsTheSameTurn:
-    async def test_the_session_remembers_a_streamed_turn(self, client):
+    async def test_the_session_remembers_a_streamed_turn(self, client, wired):
         events = parse((await client.post("/chat/stream", json={"message": "hello"})).text)
         session = events[-1][1]["session_id"]
-        remembered = await routes.sessions.history(session)
+        remembered = await wired.sessions.history(session)
         assert [message.content for message in remembered] == ["hello", ANSWER]
 
-    async def test_and_carries_it_into_the_next_question(self, client):
+    async def test_and_carries_it_into_the_next_question(self, client, wired):
         first = parse((await client.post("/chat/stream", json={"message": "hello"})).text)
         session = first[-1][1]["session_id"]
-        graph.agent_graph.cache_clear()
         await client.post("/chat/stream", json={"message": "again", "session_id": session})
-        assert len(await routes.sessions.history(session)) == 4
+        assert len(await wired.sessions.history(session)) == 4
 
 
 class TestRefusals:
@@ -126,44 +109,24 @@ class TestRefusals:
         assert response.status_code == 400
         assert "text/event-stream" not in response.headers.get("content-type", "")
 
-    async def test_a_rate_limited_caller_gets_a_status_not_a_stream(self, client, monkeypatch):
-        async def full(_key):
-            return 42
-
-        monkeypatch.setattr(routes.limiter, "retry_after", full)
+    async def test_a_rate_limited_caller_gets_a_status_not_a_stream(self, client, meter):
+        meter.wait = 42
         response = await client.post("/chat/stream", json={"message": "q"})
         assert response.status_code == 429
         assert response.headers["retry-after"] == "42"
 
-    async def test_a_turn_that_fails_says_so_in_the_stream(self, client, monkeypatch):
-        class Failing:
-            async def ainvoke(self, _messages, **_kwargs):
-                raise RuntimeError("upstream is on fire")
-
-            async def astream(self, _messages, **_kwargs):
-                raise RuntimeError("upstream is on fire")
-                yield  # pragma: no cover — makes this an async generator
-
-        monkeypatch.setattr(graph, "get_model", lambda: Failing())
-        graph.agent_graph.cache_clear()
-        events = parse((await client.post("/chat/stream", json={"message": "q"})).text)
+    async def test_a_turn_that_fails_says_so_in_the_stream(self):
+        async with client_for(container(model=Failing())) as client:
+            events = parse((await client.post("/chat/stream", json={"message": "q"})).text)
         # It opened, so the failure cannot be a status code any more.
         assert events[0][0] == "start" and events[-1][0] == "error"
 
-    async def test_a_failed_turn_leaves_the_session_as_it_was(self, client, monkeypatch):
-        class Failing:
-            async def ainvoke(self, _messages, **_kwargs):
-                raise RuntimeError("nope")
-
-            async def astream(self, _messages, **_kwargs):
-                raise RuntimeError("nope")
-                yield  # pragma: no cover
-
-        monkeypatch.setattr(graph, "get_model", lambda: Failing())
-        graph.agent_graph.cache_clear()
-        events = parse((await client.post("/chat/stream", json={"message": "q"})).text)
+    async def test_a_failed_turn_leaves_the_session_as_it_was(self):
+        wired = container(model=Failing())
+        async with client_for(wired) as client:
+            events = parse((await client.post("/chat/stream", json={"message": "q"})).text)
         session = events[0][1]["session_id"]
-        assert await routes.sessions.history(session) == [], (
+        assert await wired.sessions.history(session) == [], (
             "a question with no answer is not a turn"
         )
 

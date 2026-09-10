@@ -1,28 +1,26 @@
 """Intent classification — the router's eyes, live on the request path.
 
-Structured output is the whole trick: instead of parsing prose, the model is
-handed a schema (the pydantic class below) and must fill it, so what comes back
-is a validated object and never a string to regex. We ask for that as a tool
-call the model must make — see llm.structured for why that particular way, and
-why leaving the choice to the library cost us the classifier. It is the same
-mechanism the agent's own tools use; the classifier is its smallest lesson.
+Structured output is the whole trick: the model is handed a schema and must
+fill it, so what comes back is a validated object and never a string to
+regex. It is asked for as a tool call the model must make (llm.structured),
+the same mechanism the agent's own tools use.
 
-classify() raises only when there is no way left to get a label. The caller
-(the graph's classify node) owns that failure policy — "route to the portfolio
-branch" — but it is a poor thing to fall back on, because it is not "no
-answer", it is a confident wrong turn taken on every question. So this module
-exhausts its options first.
+`classify` raises only when there is no way left to get a label. The graph
+owns that failure policy — route to the portfolio branch — but it is a poor
+thing to fall back on: not "no answer" but a confident wrong turn on every
+question. So this exhausts its options first.
 """
 
 import logging
-from functools import cache
-from typing import Literal
+from typing import Any, Literal
 
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import Runnable
 from pydantic import BaseModel, Field
 
-from ..composition import config
-from .llm import ask, get_model, get_router_model, structured
+from ..config import Config
+from .llm import Models, structured
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -43,43 +41,37 @@ class IntentLabel(BaseModel):
     reason: str = Field(description="One short sentence: why this label.")
 
 
-@cache  # lazy singleton: built on the first call, reused ever after
-def _labeler():
-    # The model is forced to answer in the schema's shape, as a tool call it
-    # must make; the runnable yields IntentLabel instances directly.
-    return structured(get_router_model(), IntentLabel)
+class IntentClassifier:
+    """Labels a question, on the cheap model when it can be reached.
 
-
-@cache
-def _understudy():
-    """The same job on the model that answers — the one we know is reachable."""
-    return structured(get_model(), IntentLabel)
-
-
-async def classify(question: str) -> IntentLabel:
-    """Label the question, on the cheap model if it can be reached.
-
-    The labelling model is chosen for being cheap and quick, and a cheap model
-    is exactly the kind that turns out not to be servable: it lives on fewer
-    providers, and the ones it has are likelier to fail a policy we hold — ours
-    refuse to be trained on, because these prompts carry wallet addresses.
-
-    Twice now that produced a router which failed on every single request while
-    the product looked fine, because the fallback for "no label" is a label. So
-    a labelling model we cannot reach costs one wasted call and the answering
-    model does the labelling, rather than costing every question its routing.
-    The warning is loud because this is a configuration mistake, not weather.
+    The labelling model is chosen for being cheap, and a cheap model is the
+    kind that turns out not to be servable: fewer providers, likelier to fail
+    a policy we hold. Twice that produced a router failing on every request
+    while the product looked fine. So an unreachable labelling model costs
+    one wasted call, and the answering model does the labelling instead.
     """
-    messages = [SystemMessage(content=CLASSIFIER_PROMPT), HumanMessage(content=question)]
-    try:
-        return await ask(_labeler, messages, config.labelling(), _labeler.cache_clear)
-    except Exception as error:
-        if config.labelling().model == config.answering().model:
-            raise
-        logger.warning(
-            "labelling model %s unusable (%r) — labelling on %s instead",
-            config.labelling().model,
-            error,
-            config.answering().model,
-        )
-        return await ask(_understudy, messages, config.answering(), _understudy.cache_clear)
+
+    def __init__(self, models: Models, config: Config) -> None:
+        self._models = models
+        self._config = config
+
+    async def classify(self, question: str) -> IntentLabel:
+        messages = [SystemMessage(content=CLASSIFIER_PROMPT), HumanMessage(content=question)]
+        labelling, answering = self._config.labelling(), self._config.answering()
+        try:
+            label: IntentLabel = await self._models.ask(labelling, messages, prepare=_as_label)
+        except Exception as error:
+            if labelling.model == answering.model:
+                raise
+            logger.warning(
+                "labelling model %s unusable (%r) — labelling on %s instead",
+                labelling.model,
+                error,
+                answering.model,
+            )
+            label = await self._models.ask(answering, messages, prepare=_as_label)
+        return label
+
+
+def _as_label(model: BaseChatModel) -> Runnable[Any, Any]:
+    return structured(model, IntentLabel)

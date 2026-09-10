@@ -107,9 +107,6 @@ class MemoryConversationStore:
         self._index.pop(source, None)
         return moved
 
-    async def close(self) -> None:
-        return None
-
 
 def rate_limit_storage() -> MemoryStorage:
     """Counters for one process — right for one process, and only that."""
@@ -124,3 +121,9 @@ class StaticPanel:
 
     def current(self) -> PanelValues:
         return self._values
+
+    async def start(self) -> None:
+        return None
+
+    async def stop(self) -> None:
+        return None

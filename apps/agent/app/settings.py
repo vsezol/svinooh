@@ -95,7 +95,3 @@ class Settings(BaseSettings):
         # "default" is how the panel writes the empty setting, and an
         # environment may copy it. Both mean: send no instruction.
         return "" if value == "default" else value
-
-
-#: Read at import for now; the composition root takes this over in step 3.
-settings = Settings()

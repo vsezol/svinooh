@@ -1,10 +1,10 @@
 """The seams: what this service needs of the outside world, said as protocols.
 
 Every one of these is something we depend on and do not own. The layers above
-name the protocol; app/adapters names the vendor; app/composition.py is the one
+name the protocol; app/adapters names the vendor; app/container.py is the one
 place the two are introduced to each other. So "replace Redis with a database,
 or with an HTTP service" is a new module in adapters plus one line in the
-composition root — never a change in app/services.
+container — never a change in app/services.
 
 `Protocol` rather than an abstract base class, which is the Python way to do
 this: an adapter satisfies a port by having the right methods, so nothing has
@@ -53,8 +53,6 @@ class ConversationStore(Protocol):
     async def reassign(self, source: str, target: str) -> int:
         """Move every conversation from one owner to another; returns how many."""
 
-    async def close(self) -> None: ...
-
 
 class RateLimiter(Protocol):
     """How often one caller may ask.
@@ -91,3 +89,9 @@ class Panel(Protocol):
 
     def current(self) -> PanelValues:
         """The values as last heard; NOTHING_DECIDED until anything was."""
+
+    async def start(self) -> None:
+        """Hear the panel before the first turn, then keep hearing it."""
+
+    async def stop(self) -> None:
+        """Stop listening; the last values stand."""

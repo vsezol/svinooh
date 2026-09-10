@@ -29,6 +29,7 @@ import uuid
 
 import pytest
 
+from app.adapters.redis import client
 from app.adapters.redis.conversations import RedisConversationStore
 from app.domain.conversation import CHAT_TTL_S
 from app.services.sessions import SessionStore
@@ -55,7 +56,8 @@ async def _reachable() -> bool:
 async def redis_store():
     if not await _reachable():
         pytest.skip(f"no Redis at {URL}")
-    backend = RedisConversationStore(URL)
+    pool = client.pool(URL)
+    backend = RedisConversationStore(pool)
     store = SessionStore(backend, max_messages=6, max_turns=5)
     owners: list[str] = []
     chat_ids: list[str] = []
@@ -70,7 +72,7 @@ async def redis_store():
     keys = [f"agent:chat:{cid}" for cid in chat_ids] + [f"agent:owner:{o}" for o in owners]
     if keys:
         await raw.delete(*keys)
-    await backend.close()
+    await pool.disconnect()
 
 
 def _ids() -> tuple[str, str]:

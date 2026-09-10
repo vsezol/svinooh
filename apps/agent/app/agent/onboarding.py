@@ -16,14 +16,15 @@ one module per action, each in this same three-phase shape.
 """
 
 import logging
-from functools import cache
-from typing import Literal
+from typing import Any, Literal
 
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import Runnable
 from pydantic import BaseModel, Field
 
-from ..composition import config
-from .llm import ask, get_router_model, structured
+from ..config import Config
+from .llm import Models, structured
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -78,16 +79,23 @@ class ConfirmationDecision(BaseModel):
     reason: str = Field(description="One short sentence: why this label.")
 
 
-@cache
-def _confirmation_labeler():
-    return structured(get_router_model(), ConfirmationDecision)
+class ConfirmationClassifier:
+    """Reads the user's reply to "create it?" as a yes, a no, or neither."""
+
+    def __init__(self, models: Models, config: Config) -> None:
+        self._models = models
+        self._config = config
+
+    async def classify(self, reply: str) -> ConfirmationDecision:
+        messages = [SystemMessage(content=CONFIRMATION_PROMPT), HumanMessage(content=reply)]
+        decision: ConfirmationDecision = await self._models.ask(
+            self._config.labelling(), messages, prepare=_as_decision
+        )
+        return decision
 
 
-async def classify_confirmation(reply: str) -> ConfirmationDecision:
-    messages = [SystemMessage(content=CONFIRMATION_PROMPT), HumanMessage(content=reply)]
-    return await ask(
-        _confirmation_labeler, messages, config.labelling(), _confirmation_labeler.cache_clear
-    )
+def _as_decision(model: BaseChatModel) -> Runnable[Any, Any]:
+    return structured(model, ConfirmationDecision)
 
 
 # ── phase 3: the execution — what actually hits the API, after the yes ─────

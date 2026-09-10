@@ -137,13 +137,19 @@ class TestKeepingItFresh:
             await remote.fetch()
         assert "agent config changed" not in caplog.text
 
-    async def test_keep_fresh_asks_again_until_cancelled(self):
+    async def test_started_it_asks_again_until_stopped(self):
         host = Host(FULL)
-        refreshing = asyncio.create_task(panel(host, every_s=0.005).keep_fresh())
+        remote = panel(host, every_s=0.005)
+        await remote.start()
+        assert remote.current().model == "openai:answers", "heard before the first turn"
         await asyncio.wait_for(host.asked_again.wait(), timeout=2)
-        refreshing.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await refreshing
+        await remote.stop()
+        asked = len(host.calls)
+        await asyncio.sleep(0.02)
+        assert len(host.calls) == asked, "stopped means stopped"
+
+    async def test_stopping_what_was_never_started_is_fine(self):
+        await panel(Host(FULL)).stop()
 
 
 class TestWhatATestCanSay:
