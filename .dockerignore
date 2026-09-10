@@ -8,3 +8,9 @@ node_modules
 .beads
 .claude
 *.log
+# Python: a local venv and tool caches must never ride into an image.
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
