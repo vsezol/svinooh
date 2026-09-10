@@ -75,10 +75,6 @@ class Owner:
         """
         return Owner(key=f"sess:{session_id}")
 
-    @property
-    def listable(self) -> bool:
-        """Whether this caller is somebody a listing can be built for."""
-        return not self.key.startswith("sess:")
 
 
 def clean_anon_id(raw: str | None) -> str | None:

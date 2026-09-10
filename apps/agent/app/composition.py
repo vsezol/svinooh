@@ -27,7 +27,22 @@ logger = logging.getLogger("svinooh-ai")
 
 def conversation_store(redis_url: str) -> ConversationStore:
     if not redis_url:
-        logger.info("REDIS_URL not set — conversations are kept in this process")
+        # A warning, and deliberately not info, for two reasons that both
+        # matter in production.
+        #
+        # It describes a degraded state: the store is the durable one, and
+        # without a URL it is one process's memory again — conversations die on
+        # restart and a second replica has never heard of them. Everything
+        # still answers, which is exactly what makes it worth saying loudly.
+        #
+        # And these factories run while app/api/routes.py is being imported,
+        # which is before create_app() has configured logging. Until it has,
+        # logging's last-resort handler prints WARNING and above and drops the
+        # rest — so at info level this line does not appear anywhere at all.
+        # That is the failure _configure_logging's own docstring is about, and
+        # the one thing that must not go quiet is the notice that the durable
+        # store is not durable.
+        logger.warning("REDIS_URL not set — conversations are kept in this process only")
         return memory.MemoryConversationStore()
     # Imported here rather than at module scope so a service with no Redis
     # never imports the driver at all.
@@ -38,7 +53,8 @@ def conversation_store(redis_url: str) -> ConversationStore:
 
 def rate_limiter(redis_url: str, max_requests: int, window_s: int) -> RateLimiter:
     if not redis_url:
-        logger.info("REDIS_URL not set — rate limiting is per-process")
+        # Same reasoning as above: degraded, and emitted before logging is set up.
+        logger.warning("REDIS_URL not set — rate limiting counts per-process only")
         return WindowRateLimiter(max_requests, window_s, memory.rate_limit_storage())
     from .adapters.redis import rate_limit
 
