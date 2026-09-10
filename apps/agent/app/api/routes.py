@@ -22,14 +22,13 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
 
-from .. import remote_config
 from ..agent.graph import agent_graph
 from ..agent.streaming import turn_events
 from ..composition import allowance, limiter, sessions
-from ..config import settings
 from ..domain.conversation import Chat
 from ..domain.identity import ANON_HEADER, Owner
 from ..services.identity import resolve_owner
+from ..settings import settings
 from .schemas import (
     ChatDetail,
     ChatList,
@@ -96,10 +95,6 @@ async def _admit(
     text = body.message.strip()
     if not text:
         raise HTTPException(status_code=400, detail="empty message")
-
-    # Never awaited: a person waiting for an answer must not also wait for a
-    # settings poll. This turn runs on what is already in hand.
-    remote_config.refresh_soon()
 
     # The lock on the door: name the caller (401 only when the host rejects
     # the token outright), then charge the turn against their budget.

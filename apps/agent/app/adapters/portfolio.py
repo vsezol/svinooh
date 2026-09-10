@@ -15,8 +15,6 @@ from typing import Protocol
 
 import httpx
 
-from ..config import settings
-
 
 class DataSource(Protocol):
     async def portfolio(self, ref: str, token: str | None) -> dict: ...
@@ -27,8 +25,9 @@ class DataSource(Protocol):
 class PortfolioApiSource:
     """The svinooh portfolio API, spoken to over plain public HTTP."""
 
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, timeout_s: float) -> None:
         self._base = base_url.rstrip("/")
+        self._timeout_s = timeout_s
 
     @staticmethod
     def _headers(token: str | None) -> dict:
@@ -41,13 +40,13 @@ class PortfolioApiSource:
         # A client per call is deliberate at this traffic (one fetch per chat
         # turn); a pooled client is an optimization to make when it shows up in
         # a profile, not before.
-        async with httpx.AsyncClient(timeout=settings.context_timeout_s) as client:
+        async with httpx.AsyncClient(timeout=self._timeout_s) as client:
             response = await client.get(f"{self._base}{path}", headers=self._headers(token))
             response.raise_for_status()
             return response.json()
 
     async def _post(self, path: str, token: str | None, body: dict) -> dict:
-        async with httpx.AsyncClient(timeout=settings.context_timeout_s) as client:
+        async with httpx.AsyncClient(timeout=self._timeout_s) as client:
             response = await client.post(
                 f"{self._base}{path}", headers=self._headers(token), json=body
             )

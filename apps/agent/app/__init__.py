@@ -7,18 +7,19 @@ where the portfolio comes from, app/agent the graph and the model, app/api the
 wire.
 """
 
+import asyncio
 import logging
 import sys
 from collections.abc import AsyncIterator, Sequence
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import remote_config
+from . import composition
 from .api.routes import router
-from .config import settings
 from .domain.identity import ANON_HEADER
+from .settings import settings
 
 
 class _Below(logging.Filter):
@@ -74,10 +75,16 @@ def _configure_logging() -> None:
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Startup before the yield, shutdown after it."""
-    # So the first turn already runs on what the panel says rather than on
-    # the environment the container booted with.
-    await remote_config.prime()
-    yield
+    # The panel is heard once before the first turn, then kept fresh in the
+    # background: a turn never waits on it, and an outage costs only freshness.
+    await composition.panel.fetch()
+    refreshing = asyncio.create_task(composition.panel.keep_fresh())
+    try:
+        yield
+    finally:
+        refreshing.cancel()
+        with suppress(asyncio.CancelledError):
+            await refreshing
 
 
 def create_app(cors_origins: Sequence[str] | None = None) -> FastAPI:

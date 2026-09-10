@@ -20,7 +20,8 @@ from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 
-from ..config import Role, answering, labelling, settings
+from ..composition import config
+from ..config import Role
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -61,7 +62,7 @@ def _speaks_openai_wire(model: str) -> bool:
     both ride in it, so both are for the OpenAI wire only — which is the wire
     an aggregator speaks for every vendor anyway.
     """
-    return bool(settings.model_base_url) or model.startswith("openai:")
+    return bool(config.settings.model_base_url) or model.startswith("openai:")
 
 
 def _provider_policy(sort: str) -> dict:
@@ -75,12 +76,12 @@ def _provider_policy(sort: str) -> dict:
     because "best provider" means different things to a job that writes
     paragraphs and a job that writes one word.
     """
-    if not settings.model_base_url:
+    if not config.settings.model_base_url:
         return {}
     policy: dict = {}
-    if settings.provider_data_collection:
-        policy["data_collection"] = settings.provider_data_collection
-    if settings.provider_require_parameters:
+    if config.settings.provider_data_collection:
+        policy["data_collection"] = config.settings.provider_data_collection
+    if config.settings.provider_require_parameters:
         policy["require_parameters"] = True
     if sort:
         policy["sort"] = sort
@@ -144,10 +145,10 @@ def _credentials() -> dict:
     one key that service issued.
     """
     credentials = {}
-    if settings.model_api_key:
-        credentials["api_key"] = settings.model_api_key
-    if settings.model_base_url:
-        credentials["base_url"] = settings.model_base_url
+    if config.settings.model_api_key:
+        credentials["api_key"] = config.settings.model_api_key
+    if config.settings.model_base_url:
+        credentials["base_url"] = config.settings.model_base_url
     return credentials
 
 
@@ -158,7 +159,7 @@ def model_for(role: Role) -> BaseChatModel:
         role.model,
         # langchain's own name for it; ours says what it caps.
         max_tokens=role.answer_token_cap,
-        timeout=settings.request_timeout_s,
+        timeout=config.settings.request_timeout_s,
         **_credentials(),
         **_wire_options(role),
     )
@@ -166,12 +167,12 @@ def model_for(role: Role) -> BaseChatModel:
 
 def get_model() -> BaseChatModel:
     """The model that answers — what the user reads."""
-    return model_for(answering())
+    return model_for(config.answering())
 
 
 def get_router_model() -> BaseChatModel:
     """The model that labels — the intent and confirmation classifiers."""
-    return model_for(labelling())
+    return model_for(config.labelling())
 
 
 async def ask(build, messages, role: Role, forget=None):

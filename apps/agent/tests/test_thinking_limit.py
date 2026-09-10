@@ -11,14 +11,14 @@ every classification. Both were invisible, because the classifier's fail-safe
 swallows a failure and routes everything to the portfolio branch.
 """
 
-from dataclasses import replace
-
 import pytest
 
 import app.agent.intent as intent
 import app.agent.llm as llm
+from app.adapters.memory import StaticPanel
 from app.agent.intent import IntentLabel
-from app.config import Role
+from app.config import Config, Role
+from app.settings import Settings
 
 NO_ENDPOINTS = (
     "Error code: 404 - {'error': {'message': 'No endpoints found that can handle "
@@ -43,14 +43,24 @@ def body_for(effort: str = "low", model: str = "openai:m", sort: str = "throughp
     return llm._wire_options(role(model=model, effort=effort, sort=sort)).get("extra_body", {})
 
 
-def on_wire(monkeypatch, base_url: str) -> None:
-    """Point the module at an aggregator, or at a provider directly.
+AGGREGATOR = "https://openrouter.ai/api/v1"
 
-    Settings is a frozen dataclass on purpose — configuration does not change
-    under a running service — so a test swaps the whole object rather than one
-    field of it.
+
+def wire(monkeypatch, **env) -> None:
+    """Hand both modules one set of dials, built from this environment alone.
+
+    Settings is frozen on purpose — configuration does not change under a
+    running service — so a test builds a whole object rather than poking one
+    field of the live one.
     """
-    monkeypatch.setattr(llm, "settings", replace(llm.settings, model_base_url=base_url))
+    dials = Config(Settings(**env), StaticPanel())
+    monkeypatch.setattr(llm, "config", dials)
+    monkeypatch.setattr(intent, "config", dials)
+
+
+def on_wire(monkeypatch, base_url: str) -> None:
+    """Point the service at an aggregator, or at a provider directly."""
+    wire(monkeypatch, model_base_url=base_url)
 
 
 @pytest.fixture(autouse=True)
@@ -61,7 +71,7 @@ def on_the_aggregator(monkeypatch):
     extra_body to put it in, so every test about either has to say which wire
     it is on.
     """
-    on_wire(monkeypatch, "https://openrouter.ai/api/v1")
+    on_wire(monkeypatch, AGGREGATOR)
 
 
 @pytest.fixture(autouse=True)
@@ -133,8 +143,12 @@ def cached(labeler):
 @pytest.fixture
 def asking_for_thought(monkeypatch):
     """A labelling role that does send a setting — the only kind that retries."""
-    monkeypatch.setattr(llm, "labelling", lambda: role(model="openai:router"))
-    monkeypatch.setattr(intent, "labelling", lambda: role(model="openai:router"))
+    wire(
+        monkeypatch,
+        model_base_url=AGGREGATOR,
+        router_model="openai:router",
+        router_reasoning_effort="low",
+    )
 
 
 @pytest.fixture
@@ -146,7 +160,14 @@ def no_understudy(monkeypatch):
     not about that fallback, so they need the fallback to be unavailable —
     which is what a deployment where both roles run one model looks like.
     """
-    monkeypatch.setattr(intent, "answering", lambda: role(model="openai:router"))
+    wire(
+        monkeypatch,
+        model_base_url=AGGREGATOR,
+        model="openai:router",
+        reasoning_effort="low",
+        router_model="openai:router",
+        router_reasoning_effort="low",
+    )
 
 
 class TestClassifierRecovery:
@@ -188,9 +209,13 @@ class TestClassifierRecovery:
     async def test_a_role_that_asks_for_nothing_does_not_retry(self, monkeypatch, no_understudy):
         # The shipped labelling role. A 404 here is about something we are not
         # willing to give up, so it goes to the caller on the first failure.
-        quiet = role(model="openai:instruct", effort="")
-        monkeypatch.setattr(intent, "labelling", lambda: quiet)
-        monkeypatch.setattr(intent, "answering", lambda: quiet)
+        wire(
+            monkeypatch,
+            model_base_url=AGGREGATOR,
+            model="openai:instruct",
+            reasoning_effort="",
+            router_model="openai:instruct",
+        )
         labeler = Labeler(refusals=99, saying=NO_ENDPOINTS)
         monkeypatch.setattr(intent, "_labeler", cached(labeler))
         with pytest.raises(Exception, match="No endpoints"):

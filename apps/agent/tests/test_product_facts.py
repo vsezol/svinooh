@@ -6,72 +6,51 @@ offered Cosmos over IBC. Neither exists. Both answers were confident and
 fluent, because the model had no facts and a question does not wait for them —
 a model given nothing does not say nothing.
 
-The facts now arrive with the config, from the same array the FAQ page renders,
-so the page and the assistant cannot answer the same question differently.
+The facts now arrive with the panel's values, from the same array the FAQ page
+renders, so the page and the assistant cannot answer the same question
+differently. How a payload becomes facts is tests/test_panel.py; this is what
+reaches the model once it has.
 """
 
-import pytest
+from app.adapters.memory import StaticPanel
+from app.config import DEFAULT_SYSTEM_PROMPT, Config
+from app.panel import PanelValues, ProductFact
+from app.settings import Settings
 
-from app import remote_config
-from app.config import DEFAULT_SYSTEM_PROMPT, product_facts, settings, system_prompt
-
-FACTS = [
-    {"q": "Which chains are supported?", "a": "EVM networks, Solana, TRON and Bitcoin."},
-    {"q": "How do I add a wallet?", "a": "Paste the address into the field under the charts."},
-]
+FACTS = (
+    ProductFact(q="Which chains are supported?", a="EVM networks, Solana, TRON and Bitcoin."),
+    ProductFact(q="How do I add a wallet?", a="Paste the address into the field under the charts."),
+)
 
 
-@pytest.fixture
-def panel_says(monkeypatch):
-    def set(values):
-        monkeypatch.setattr(remote_config, "_values", values)
-
-    return set
+def told(*facts: ProductFact) -> Config:
+    return Config(Settings(), StaticPanel(PanelValues(product=facts)))
 
 
 class TestWhatReachesTheModel:
-    def test_the_facts_are_in_the_prompt(self, panel_says):
-        panel_says({"product": FACTS})
-        prompt = system_prompt()
+    def test_the_facts_are_in_the_prompt(self):
+        prompt = told(*FACTS).system_prompt()
         assert "Paste the address into the field under the charts." in prompt
         assert "EVM networks, Solana, TRON and Bitcoin." in prompt
 
-    def test_the_question_travels_with_its_answer(self, panel_says):
+    def test_the_question_travels_with_its_answer(self):
         # A bare list of sentences is harder to use than a list of answers to
         # questions somebody actually asks.
-        panel_says({"product": FACTS})
-        assert "How do I add a wallet?" in system_prompt()
+        assert "How do I add a wallet?" in told(*FACTS).system_prompt()
 
-    def test_the_rules_come_first_and_stay_whole(self, panel_says):
-        panel_says({"product": FACTS})
-        prompt = system_prompt()
+    def test_the_rules_come_first_and_stay_whole(self):
+        prompt = told(*FACTS).system_prompt()
         assert prompt.startswith(DEFAULT_SYSTEM_PROMPT)
         assert "this, and nothing beyond it" in prompt
 
-    def test_the_section_is_not_headed_with_a_phrase_we_would_hate_quoted(self, panel_says):
+    def test_the_section_is_not_headed_with_a_phrase_we_would_hate_quoted(self):
         # Whatever the section is called is what the model calls it back: it
         # answered "the product facts do not list any" because that is the
         # name the header taught it.
-        panel_says({"product": FACTS})
-        assert "product facts" not in product_facts().lower()
+        assert "product facts" not in told(*FACTS).product_facts().lower()
 
-
-class TestWhenThereAreNoFacts:
-    def test_nothing_is_appended(self, panel_says):
-        panel_says({})
-        assert system_prompt() == settings.system_prompt
-
-    @pytest.mark.parametrize("value", [None, "", [], "a string", {"not": "a list"}, 42], ids=str)
-    def test_a_shape_we_did_not_expect_is_ignored_rather_than_rendered(self, panel_says, value):
-        # The config is fetched over HTTP from another service; a bad payload
-        # must cost the facts, never the conversation.
-        panel_says({"product": value})
-        assert product_facts() == ""
-
-    def test_entries_without_an_answer_are_dropped(self, panel_says):
-        panel_says({"product": [{"q": "?"}, {"a": "Bitcoin balances."}, "junk"]})
-        facts = product_facts()
-        assert "Bitcoin balances." in facts and "?" not in facts
+    def test_nothing_is_appended_when_there_are_no_facts(self):
+        assert told().system_prompt() == DEFAULT_SYSTEM_PROMPT
 
 
 class TestTheRulesThemselves:
