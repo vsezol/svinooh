@@ -19,15 +19,16 @@ COPY --from=ghcr.io/astral-sh/uv:0.9 /uv /usr/local/bin/uv
 ENV UV_PYTHON_DOWNLOADS=never \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
-# Dependencies before code, so a code change does not reinstall them.
+# Dependencies before code, so a code change does not reinstall them: this
+# layer is cached until uv.lock moves, which is the caching that matters.
 #
-# The cache mount needs an explicit `id`. BuildKit defaults it to the target
-# path and builds this happily without one; Railway's builder does not, and
-# refuses the whole file with "flag is missing an id argument" — a build that
-# fails in production and passes on a laptop.
+# And no `--mount=type=cache` on it, deliberately. Railway's builder only
+# accepts one whose id is `s/<service id>-<target>`, and its own docs say a
+# variable cannot stand in for that id — so the alternative is this repo
+# carrying a platform's opaque service id, to save a package download on the
+# rare build where the lockfile changed at all.
 COPY apps/agent/pyproject.toml apps/agent/uv.lock ./
-RUN --mount=type=cache,id=agent-uv,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev
 COPY apps/agent/main.py ./
 COPY apps/agent/app ./app
 
