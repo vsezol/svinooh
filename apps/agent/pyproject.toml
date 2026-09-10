@@ -25,6 +25,7 @@ dependencies = [
     "limits>=5.8",
     # Conversations and the rate limiter's counters, one client library for both.
     "redis>=8.1",
+    "pydantic-settings>=2.15.0",
 ]
 
 [dependency-groups]
