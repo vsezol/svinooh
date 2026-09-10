@@ -162,6 +162,14 @@ body[data-theme='light'] .sv-a-c-on-light {
   border-color: var(--acc);
 }
 
+/* The card above is this field's focus mark, so the field takes no ring of its
+   own — see the note beside :focus-visible in the kit. The box is borderless
+   and spans the row, so a ring around it is a rectangle drawn through the
+   middle of the card. */
+.sv-a-c-composer-input:focus-visible {
+  outline: none;
+}
+
 .sv-a-c-composer-input {
   flex: 1;
   min-width: 0;
