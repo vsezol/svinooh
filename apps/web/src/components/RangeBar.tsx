@@ -23,7 +23,17 @@ import type { PositionBand } from '@svinooh/shared';
  */
 const FILL_ALPHA = 42; // % of tone mixed into the surface — solid, never translucent
 
-export function RangeBar({ band, inRange }: { band: PositionBand; inRange: boolean }) {
+/**
+ * Only the three prices, not the whole band.
+ *
+ * A position carries a pair, a fee tier, a network and a price label as well,
+ * and this draws none of them — so asking for all of it meant the second place
+ * that wanted this scale had to invent four fields it would never read. The
+ * type now says what is used.
+ */
+export type Band = Pick<PositionBand, 'lower' | 'upper' | 'current'>;
+
+export function RangeBar({ band, inRange }: { band: Band; inRange: boolean }) {
   const { lower, upper, current } = band;
   const span = upper - lower;
   // A degenerate band has no inside to be at a point of
