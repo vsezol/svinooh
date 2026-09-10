@@ -1,6 +1,6 @@
 """Who is asking — the value, and the rule for reading it off a header.
 
-Pure: naming a caller from a token is I/O and lives in app/services/identity.py.
+Pure: naming a caller from a token is I/O and lives in app/application/identity.py.
 What is here is what an owner IS, and everything downstream keys on one string:
 
     user:<id>    somebody the host API named from their token
@@ -18,7 +18,7 @@ The browser half of this — generating the id and holding it — is step 3 part
 of apps/agent-web/ROADMAP.md, which belongs to a separate branch. This is the
 server seam part 2 could not be built without, kept small and in a file of its
 own so part 1 can take it over. If part 1 lands a different header or id
-format, this module and services/identity.py are the only things that change.
+format, this module and application/identity.py are the only things that change.
 -----------------------------------------------------------------------------
 """
 
@@ -33,6 +33,19 @@ ANON_HEADER = "X-Svinooh-Anon-Id"
 #: than an exact format — uuid hex, nanoid and base64url all pass — because the
 #: format is part 1's to choose and this only has to keep a key safe.
 _ANON_ID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+
+
+@dataclass(frozen=True)
+class Caller:
+    """What a request carries about who is asking, before anyone is named.
+
+    The two credentials and nothing else: the token the host is the authority
+    on, and the id the browser made up. Turning them into an Owner is
+    app/application/identity.py.
+    """
+
+    authorization: str | None = None
+    anon_id: str | None = None
 
 
 @dataclass(frozen=True)

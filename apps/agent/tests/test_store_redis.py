@@ -31,8 +31,8 @@ import pytest
 
 from app.adapters.redis import client
 from app.adapters.redis.conversations import RedisConversationStore
+from app.application.sessions import SessionStore
 from app.domain.conversation import CHAT_TTL_S
-from app.services.sessions import SessionStore
 
 URL = os.getenv("AGENT_TEST_REDIS_URL", "redis://localhost:6399/0")
 
@@ -93,7 +93,7 @@ class TestItRoundTrips:
         store, _, track = redis_store
         owner, chat_id = track(*_ids())
         await store.append(chat_id, owner, "hello", "hi", [])
-        assert [m.content for m in await store.history(chat_id)] == ["hello", "hi"]
+        assert [(t.q, t.a) for t in await store.history(chat_id)] == [("hello", "hi")]
 
     async def test_it_is_listed_under_its_owner(self, redis_store):
         store, _, track = redis_store

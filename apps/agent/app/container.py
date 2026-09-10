@@ -3,7 +3,7 @@
 `build` is the only function in the service that names a vendor. Everything
 above it talks to app/ports.py; everything it builds implements one of those
 ports. Replacing Redis with a database, or the host with another API, is a
-new adapter plus one line here — never a change in app/services or the graph.
+new adapter plus one line here — never a change in app/application or the graph.
 
 Built once per process by create_app, never at import: a module that wires
 the service when imported cannot be imported by a test, and a test wants to
@@ -24,12 +24,14 @@ from .agent.graph import Agent
 from .agent.intent import IntentClassifier
 from .agent.llm import Models
 from .agent.onboarding import ConfirmationClassifier
+from .application.auth import Authenticator
+from .application.chats import Chats
+from .application.identity import Identity
+from .application.limits import WindowAllowance, WindowRateLimiter
+from .application.sessions import SessionStore
+from .application.turns import Turns
 from .config import Config
 from .ports import Allowance, ConversationStore, Panel, RateLimiter
-from .services.auth import Authenticator
-from .services.identity import Identity
-from .services.limits import WindowAllowance, WindowRateLimiter
-from .services.sessions import SessionStore
 from .settings import Settings
 
 logger = logging.getLogger("svinooh-ai")
@@ -49,6 +51,9 @@ class Container:
     limiter: RateLimiter
     allowance: Allowance
     agent: Agent
+    #: The use cases the HTTP surface is a thin skin over.
+    turns: Turns
+    chats: Chats
     #: The one Redis pool, shared by the store and the counters; None without
     #: a REDIS_URL, when both live in this process.
     redis: ConnectionPool | None = None
@@ -81,25 +86,32 @@ def build(settings: Settings) -> Container:
     config = Config(settings, panel)
     portfolio = PortfolioApiSource(settings.portfolio_api_url, settings.context_timeout_s)
     models = Models(settings)
+    identity = Identity(Authenticator(portfolio, settings.auth_cache_ttl_s))
+    sessions = SessionStore(store, settings.history_max_messages, settings.chat_max_turns)
+    limiter = WindowRateLimiter(
+        settings.rate_limit_requests, settings.rate_limit_window_s, counters
+    )
+    allowance = WindowAllowance(settings.free_questions, settings.free_window_s, counters)
+    agent = Agent(
+        config,
+        portfolio,
+        models,
+        IntentClassifier(models, config),
+        ConfirmationClassifier(models, config),
+    )
     return Container(
         settings=settings,
         panel=panel,
         config=config,
         portfolio=portfolio,
-        identity=Identity(Authenticator(portfolio, settings.auth_cache_ttl_s)),
+        identity=identity,
         store=store,
-        sessions=SessionStore(store, settings.history_max_messages, settings.chat_max_turns),
-        limiter=WindowRateLimiter(
-            settings.rate_limit_requests, settings.rate_limit_window_s, counters
-        ),
-        allowance=WindowAllowance(settings.free_questions, settings.free_window_s, counters),
-        agent=Agent(
-            config,
-            portfolio,
-            models,
-            IntentClassifier(models, config),
-            ConfirmationClassifier(models, config),
-        ),
+        sessions=sessions,
+        limiter=limiter,
+        allowance=allowance,
+        agent=agent,
+        turns=Turns(sessions, identity, limiter, allowance, agent),
+        chats=Chats(sessions, identity, settings.chat_list_limit),
         redis=redis,
     )
 

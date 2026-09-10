@@ -16,10 +16,8 @@ import logging
 import time
 from dataclasses import dataclass
 
-import httpx
-from fastapi import HTTPException
-
 from ..adapters.portfolio import PortfolioApiSource
+from ..domain.errors import UnknownTokenError
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -43,7 +41,7 @@ class Authenticator:
     async def authenticate(self, token: str | None) -> Caller | None:
         """Name the caller, or None for the anonymous.
 
-        Raises 401 only when the host affirmatively rejects the token.
+        Raises UnknownTokenError only when the host affirmatively rejects it.
         """
         if not token:
             return None
@@ -55,11 +53,9 @@ class Authenticator:
 
         try:
             me = await self._portfolio.me(token)
-        except httpx.HTTPStatusError as error:
-            if error.response.status_code in (401, 403):
-                raise HTTPException(status_code=401, detail="unknown token") from error
-            logger.warning("auth check errored (%s) — treating caller as anonymous", error)
-            return None
+        except UnknownTokenError:
+            # The host said no. That is an answer, not an outage.
+            raise
         except Exception as error:  # noqa: BLE001 — an outage must not close the door
             logger.warning("auth check failed (%r) — treating caller as anonymous", error)
             return None

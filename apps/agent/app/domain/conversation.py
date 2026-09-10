@@ -2,12 +2,12 @@
 
 Pure: no Redis, no HTTP, no framework, no model client. What a conversation IS
 lives here; where it is kept is app/adapters, and what is done with it is
-app/services. The layer is worth having precisely because these types mean the
+app/application. The layer is worth having precisely because these types mean the
 same thing coming out of Redis, out of a dict in a test, or out of whatever
 replaces Redis later.
 
 **One representation.** A conversation is its turns. The context replayed into
-the model is derived from them (app/services/sessions.py) and so is the
+the model is derived from them (app/application/sessions.py) and so is the
 transcript the reader sees — two projections of one record, never two records.
 That split, kept as two stores, is the bug this whole step existed to remove.
 """

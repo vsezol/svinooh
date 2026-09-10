@@ -9,8 +9,8 @@ one to whoever it belongs to.
 import pytest
 
 from app.adapters.memory import rate_limit_storage
+from app.application.limits import WindowAllowance
 from app.domain.identity import ANON_HEADER
-from app.services.limits import WindowAllowance
 from app.settings import Settings
 from tests.support import Door, Meter, Purse, client_for, container, fake_model
 
@@ -166,7 +166,7 @@ class TestASessionIdIsNotAKey:
         theirs = await ask(client, "repeat that", anon=OTHER_ANON, session=mine["session_id"])
         # Their conversation starts empty: one turn, their own.
         replayed = await wired.sessions.history(theirs["session_id"])
-        assert [m.content for m in replayed] == ["repeat that", ANSWER]
+        assert [(t.q, t.a) for t in replayed] == [("repeat that", ANSWER)]
 
     async def test_a_stranger_cannot_confirm_a_pending_proposal(self, client, wired):
         """The write gate is a pending action on the conversation, so an id
@@ -288,7 +288,7 @@ class TestTheIdIsCheckedBeforeItIsTrusted:
         first = await ask(client, "hello", anon=None)
         session = first["session_id"]
         await ask(client, "again", anon=None, session=session)
-        assert len(await wired.sessions.history(session)) == 4
+        assert [t.q for t in await wired.sessions.history(session)] == ["hello", "again"]
 
 
 class TestTheCostLock:
