@@ -9,6 +9,7 @@ is set, and what is per request is the API call, not the client.
 
 import asyncio
 import logging
+import time
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -18,6 +19,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.runnables import Runnable
 
 from ..config import Role
+from ..observability import metrics
 from ..settings import Settings
 
 logger = logging.getLogger("svinooh-ai")
@@ -73,14 +75,28 @@ class Models:
         one, belongs to the caller — there is no loop here.
         """
         async with self._in_flight:
+            # Counted from here rather than from the wait: the gauge says how
+            # many calls are actually in the air, which is the number the
+            # provider sees.
+            metrics.in_flight(1)
+            started, outcome = time.perf_counter(), "ok"
             try:
                 return await self._runnable(role, prepare).ainvoke(messages)
             except Exception as error:
                 if not (is_thinking_setting_rejected(error) and self.stop_asking_it_to_think(role)):
+                    outcome = "failed"
                     raise
                 # Still holding its place in the queue: the retry is the same
                 # call, and letting go here would send it to the back.
-                return await self._runnable(role, prepare).ainvoke(messages)
+                try:
+                    return await self._runnable(role, prepare).ainvoke(messages)
+                except Exception:
+                    outcome = "failed"
+                    raise
+            finally:
+                metrics.in_flight(-1)
+                metrics.timed(metrics.model_duration, time.perf_counter() - started, role=role.name)
+                metrics.counted(metrics.model_calls, role=role.name, outcome=outcome)
 
     def _runnable(self, role: Role, prepare: Prepare | None) -> Runnable[Any, Any]:
         client = self.for_role(role)

@@ -9,6 +9,7 @@ door.
 
 import asyncio
 import logging
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -19,6 +20,7 @@ from ..domain.errors import (
     TurnTimedOutError,
 )
 from ..domain.identity import Caller, Owner
+from ..observability import metrics
 from ..ports import Agent, Allowance, Ask, Finished, Progress, RateLimiter, Reply
 from .identity import Identity
 from .sessions import SessionStore
@@ -127,13 +129,21 @@ class Turns:
         loop: past it the caller is given an ending rather than a connection
         held open on work nobody is waiting for any more.
         """
+        started = time.perf_counter()
         try:
             async with asyncio.timeout(self._deadline_s):
                 reply = await self._agent.run(admitted.ask)
         except TimeoutError as expired:
             logger.warning("turn %s ran past %ss", admitted.session_id, self._deadline_s)
+            metrics.counted(metrics.turns, outcome="timed_out")
             raise TurnTimedOutError from expired
-        return await self._applied(reply, admitted)
+        except Exception:
+            metrics.counted(metrics.turns, outcome="failed")
+            raise
+        answered = await self._applied(reply, admitted)
+        metrics.counted(metrics.turns, outcome="answered")
+        metrics.timed(metrics.turn_duration, time.perf_counter() - started)
+        return answered
 
     async def watch(self, admitted: Admitted) -> AsyncIterator[tuple[str, dict]]:
         """The same turn, reported while it happens.
@@ -141,6 +151,7 @@ class Turns:
         Every event but the last passes through untouched; `done` carries the
         finished answer, once the turn's decisions have been applied.
         """
+        started = time.perf_counter()
         try:
             async with asyncio.timeout(self._deadline_s):
                 async for update in self._agent.watch(admitted.ask):
@@ -149,12 +160,16 @@ class Turns:
                             yield kind, payload
                         case Finished(reply):
                             yield "done", {"text": await self._applied(reply, admitted)}
+                            metrics.counted(metrics.turns, outcome="answered")
+                            metrics.timed(metrics.turn_duration, time.perf_counter() - started)
                         case _:
                             yield "error", {"message": update.message}
+                            metrics.counted(metrics.turns, outcome="failed")
         except TimeoutError:
             # The stream is already open, so the deadline is an event rather
             # than a status code — the reader still gets an ending.
             logger.warning("turn %s ran past %ss", admitted.session_id, self._deadline_s)
+            metrics.counted(metrics.turns, outcome="timed_out")
             yield "error", {"message": "the answer took too long"}
 
     async def remember(self, admitted: Admitted, answer: str, blocks: list[dict]) -> None:
@@ -198,6 +213,7 @@ class Turns:
         if await self._allowance.charge(owner.key):
             return True
         logger.info("allowance spent for %s — the answer is the sign-in card", owner.key)
+        metrics.counted(metrics.turns, outcome="walled")
         return False
 
 

@@ -41,6 +41,7 @@ from langgraph.graph.state import CompiledStateGraph
 from ..adapters.portfolio import PortfolioApiSource
 from ..config import Config
 from ..domain.conversation import Turn
+from ..observability import metrics
 from ..ports import Ask, Failed, Finished, Progress, Reply, Update
 from .intent import IntentClassifier
 from .llm import Models, extract_text
@@ -189,9 +190,15 @@ class LangGraphAgent:
             async with step("route", "Reading the question"):
                 label = await self._intents.classify(state["question"])
             logger.info("intent: %s (%s) q=%.80s", label.intent, label.reason, state["question"])
+            metrics.counted(metrics.intents, intent=label.intent)
             return {"intent": label.intent}
         except Exception as error:  # noqa: BLE001 — the fail-safe IS the handling
             logger.warning("intent classifier failed (%r) — routing to portfolio", error)
+            # Counted apart from the label it falls back to: a router that
+            # fails on every request looks exactly like one that finds every
+            # question to be about money, which is how it hid twice.
+            metrics.counted(metrics.intents, intent="unreadable")
+            metrics.counted(metrics.errors, type="classifier")
             return {"intent": "portfolio"}
 
     async def _identity(self, state: AgentState) -> AgentState:
@@ -217,6 +224,7 @@ class LangGraphAgent:
                 me = await self._portfolio.me(auth)
         except Exception as error:  # noqa: BLE001 — an error is NOT an empty list
             logger.warning("identity lookup failed: %r", error)
+            metrics.counted(metrics.errors, type="identity")
             return {"route": "unavailable"}
 
         if not me.portfolios:
@@ -254,6 +262,7 @@ class LangGraphAgent:
             tools = portfolio_tools(self._portfolio, target, token, portfolio)
         except Exception as error:  # noqa: BLE001 — any fetch failure degrades the same way
             logger.warning("portfolio context fetch failed for %s: %r", target, error)
+            metrics.counted(metrics.errors, type="portfolio")
             system = degraded_prompt(system)
         if not tools:
             return await self._answer(system, state)

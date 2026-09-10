@@ -26,6 +26,7 @@ dependencies = [
     # Conversations and the rate limiter's counters, one client library for both.
     "redis>=8.1",
     "pydantic-settings>=2.15.0",
+    "prometheus-client>=0.26.0",
 ]
 
 [dependency-groups]

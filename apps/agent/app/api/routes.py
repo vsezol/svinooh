@@ -17,11 +17,12 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from ..application.turns import Admitted, Question
 from ..container import Container
 from ..domain.identity import ANON_HEADER, Caller
+from ..observability import metrics
 from ..panel import NOTHING_DECIDED
 from .schemas import (
     ChatDetail,
@@ -52,6 +53,18 @@ AnonId = Annotated[str | None, Header(alias=ANON_HEADER)]
 def health() -> dict:
     """The process is up. This is what the platform restarts on."""
     return {"ok": True}
+
+
+@router.get("/metrics")
+def scrape() -> Response:
+    """What this instance has counted, for Prometheus.
+
+    Unauthenticated, like the api's and the wallet's: it is scraped over the
+    private network, and what it holds is request counts and latencies. Every
+    label is bounded and none of them names a caller or a conversation.
+    """
+    body, content_type = metrics.render()
+    return Response(content=body, media_type=content_type)
 
 
 @router.get("/ready")

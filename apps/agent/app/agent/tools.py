@@ -26,6 +26,7 @@ from langchain_core.tools import tool
 
 from ..adapters.portfolio import DataSource
 from ..domain.portfolio import History, Period, Portfolio, total_of
+from ..observability import metrics
 from .context import position_line, short_address, usd
 from .steps import step, tool_label
 
@@ -154,6 +155,10 @@ async def run_tools(calls: list[dict], tools: list) -> list[ToolMessage]:
     results = []
     for call in calls:
         name, args = call.get("name", ""), call.get("args", {})
+        # The label is the tool's own name only when we have one by that name:
+        # the model picks this string, and an invented one must not become a
+        # series of its own.
+        counted_as = name if name in by_name else "unknown"
         try:
             handler = by_name.get(name)
             if handler is None:
@@ -166,8 +171,10 @@ async def run_tools(calls: list[dict], tools: list) -> list[ToolMessage]:
             ):
                 result = await handler.ainvoke(args)
             logger.info("tool %s(%s) -> %d chars", name, args, len(str(result)))
+            metrics.counted(metrics.tool_calls, tool=counted_as, outcome="ok")
         except Exception as error:  # noqa: BLE001 — the model handles tool failures
             logger.warning("tool %s failed: %r", name, error)
+            metrics.counted(metrics.tool_calls, tool=counted_as, outcome="failed")
             result = f"Tool call failed: {error}"
         results.append(ToolMessage(content=str(result), tool_call_id=call.get("id", "")))
     return results
