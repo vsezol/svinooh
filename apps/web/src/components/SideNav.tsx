@@ -45,6 +45,14 @@ function SparkIcon({ size }: { size: number }) {
 const NARROW_KEY = 'svinooh_rail_narrow';
 
 const navItem = (active: boolean, disabled: boolean, narrow = false): CSSProperties => ({
+  // A button's own furniture, undone: these were divs with a click handler,
+  // which meant the rail — the main navigation of every signed-in screen —
+  // could not be reached by a keyboard at all, and so could never show the
+  // focus ring the rest of the product now has.
+  border: 'none',
+  width: '100%',
+  fontFamily: 'inherit',
+  textAlign: 'left',
   display: 'flex',
   alignItems: 'center',
   justifyContent: narrow ? 'center' : 'flex-start',
@@ -171,43 +179,52 @@ export function SideNav({ tab, onTab, isAdmin, chat }: Props) {
             tabsFor, where that order is decided. They are two drawings of one
             navigation, and a reader moving between a phone and a desktop
             should not have to re-learn where things are. */}
-        <div
-          {...(AGENT_ENABLED
-            ? { className: 'nav-item', onClick: () => onTab('agent'), title: 'AI agent' }
-            : { title: 'AI agent — soon' })}
+        <button
+          type="button"
+          className="nav-item"
+          disabled={!AGENT_ENABLED}
+          onClick={() => onTab('agent')}
+          title={AGENT_ENABLED ? 'AI agent' : 'AI agent — soon'}
+          aria-current={AGENT_ENABLED && tab === 'agent' ? 'page' : undefined}
           style={navItem(AGENT_ENABLED && tab === 'agent', !AGENT_ENABLED, narrow)}
         >
           <SparkIcon size={16} />
           {label('AI agent')}
-        </div>
-        <div
+        </button>
+        <button
+          type="button"
           className="nav-item"
           onClick={() => onTab('portfolio')}
           title="Portfolio"
+          aria-current={tab === 'portfolio' ? 'page' : undefined}
           style={navItem(tab === 'portfolio', false, narrow)}
         >
           <ChartIcon size={16} />
           {label('Portfolio')}
-        </div>
-        <div
+        </button>
+        <button
+          type="button"
           className="nav-item"
           onClick={() => onTab('notifications')}
           title="Alerts"
+          aria-current={tab === 'notifications' ? 'page' : undefined}
           style={navItem(tab === 'notifications', false, narrow)}
         >
           <BellIcon size={16} />
           {label('Alerts')}
-        </div>
+        </button>
         {isAdmin ? (
-          <div
+          <button
+            type="button"
             className="nav-item"
             onClick={() => onTab('admin')}
             title="Admin"
+            aria-current={tab === 'admin' ? 'page' : undefined}
             style={navItem(tab === 'admin', false, narrow)}
           >
             <SlidersIcon size={16} />
             {label('Admin')}
-          </div>
+          </button>
         ) : null}
 
         {/* The chat's own navigation, in the rail beside the pages — which is
