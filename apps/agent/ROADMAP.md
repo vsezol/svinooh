@@ -39,3 +39,4 @@ them.
 | --- | --- |
 | [#189](https://github.com/vsezol/svinooh/pull/189) | Step 1, the toolchain: a lockfile, three gates, CI, a non-root image |
 | [#191](https://github.com/vsezol/svinooh/pull/191) | Step 2, configuration as objects: `Settings`, the `Panel` port, `Config` |
+| [#192](https://github.com/vsezol/svinooh/pull/192) | Step 3, the container: built once in `create_app`, handed down through `Depends`; tests build one over fakes |
