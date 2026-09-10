@@ -79,6 +79,40 @@ class TestWhatIsSaidAboutAPortfolioNobodyOwns:
         assert "public" not in said and "private" not in said
 
 
+class TestNothingIsDoneUntilItIs:
+    """One rule, in every branch where nothing has happened yet — and no other.
+
+    The turn that proposes, the turn that finds nothing to confirm, the turn
+    that failed and the turn that was declined can each describe a portfolio
+    that does not exist. The base prompt cannot, and every turn pays for it.
+    """
+
+    def test_every_branch_where_nothing_exists_carries_it(self):
+        from app.agent import prompts
+        from app.domain.onboarding import Created
+
+        nothing_yet = [
+            prompts.onboarding_prompt("", signed_in=False),
+            prompts.onboarding_prompt("", signed_in=True),
+            prompts.confirmation_request_prompt("", ["0xAAA"], anonymous=True),
+            prompts.nothing_proposed_prompt(""),
+            prompts.creation_failed_prompt(""),
+            prompts.cancelled_prompt(""),
+        ]
+        assert all(prompts.NOTHING_IS_DONE_UNTIL_IT_IS in said for said in nothing_yet)
+        # And the one branch where something DID happen says so instead.
+        assert prompts.NOTHING_IS_DONE_UNTIL_IT_IS not in prompts.created_prompt(
+            "", Created(slug="s", anonymous=True)
+        )
+
+    def test_and_the_base_prompt_does_not(self):
+        # Every turn is billed for the base, and a question about a health
+        # factor cannot claim to have created anything.
+        from app.agent import prompts
+
+        assert prompts.NOTHING_IS_DONE_UNTIL_IT_IS not in prompts.DEFAULT_SYSTEM_PROMPT
+
+
 class TestTheRulesThemselves:
     def test_the_model_is_told_not_to_invent_the_product(self):
         # Rule 7 is the one that had to be written down: the model has seen a
