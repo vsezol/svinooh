@@ -17,11 +17,12 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from ..application.turns import Admitted, Question
 from ..container import Container
 from ..domain.identity import ANON_HEADER, Caller
+from ..panel import NOTHING_DECIDED
 from .schemas import (
     ChatDetail,
     ChatList,
@@ -49,7 +50,30 @@ AnonId = Annotated[str | None, Header(alias=ANON_HEADER)]
 
 @router.get("/health")
 def health() -> dict:
+    """The process is up. This is what the platform restarts on."""
     return {"ok": True}
+
+
+@router.get("/ready")
+async def ready(deps: Deps) -> JSONResponse:
+    """What this instance can actually reach.
+
+    /health answers from the process alone, which is right for a restart
+    trigger and useless for the failure that matters: a Redis that is
+    configured and not answering means conversations are being lost quietly,
+    and everything still looks fine. That one is a 503 here.
+
+    The panel not having been heard is reported and is not a 503 — the
+    service answers on its environment until it has, by design.
+    """
+    store = await deps.store_state()
+    body = {
+        "ok": store != "unreachable",
+        "store": store,
+        "panel": "heard" if deps.panel.current() != NOTHING_DECIDED else "not heard yet",
+        "model": deps.config.answering().model,
+    }
+    return JSONResponse(status_code=200 if body["ok"] else 503, content=body)
 
 
 def _asked(body: ChatRequest) -> Question:

@@ -84,14 +84,14 @@ class RemotePanel:
     def __init__(
         self,
         base_url: str,
-        timeout_s: float,
+        client: httpx.AsyncClient,
         every_s: float = REFRESH_EVERY_S,
-        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._url = f"{base_url.rstrip('/')}/api/agent/config"
-        self._timeout_s = timeout_s
+        # The same pool the portfolio is read through: this is one small
+        # request a minute to the same host.
+        self._client = client
         self._every_s = every_s
-        self._transport = transport
         self._values = NOTHING_DECIDED
         self._refreshing: asyncio.Task[None] | None = None
 
@@ -101,12 +101,9 @@ class RemotePanel:
     async def fetch(self) -> None:
         """Ask once. A failure keeps what was in hand, and says so."""
         try:
-            async with httpx.AsyncClient(
-                timeout=self._timeout_s, transport=self._transport
-            ) as client:
-                response = await client.get(self._url)
-                response.raise_for_status()
-                incoming = parse(response.json())
+            response = await self._client.get(self._url)
+            response.raise_for_status()
+            incoming = parse(response.json())
         except Exception as error:  # noqa: BLE001 — settings must not break chatting
             logger.warning("agent config not fetched (%r) — keeping the current values", error)
             return

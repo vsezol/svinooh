@@ -13,8 +13,10 @@ from fastapi.responses import JSONResponse
 
 from ..domain.errors import (
     EmptyMessageError,
+    MessageTooLongError,
     NoSuchConversationError,
     RateLimitedError,
+    TurnTimedOutError,
     UnknownTokenError,
 )
 
@@ -39,9 +41,20 @@ def _rate_limited(_request: Request, error: Exception) -> Response:
     )
 
 
+def _too_long(_request: Request, error: Exception) -> Response:
+    # The limit travels with the refusal: a client told 4000 can trim, and one
+    # that is only refused guesses.
+    limit = error.limit if isinstance(error, MessageTooLongError) else 0
+    return JSONResponse(
+        status_code=413, content={"detail": f"message too long — at most {limit} characters"}
+    )
+
+
 def install(app: FastAPI) -> None:
     """Teach the app what each refusal means on the wire."""
     app.add_exception_handler(EmptyMessageError, _refusal(400, "empty message"))
     app.add_exception_handler(UnknownTokenError, _refusal(401, "unknown token"))
     app.add_exception_handler(RateLimitedError, _rate_limited)
     app.add_exception_handler(NoSuchConversationError, _refusal(404, "no such conversation"))
+    app.add_exception_handler(MessageTooLongError, _too_long)
+    app.add_exception_handler(TurnTimedOutError, _refusal(504, "the answer took too long"))

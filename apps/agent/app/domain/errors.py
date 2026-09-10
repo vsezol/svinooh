@@ -24,6 +24,22 @@ class UnknownTokenError(AgentError):
     """
 
 
+class MessageTooLongError(AgentError):
+    """A question longer than we will pay a model to read."""
+
+    def __init__(self, limit: int) -> None:
+        super().__init__(f"message too long — at most {limit} characters")
+        self.limit = limit
+
+
+class TurnTimedOutError(AgentError):
+    """The turn ran past its deadline and was given up on.
+
+    An ending, rather than a connection held open on work nobody is waiting
+    for any more.
+    """
+
+
 class RateLimitedError(AgentError):
     """The caller's budget for this window is spent."""
 

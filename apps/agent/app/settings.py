@@ -48,6 +48,28 @@ class Settings(BaseSettings):
     router_max_tokens: int = Field(200, ge=1)
     router_provider_sort: str = "throughput"
 
+    # ── what a turn may take, and how many may run at once ──────────────────
+    # The whole turn, tools and all. Past this the reader gets an ending
+    # instead of a connection that stays open on work nobody is waiting for.
+    turn_timeout_s: int = Field(120, ge=1)
+    # Model calls in flight across every turn. The provider rate-limits us
+    # anyway; queueing here means a burst waits in one place, where it can be
+    # measured, instead of arriving at the provider as a wall of 429s.
+    model_max_in_flight: int = Field(8, ge=1)
+    # The longest question we will pay a model to read. The DESIGN risk table
+    # has promised this since the service shipped.
+    message_max_chars: int = Field(4000, ge=1)
+    # Sockets to the host API, shared by every turn. Zero pooling was the
+    # old behaviour: a fresh connection, and a fresh TLS handshake, per call.
+    http_max_connections: int = Field(100, ge=1)
+    http_keepalive_connections: int = Field(20, ge=0)
+    # Connecting is not reading: a host that is down should be found out in
+    # seconds, while a slow answer gets the whole context budget.
+    http_connect_timeout_s: float = Field(5.0, gt=0)
+    # Token validations held at once. Bounded so a flood of distinct tokens
+    # cannot grow this map until the process is killed for it.
+    auth_cache_max: int = Field(10_000, ge=1)
+
     # ── the turn ────────────────────────────────────────────────────────────
     # An override for the shipped system prompt (app/config.py); empty keeps it.
     system_prompt: str = Field("", validation_alias="AGENT_SYSTEM")

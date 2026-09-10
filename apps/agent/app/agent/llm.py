@@ -7,6 +7,7 @@ first use and reused: the service boots and answers /health before any key
 is set, and what is per request is the API call, not the client.
 """
 
+import asyncio
 import logging
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -36,6 +37,11 @@ class Models:
         self._settings = settings
         self._factory = factory
         self._clients: dict[Role, BaseChatModel] = {}
+        # How many calls may be in the air at once, across every turn this
+        # process is serving. The provider limits us anyway; queueing here
+        # means a burst waits in one place we can measure, rather than
+        # arriving at the provider as a wall of 429s that each cost a turn.
+        self._in_flight = asyncio.Semaphore(settings.model_max_in_flight)
         # Models whose endpoint refused a thinking setting, in either
         # direction: some insist on thinking, others have none to do and are
         # filtered away for being asked. Either refusal would otherwise kill
@@ -66,12 +72,15 @@ class Models:
         and try once more on a fresh client. Any other failure, and any second
         one, belongs to the caller — there is no loop here.
         """
-        try:
-            return await self._runnable(role, prepare).ainvoke(messages)
-        except Exception as error:
-            if not (is_thinking_setting_rejected(error) and self.stop_asking_it_to_think(role)):
-                raise
-            return await self._runnable(role, prepare).ainvoke(messages)
+        async with self._in_flight:
+            try:
+                return await self._runnable(role, prepare).ainvoke(messages)
+            except Exception as error:
+                if not (is_thinking_setting_rejected(error) and self.stop_asking_it_to_think(role)):
+                    raise
+                # Still holding its place in the queue: the retry is the same
+                # call, and letting go here would send it to the back.
+                return await self._runnable(role, prepare).ainvoke(messages)
 
     def _runnable(self, role: Role, prepare: Prepare | None) -> Runnable[Any, Any]:
         client = self.for_role(role)
