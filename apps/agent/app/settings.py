@@ -55,7 +55,14 @@ class Settings(BaseSettings):
     # Model calls in flight across every turn. The provider rate-limits us
     # anyway; queueing here means a burst waits in one place, where it can be
     # measured, instead of arriving at the provider as a wall of 429s.
-    model_max_in_flight: int = Field(8, ge=1)
+    #
+    # 32 because it was measured (load/README.md). This shipped at 8, which
+    # turned out to be below the concurrency of ordinary traffic rather than
+    # above it: at fifty readers the semaphore sat pegged at 8 and every turn
+    # queued behind it, four times slower than the same run with room. It is
+    # a valve against a pathological burst, and the rate limit is the cost
+    # lock — a valve that closes under normal load is just a slower service.
+    model_max_in_flight: int = Field(32, ge=1)
     # The longest question we will pay a model to read. The DESIGN risk table
     # has promised this since the service shipped.
     message_max_chars: int = Field(4000, ge=1)

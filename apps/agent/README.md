@@ -41,6 +41,13 @@ the HTTP series are the same ones the api and the wallet emit, and the
 agent's own are underneath — `svinooh_agent_turns_total`,
 `svinooh_agent_model_duration_seconds`, `svinooh_agent_tool_calls_total`.
 
+## Push on it
+
+`load/` holds a fake model, a fake host API and a locustfile, so a run
+measures this service rather than the provider's afternoon. The numbers it
+last produced, and the setting they moved, are in
+[load/README.md](load/README.md).
+
 ## Check it
 
 The gates CI runs on every PR that touches `apps/agent`:
