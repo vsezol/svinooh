@@ -189,26 +189,28 @@ def created_prompt(base: str, created: Created) -> str:
     added = "\n".join(f"- {address}" for address in created.added) or "- none"
     refused_lines = "\n".join(f"- {r.address}: {r.reason}" for r in created.refused)
     failure_note = f"\nThese were refused:\n{refused_lines}" if created.refused else ""
-    # An ownerless portfolio is the one thing here a person can lose by not
-    # acting: nobody holds it, so the link IS the only way back to it.
+    # An ownerless portfolio is public, and saying otherwise is the one
+    # mistake here that cannot be walked back: somebody is told their
+    # balances are private while anyone holding the link can read them. A
+    # production answer said "it's private by default" with this very note in
+    # front of it, which is why the instruction is now a negative one.
     claim_note = (
-        "\n\nThis portfolio belongs to nobody and is public. Tell them to "
-        "keep the link — it is the only way back to it — and that signing in "
-        "claims it as theirs."
+        "\n\nThis portfolio belongs to NOBODY and is PUBLIC — anyone with the "
+        "link can see it. Say that plainly, and that signing in claims it as "
+        "theirs. Never call it private, and never say it is private by "
+        "default: it is not, and telling somebody their balances are hidden "
+        "when they are not is worse than saying nothing."
         if created.anonymous
         else ""
     )
     return (
         f"{base}\n\nThe portfolio was just created. Facts to relay, in the "
         f"user's language:\n- link: /p/{created.slug}\n"
-        f"Wallets added:\n{added}{failure_note}{claim_note}\n\nWrite the "
-        "link out in full, exactly as given above. Never abbreviate it, never "
-        "replace any part of it with an ellipsis, and never promise to send "
-        "it later — this message is the only place it appears, and for a "
-        "portfolio nobody owns it is the only way back to it.\n\nTell them it "
-        "is scanning now and they can ask about it here once the first sync "
-        "lands. Relay failures honestly — do not soften a refused address "
-        "into a success."
+        f"Wallets added:\n{added}{failure_note}{claim_note}\n\nThe link is "
+        "appended to your reply for you, so do not write it out yourself and "
+        "do not promise to send it later.\n\nTell them it is scanning now and "
+        "they can ask about it here once the first sync lands. Relay failures "
+        "honestly — do not soften a refused address into a success."
     )
 
 

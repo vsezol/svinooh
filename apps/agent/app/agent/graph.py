@@ -351,6 +351,12 @@ class LangGraphAgent:
         outcome: AgentState = {**answered, "pending_clear": True}
         if result.slug:
             outcome["portfolio_created"] = result.slug
+            # Appended rather than asked for. The link is the only way back to
+            # a portfolio nobody owns, and in production the model wrote
+            # "svinooh.com/p/…" once and left it out entirely the next time —
+            # both after being handed it. A path is language-neutral, so this
+            # costs the answer nothing and cannot be lost.
+            outcome["answer"] = f"{answered['answer']}\n\n/p/{result.slug}"
         return outcome
 
     async def _cancel_creation(self, state: AgentState) -> AgentState:

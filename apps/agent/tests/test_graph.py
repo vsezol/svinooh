@@ -373,6 +373,25 @@ class TestTheContractWithTheLayerAbove:
         assert reply.pending_set == ("0xAAA",), "the order, not the write"
         assert api.created == 0 and api.created_anonymous == []
 
+    async def test_the_link_is_in_the_answer_whatever_the_model_wrote(self):
+        # Twice in production the model was handed the link and did not give
+        # it: once as "svinooh.com/p/…", once not at all. For a portfolio
+        # nobody owns it is the only way back, so it is appended rather than
+        # asked for.
+        bot, _, _ = wire(confirmation="confirm", model=Model(text="Done."))
+        reply = await bot.run(Ask(question="yes", pending_addresses=("0xAAA",)))
+        assert reply.answer.endswith("/p/anon-pf")
+        assert reply.answer.startswith("Done.")
+
+    async def test_and_nothing_is_appended_when_nothing_was_created(self):
+        class Refusing(Api):
+            async def create_anonymous_portfolio(self, address):
+                raise RuntimeError("the host said no")
+
+        bot, _, _ = wire(confirmation="confirm", api=Refusing(), model=Model(text="It failed."))
+        reply = await bot.run(Ask(question="yes", pending_addresses=("0xAAA",)))
+        assert "/p/" not in reply.answer and reply.portfolio_created is None
+
     async def test_a_confirmed_proposal_names_what_to_remember(self):
         bot, api, _ = wire(confirmation="confirm")
         reply = await bot.run(Ask(question="yes", pending_addresses=("0xAAA", "sol1")))

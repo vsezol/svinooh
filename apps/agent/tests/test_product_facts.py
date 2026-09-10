@@ -54,6 +54,30 @@ class TestWhatReachesTheModel:
         assert system_prompt(told()) == DEFAULT_SYSTEM_PROMPT
 
 
+class TestWhatIsSaidAboutAPortfolioNobodyOwns:
+    """The one mistake here that cannot be walked back.
+
+    An ownerless portfolio is public. A production answer said "it's private
+    by default" with the disclosure in front of it, which tells somebody
+    their balances are hidden when anyone with the link can read them.
+    """
+
+    def test_the_disclosure_forbids_the_word_it_kept_reaching_for(self):
+        from app.agent.prompts import created_prompt
+        from app.domain.onboarding import Created
+
+        said = created_prompt("base", Created(slug="anon-pf", anonymous=True))
+        assert "PUBLIC" in said and "Never call it private" in said
+
+    def test_and_an_owned_one_is_told_none_of_it(self):
+        # Their portfolio IS private, so the same warning there would be false.
+        from app.agent.prompts import created_prompt
+        from app.domain.onboarding import Created
+
+        said = created_prompt("base", Created(slug="mine", anonymous=False))
+        assert "PUBLIC" not in said and "private" not in said
+
+
 class TestTheRulesThemselves:
     def test_the_model_is_told_not_to_invent_the_product(self):
         # Rule 7 is the one that had to be written down: the model has seen a
