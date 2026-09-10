@@ -48,6 +48,26 @@
   outline-offset: -2px;
 }
 
+/* A control that already says it has focus does not also take the ring.
+
+   A text field's border goes accent, a checkbox's box does, a composer's card
+   does — one mark each, which is the point. Without this they wear two, and
+   the second one is drawn in the wrong place: a field inside a card is
+   borderless and spans the row, so its ring is a box through the middle of
+   the card. That is what the composer looked like while somebody typed.
+
+   Qualified with :focus-visible so it outranks the rule above rather than
+   racing it. `outline: none` on the bare class is the same weight as
+   `:focus-visible`, so which won came down to which stylesheet the bundler
+   happened to inject last — and it lost in the chat, where chrome.css arrives
+   through a JS import rather than the @import chain. */
+.ui-input:focus-visible,
+.ui-select:focus-visible,
+.ui-checkbox input:focus-visible,
+.ui-tip:focus-visible {
+  outline: none;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    Button — the sans-set actions
    ═══════════════════════════════════════════════════════════════════════ */
