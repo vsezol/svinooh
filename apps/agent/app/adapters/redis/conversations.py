@@ -1,7 +1,7 @@
 """Conversations kept in Redis — one adapter behind ports.ConversationStore.
 
-**The key space**, all under one prefix so sharing an instance with the
-portfolio cache is a neighbour rather than a collision:
+**The key space**, all under one prefix so anything else sharing the instance
+is a neighbour rather than a collision:
 
     agent:chat:<id>           the conversation — turns, title, owner, pending
     agent:owner:<owner_key>   that owner's chat ids, a ZSET scored by updated
@@ -9,8 +9,8 @@ portfolio cache is a neighbour rather than a collision:
 Two keys because they answer two different questions. `agent:chat:<id>` is the
 record, fetched by id in one hop. `agent:owner:<key>` is a secondary index:
 Redis cannot answer "every chat whose owner is X" — the only alternative is
-SCAN over the whole keyspace, which walks every key on the instance (the
-portfolio cache included), returns no order, and can return the same key twice.
+SCAN over the whole keyspace, which walks every key on the instance, returns
+no order, and can return the same key twice.
 The ZSET answers it in one ZREVRANGE and keeps the ordering as data, because
 the score IS the last-turn time. Only the id and that score are duplicated
 between the two keys; the title and the turns exist once.

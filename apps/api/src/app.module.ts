@@ -3,7 +3,6 @@ import { JwtModule } from '@nestjs/jwt';
 import { AdminProxyModule } from './admin-proxy/admin-proxy.module';
 import { AuthProxyModule } from './auth-proxy/auth-proxy.module';
 import { BillingModule } from './billing/billing.module';
-import { CacheModule } from './cache/cache.module';
 import { config } from './config';
 import { AgentConfigController } from './agent-config.controller';
 import { HealthController } from './health.controller';
@@ -15,7 +14,6 @@ import { PrismaModule } from '@svinooh/db';
   imports: [
     PrismaModule,
     MetricsModule,
-    CacheModule,
     // Only billing publishes from the api (the thank-you after a payment);
     // without a broker the publish is a no-op, never an error
     RabbitModule.forRoot(config.rabbitUrl),

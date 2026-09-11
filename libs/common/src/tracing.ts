@@ -17,7 +17,6 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { AmqplibInstrumentation } from '@opentelemetry/instrumentation-amqplib';
 import { ExpressInstrumentation } from '@opentelemetry/instrumentation-express';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
-import { IORedisInstrumentation } from '@opentelemetry/instrumentation-ioredis';
 import { NestInstrumentation } from '@opentelemetry/instrumentation-nestjs-core';
 import { UndiciInstrumentation } from '@opentelemetry/instrumentation-undici';
 import { resourceFromAttributes } from '@opentelemetry/resources';
@@ -66,7 +65,6 @@ if (endpoint) {
       }),
       new ExpressInstrumentation(),
       new NestInstrumentation(),
-      new IORedisInstrumentation(),
       new AmqplibInstrumentation(),
       new PrismaInstrumentation(),
     ],

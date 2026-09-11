@@ -526,64 +526,14 @@
               "mode": "none"
             }
           },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 28
-      },
-      "id": 9,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(rate(svinooh_cache_ops_total{op=\"hit\"}[5m])) / clamp_min(sum(rate(svinooh_cache_ops_total[5m])),0.0001) * 100",
-          "legendFormat": "hit %",
-          "refId": "A"
-        }
-      ],
-      "title": "Cache hit ratio %",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 12,
-            "lineWidth": 2,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            }
-          },
           "unit": "none"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
+        "w": 12,
+        "x": 0,
         "y": 28
       },
       "id": 10,
@@ -632,8 +582,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
+        "w": 12,
+        "x": 12,
         "y": 28
       },
       "id": 11,
