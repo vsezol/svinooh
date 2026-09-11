@@ -220,14 +220,24 @@ export function Landing({ preloaded: fromServer }: { preloaded?: LandingData } =
             Pro
           </ButtonLink>
           <ThemeToggle />
+          {/* The way in, for somebody who is already somebody. It stands where
+              Sign in stands for everybody else — the same pill in the same
+              place, saying the one thing there is left to do. Signed out
+              there is no app to open; signed in there is nothing to sign into. */}
           {me ? (
-            <AccountMenu
-              name={me.name}
-              username={me.username}
-              photoUrl={me.photoUrl}
-              onPro={() => router.push('/pro')}
-              onExit={logout}
-            />
+            <>
+              <ButtonLink size="sm" href="/ai">
+                Open app
+              </ButtonLink>
+              <AccountMenu
+                name={me.name}
+                username={me.username}
+                photoUrl={me.photoUrl}
+                onPortfolio={() => router.push(`/p/${me.portfolioSlug}`)}
+                onPro={() => router.push('/pro')}
+                onExit={logout}
+              />
+            </>
           ) : (
             <Button size="sm" onClick={() => setAuthOpen(true)}>
               Sign in
