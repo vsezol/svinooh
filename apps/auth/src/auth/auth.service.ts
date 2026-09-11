@@ -18,12 +18,14 @@ import type {
   TelegramConnectStartDto,
   TelegramPollDto,
   TelegramStartDto,
+  WalletChallengeDto,
 } from '@svinooh/shared';
 import { config } from '../config';
 import { PrismaService } from '@svinooh/db';
 import { verifyTelegramLogin } from './telegram';
 import { TelegramLoginService } from './telegram-login.service';
 import { UserService } from './user.service';
+import { WalletLoginService } from './wallet-login.service';
 import { XLoginService } from './x-login.service';
 import { setting } from '@svinooh/common';
 
@@ -37,6 +39,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly logins: TelegramLoginService,
     private readonly users: UserService,
+    private readonly wallets: WalletLoginService,
     private readonly x: XLoginService,
   ) {}
 
@@ -48,8 +51,23 @@ export class AuthService {
       botId: config.botToken ? config.botToken.split(':')[0] : null,
       devMode: config.devMode,
       xEnabled: this.x.enabled,
+      // Public by design, and served rather than baked in: it tells the relay
+      // which dapp is calling and authorises nothing. Without it the QR and the
+      // phone half of wallet sign-in stay closed; a browser extension does not
+      // go near the relay and works either way.
+      walletConnectProjectId: config.walletConnectProjectId,
       syncIntervalMin: setting('sync.activeIntervalMin'),
     };
+  }
+
+  /** The sentence this address must sign to prove it is theirs */
+  walletChallenge(address: string, chainId: number): Promise<WalletChallengeDto> {
+    return this.wallets.challenge(address, chainId);
+  }
+
+  /** A signed challenge becomes the same session every other sign-in gives */
+  async walletVerify(nonce: string, signature: string): Promise<AuthResponseDto> {
+    return this.finishLogin(await this.users.upsertWallet(await this.wallets.verify(nonce, signature)));
   }
 
   /** Where to send the browser to sign in with X */

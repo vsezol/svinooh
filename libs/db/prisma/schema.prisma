@@ -16,6 +16,11 @@ model User {
   /// X (Twitter) account id — a separate identity, exactly as telegramId is:
   /// signing in with X makes its own user, never links to a Telegram one
   xId        String?          @unique
+  /// The EVM address that signed in, lower-case — a third identity beside
+  /// telegramId and xId, and as separate from them. Lower-case because a
+  /// unique index is the thing that decides whether two sign-ins are the same
+  /// account, and checksum case would let 0xAB… and 0xab… be two people.
+  walletAddress String?       @unique
   /// Telegram chat that receives this user's alerts when the identity itself
   /// is not Telegram. A delivery address, not an identity: the chat's own
   /// Telegram account, if it ever signs in, is a different user entirely.
@@ -167,6 +172,30 @@ model TelegramLogin {
   username   String?
   expiresAt  DateTime
   createdAt  DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+/// A wallet sign-in the site started and is still waiting on: the message we
+/// asked an address to sign, kept until the signature comes back.
+///
+/// The whole message is stored rather than re-derived, so verification never
+/// has to trust — or parse — anything the browser sends back. It signs what we
+/// wrote or it signs nothing; the row is the only thing the signature is
+/// checked against, and it is deleted the moment it is spent, which is what
+/// makes a captured signature worthless the second time.
+///
+/// In a table for the same reason TelegramLogin is: any instance must be able
+/// to finish a sign-in another one started.
+model WalletLogin {
+  nonce     String   @id
+  /// Lower-case, and the address the message names — the recovered signer must
+  /// be this one, so a signature from some other wallet cannot redeem it
+  address   String
+  /// The exact EIP-4361 text handed to the wallet
+  message   String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
   @@index([expiresAt])
 }

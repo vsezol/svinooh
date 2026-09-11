@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
+import { getAddress } from 'ethers';
 import { Prisma } from '@prisma/client';
 import type { Portfolio, User } from '@prisma/client';
 import { PrismaService } from '@svinooh/db';
@@ -64,6 +65,31 @@ export class UserService {
       where: { xId: p.id },
       create: { xId: p.id, ...profile },
       update: profile,
+    });
+  }
+
+  /**
+   * A wallet is its own identity too, and the same rule holds: signing in with
+   * an address finds or makes the user that IS that address, and never reaches
+   * for a Telegram or X account to attach to.
+   *
+   * The name is the shortened address, because a wallet gives us nothing else
+   * and "Anonymous" everywhere is worse than the one fact we do have. It is
+   * public chain data — the one kind of name the privacy rule allows to be
+   * generated — and it is stored checksummed for reading while the identity
+   * itself stays lower-case for matching. Nothing to update on a return visit:
+   * an address does not change its mind about what it is called.
+   */
+  upsertWallet(address: string): Promise<User> {
+    const walletAddress = address.toLowerCase();
+    const checksummed = getAddress(walletAddress);
+    return this.prisma.user.upsert({
+      where: { walletAddress },
+      create: {
+        walletAddress,
+        firstName: `${checksummed.slice(0, 6)}…${checksummed.slice(-4)}`,
+      },
+      update: {},
     });
   }
 

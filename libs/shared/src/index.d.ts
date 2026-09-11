@@ -275,12 +275,31 @@ export interface AuthConfigDto {
   devMode: boolean;
   /** Sign-in with X is configured on the server — the button goes live */
   xEnabled: boolean;
+  /**
+   * WalletConnect project id — public by design (it identifies the dapp to the
+   * relay, it does not authorise anything) and served from here rather than
+   * baked into the bundle, so changing it does not mean a rebuild.
+   *
+   * Null only turns off the QR/phone half of wallet sign-in: a browser
+   * extension is spoken to directly and needs nothing from us.
+   */
+  walletConnectProjectId: string | null;
   syncIntervalMin: number;
 }
 
 /** Start X sign-in: where to send the browser */
 export interface XStartDto {
   url: string;
+}
+
+/**
+ * The message an address is asked to sign, and the nonce that redeems it.
+ * The text is the server's — the browser signs it verbatim and never writes
+ * its own.
+ */
+export interface WalletChallengeDto {
+  nonce: string;
+  message: string;
 }
 
 /** One portfolio an account owns — enough to name it in a switcher */

@@ -123,6 +123,45 @@ Three ways in, all handled by the auth service:
 
 In production turn the dev login off: `AUTH_DEV_MODE=false`.
 
+## Signing in with a wallet
+
+The third door, and the one this audience already has open. An address is an
+identity here exactly as a Telegram or an X account is: signing in with one
+finds or makes the user that IS that address, and never attaches itself to an
+account that arrived by another door.
+
+**Nothing here knows the name of a single wallet.** Two mechanisms cover the
+whole field, and both hand back the same EIP-1193 object:
+
+- **The extension announces itself** (EIP-6963). The page asks once and every
+  installed wallet answers with its name, its icon and a provider — MetaMask,
+  Rabby, Phantom, Coinbase, Brave, whatever is actually there. The list is what
+  replied, so it can never be out of date, and it never offers a wallet this
+  browser cannot open.
+- **WalletConnect** is the other six hundred. One relay, one QR code on a
+  desktop, a deep link into the wallet app on a phone. It is fetched at the
+  moment it is chosen — the library is large and most sign-ins never touch it.
+
+The proof is a signed sentence, EIP-4361 ("Sign-In with Ethereum"): no
+transaction, no gas, no allowance, and the message says so in the wallet's own
+prompt. The text is written by the server and stored before it is handed out
+(`WalletLogin`), the signature is checked against that stored row and nothing
+else, and the row is deleted as it is spent — so the browser cannot choose what
+it signs, and a signature that leaks is worth nothing a second time. Five
+minutes to live, one address, one use.
+
+Set `WALLETCONNECT_PROJECT_ID` on the **auth** service (free, from
+[dashboard.reown.com](https://dashboard.reown.com)). It is public — it names the
+dapp to the relay and authorises nothing — which is why it is served in
+`GET /api/auth/config` rather than baked into the bundle: changing it is a
+restart, not a rebuild. Unset, the extension half still works and only the QR
+row disappears.
+
+A smart-contract wallet (Safe and the rest) cannot sign in this way yet — the
+signature it produces is EIP-1271 and is verified by asking a chain, not by
+recovering a key. Nothing is lost in the meantime: a Safe is *tracked* like any
+other address, which never needed a signature.
+
 ## The landing is rendered on the server
 
 Every other page is a client render — open the shell, fetch, draw. The landing
@@ -580,7 +619,8 @@ Key variables:
 api     DATABASE_URL, JWT_SECRET, REDIS_URL, AUTH_SERVICE_URL, WALLET_SERVICE_URL,
         WEB_ORIGIN, LOKI_URL, OTEL_EXPORTER_OTLP_ENDPOINT, SERVICE_NAME
 auth    DATABASE_URL, JWT_SECRET (same as api), TELEGRAM_BOT_TOKEN,
-        TELEGRAM_BOT_USERNAME, WEB_URL, AUTH_DEV_MODE=false, LOKI_URL, OTEL_…
+        TELEGRAM_BOT_USERNAME, WALLETCONNECT_PROJECT_ID, WEB_URL,
+        AUTH_DEV_MODE=false, LOKI_URL, OTEL_…
 wallet  DATABASE_URL, RABBITMQ_URL, EVM_SCANNER_URL, INTERNAL_TOKEN, LOKI_URL, OTEL_…
 scanner-evm  SCANNER_ENGINE=lightpanda (default; =chrome to fall back),
              CHROME_NO_SANDBOX=1 (only used by the chrome engine),

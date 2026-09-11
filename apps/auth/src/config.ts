@@ -25,8 +25,16 @@ export const config = {
   // means the X button stays "soon" — nothing else changes.
   xClientId: process.env.X_CLIENT_ID || null,
   xClientSecret: process.env.X_CLIENT_SECRET || null,
+  // WalletConnect (Reown) project id, from dashboard.reown.com. Public — it
+  // names the dapp to the relay and authorises nothing, which is why it is
+  // served to the browser in /auth/config. Unset means wallet sign-in still
+  // works through a browser extension and only the QR/phone route is closed.
+  walletConnectProjectId: process.env.WALLETCONNECT_PROJECT_ID || null,
   devMode: bool(process.env.AUTH_DEV_MODE, false),
-  // Public URL of the web app — for the "back to site" button in the bot.
+  // Public URL of the web app — the "back to site" button in the bot, and the
+  // domain a wallet is asked to sign against. A wallet shows that domain beside
+  // the site it is actually talking to, so a wrong value here does not break
+  // sign-in quietly: it warns the person mid-signature.
   webUrl: (process.env.WEB_URL || 'https://svinooh.com').replace(/\/+$/, ''),
   // Shared with the bot, which is the only thing allowed to ask for a sign-in
   // link on somebody's behalf. Unset means the internal route refuses

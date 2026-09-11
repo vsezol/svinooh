@@ -13,6 +13,7 @@
     "@svinooh/content": "*",
     "@svinooh/shared": "*",
     "@svinooh/ui": "*",
+    "@walletconnect/ethereum-provider": "^2.24.0",
     "@web3icons/react": "^4.1.21",
     "lightweight-charts": "^5.2.1",
     "next": "^16.3.3",
