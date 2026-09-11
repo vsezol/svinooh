@@ -28,6 +28,11 @@ const STRUCTURED_DATA = JSON.stringify({
       name: 'svinooh',
       url: 'https://svinooh.com/',
       logo: 'https://svinooh.com/icon-512.png',
+      // The accounts that are this same organization elsewhere. It is how a
+      // crawler joins the profile to the entity rather than treating them as
+      // two things that happen to share a name, and it pairs with the rel="me"
+      // on the footer's link.
+      sameAs: ['https://x.com/svinooh'],
     },
     {
       '@type': 'WebApplication',

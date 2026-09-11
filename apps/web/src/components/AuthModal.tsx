@@ -7,6 +7,7 @@ import { useAuth } from '../lib/auth';
 import { parkReturn } from '../lib/after-signin';
 import { pendingTgToken, pollTelegramLogin } from '../lib/telegram';
 import { Button, Dialog, IconButton, Input, Note, Spinner, Title } from '../ui';
+import { XMark } from '@svinooh/ui';
 import { Logo } from './Logo';
 
 const TG_ICON = (
@@ -233,9 +234,7 @@ export function AuthModal({
             onClick={config?.xEnabled ? startX : undefined}
             style={{ marginTop: 'var(--sp-4)' }}
           >
-            <svg viewBox="0 0 24 24" width={13} height={13} fill="currentColor">
-              <path d="M18.9 2H22l-6.8 7.8L23.2 22h-6.3l-4.9-6.4L6.4 22H3.3l7.3-8.3L1.6 2h6.4l4.4 5.9L18.9 2zm-1.1 18h1.7L6.9 3.7H5.1L17.8 20z" />
-            </svg>
+            <XMark size={12} />
             {config?.xEnabled ? 'Continue with X' : 'Continue with X · soon'}
           </Button>
 
