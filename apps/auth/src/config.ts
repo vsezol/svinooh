@@ -26,7 +26,10 @@ export const config = {
   xClientId: process.env.X_CLIENT_ID || null,
   xClientSecret: process.env.X_CLIENT_SECRET || null,
   devMode: bool(process.env.AUTH_DEV_MODE, false),
-  // Public URL of the web app — for the "back to site" button in the bot.
+  // Public URL of the web app — the "back to site" button in the bot, and the
+  // domain a wallet is asked to sign against. A wallet shows that domain beside
+  // the site it is actually talking to, so a wrong value here does not break
+  // sign-in quietly: it warns the person mid-signature.
   webUrl: (process.env.WEB_URL || 'https://svinooh.com').replace(/\/+$/, ''),
   // Shared with the bot, which is the only thing allowed to ask for a sign-in
   // link on somebody's behalf. Unset means the internal route refuses

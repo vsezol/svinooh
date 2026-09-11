@@ -45,6 +45,18 @@ export class AuthController {
     return this.auth.connectRemove(userId);
   }
 
+  /** Wallet sign-in, step one: the sentence this address is asked to sign */
+  @Post('wallet/nonce')
+  walletNonce(@Body() body: { address?: string }) {
+    return this.auth.walletChallenge(body?.address ?? '');
+  }
+
+  /** Step two: the signature, which is the whole proof */
+  @Post('wallet/verify')
+  walletVerify(@Body() body: { nonce?: string; signature?: string }) {
+    return this.auth.walletVerify(body?.nonce ?? '', body?.signature ?? '');
+  }
+
   @Post('x/start')
   xStart() {
     return this.auth.xStart();

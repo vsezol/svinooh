@@ -283,6 +283,16 @@ export interface XStartDto {
   url: string;
 }
 
+/**
+ * The message an address is asked to sign, and the nonce that redeems it.
+ * The text is the server's — the browser signs it verbatim and never writes
+ * its own.
+ */
+export interface WalletChallengeDto {
+  nonce: string;
+  message: string;
+}
+
 /** One portfolio an account owns — enough to name it in a switcher */
 export interface OwnedPortfolioDto {
   slug: string;

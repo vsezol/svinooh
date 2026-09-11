@@ -1,6 +1,16 @@
 import { createHash } from 'node:crypto';
 import type { Chain } from '@svinooh/shared';
 
+/**
+ * What an address is, and how it is spelled — the one place that decides both.
+ *
+ * It lived in the api, which was where addresses arrived from people. Sign-in
+ * with a wallet is a second door they arrive through, in another service, and
+ * base58 is the same base58 on both sides: the decoder that tells a SOL address
+ * from a TRON one is also what turns a Solana address into the public key a
+ * signature is checked against.
+ */
+
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const BASE58_MAP = new Map([...BASE58_ALPHABET].map((char, index) => [char, index]));
 

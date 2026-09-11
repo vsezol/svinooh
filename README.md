@@ -16,7 +16,8 @@ without rework — for future analytics work.
 apps/
   api/    — gateway (NestJS): portfolios, history, JWT verification,
             /auth/* proxied to the auth service
-  auth/   — sign-in (NestJS): Telegram bot and login widget, issues JWTs, owns User
+  auth/   — sign-in (NestJS): Telegram bot and login widget, X, wallet
+            signatures; issues JWTs, owns User
   wallet/ — scanning (NestJS): decides what is due, one RabbitMQ queue per
             chain, the SOL/TRON/BTC scanners, snapshots
   scanner-evm/ — the EVM scanner (NestJS): a headless browser (lightpanda or
@@ -33,7 +34,8 @@ libs/
   shared/ — the API contract (types only, nothing to build)
   db/     — Prisma schema, migrations and PrismaService, shared by the services
   common/ — cross-service plumbing: auth guards, Prometheus metrics,
-            the Loki logger, the OpenTelemetry bootstrap
+            the Loki logger, the OpenTelemetry bootstrap, and what an address
+            is (base58, the chain behind it, the one spelling we store)
 ops/
   prometheus/, tempo/, grafana/ — the observability services: configs,
             datasources and dashboards, all built from this repo
@@ -49,10 +51,11 @@ web ──HTTPS+JWT──▶ api ──HTTP /auth/*───▶ auth ──▶ T
                     └──▶ Postgres ◀── auth, wallet
 ```
 
-Postgres is shared, with ownership by table: **auth** writes `User`, **wallet**
-writes `Wallet` / `Position` / `WalletSnapshot`, **api** writes `Portfolio` and
-the billing tables (`Subscription` / `Payment` / `FeatureUsage`) and reads
-everything; **monitor-alerts** owns the alert-trial meter on `FeatureUsage` and
+Postgres is shared, with ownership by table: **auth** writes `User` and the
+first `Portfolio` an account is given — with, for a wallet sign-in, the one
+`Wallet` it is created holding; **wallet** writes `Wallet` / `Position` /
+`WalletSnapshot`, **api** writes `Portfolio` and the billing tables
+(`Subscription` / `Payment` / `FeatureUsage`) and reads everything; **monitor-alerts** owns the alert-trial meter on `FeatureUsage` and
 the reminder stamps on `Subscription`. Only the api is exposed publicly; the other two are reachable
 over Railway's private network. JWTs are signed by auth and verified by api,
 which means both need the same `JWT_SECRET`.
@@ -121,6 +124,60 @@ Three ways in, all handled by the auth service:
   page with no explanation.
 
 In production turn the dev login off: `AUTH_DEV_MODE=false`.
+
+## Signing in with a Solana wallet
+
+The third door, and the one this audience already has open. An address is an
+identity here exactly as a Telegram or an X account is: signing in with one
+finds or makes the user that IS that address, and never attaches itself to an
+account that arrived another way.
+
+**Nothing here knows the name of a single wallet.** Phantom, Solflare, Backpack
+and the rest all speak the [Wallet
+Standard](https://github.com/wallet-standard/wallet-standard): they register
+themselves with the page, and what they register is a name, an icon and the two
+things a sign-in needs — connect, and sign a message. So the list in the modal
+is whatever answered this browser. It cannot go stale, it never names a wallet
+that is not installed, and it gains a new wallet the day that wallet ships.
+
+The proof is one signature over a sentence the server wrote: no transaction,
+nothing approved, no fee, and the message says so, because the wallet's prompt
+is the one place somebody decides whether to trust us. The text is stored before
+it is handed out (`WalletLogin`), the signature is checked against that stored
+row and nothing else — so a browser cannot choose what an address appears to
+have agreed to — and the row is deleted as it is spent, so a signature that
+leaks is worth nothing the second time. Five minutes, one address, one use.
+
+Verifying it needs no library, no RPC node and no key management: a Solana
+address **is** an ed25519 public key, base58 of the 32 raw bytes, so the auth
+service decodes the address it already stored and hands the bytes to node's
+`crypto`. The base58 decoder is the one the api has always used to tell a SOL
+address from a TRON one — it lives in `libs/common` now, because both services
+need the same answer about the same string.
+
+There is nothing to configure. `WEB_URL` gains a second job, though: it is the
+domain the wallet is asked to sign against, and a wallet shows that domain
+beside the site it is really talking to.
+
+**A wallet account's portfolio is created holding that wallet**, in the same
+statement that creates the portfolio and its ownership — watching that address
+is the entire reason somebody signs in with a wallet, and asking them to paste
+it on the next screen is asking them to repeat themselves.
+
+Riding inside that one write is the whole design, and it is what makes the rule
+"once, ever" rather than "every time": a portfolio is created once per account,
+so it is seeded once per account, and a wallet somebody deletes afterwards stays
+deleted. There is no second moment at which the code could run. Doing it from
+the browser after signing in could not promise that — the client cannot tell a
+sign-up from a sign-in, and its request would keep putting back what the owner
+took out. Being one write also means it cannot half-happen: portfolio,
+ownership, membership and the address row land together or not at all.
+
+Nothing has to be asked of the wallet service to get it scanned: `Wallet` rows
+are created due (`nextScanAt` defaults to now), and the producer's next pass —
+seconds later — takes it.
+
+EVM wallets — and WalletConnect for the phone — are the next door, not this one.
 
 ## The landing is rendered on the server
 
