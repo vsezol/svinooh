@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { AnchoredMenu, MenuItem } from '../ui';
 
 /**
- * Who you are, and the two things you can do about it.
+ * Who you are, and the things you can do about it.
  *
  * The header used to carry all of it in a row: the handle, a PRO tag, and an
  * EXIT button. On a phone that row ran off the right edge — the wordmark, a
@@ -20,11 +20,17 @@ interface Props {
   name: string;
   username?: string | null;
   photoUrl?: string | null;
+  /**
+   * Where this account's own portfolio is — offered only where it is not
+   * already on screen. The landing has no other route to it: the header's
+   * button opens the app, and the app's rail is where a page is chosen.
+   */
+  onPortfolio?: () => void;
   onPro: () => void;
   onExit: () => void;
 }
 
-export function AccountMenu({ name, username, photoUrl, onPro, onExit }: Props) {
+export function AccountMenu({ name, username, photoUrl, onPortfolio, onPro, onExit }: Props) {
   const anchor = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const handle = username ? `@${username}` : name;
@@ -51,6 +57,16 @@ export function AccountMenu({ name, username, photoUrl, onPro, onExit }: Props) 
       <AnchoredMenu open={open} onClose={() => setOpen(false)} anchor={anchor} width={216} label="Account">
         {/* The handle is a heading, not an action — it says whose menu this is */}
         <div className="account-menu-who mono ph-mask">{handle}</div>
+        {onPortfolio ? (
+          <MenuItem
+            onClick={() => {
+              setOpen(false);
+              onPortfolio();
+            }}
+          >
+            My portfolio
+          </MenuItem>
+        ) : null}
         <MenuItem
           onClick={() => {
             setOpen(false);
