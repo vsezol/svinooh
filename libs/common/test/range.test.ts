@@ -117,6 +117,72 @@ describe('enrich — finding the pool a position belongs to', () => {
   });
 
   /**
+   * What the pair alone did on a live wallet. A GMX V2 GM market has no band by
+   * design — you deposit into it and there is nothing to be inside or outside
+   * of — and it was holding the two tokens of a Uniswap V3 position on another
+   * network. It was shown that position's band, in range, with the other
+   * network's name printed under it.
+   */
+  test('a fact is never handed to a position of another protocol', () => {
+    const [p] = enrich(
+      [
+        position({
+          symbol: 'GMX V2',
+          platform: 'arb_gmx2',
+          network: 'arb',
+          tokens: [leg('WETH', 'supply', 900), leg('USDC', 'supply', 900)],
+        }),
+      ],
+      facts([pool({ ref: null })]),
+    );
+    assert.equal(p.band, undefined);
+    assert.equal(p.range, undefined);
+  });
+
+  /**
+   * The id belongs to the fact as much as to the position. A fact that names
+   * the position it was read from is only ever given to the position that names
+   * it back; another row in the same pair, whose source named no id at all, is
+   * not that position.
+   */
+  test('a fact that names its position is not given to one that cannot name it back', () => {
+    const [p] = enrich(
+      [position({ tokens: [leg('USDC', 'supply', 500), leg('WETH', 'supply', 500)] })],
+      facts([pool({ ref: '5854873' })]),
+    );
+    assert.equal(p.band, undefined);
+    assert.equal(p.range, undefined);
+  });
+
+  /**
+   * Not every protocol has an id to give: neither Orca nor Meteora reports one
+   * the aggregator would also know, so their pools are found by pair — the
+   * protocol's own pair.
+   */
+  test('a protocol with no id to give still finds its pool by pair', () => {
+    const [p] = enrich(
+      [
+        position({
+          symbol: 'Orca',
+          platform: 'orca',
+          tokens: [leg('SOL', 'supply', 500), leg('USDC', 'supply', 500)],
+        }),
+      ],
+      facts([
+        pool({
+          id: 'orca:whirlpool',
+          platform: 'orca',
+          pair: 'SOL|USDC',
+          pairLabel: 'SOL/USDC',
+          chainLabel: 'Solana',
+        }),
+      ]),
+    );
+    assert.equal(p.range, 'in');
+    assert.equal(p.band?.pair, 'SOL/USDC');
+  });
+
+  /**
    * One token held, both tokens in the uncollected fees. The pair cannot be
    * read off what the position is holding any more, and reading it off the
    * fees is how the band comes back for exactly the positions that have left
@@ -208,6 +274,9 @@ describe('enrich — what a loan costs is the lending protocol\'s own number', (
       ...over,
     }) as LendingFact;
   const facts = (lending: LendingFact[]): DefiFacts => ({ pools: [], lending }) as DefiFacts;
+  /** Every fact here is Kamino's, so every position that may have one is a Kamino position */
+  const borrower = (over: Partial<ScanPosition>): ScanPosition =>
+    position({ symbol: 'Kamino', platform: 'kamino', name: 'Lending', ...over });
 
   /**
    * The wild-caught case: Jupiter priced a Kamino USDT loan at 7.8% APR
@@ -219,8 +288,7 @@ describe('enrich — what a loan costs is the lending protocol\'s own number', (
   test('the protocol rate replaces the aggregator rate, leg included', () => {
     const [p] = enrich(
       [
-        position({
-          name: 'Lending',
+        borrower({
           borrowApy: 0.0807,
           healthRate: 2.51,
           tokens: [
@@ -242,7 +310,7 @@ describe('enrich — what a loan costs is the lending protocol\'s own number', (
 
   test('no matching fact leaves the aggregator rate alone', () => {
     const [p] = enrich(
-      [position({ name: 'Lending', borrowApy: 0.0807, tokens: [{ ...leg('USDC', 'borrow', -100), apy: 0.0807 }] })],
+      [borrower({ borrowApy: 0.0807, tokens: [{ ...leg('USDC', 'borrow', -100), apy: 0.0807 }] })],
       facts([loanFact()]), // fact is about USDT, position borrows USDC
     );
     assert.equal(p.borrowApy, 0.0807);
@@ -250,7 +318,7 @@ describe('enrich — what a loan costs is the lending protocol\'s own number', (
 
   test('two facts about the same token cannot pick a side', () => {
     const [p] = enrich(
-      [position({ name: 'Lending', borrowApy: 0.0807, tokens: [leg('USDT', 'borrow', -100)] })],
+      [borrower({ borrowApy: 0.0807, tokens: [leg('USDT', 'borrow', -100)] })],
       facts([loanFact(), loanFact({ id: 'kamino:other:reserve', market: 'Main Market', borrowRate: 9.9 })]),
     );
     assert.equal(p.borrowApy, 0.0807);
@@ -258,10 +326,32 @@ describe('enrich — what a loan costs is the lending protocol\'s own number', (
 
   test('a fact with no rate still names the market and touches nothing else', () => {
     const [p] = enrich(
-      [position({ name: 'Lending', borrowApy: 0.0807, tokens: [leg('USDT', 'borrow', -100)] })],
+      [borrower({ borrowApy: 0.0807, tokens: [leg('USDT', 'borrow', -100)] })],
       facts([loanFact({ borrowRate: null })]),
     );
     assert.equal(p.borrowApy, 0.0807);
     assert.equal(p.loan?.market, 'SOL/BTC Market');
+  });
+
+  /**
+   * The same asset borrowed at a different protocol. What a loan costs is the
+   * lending protocol's own number — and this loan is not that protocol's, so
+   * neither its rate nor its market has anything to say here.
+   */
+  test('a loan of the same asset at another protocol is left alone', () => {
+    const [p] = enrich(
+      [
+        position({
+          symbol: 'Compound',
+          platform: 'base_compound3',
+          name: 'Lending',
+          borrowApy: 0.0807,
+          tokens: [leg('USDT', 'borrow', -100)],
+        }),
+      ],
+      facts([loanFact()]),
+    );
+    assert.equal(p.borrowApy, 0.0807);
+    assert.equal(p.loan, undefined);
   });
 });
