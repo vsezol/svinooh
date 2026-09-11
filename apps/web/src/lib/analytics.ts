@@ -1,7 +1,7 @@
 import posthog from 'posthog-js';
 
 /** Every door a sign-in can come through — the property that splits the funnel */
-export type SignInMethod = 'telegram' | 'x' | 'dev';
+export type SignInMethod = 'telegram' | 'x' | 'wallet' | 'dev';
 
 /**
  * Every product event this app reports, with the properties it carries.

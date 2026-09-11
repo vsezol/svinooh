@@ -45,6 +45,20 @@ export class AuthController {
     return this.auth.connectRemove(userId);
   }
 
+  /** Wallet sign-in, step one: the sentence this address is asked to sign */
+  @Post('wallet/nonce')
+  walletNonce(@Body() body: { address?: string; chainId?: number }) {
+    // Ethereum mainnet when the browser names nothing — a Solana address
+    // ignores it, and no wallet has ever been on chain zero
+    return this.auth.walletChallenge(body?.address ?? '', Number(body?.chainId) || 1);
+  }
+
+  /** Step two: the signature, which is the whole proof */
+  @Post('wallet/verify')
+  walletVerify(@Body() body: { nonce?: string; signature?: string }) {
+    return this.auth.walletVerify(body?.nonce ?? '', body?.signature ?? '');
+  }
+
   @Post('x/start')
   xStart() {
     return this.auth.xStart();

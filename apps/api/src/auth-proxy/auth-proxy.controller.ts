@@ -55,6 +55,16 @@ export class AuthProxyController {
     return forward('POST', '/auth/telegram/start', { body: {} });
   }
 
+  @Post('wallet/nonce')
+  walletNonce(@Body() body: unknown) {
+    return forward('POST', '/auth/wallet/nonce', { body });
+  }
+
+  @Post('wallet/verify')
+  walletVerify(@Body() body: unknown) {
+    return forward('POST', '/auth/wallet/verify', { body });
+  }
+
   @Post('x/start')
   xStart() {
     return forward('POST', '/auth/x/start', { body: {} });
