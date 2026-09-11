@@ -60,13 +60,6 @@ export class MetricsService {
     registers: [this.registry],
   });
 
-  readonly cacheOps = new Counter({
-    name: 'svinooh_cache_ops_total',
-    help: 'Portfolio cache operations',
-    labelNames: ['op'] as const, // hit | miss
-    registers: [this.registry],
-  });
-
   readonly errors = new Counter({
     name: 'svinooh_errors_total',
     help: 'Errors by type',

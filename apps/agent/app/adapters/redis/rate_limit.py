@@ -23,8 +23,8 @@ Two details worth stating, because both look like details and are not:
 from limits.aio.storage import RedisStorage
 from redis.asyncio import ConnectionPool
 
-#: Keeps the counters out of the way of everything else on the instance — the
-#: portfolio cache included. See adapters/redis/conversations.py on sharing.
+#: Keeps the counters out of the way of everything else on the instance. See
+#: adapters/redis/conversations.py on sharing.
 KEY_PREFIX = "agent:rl"
 
 

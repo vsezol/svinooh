@@ -33,7 +33,6 @@ import { round2 } from '../common/util';
 import { config } from '../config';
 import { PrismaService } from '@svinooh/db';
 import { detectChain, normalizeAddress } from '../scanners/detect';
-import { CacheService } from '../cache/cache.service';
 import { RESERVED_SLUGS, setting, slugifyName, wordSlug } from '@svinooh/common';
 import { PremiumService } from '../billing/premium.service';
 
@@ -291,30 +290,34 @@ function threshold(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 }
 
-/** Redis cache key for the assembled portfolio */
-function cacheKey(slug: string): string {
-  return `pf:${slug}`;
-}
-
 /**
- * How long this view may be served before it is rebuilt — the cache's TTL is the
- * page's polling period, in both of the periods the page has.
+ * How often one portfolio's visit is worth writing down: a minute.
  *
- * Nothing invalidates this cache when a scan lands: the wallet service writes to
- * Postgres and has never heard of Redis, so a background update is only ever
- * picked up by the entry expiring. That makes the TTL the delay on every number
- * on the page, and a wallet waiting for its FIRST scan is where that delay is
- * felt: the page polls it every 3 seconds (PortfolioPage), and a scan that
- * finished in ten seconds then sat behind a 60-second entry — the poll asking
- * over and over for a result the cache already had and would not hand over.
+ * A view is one indexed UPDATE plus a reprioritising `updateMany`, and the page
+ * asks for the portfolio every 3 seconds while a wallet is still pending. What
+ * the write is FOR is the scan cadence — somebody is looking, so keep this
+ * wallet fresh — and that question is not answered any better by asking it
+ * twenty times a minute.
  *
- * The steady state is the other period, 60 seconds, which is what the page falls
- * back to once nothing is pending, and there is no point refreshing faster than
- * anybody asks.
+ * Per process, which is the whole mechanism: with several replicas this is at
+ * most one write per replica per minute, and the value being written is the
+ * same `now` either way.
  */
-function cacheTtlFor(view: CachedView): number {
-  const pending = view.dto.wallets.some((w) => w.status === 'pending');
-  return pending ? config.cachePendingTtlSec : config.cacheTtlSec;
+const VISIT_WINDOW_MS = 60_000;
+const visited = new Map<string, number>();
+
+/** Has this portfolio's visit already been recorded this minute? */
+function visitIsFresh(slug: string, now: number): boolean {
+  const last = visited.get(slug);
+  if (last !== undefined && now - last < VISIT_WINDOW_MS) return true;
+  // Bounded by what it is worth remembering: entries past the window say
+  // nothing, and a process that has served a lot of portfolios must not carry
+  // a key for each of them forever
+  if (visited.size > 10_000) {
+    for (const [key, at] of visited) if (now - at >= VISIT_WINDOW_MS) visited.delete(key);
+  }
+  visited.set(slug, now);
+  return false;
 }
 
 function unsupportedNetwork(): BadRequestException {
@@ -326,12 +329,13 @@ function unsupportedNetwork(): BadRequestException {
 }
 
 /**
- * What we keep in Redis. `dto` is the PUBLIC view and nothing else — the owner's
- * profile and their wallet labels sit beside it and are only ever merged in for
- * a request authenticated as the owner. Keeping them out of `dto` means a cache
- * hit cannot accidentally hand someone else's identity to a stranger.
+ * The assembled portfolio. `dto` is the PUBLIC view and nothing else — the
+ * owner's profile and their wallet labels sit beside it and are only ever merged
+ * in for a request authenticated as the owner. Keeping them apart rather than
+ * stripping them afterwards means the public payload is public by construction,
+ * not by remembering to delete a field.
  */
-interface CachedView {
+interface PortfolioView {
   ownerUserId: string | null;
   owner: PortfolioOwnerDto | null;
   labels: Record<string, string | null>;
@@ -344,7 +348,6 @@ interface CachedView {
 export class PortfolioService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cache: CacheService,
     private readonly premium: PremiumService,
   ) {}
 
@@ -471,43 +474,37 @@ export class PortfolioService {
   }
 
   /**
-   * Public view: a portfolio is visible via its link without signing in. Served
-   * from cache (Redis) — the owner-independent part is cached, and the isOwner
-   * flag is applied on read. The cache is invalidated on owner edits; background
-   * updates are picked up via TTL (see cacheTtlFor).
+   * Public view: a portfolio is visible via its link without signing in.
+   *
+   * Read straight from Postgres, one query per request. It used to be served
+   * from a Redis entry with a TTL, and nothing invalidated that entry when a
+   * scan landed — the wallet service writes to Postgres and had never heard of
+   * Redis — so the TTL was simply a delay on every number on the page, longest
+   * exactly where it was felt most: a wallet waiting for its first scan, polled
+   * every 3 seconds for a result the cache already had and would not hand over.
    */
   async getBySlug(slug: string, userId: string | null): Promise<PortfolioDto> {
-    const key = cacheKey(slug);
-    let view = await this.cache.get<CachedView>(key);
-    if (!view) {
-      view = await this.buildView(slug);
-      await this.cache.set(key, view, cacheTtlFor(view));
-      // Record the visit so the wallet service knows this portfolio is being
-      // looked at and keeps it fresh. Only on a cache MISS, which the TTL
-      // throttles to one write per portfolio per TTL — and never in the way of
-      // the response. While a wallet is pending that is a write every 3s rather
-      // than every 60s, which is a single indexed UPDATE against a window that
-      // ends with the first scan (and that the stuck-pending sweep in the wallet
-      // service bounds even when no scan ever comes back).
-      this.touchViewed(slug);
-    }
+    const view = await this.buildView(slug);
+    // Somebody is looking at this portfolio, so the wallet service keeps it
+    // fresh. Never in the way of the response, and at most once a minute — see
+    // VISIT_WINDOW_MS for why that is enough.
+    if (!visitIsFresh(slug, Date.now())) this.touchViewed(slug);
     const isOwner = userId !== null && view.ownerUserId === userId;
-    // The cached view is the PUBLIC one. Owner-only fields — their own profile
-    // and the labels they gave their wallets — are grafted on here, for the
-    // owner alone, so a cache hit can never serve them to somebody else.
+    // `view.dto` is the PUBLIC view. Owner-only fields — their own profile and
+    // the labels they gave their wallets — are grafted on here, for the owner
+    // alone, so nobody else is ever served somebody's identity.
     return {
       ...view.dto,
       isOwner,
       owner: isOwner ? view.owner : null,
-      // `?? false` covers views cached before the field existed, until they age out
-      hideSmallBalances: isOwner && (view.hideSmallBalances ?? false),
+      hideSmallBalances: isOwner && view.hideSmallBalances,
       wallets: isOwner
-        ? view.dto.wallets.map((w) => ({ ...w, label: view!.labels[w.id] ?? null }))
+        ? view.dto.wallets.map((w) => ({ ...w, label: view.labels[w.id] ?? null }))
         : view.dto.wallets,
     };
   }
 
-  private async buildView(slug: string): Promise<CachedView> {
+  private async buildView(slug: string): Promise<PortfolioView> {
     const portfolio = await this.prisma.portfolio.findUnique({
       where: { slug },
       include: {
@@ -541,7 +538,7 @@ export class PortfolioService {
     const dto: PortfolioDto = {
       slug: portfolio.slug,
       name: portfolio.name,
-      // Never in the cached (public) view — filled in for the owner in getBySlug
+      // Never in the public view — filled in for the owner in getBySlug
       owner: null,
       hideSmallBalances: false,
       visibility: !portfolio.owner ? 'anonymous' : portfolio.owner.isPublic ? 'public' : 'private',
@@ -676,7 +673,6 @@ export class PortfolioService {
     const emptyIds = others.filter((o) => o.portfolio.wallets.length === 0).map((o) => o.portfolioId);
     if (emptyIds.length) await this.prisma.portfolio.deleteMany({ where: { id: { in: emptyIds } } });
 
-    await this.cache.del(cacheKey(slug));
     return { slug: portfolio.slug };
   }
 
@@ -697,7 +693,6 @@ export class PortfolioService {
       throw new ConflictException('This is your only portfolio — create another before deleting it');
     }
     await this.prisma.portfolio.delete({ where: { id: portfolio.id } });
-    await this.cache.del(cacheKey(slug));
     return { ok: true };
   }
 
@@ -712,7 +707,6 @@ export class PortfolioService {
       where: { portfolioId: portfolio.id },
       data: { isPublic },
     });
-    await this.cache.del(cacheKey(slug));
     return { visibility: isPublic ? 'public' : 'private' };
   }
 
@@ -727,9 +721,6 @@ export class PortfolioService {
       where: { portfolioId: portfolio.id },
       data: { hideSmallBalances },
     });
-    // The setting rides the cached view (owner-only on read), so the view is
-    // stale the moment it changes — same as visibility
-    await this.cache.del(cacheKey(slug));
     return { hideSmallBalances };
   }
 
@@ -835,7 +826,6 @@ export class PortfolioService {
       }
       throw err;
     }
-    await this.cache.del(cacheKey(slug));
     return { name, slug: nextSlug };
   }
 
@@ -916,7 +906,6 @@ export class PortfolioService {
     // An address somebody else already tracks arrives with its readings and its
     // positions; only one nobody has scanned yet needs to jump the queue
     if (wallet.lastSyncedAt === null) this.requestScan(wallet.id);
-    await this.cache.del(cacheKey(slug));
     return this.toWalletDto(held, 0);
   }
 
@@ -934,7 +923,6 @@ export class PortfolioService {
     // An empty name resets to the default (null)
     const label = String(labelRaw || '').trim().slice(0, 40) || null;
     await this.prisma.portfolioWallet.update({ where: { id: held.id }, data: { label } });
-    await this.cache.del(cacheKey(slug));
     return { label };
   }
 
@@ -948,7 +936,6 @@ export class PortfolioService {
     // history, stay — somebody else may be tracking it, and if nobody is it
     // simply stops being due for a scan.
     await this.prisma.portfolioWallet.delete({ where: { id: held.id } });
-    await this.cache.del(cacheKey(slug));
     return { ok: true };
   }
 
