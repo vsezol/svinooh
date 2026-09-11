@@ -1,4 +1,4 @@
-import { XMark } from '@svinooh/ui';
+import { XMark } from '@svinooh/ui/XMark';
 import type { SignInBlock } from '../../app/types';
 
 export type SignInProvider = 'telegram' | 'x';

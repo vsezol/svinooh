@@ -1,6 +1,6 @@
-// By its own path, not through the kit's barrel: the barrel re-exports
-// ButtonLink, which imports next/link — a dependency this app does not have
-// and does not need.
+// By its own path, as everything from the kit is here: this app bundles the
+// kit's source with webpack, so an import takes whatever the module it names
+// pulls in — the barrel would be the whole kit, charts and icon set included.
 import { AppHeader } from '@svinooh/ui/AppHeader';
 
 import './chrome.css';
