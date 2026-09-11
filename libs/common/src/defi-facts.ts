@@ -65,6 +65,40 @@ function byRef(pools: PoolFact[], position: ScanPosition): PoolFact | null {
   return only(pools.filter((p) => p.ref && p.ref.trim() === ref));
 }
 
+/**
+ * The one fact of this pair that does not name a position of its own.
+ *
+ * Asked after the id and never for a fact that carries one: a fact that says
+ * which position it is has already been offered to the position that says the
+ * same, and reaching here means that was not this one. Where neither side has
+ * an id — the protocols that have none to give — the pair is all there is.
+ *
+ * Even then it answers only where exactly one fact can be meant. A pair is not
+ * an identity: two positions in one pool are two rows with the same pair, and a
+ * confidently wrong band on somebody's money is worse than an absent one.
+ */
+function byPair(pools: PoolFact[], pair: string): PoolFact | null {
+  return only(pools.filter((p) => !p.ref && p.pair === pair));
+}
+
+/**
+ * The facts this position's own protocol produced, and nobody else's.
+ *
+ * A fact is one protocol reading one of its own positions, so a position of
+ * another protocol is not something it can describe. Without this the match
+ * came down to the pair, and a pair is not an identity: a concentrated pool's
+ * band was handed to a position on another network, of a protocol whose
+ * positions have no band at all, because the two held the same two tokens.
+ *
+ * The fact's own name is looked for INSIDE what the position says it is, since
+ * every source writes a protocol its own way: an aggregator's project id
+ * (`base_uniswap3`), a display name (`Uniswap V3`), a bare id (`kamino`).
+ */
+function ofProtocol<T extends { platform: string }>(facts: T[], position: ScanPosition): T[] {
+  const said = `${position.platform ?? ''} ${position.symbol ?? ''}`.toLowerCase();
+  return facts.filter((fact) => said.includes(fact.platform));
+}
+
 /** The one fact that can only be about this position, or nothing */
 function only<T>(candidates: T[]): T | null {
   return candidates.length === 1 ? candidates[0] : null;
@@ -88,13 +122,14 @@ function only<T>(candidates: T[]): T | null {
  * and are there to be read: they are what lets an alert say how far out of
  * range a position went and which way, instead of only that it went.
  *
- * A pool position is matched to a fact by its own id where both sides have one,
- * and by its pair otherwise; a loan by the asset it borrowed. Only the id is an
- * identity, so where the pair is all there is, a match is used only when
- * exactly one fact can be about this position — a wallet with two positions in
- * the same pool and no ids to tell them apart gets the inference it had before
- * rather than a coin-flip between two bands, because a confidently wrong range
- * on somebody's money is worse than an approximate one.
+ * A fact is only ever matched to a position of the protocol it came from. Among
+ * those, a pool position is matched by its own id where the fact has one and by
+ * its pair where the protocol has none to give; a loan by the asset it borrowed.
+ * Only the id is an identity, so where the pair is all there is, a match is used
+ * only when exactly one fact can be about this position — a wallet with two
+ * positions in the same pool and no ids to tell them apart gets the inference it
+ * had before rather than a coin-flip between two bands, because a confidently
+ * wrong range on somebody's money is worse than an approximate one.
  */
 export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPosition[] {
   if (!facts.pools.length && !facts.lending.length) return positions;
@@ -102,10 +137,11 @@ export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPositio
   return positions.map((position) => {
     const patch: Partial<ScanPosition> = {};
 
-    // Its own id where both sides have one, its pair otherwise
+    // Its own protocol first; then its own id where the fact has one, its pair
+    // where the protocol has no id to give
     const pair = pairOf(position);
-    const pool =
-      byRef(facts.pools, position) ?? (pair ? only(facts.pools.filter((p) => p.pair === pair)) : null);
+    const pools = ofProtocol(facts.pools, position);
+    const pool = byRef(pools, position) ?? (pair ? byPair(pools, pair) : null);
 
     // A full-range position has no band to be outside of, and saying "in
     // range" of a pool that spans every price is a badge that means nothing
@@ -124,7 +160,7 @@ export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPositio
 
     const borrowed = (position.tokens ?? []).filter((t) => t.role === 'borrow');
     if (borrowed.length) {
-      const loans = facts.lending.filter((l) =>
+      const loans = ofProtocol(facts.lending, position).filter((l) =>
         borrowed.some((leg) => leg.symbol.trim().toUpperCase() === l.token),
       );
       const loan = only(loans);
