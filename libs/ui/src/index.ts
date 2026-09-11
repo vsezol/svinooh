@@ -14,10 +14,15 @@
  *  2. When something is needed in a second place, it comes here — extended with
  *     a prop if it is a variation, added as a component if it is genuinely new.
  *     Copying it is what produced twenty font sizes and ten button classes.
+ *  3. Nothing exported from here may import a framework. Two apps consume the
+ *     kit and only one of them is Next: the agent's frontend is a webpack
+ *     microfrontend, and one `next/link` anywhere in this file's import graph
+ *     fails its build at resolve time. A component that does need the framework
+ *     keeps to its own path — see ButtonLink, which is why this rule is here.
  */
 export { AppHeader } from './AppHeader';
 export type { AppHeaderProps, AppTab } from './AppHeader';
-export { Button, ButtonLink, IconButton, Spinner } from './Button';
+export { Button, IconButton, Spinner } from './Button';
 export type { ButtonVariant, ControlSize } from './Button';
 export { Tag, TagButton } from './Tag';
 export type { TagVariant } from './Tag';

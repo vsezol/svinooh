@@ -5,6 +5,8 @@
   "description": "The svinooh UI kit: color tokens, measurement tokens, .ui-* component classes and their React wrappers. Shipped as source \u2014 consumers transpile it (Next via transpilePackages).",
   "exports": {
     ".": "./src/index.ts",
+    "./ButtonLink": "./src/ButtonLink.tsx",
+    "./XMark": "./src/XMark.tsx",
     "./theme.css": "./src/theme.css",
     "./tokens.css": "./src/tokens.css",
     "./ui.css": "./src/ui.css",
