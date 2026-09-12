@@ -1,4 +1,5 @@
 export * from './env';
+export * from './address';
 export * from './scan-contract';
 export * from './rabbit/rabbit.service';
 export * from './rabbit/rabbit.module';

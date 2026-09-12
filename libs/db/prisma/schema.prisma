@@ -16,6 +16,11 @@ model User {
   /// X (Twitter) account id — a separate identity, exactly as telegramId is:
   /// signing in with X makes its own user, never links to a Telegram one
   xId        String?          @unique
+  /// The wallet address that signed in — a third identity, and as separate from
+  /// the other two. Stored exactly as the chain spells it: base58 is
+  /// case-sensitive, so lower-casing a Solana address would make it a different
+  /// address (see normalizeAddress, which this follows).
+  walletAddress String?       @unique
   /// Telegram chat that receives this user's alerts when the identity itself
   /// is not Telegram. A delivery address, not an identity: the chat's own
   /// Telegram account, if it ever signs in, is a different user entirely.
@@ -167,6 +172,30 @@ model TelegramLogin {
   username   String?
   expiresAt  DateTime
   createdAt  DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+/// A wallet sign-in the site started and is still waiting on: the message we
+/// asked an address to sign, kept until the signature comes back.
+///
+/// The whole message is stored rather than re-derived, so verification never
+/// has to trust — or parse — anything the browser sends back. It signs what we
+/// wrote or it signs nothing; the row is the only thing the signature is
+/// checked against, and it is deleted the moment it is spent, which is what
+/// makes a captured signature worthless the second time.
+///
+/// In a table for the same reason TelegramLogin is: any instance must be able
+/// to finish a sign-in another one started.
+model WalletLogin {
+  nonce     String   @id
+  /// The address the message names, spelled as its chain spells it. The signer
+  /// must be this one, so a signature from another wallet cannot redeem it.
+  address   String
+  /// The exact text handed to the wallet
+  message   String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
   @@index([expiresAt])
 }

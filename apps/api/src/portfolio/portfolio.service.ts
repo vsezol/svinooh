@@ -32,8 +32,7 @@ import type {
 import { round2 } from '../common/util';
 import { config } from '../config';
 import { PrismaService } from '@svinooh/db';
-import { detectChain, normalizeAddress } from '../scanners/detect';
-import { RESERVED_SLUGS, setting, slugifyName, wordSlug } from '@svinooh/common';
+import { detectChain, normalizeAddress, RESERVED_SLUGS, setting, slugifyName, wordSlug } from '@svinooh/common';
 import { PremiumService } from '../billing/premium.service';
 
 /**

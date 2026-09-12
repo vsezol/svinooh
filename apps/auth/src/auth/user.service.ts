@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { Portfolio, User } from '@prisma/client';
 import { PrismaService } from '@svinooh/db';
-import { wordSlug } from '@svinooh/common';
+import { detectChain, wordSlug } from '@svinooh/common';
 
 /**
  * How long a sign-in link from the bot stays good. An hour covers the case the
@@ -13,6 +13,10 @@ import { wordSlug } from '@svinooh/common';
  * bot away.
  */
 const LINK_TTL_MS = 60 * 60_000;
+
+/** `7xKXtg2C…Gs1gAsU` — as much of an address as a person reads off a screen */
+const shortAddress = (address: string): string =>
+  address.length > 12 ? `${address.slice(0, 4)}…${address.slice(-4)}` : address;
 
 /**
  * Owns the User record and its portfolio. Split out of AuthService because the
@@ -68,6 +72,26 @@ export class UserService {
   }
 
   /**
+   * A wallet is its own identity too, and the same rule holds: signing in with
+   * an address finds or makes the user that IS that address, and never reaches
+   * for a Telegram or X account to attach to.
+   *
+   * The name is the shortened address, because a wallet gives us nothing else
+   * and "Anonymous" everywhere is worse than the one fact we do have. It is
+   * public chain data — the one kind of name the privacy rule allows to be
+   * generated — and, like every other handle, it is shown to its owner and to
+   * nobody else. Nothing to update on a return visit: an address does not
+   * change its mind about what it is called.
+   */
+  upsertWallet(address: string): Promise<User> {
+    return this.prisma.user.upsert({
+      where: { walletAddress: address },
+      create: { walletAddress: address, firstName: shortAddress(address) },
+      update: {},
+    });
+  }
+
+  /**
    * Point this user's alerts at a Telegram chat. A delivery address and only
    * that: the chat's own Telegram account, if it ever signs in, is a different
    * user — nothing here reads or writes telegramId.
@@ -91,6 +115,9 @@ export class UserService {
    * WITHOUT a name: the slug identifies it. An auto-generated name is public the
    * moment the owner publishes, so it must never be derived from who they are —
    * and a placeholder like "My portfolio" reads as nonsense to everyone else.
+   *
+   * A wallet account's portfolio is created holding that wallet — see
+   * `startsHolding`.
    */
   async ensurePortfolio(user: User): Promise<Portfolio> {
     const existing = await this.prisma.portfolioOwner.findFirst({
@@ -107,6 +134,7 @@ export class UserService {
           data: {
             slug: wordSlug(attempt),
             owner: { create: { userId: user.id } },
+            wallets: this.startsHolding(user),
           },
         });
       } catch (err) {
@@ -115,6 +143,46 @@ export class UserService {
         if (!collision || attempt >= 5) throw err;
       }
     }
+  }
+
+  /**
+   * What a new portfolio is created holding: for a wallet account, the address
+   * it signed in with — watching that address is the entire reason somebody
+   * signs in with a wallet, and asking them to paste it on the next screen is
+   * asking them to repeat themselves.
+   *
+   * It rides inside the statement that creates the portfolio, and that is the
+   * whole design. Creating a portfolio happens once per account, so seeding it
+   * happens once per account — there is no second moment at which this could
+   * run, which means a wallet somebody deletes afterwards stays deleted. Doing
+   * it from the browser after signing in could not promise that: the client
+   * cannot tell a sign-up from a sign-in, and the request it would send is one
+   * the person did not ask for a second time.
+   *
+   * Atomic for the same reason: portfolio, ownership, membership and the
+   * address itself are one write. A half-done version of this is a portfolio
+   * that was supposed to have a wallet and never will.
+   *
+   * The address row is created due (`Wallet.nextScanAt` defaults to now), so
+   * the producer's next pass takes it — a few seconds, and no call into the
+   * wallet service from here to arrange it.
+   */
+  private startsHolding(user: User): Prisma.PortfolioCreateInput['wallets'] {
+    const address = user.walletAddress;
+    const chain = address ? detectChain(address) : null;
+    if (!address || !chain) return undefined;
+    return {
+      create: {
+        wallet: {
+          // Somebody else may already be tracking this address — then it is
+          // that same row, with its readings and its history already on it
+          connectOrCreate: {
+            where: { chain_address: { chain, address } },
+            create: { chain, address },
+          },
+        },
+      },
+    };
   }
 
   /**
