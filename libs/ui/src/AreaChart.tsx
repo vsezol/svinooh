@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   AreaSeries,
   createChart,
@@ -11,6 +11,7 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import type { HistoryRange } from '@svinooh/shared';
+import { nearestIndex, useChartSync } from './chartSync';
 import { fmtUsd } from './money';
 import { useThemeName } from './useThemeName';
 
@@ -139,6 +140,19 @@ export function AreaChart({
   /** Fingers currently on the chart, by pointer id → x. Two of them select a span. */
   const touches = useRef(new Map<number, number>());
   const theme = useThemeName();
+
+  /**
+   * This chart's name among the charts it is drawn beside, and whether the
+   * pointer is on it.
+   *
+   * Only the chart under the pointer publishes. That one rule is what keeps a
+   * synchronised crosshair from chasing itself: putting the line on a chart
+   * makes it report a crosshair move like any other, and a chart that answered
+   * would be telling the chart that told it.
+   */
+  const id = useId();
+  const under = useRef(false);
+  const { shared, publish } = useChartSync();
 
   const [hover, setHover] = useState<{ index: number } | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -269,6 +283,62 @@ export function AreaChart({
     }
     setSelection(null);
   }, [period, fingerprint]);
+
+  /**
+   * What another chart in the group is showing — nothing when this one is the
+   * one being used, or when it stands alone.
+   */
+  const elsewhere = shared.source && shared.source !== id ? shared : null;
+  /** The reading this chart has for the instant another chart is standing on */
+  const followed = elsewhere?.time != null ? nearestIndex(times, elsewhere.time) : null;
+
+  /** The crosshair another chart is holding, drawn here at the same instant */
+  useEffect(() => {
+    const c = chart.current;
+    const s = series.current;
+    if (!c || !s) return;
+    if (followed == null) {
+      // Only ours to clear: with the pointer on this chart the library is
+      // drawing its own crosshair, and clearing it would blink it away
+      if (!under.current) c.clearCrosshairPosition();
+      return;
+    }
+    c.setCrosshairPosition(data[followed].value, data[followed].time, s);
+    // `data` is rebuilt every render from the same readings; `followed` is what
+    // actually changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [followed]);
+
+  /** A span measured on another chart is the same span of time here */
+  useEffect(() => {
+    if (!elsewhere) return; // ours to keep — we are the one measuring
+    const span = elsewhere.span;
+    const from = span ? nearestIndex(times, span.from) : null;
+    const to = span ? nearestIndex(times, span.to) : null;
+    setSelection(
+      from != null && to != null && from !== to
+        ? { fromIndex: Math.min(from, to), toIndex: Math.max(from, to) }
+        : null,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elsewhere?.span?.from, elsewhere?.span?.to, Boolean(elsewhere)]);
+
+  /** The instant under the pointer, for the charts drawn beside this one */
+  useEffect(() => {
+    if (!publish || !under.current) return;
+    const index = hover && hover.index >= 0 && hover.index < times.length ? hover.index : null;
+    publish(id, { time: index == null ? null : times[index] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hover]);
+
+  /** And the span measured on it */
+  useEffect(() => {
+    if (!publish || !under.current) return;
+    publish(id, {
+      span: selection ? { from: times[selection.fromIndex], to: times[selection.toIndex] } : null,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selection]);
 
   /** Screen x → index in the series */
   const indexAt = (clientX: number): number | null => {
@@ -410,7 +480,9 @@ export function AreaChart({
       })()
     : null;
 
-  const hovered = hover && hover.index >= 0 && hover.index < values.length ? hover.index : null;
+  const own = hover && hover.index >= 0 && hover.index < values.length ? hover.index : null;
+  /** Under this chart's own pointer, or under another chart's — the same reading either way */
+  const hovered = own ?? followed;
   /** The band belongs to the line, so it is drawn in the line's own colour */
   const SELECTION = tone === 'muted' ? 'var(--mut)' : 'var(--acc)';
 
@@ -426,6 +498,15 @@ export function AreaChart({
       <div
         ref={box}
         style={{ height, width: '100%' }}
+        onPointerEnter={() => {
+          under.current = true;
+        }}
+        onPointerLeave={() => {
+          under.current = false;
+          // Said out loud rather than left behind: the crosshair this chart put
+          // on the others goes when the pointer does
+          publish?.(id, { time: null });
+        }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

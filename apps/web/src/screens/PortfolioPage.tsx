@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import type { HistoryRange, PortfolioDto, WalletDto } from '@svinooh/shared';
+import { ChartSync } from '@svinooh/ui/chartSync';
 import { AppHeader, Button, Card, Checkbox, Eyebrow, Input, Segmented, Spinner, TagButton } from '../ui';
 import { AccountMenu } from '../components/AccountMenu';
 import type { AgentControl, ConversationRef } from '../components/agent/AgentEmbed';
@@ -862,46 +863,51 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
               {isOwner ? <span>{visNote}</span> : null}
             </div>
 
-            {/* scope + period, on one row: the period tabs stay pinned right on a phone */}
-            {hasChart ? (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'nowrap', marginTop: 22 }}>
-                  <ScopeSelect options={scopeOptions} value={scope} onChange={setScope} />
-                  <div
-                    style={{
-                      border: '1px solid var(--line)',
-                      borderRadius: 'var(--r-full)',
-                      padding: 'var(--sp-1)',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <Segmented
-                      label="Chart period"
-                      items={PERIODS}
-                      value={period}
-                      onChange={setPeriod}
+            {/* One group: the total and the two cards under it read the same
+                instant, so what one line did can be read against the others at
+                the moment it did it */}
+            <ChartSync>
+              {/* scope + period, on one row: the period tabs stay pinned right on a phone */}
+              {hasChart ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'nowrap', marginTop: 22 }}>
+                    <ScopeSelect options={scopeOptions} value={scope} onChange={setScope} />
+                    <div
+                      style={{
+                        border: '1px solid var(--line)',
+                        borderRadius: 'var(--r-full)',
+                        padding: 'var(--sp-1)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Segmented
+                        label="Chart period"
+                        items={PERIODS}
+                        value={period}
+                        onChange={setPeriod}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 14 }}>
+                    <AreaChart
+                      values={history?.data.total.values ?? []}
+                      times={history?.data.total.times ?? []}
+                      period={drawn}
+                      height="clamp(160px,26vw,240px)"
                     />
                   </div>
-                </div>
+                </>
+              ) : null}
 
-                <div style={{ marginTop: 14 }}>
-                  <AreaChart
-                    values={history?.data.total.values ?? []}
-                    times={history?.data.total.times ?? []}
-                    period={drawn}
-                    height="clamp(160px,26vw,240px)"
-                  />
-                </div>
-              </>
-            ) : null}
-
-            <MetricCards
-              rewards={rewards}
-              debt={debt}
-              claimableSeries={history?.data.claimable ?? EMPTY_HISTORY.claimable}
-              debtSeries={history?.data.debt ?? EMPTY_HISTORY.debt}
-              period={drawn}
-            />
+              <MetricCards
+                rewards={rewards}
+                debt={debt}
+                claimableSeries={history?.data.claimable ?? EMPTY_HISTORY.claimable}
+                debtSeries={history?.data.debt ?? EMPTY_HISTORY.debt}
+                period={drawn}
+              />
+            </ChartSync>
 
             {/* add wallet */}
             {canAdd ? (
