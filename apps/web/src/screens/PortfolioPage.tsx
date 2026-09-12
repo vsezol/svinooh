@@ -11,6 +11,7 @@ import type { AgentControl, ConversationRef } from '../components/agent/AgentEmb
 import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AlertSettings } from '../components/AlertSettings';
 import { AreaChart } from '../components/AreaChart';
+import { ChartSettings, useSyncCursor } from '../components/ChartSettings';
 import { AuthModal } from '../components/AuthModal';
 import { ClaimModal } from '../components/ClaimModal';
 import { DeletePortfolio } from '../components/DeletePortfolio';
@@ -234,6 +235,8 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   const agent = useRef<AgentControl | null>(null);
   const [scope, setScope] = useState<string>('all');
   const [period, setPeriod] = useState<HistoryRange>('24h');
+  /** Whether pointing at a moment on one chart reads it on the others — see ChartSettings */
+  const [syncCursor, setSyncCursor] = useSyncCursor();
   const [hideSmall, setHideSmall] = useState(false);
   // The saved preference, applied once per portfolio load. Seeding rather than
   // deriving keeps a toggle made just now from being undone by a reload that
@@ -866,26 +869,42 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
             {/* One group: the total and the two cards under it read the same
                 instant, so what one line did can be read against the others at
                 the moment it did it */}
-            <ChartSync>
+            <ChartSync enabled={syncCursor}>
               {/* scope + period, on one row: the period tabs stay pinned right on a phone */}
               {hasChart ? (
                 <>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'nowrap', marginTop: 22 }}>
+                  {/* The period and the settings beside it travel together: on a
+                    phone there is no room for them next to the scope, so the
+                    pair wraps onto its own line rather than sliding off the
+                    edge — which is where the settings button went. */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    rowGap: 12,
+                    flexWrap: 'wrap',
+                    marginTop: 22,
+                  }}
+                >
                     <ScopeSelect options={scopeOptions} value={scope} onChange={setScope} />
-                    <div
-                      style={{
-                        border: '1px solid var(--line)',
-                        borderRadius: 'var(--r-full)',
-                        padding: 'var(--sp-1)',
-                        flexShrink: 0,
-                      }}
-                    >
-                      <Segmented
-                        label="Chart period"
-                        items={PERIODS}
-                        value={period}
-                        onChange={setPeriod}
-                      />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>
+                      <div
+                        style={{
+                          border: '1px solid var(--line)',
+                          borderRadius: 'var(--r-full)',
+                          padding: 'var(--sp-1)',
+                        }}
+                      >
+                        <Segmented
+                          label="Chart period"
+                          items={PERIODS}
+                          value={period}
+                          onChange={setPeriod}
+                        />
+                      </div>
+                      <ChartSettings syncCursor={syncCursor} onSyncCursor={setSyncCursor} />
                     </div>
                   </div>
 
