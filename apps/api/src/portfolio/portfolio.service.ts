@@ -481,13 +481,16 @@ export class PortfolioService {
    * Redis — so the TTL was simply a delay on every number on the page, longest
    * exactly where it was felt most: a wallet waiting for its first scan, polled
    * every 3 seconds for a result the cache already had and would not hand over.
+   *
+   * `viewing` is the caller saying a person has this open. Only the portfolio
+   * page says it — see the controller for what reading it as a visit cost.
    */
-  async getBySlug(slug: string, userId: string | null): Promise<PortfolioDto> {
+  async getBySlug(slug: string, userId: string | null, viewing = false): Promise<PortfolioDto> {
     const view = await this.buildView(slug);
     // Somebody is looking at this portfolio, so the wallet service keeps it
     // fresh. Never in the way of the response, and at most once a minute — see
     // VISIT_WINDOW_MS for why that is enough.
-    if (!visitIsFresh(slug, Date.now())) this.touchViewed(slug);
+    if (viewing && !visitIsFresh(slug, Date.now())) this.touchViewed(slug);
     const isOwner = userId !== null && view.ownerUserId === userId;
     // `view.dto` is the PUBLIC view. Owner-only fields — their own profile and
     // the labels they gave their wallets — are grafted on here, for the owner

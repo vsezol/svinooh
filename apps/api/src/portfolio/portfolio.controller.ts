@@ -50,10 +50,25 @@ export class PortfolioController {
     return this.portfolios.createOwned(userId);
   }
 
+  /**
+   * One portfolio. `viewing=1` says a person has it open — the portfolio page
+   * says so, and nothing else does.
+   *
+   * Reading a portfolio is not the same as somebody looking at one, and the
+   * two were the same call: the landing draws its demo from the largest public
+   * portfolio, through this endpoint, so every landing hit — every crawler,
+   * every prerender — reported that portfolio as freshly visited and held its
+   * wallets on the fast scan tier forever. Recording the visit is opt-in now,
+   * so a reader that has no opinion about it simply reads.
+   */
   @Get(':slug')
   @UseGuards(OptionalAuthGuard)
-  get(@Param('slug') slug: string, @CurrentUserId() userId: string | null) {
-    return this.portfolios.getBySlug(slug, userId);
+  get(
+    @Param('slug') slug: string,
+    @CurrentUserId() userId: string | null,
+    @Query('viewing') viewing?: string,
+  ) {
+    return this.portfolios.getBySlug(slug, userId, viewing === '1');
   }
 
   @Patch(':slug')
