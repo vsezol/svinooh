@@ -85,26 +85,33 @@ export class MetricsCollectorsService implements OnModuleInit {
     });
 
     /**
-     * Who signed up, by the identity they signed in with. The two are disjoint
-     * by design — an X account never links to a Telegram one — so the sum is
-     * the user table. `dev` exists so that sum stays honest even where a
-     * development sign-in once created a row; in production it reads zero.
+     * Who signed up, by the identity they signed in with. The doors are
+     * disjoint by design — an X account never links to a Telegram one, and a
+     * wallet signature never links to either — so the sum is the user table.
+     * `dev` exists so that sum stays honest even where a development sign-in
+     * once created a row; in production it reads zero.
+     *
+     * A wallet is a door like the other two, and it was the one this gauge did
+     * not count: signing in by signing a message made a user nothing here could
+     * see, so the sum quietly stopped being the user table.
      */
     new Gauge({
       name: 'svinooh_users',
       help: 'Registered users by the identity they signed in with',
-      labelNames: ['provider'] as const, // telegram | x | dev
+      labelNames: ['provider'] as const, // telegram | x | wallet | dev
       registers,
       async collect() {
         try {
-          const [telegram, x, dev] = await Promise.all([
+          const [telegram, x, wallet, dev] = await Promise.all([
             prisma.user.count({ where: { telegramId: { not: null } } }),
             prisma.user.count({ where: { xId: { not: null } } }),
+            prisma.user.count({ where: { walletAddress: { not: null } } }),
             prisma.user.count({ where: { devKey: { not: null } } }),
           ]);
           this.reset();
           this.set({ provider: 'telegram' }, telegram);
           this.set({ provider: 'x' }, x);
+          this.set({ provider: 'wallet' }, wallet);
           this.set({ provider: 'dev' }, dev);
         } catch {
           /* DB unavailable at scrape time — skip */

@@ -59,12 +59,21 @@ export function track<E extends keyof ProductEvents>(event: E, properties: Produ
 }
 
 /**
- * Ties this browser's events to an account — the internal user id and nothing
- * else. No name, no Telegram handle: the id is enough to count one person as
- * one person across visits.
+ * Ties this browser's events to an account — the internal user id, and the door
+ * they came in by. No name, no Telegram handle, no address: the id is enough to
+ * count one person as one person across visits, and the door is the same fact
+ * the `svinooh_users` gauge carries as a label.
+ *
+ * The method is passed on a sign-in and left out on a returning session, which
+ * is exactly right: PostHog leaves a property alone when identify does not
+ * mention it, so the door survives every later visit without being restated.
+ *
+ * Without it, wallet sign-ins were countable as EVENTS and invisible as PEOPLE
+ * — the funnel could say how many signed in that way and the person list could
+ * not say how many exist.
  */
-export function identify(userId: string): void {
-  if (ready()) posthog.identify(userId);
+export function identify(userId: string, method?: SignInMethod): void {
+  if (ready()) posthog.identify(userId, method ? { signin_method: method } : undefined);
 }
 
 /** Signed out: the next events belong to a fresh anonymous visitor, not to the account */

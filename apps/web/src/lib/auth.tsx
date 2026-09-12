@@ -65,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tokenStore.set(res.token);
     // In this order on purpose: the person first, then the sign-in, then the
     // claim settleClaim may report — so the timeline reads the way it happened
-    identify(res.me.id);
+    identify(res.me.id, method);
     track('signed_in', { method });
     const settled = await settleClaim(res.me);
     setMe(settled);
