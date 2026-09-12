@@ -91,7 +91,10 @@ function usePortfolio(slug: string, viewerId: string | null) {
 
   const reload = useCallback(async () => {
     try {
-      setData(await api<PortfolioDto>(`/portfolios/${slug}`));
+      // `viewing`: this is a person with the page open, which is what puts the
+      // wallets on the fast scan tier. Every other reader of a portfolio — the
+      // landing's demo among them — leaves that alone
+      setData(await api<PortfolioDto>(`/portfolios/${slug}?viewing=1`));
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err : new ApiError(0, 'Something went wrong'));
