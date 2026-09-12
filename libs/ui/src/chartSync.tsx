@@ -47,9 +47,10 @@ const Context = createContext<Store | null>(null);
  * page around the charts sixty times a second to move a dotted line.
  *
  * Renders no element of its own, so it can wrap anything without becoming part
- * of the layout. A chart outside one is simply on its own.
+ * of the layout. A chart outside one — or inside one switched off — is simply
+ * on its own.
  */
-export function ChartSync({ children }: { children: ReactNode }) {
+export function ChartSync({ enabled = true, children }: { enabled?: boolean; children: ReactNode }) {
   const store = useMemo<Store>(() => {
     let state = NOTHING;
     const listeners = new Set<() => void>();
@@ -65,7 +66,9 @@ export function ChartSync({ children }: { children: ReactNode }) {
       },
     };
   }, []);
-  return <Context.Provider value={store}>{children}</Context.Provider>;
+  // Switched off, the group is withdrawn rather than torn down: the charts see
+  // what a chart with no group around it sees, and keep the canvases they have
+  return <Context.Provider value={enabled ? store : null}>{children}</Context.Provider>;
 }
 
 const alone = () => NOTHING;
