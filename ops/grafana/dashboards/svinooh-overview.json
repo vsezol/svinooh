@@ -860,6 +860,15 @@
           "expr": "sum(svinooh_users{provider=\"x\"}) or vector(0)",
           "legendFormat": "x",
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(svinooh_users{provider=\"wallet\"}) or vector(0)",
+          "legendFormat": "wallet",
+          "refId": "C"
         }
       ],
       "title": "Registered users",
