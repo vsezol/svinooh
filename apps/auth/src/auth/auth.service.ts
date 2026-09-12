@@ -56,8 +56,8 @@ export class AuthService {
   }
 
   /** The sentence this address must sign to prove it is theirs */
-  walletChallenge(address: string): Promise<WalletChallengeDto> {
-    return this.wallets.challenge(address);
+  walletChallenge(address: string, chainId: number): Promise<WalletChallengeDto> {
+    return this.wallets.challenge(address, chainId);
   }
 
   /** A signed challenge becomes the same session every other sign-in gives */

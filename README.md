@@ -125,20 +125,26 @@ Three ways in, all handled by the auth service:
 
 In production turn the dev login off: `AUTH_DEV_MODE=false`.
 
-## Signing in with a Solana wallet
+## Signing in with a wallet
 
 The third door, and the one this audience already has open. An address is an
 identity here exactly as a Telegram or an X account is: signing in with one
 finds or makes the user that IS that address, and never attaches itself to an
 account that arrived another way.
 
-**Nothing here knows the name of a single wallet.** Phantom, Solflare, Backpack
-and the rest all speak the [Wallet
-Standard](https://github.com/wallet-standard/wallet-standard): they register
-themselves with the page, and what they register is a name, an icon and the two
-things a sign-in needs — connect, and sign a message. So the list in the modal
-is whatever answered this browser. It cannot go stale, it never names a wallet
-that is not installed, and it gains a new wallet the day that wallet ships.
+**Nothing here knows the name of a single wallet.** Two ecosystems, two ways a
+wallet introduces itself to a page, and in both of them it is the wallet doing
+the talking: Solana wallets register through the [Wallet
+Standard](https://github.com/wallet-standard/wallet-standard) (Phantom,
+Solflare, Backpack), EVM wallets announce themselves through
+[EIP-6963](https://eips.ethereum.org/EIPS/eip-6963) (MetaMask, Rabby, Coinbase,
+Brave). Each hands over a name, an icon and the two things a sign-in needs.
+
+So the list in the modal is whatever answered this browser. It cannot go stale,
+it never names a wallet that is not installed, and it gains a new wallet the day
+that wallet ships. A wallet that speaks both — Phantom does — appears once per
+chain, tagged with it, because those are two different addresses and the one
+somebody signs with is the one that becomes their account.
 
 The proof is one signature over a sentence the server wrote: no transaction,
 nothing approved, no fee, and the message says so, because the wallet's prompt
@@ -148,12 +154,16 @@ row and nothing else — so a browser cannot choose what an address appears to
 have agreed to — and the row is deleted as it is spent, so a signature that
 leaks is worth nothing the second time. Five minutes, one address, one use.
 
-Verifying it needs no library, no RPC node and no key management: a Solana
-address **is** an ed25519 public key, base58 of the 32 raw bytes, so the auth
-service decodes the address it already stored and hands the bytes to node's
-`crypto`. The base58 decoder is the one the api has always used to tell a SOL
-address from a TRON one — it lives in `libs/common` now, because both services
-need the same answer about the same string.
+The chain is never asked for and never stored: an address says which one it is
+on, and `detectChain` — the same function the address box has always used —
+decides the shape of the message, how the signature is spelled, and which proof
+applies. A **Solana** address *is* an ed25519 public key, base58 of the 32 raw
+bytes, so the auth service decodes the address it already stored and hands the
+bytes to node's `crypto`: no library, no RPC node, no key management. An **EVM**
+address is the hash of a key we do not have, so the key is recovered from the
+signature and compared — `ethers.verifyMessage`, which is the whole of what
+ethers is there for. That shared decoder is why `detect.ts` lives in
+`libs/common` now: both services need the same answer about the same string.
 
 There is nothing to configure. `WEB_URL` gains a second job, though: it is the
 domain the wallet is asked to sign against, and a wallet shows that domain
@@ -177,7 +187,15 @@ Nothing has to be asked of the wallet service to get it scanned: `Wallet` rows
 are created due (`nextScanAt` defaults to now), and the producer's next pass —
 seconds later — takes it.
 
-EVM wallets — and WalletConnect for the phone — are the next door, not this one.
+WalletConnect — the phone, and the six hundred wallets that live on one — is
+the next door, not this one. It needs a relay project id and a megabyte of
+library; what is here needs neither, and covers every wallet that is installed
+in the browser doing the asking.
+
+A smart-contract wallet (Safe and the rest) cannot sign in this way: its
+signature is EIP-1271 and is verified by asking a chain, not by recovering a
+key. Nothing is lost meanwhile — a Safe is *tracked* like any other address,
+which never needed a signature.
 
 ## The landing is rendered on the server
 
