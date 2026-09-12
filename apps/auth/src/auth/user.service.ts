@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { Portfolio, User } from '@prisma/client';
 import { PrismaService } from '@svinooh/db';
+import { getAddress } from 'ethers';
 import { detectChain, wordSlug } from '@svinooh/common';
 
 /**
@@ -14,9 +15,19 @@ import { detectChain, wordSlug } from '@svinooh/common';
  */
 const LINK_TTL_MS = 60 * 60_000;
 
-/** `7xKXtg2C…Gs1gAsU` — as much of an address as a person reads off a screen */
-const shortAddress = (address: string): string =>
-  address.length > 12 ? `${address.slice(0, 4)}…${address.slice(-4)}` : address;
+/**
+ * As much of an address as a person reads off a screen, spelled the way its
+ * chain spells it: `0x1a2b…9f0e` with the checksum case wallets show, and
+ * `7xKX…gAsU` for base58, which has no case to restore.
+ */
+const shortAddress = (address: string): string => {
+  if (address.length <= 12) return address;
+  const hex = detectChain(address) === 'EVM';
+  // 0x and four, against base58's four: the prefix is not part of what tells
+  // one address from another, and every EVM address shares it
+  const shown = hex ? getAddress(address) : address;
+  return `${shown.slice(0, hex ? 6 : 4)}…${shown.slice(-4)}`;
+};
 
 /**
  * Owns the User record and its portfolio. Split out of AuthService because the

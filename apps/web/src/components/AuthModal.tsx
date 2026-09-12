@@ -6,9 +6,8 @@ import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { parkReturn } from '../lib/after-signin';
 import { pendingTgToken, pollTelegramLogin } from '../lib/telegram';
-import { declined, endWalletSession, signInWithWallet, useSolanaWallets } from '../lib/wallet';
-import type { Wallet } from '@wallet-standard/base';
-import { Button, Dialog, IconButton, Input, Note, Spinner, Title } from '../ui';
+import { declined, signInWithWallet, useWallets, type WalletChoice } from '../lib/wallet';
+import { Button, Dialog, IconButton, Input, Note, Spinner, Tag, Title } from '../ui';
 import { XMark } from '@svinooh/ui';
 import { Logo } from './Logo';
 
@@ -74,7 +73,7 @@ export function AuthModal({
   const [picking, setPicking] = useState(false);
   /** Which wallet in that list is mid-signature — the spinner is that one's */
   const [signing, setSigning] = useState<string | null>(null);
-  const wallets = useSolanaWallets();
+  const wallets = useWallets();
 
   useEffect(() => {
     return () => {
@@ -142,13 +141,13 @@ export function AuthModal({
    * The connection is closed on the way out, however it ended: it was worth one
    * message, and what keeps them signed in afterwards is our own token.
    */
-  const walletSignIn = async (wallet: Wallet) => {
+  const walletSignIn = async (choice: WalletChoice) => {
     if (busy) return;
     setBusy('wallet');
-    setSigning(wallet.name);
+    setSigning(choice.id);
     setError(null);
     try {
-      const me = await applyAuth(await signInWithWallet(wallet), 'wallet');
+      const me = await applyAuth(await signInWithWallet(choice), 'wallet');
       onClose();
       if (!returnTo) router.push(`/p/${me.portfolioSlug}`);
     } catch (err) {
@@ -163,8 +162,6 @@ export function AuthModal({
       );
       setBusy(null);
       setSigning(null);
-    } finally {
-      void endWalletSession(wallet);
     }
   };
 
@@ -245,33 +242,43 @@ export function AuthModal({
         /**
          * What is actually installed, and nothing else.
          *
-         * Every one of these registered itself with the page a moment ago, so
-         * each is one prompt away. Naming a wallet we cannot see is the thing
-         * this avoids — a hard list of logos goes stale, and most of it would
-         * be wallets this browser cannot open anyway.
+         * Every one of these introduced itself to the page a moment ago — a
+         * Solana wallet by registering, an EVM one by announcing — so each is
+         * one prompt away. Naming a wallet we cannot see is the thing this
+         * avoids: a hard list of logos goes stale, and most of it would be
+         * wallets this browser cannot open anyway.
          */
         <>
           <div style={{ marginTop: 'var(--sp-6)', display: 'grid', gap: 'var(--sp-4)' }}>
             {wallets.map((w) => (
               <Button
-                key={w.name}
+                key={w.id}
                 variant="soft"
                 size="lg"
                 block
-                loading={signing === w.name}
-                disabled={busy !== null && signing !== w.name}
-                onClick={() => walletSignIn(w.wallet)}
+                loading={signing === w.id}
+                disabled={busy !== null && signing !== w.id}
+                onClick={() => walletSignIn(w)}
               >
-                {/* The wallet's own mark, as it registered it — a data URI, no request */}
-                <img src={w.icon} alt="" width={16} height={16} style={{ borderRadius: 'var(--r-sm)' }} />
+                {w.icon ? (
+                  // The wallet's own mark, as it announced it — a data URI, no request
+                  <img src={w.icon} alt="" width={16} height={16} style={{ borderRadius: 'var(--r-sm)' }} />
+                ) : (
+                  WALLET_ICON
+                )}
                 {w.name}
+                {/* Which address this row signs with — a wallet that speaks both
+                    chains offers both, and they are two different accounts */}
+                <Tag size="sm" variant="soft">
+                  {w.chain}
+                </Tag>
               </Button>
             ))}
           </div>
 
           <Note style={{ textAlign: 'center', marginTop: 'var(--sp-5)', lineHeight: 1.55 }}>
             {wallets.length === 0
-              ? 'No Solana wallet answered in this browser. Install Phantom or Solflare, or open svinooh in your wallet’s own browser.'
+              ? 'No wallet answered in this browser. Install one — Phantom, Solflare, MetaMask, Rabby — or open svinooh in your wallet’s own browser.'
               : 'You sign one sentence to prove the address is yours. It is not a transaction: nothing moves, nothing is approved, and there is no fee. The address goes straight into your portfolio.'}
           </Note>
 
@@ -347,7 +354,7 @@ export function AuthModal({
 
           {/* The third door opens onto a list rather than a flow: which wallet
               is a question only this browser can answer, and it answers it by
-              saying which ones registered themselves. */}
+              saying which ones announced themselves. */}
           <Button
             variant="soft"
             size="lg"
@@ -360,7 +367,7 @@ export function AuthModal({
             style={{ marginTop: 'var(--sp-4)' }}
           >
             {WALLET_ICON}
-            Continue with a Solana wallet
+            Connect wallet
           </Button>
 
           {!config?.botUsername && !config?.devMode ? (
