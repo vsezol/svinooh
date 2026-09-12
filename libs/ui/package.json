@@ -17,6 +17,7 @@
     "./AppHeader": "./src/AppHeader.tsx",
     "./money": "./src/money.ts",
     "./AreaChart": "./src/AreaChart.tsx",
+    "./chartSync": "./src/chartSync.tsx",
     "./when": "./src/when.ts"
   },
   "peerDependencies": {
