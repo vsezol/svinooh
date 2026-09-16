@@ -35,8 +35,10 @@ scrape_configs:
     static_configs:
       - targets: ['agent.railway.internal:3000']
 
-  # The observability stack watches itself too — if log ingestion breaks, that
-  # should be visible here rather than by noticing missing data
-  - job_name: loki
-    static_configs:
-      - targets: ['loki.railway.internal:3100']
+  # Loki is not scraped. Nothing ships logs to it any more (they are read in
+  # Railway) and it sleeps, which a scrape every minute would never let it do.
+  # If LOKI_URL comes back on the services, this job comes back with it:
+  #
+  #   - job_name: loki
+  #     static_configs:
+  #       - targets: ['loki.railway.internal:3100']
