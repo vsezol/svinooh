@@ -1,5 +1,8 @@
 # Local development. `docker compose up -d` gives you the two things the
-# services genuinely cannot fake: a database and a broker.
+# services genuinely cannot fake: a database and a queue. The queue here is
+# RabbitMQ, the default. To run it on Redis instead, set QUEUE_DRIVER=redis and
+# point REDIS_URL at any Redis — the one the agent uses on localhost:6379 does
+# (see libs/common/src/queue).
 #
 # The broker used to be optional, and the wallet service carried a second,
 # broker-less implementation of the whole scan pipeline to cope. Two pipelines
@@ -8,8 +11,8 @@
 # cheaper to run the broker locally than to keep a shadow copy of the system
 # honest.
 #
-# Redis, Loki and Tempo stay optional: without their variables the services use
-# an in-memory cache and log to stdout, which is the same code path either way.
+# Loki stays optional: without LOKI_URL the services log to stdout, which is the
+# same code path either way.
 services:
   db:
     image: postgres:16-alpine

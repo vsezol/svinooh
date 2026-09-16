@@ -18,8 +18,8 @@ apps/
             /auth/* proxied to the auth service
   auth/   — sign-in (NestJS): Telegram bot and login widget, X, wallet
             signatures; issues JWTs, owns User
-  wallet/ — scanning (NestJS): decides what is due, one RabbitMQ queue per
-            chain, the SOL/TRON/BTC scanners, snapshots
+  wallet/ — scanning (NestJS): decides what is due, one queue per chain
+            (Redis or RabbitMQ), the SOL/TRON/BTC scanners, snapshots
   scanner-evm/ — the EVM scanner (NestJS): a headless browser (lightpanda or
             Chrome via SCANNER_ENGINE), and nothing else. No database, no
             queue: an address in, what it holds out
@@ -46,7 +46,7 @@ ops/
 ```
 web ──HTTPS+JWT──▶ api ──HTTP /auth/*───▶ auth ──▶ Telegram Bot API
                     │
-                    ├──HTTP /internal/scan──▶ wallet ──▶ RabbitMQ (scan.evm, scan.sol, …)
+                    ├──HTTP /internal/scan──▶ wallet ──▶ queue (scan.evm, scan.sol, …)
                     │                            └──HTTP /internal/scan──▶ scanner-evm ──▶ browser (lightpanda)
                     └──▶ Postgres ◀── auth, wallet
 ```
@@ -77,7 +77,8 @@ localhost — the widget needs a domain bound to the bot), paste a wallet addres
 and the rest takes care of itself.
 
 `docker compose up -d` gives you Postgres and RabbitMQ, which is everything the
-services genuinely need. Redis, Loki and Tempo stay optional: without them the
+services genuinely need; with `QUEUE_DRIVER=redis` and a `REDIS_URL` the queue
+runs on Redis instead. Redis, Loki and Tempo stay optional: without them the
 agent keeps its conversations in the process and logs/traces go to stdout only.
 
 The broker is not optional any more. It used to be, and the wallet service
@@ -553,7 +554,8 @@ Reliability rules (a silently wrong number is worse than a failed request):
 
 ## The scan queue and history
 
-The wallet service keeps a RabbitMQ queue of addresses. A producer tops it up
+The wallet service keeps a queue of addresses, on Redis Streams or RabbitMQ —
+whichever `QUEUE_DRIVER` names (`libs/common/src/queue`). A producer tops it up
 with the addresses that are **due**, a consumer takes them one at a time
 (`SCAN_PREFETCH`) with a pause after each (`SCAN_JOB_DELAY_MS`). Identical
 addresses in different portfolios are scanned once.
@@ -580,7 +582,7 @@ declared and re-declaring the old name with it would fail the channel. Whatever
 is left in the old `scan.<chain>` queues is abandoned harmlessly — an address
 whose job is never delivered comes due again when its lease expires — and they
 can be deleted once empty. There is one pipeline and it goes through the broker — locally too,
-which is why `docker compose` brings RabbitMQ up alongside Postgres.
+which is why `docker compose` brings RabbitMQ up alongside Postgres (or set `QUEUE_DRIVER=redis`).
 
 The api assembles a portfolio from Postgres on every request — one query — so
 the page shows a scan the moment it lands. It used to be served from a Redis
@@ -624,7 +626,7 @@ One project, eleven services:
 
 | Service | What it is |
 |---|---|
-| `Postgres`, `Redis`, `rabbitmq` | data and messaging (Redis holds the agent's conversations and rate limits) |
+| `Postgres`, `Redis`, `rabbitmq` | data and messaging (Redis carries the queue and holds the agent's conversations and rate limits; rabbitmq sleeps, kept as the way back) |
 | `api`, `auth`, `wallet`, `web` | the application |
 | `prometheus`, `loki`, `tempo`, `grafana` | observability |
 
@@ -659,7 +661,7 @@ api     DATABASE_URL, JWT_SECRET, AUTH_SERVICE_URL, WALLET_SERVICE_URL,
         WEB_ORIGIN, LOKI_URL, OTEL_EXPORTER_OTLP_ENDPOINT, SERVICE_NAME
 auth    DATABASE_URL, JWT_SECRET (same as api), TELEGRAM_BOT_TOKEN,
         TELEGRAM_BOT_USERNAME, WEB_URL, AUTH_DEV_MODE=false, LOKI_URL, OTEL_…
-wallet  DATABASE_URL, RABBITMQ_URL, EVM_SCANNER_URL, INTERNAL_TOKEN, LOKI_URL, OTEL_…
+wallet  DATABASE_URL, QUEUE_DRIVER, REDIS_URL or RABBITMQ_URL, EVM_SCANNER_URL, INTERNAL_TOKEN, LOKI_URL, OTEL_…
 scanner-evm  SCANNER_ENGINE=lightpanda (default; =chrome to fall back),
              CHROME_NO_SANDBOX=1 (only used by the chrome engine),
              INTERNAL_TOKEN (same string as wallet's), LOKI_URL, OTEL_…

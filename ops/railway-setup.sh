@@ -65,6 +65,7 @@ command -v railway >/dev/null || { echo "railway CLI not found"; exit 1; }
 # image exposes USER/PASS + a private domain, not a ready URL. This exact form
 # is what the live services use (verified: scanner-evm connected with it).
 PG_URL='${{Postgres.DATABASE_URL}}'
+# Redis carries the queue (QUEUE_DRIVER=redis) as well as the agent's conversations
 REDIS_URL='${{Redis.REDIS_URL}}'
 RABBIT_URL='amqp://${{rabbitmq.RABBITMQ_DEFAULT_USER}}:${{rabbitmq.RABBITMQ_DEFAULT_PASS}}@${{rabbitmq.RAILWAY_PRIVATE_DOMAIN}}:5672'
 # Kept for bringing Loki back; the services below get an empty LOKI_URL today
@@ -99,6 +100,10 @@ add_db postgres
 add_db redis
 
 echo "== message broker =="
+# Asleep (Serverless, see MANUAL STEPS): every service runs the queue on Redis
+# (QUEUE_DRIVER=redis below), so nothing connects to it and it costs nothing. It
+# stays defined, variables and all, as the way back: set QUEUE_DRIVER=rabbitmq on
+# the services and the first connection wakes it.
 # The plain image, not -management: nothing calls the management API, and its
 # plugins were ~38MB of loaded code on a broker carrying ~1.7k messages a day.
 add_image rabbitmq "rabbitmq:3.13"
@@ -141,6 +146,7 @@ add_repo api
 setvars api \
   "NODE_ENV=production" "PORT=3000" \
   "DATABASE_URL=${PG_URL}" "REDIS_URL=${REDIS_URL}" \
+  "RABBITMQ_URL=${RABBIT_URL}" "QUEUE_DRIVER=redis" \
   "JWT_SECRET=${JWT_SECRET}" \
   "AUTH_SERVICE_URL=${AUTH_URL}" "WALLET_SERVICE_URL=${WALLET_URL}" \
   "ADMIN_SERVICE_URL=${ADMIN_URL}" "INTERNAL_SECRET=${INTERNAL_SECRET}" \
@@ -168,7 +174,7 @@ add_repo wallet
 setvars wallet \
   "PORT=3000" \
   "DATABASE_URL=${PG_URL}" \
-  "RABBITMQ_URL=${RABBIT_URL}" \
+  "RABBITMQ_URL=${RABBIT_URL}" "QUEUE_DRIVER=redis" "REDIS_URL=${REDIS_URL}" \
   "CHROME_NO_SANDBOX=1" \
   "LOKI_URL=" "${NODE_MEMORY[@]}" \
   "SERVICE_NAME=svinooh-wallet"
@@ -180,7 +186,7 @@ setvars wallet \
 add_repo scanner-evm
 setvars scanner-evm \
   "PORT=3000" \
-  "RABBITMQ_URL=${RABBIT_URL}" \
+  "RABBITMQ_URL=${RABBIT_URL}" "QUEUE_DRIVER=redis" "REDIS_URL=${REDIS_URL}" \
   "SCANNER_ENGINE=lightpanda" \
   "CHROME_NO_SANDBOX=1" \
   "LOKI_URL=" \
@@ -195,7 +201,7 @@ add_repo monitor-alerts
 setvars monitor-alerts \
   "NODE_ENV=production" "PORT=3000" \
   "DATABASE_URL=${PG_URL}" \
-  "RABBITMQ_URL=${RABBIT_URL}" \
+  "RABBITMQ_URL=${RABBIT_URL}" "QUEUE_DRIVER=redis" "REDIS_URL=${REDIS_URL}" \
   "${NODE_MEMORY[@]}"
 
 # bot-telegram — the Telegram bot: long-polls for /start, and drains
@@ -210,7 +216,7 @@ setvars bot-telegram \
   "INTERNAL_SECRET=${INTERNAL_SECRET}" \
   "AUTH_URL=${AUTH_URL}" \
   "WEB_URL=${PUBLIC_WEB_ORIGIN}" \
-  "RABBITMQ_URL=${RABBIT_URL}" \
+  "RABBITMQ_URL=${RABBIT_URL}" "QUEUE_DRIVER=redis" "REDIS_URL=${REDIS_URL}" \
   "${NODE_MEMORY[@]}"
 
 # admin — the tunables, behind the Admin tab in the product.
@@ -291,6 +297,7 @@ The Railway CLI does not set these reliably; do them once in the dashboard
    costs nothing. The setting takes effect on the service's next deploy.
      loki   → nothing ships logs to it or scrapes it (see observability)
      admin  → woken by the Admin tab, through the api
+     rabbitmq → while the queue runs on Redis (QUEUE_DRIVER=redis)
      earn   → also needs EARN_REFRESH_INTERVAL_S=604800, or its five-minute
               refresh counts as traffic and it never sleeps
    Not agent-web: the first request to a sleeping service can fail, and the
