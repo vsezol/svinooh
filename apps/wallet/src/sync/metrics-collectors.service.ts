@@ -3,7 +3,7 @@ import { Gauge } from 'prom-client';
 import type { Chain } from '@svinooh/shared';
 import {
   MetricsService,
-  RabbitService,
+  QueueService,
   scanQueueName,
   SCAN_RESULT_QUEUE,
   setting,
@@ -13,7 +13,7 @@ import { PrismaService } from '@svinooh/db';
 /**
  * Business gauges computed at scrape time (async collect): how many wallets by
  * status, how many portfolios, the scan queue depth. They live here because they
- * need Prisma and Rabbit — MetricsService is kept dependency-free.
+ * need Prisma and the queue — MetricsService is kept dependency-free.
  */
 const SCAN_QUEUES: string[] = [
   ...(['EVM', 'SOL', 'TRON', 'BTC'] as Chain[]).map(scanQueueName),
@@ -24,14 +24,14 @@ const SCAN_QUEUES: string[] = [
 export class MetricsCollectorsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly rabbit: RabbitService,
+    private readonly queues: QueueService,
     private readonly metrics: MetricsService,
   ) {}
 
   onModuleInit() {
     const registers = [this.metrics.registry];
     const prisma = this.prisma;
-    const rabbit = this.rabbit;
+    const queues = this.queues;
 
     new Gauge({
       name: 'svinooh_wallets',
@@ -138,7 +138,7 @@ export class MetricsCollectorsService implements OnModuleInit {
       registers,
       async collect() {
         try {
-          this.set(await rabbit.messageCount(SCAN_QUEUES));
+          this.set(await queues.messageCount(SCAN_QUEUES));
         } catch {
           /* no-op */
         }

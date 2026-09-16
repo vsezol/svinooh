@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import { PrismaClient } from '@prisma/client';
-import { RabbitService, startSettings, WALLET_STATE_QUEUE } from '@svinooh/common';
+import { QueueService, startSettings, WALLET_STATE_QUEUE } from '@svinooh/common';
 import type { WalletStateEvent } from '@svinooh/shared';
 import { Collector } from './collector';
 import { Renewals } from './renewals';
@@ -23,20 +23,20 @@ const SLOWDOWN_SWEEP_MS = 15 * 60_000;
  *
  * Fastify rather than Nest, and no dependency injection: this service has one
  * job, three collaborators and no HTTP surface beyond a health check, so a
- * container to wire it would cost memory and buy nothing. `RabbitService` is
- * used directly — it is a plain class whose constructor takes a URL, and its
- * reconnect loop and manual acks are worth more than the decorator it carries.
+ * container to wire it would cost memory and buy nothing. `QueueService` is
+ * used directly — it is a plain class whose constructor takes the queue's
+ * config, and its reconnects and acks are worth more than the decorator it carries.
  */
 async function main(): Promise<void> {
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' } });
   app.get('/health', async () => ({ ok: true }));
 
   const prisma = new PrismaClient();
-  const rabbit = new RabbitService(config.rabbitUrl || null);
+  const queues = new QueueService(config.queue);
   const trial = new Trial(prisma);
-  const collector = new Collector(prisma, rabbit, trial);
-  const slowdown = new Slowdown(prisma, rabbit);
-  const renewals = new Renewals(prisma, rabbit);
+  const collector = new Collector(prisma, queues, trial);
+  const slowdown = new Slowdown(prisma, queues);
+  const renewals = new Renewals(prisma, queues);
 
   // The trial and the sweeps pace themselves on billing knobs, and slowdown on
   // the sync ones — followed live from the table, like every other service.
@@ -46,9 +46,9 @@ async function main(): Promise<void> {
     (error) => app.log.warn(`could not read settings: ${error.message}`),
   );
 
-  await rabbit.onApplicationBootstrap();
-  if (rabbit.enabled) {
-    rabbit.consume<WalletStateEvent>(
+  await queues.onApplicationBootstrap();
+  if (queues.enabled) {
+    queues.consume<WalletStateEvent>(
       WALLET_STATE_QUEUE,
       (event) => collector.handle(event),
       config.prefetch,
@@ -71,15 +71,15 @@ async function main(): Promise<void> {
     };
     setInterval(() => void sweep(), SLOWDOWN_SWEEP_MS).unref();
   } else {
-    // Nothing to do without a broker, and saying so beats looking healthy and
+    // Nothing to do without a queue, and saying so beats looking healthy and
     // idle while somebody wonders why no alert ever arrives
-    app.log.warn('RABBITMQ_URL not set — nothing to collect');
+    app.log.warn('No queue configured (QUEUE_DRIVER with REDIS_URL or RABBITMQ_URL) — nothing to collect');
   }
 
   await app.listen({ port: config.port, host: '0.0.0.0' });
 
   const stop = async () => {
-    await rabbit.onModuleDestroy();
+    await queues.onModuleDestroy();
     await prisma.$disconnect();
     await app.close();
     process.exit(0);

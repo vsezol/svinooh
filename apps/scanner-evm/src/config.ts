@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { bool, int } from '@svinooh/common';
+import { bool, int, queueConfigFromEnv } from '@svinooh/common';
 
 // .env lives at the root of apps/scanner-evm. At runtime __dirname is
 // apps/scanner-evm/dist (after nest build) or apps/scanner-evm/src (under tsx) —
@@ -21,7 +21,8 @@ if (existsSync(envPath)) {
  */
 export const config = {
   port: int(process.env.PORT, 3000),
-  rabbitUrl: process.env.RABBITMQ_URL || null,
+  // The queue it drains: QUEUE_DRIVER with REDIS_URL or RABBITMQ_URL
+  queue: queueConfigFromEnv(),
   // Pause after each scan. The pacing knob against DeBank: this service holds
   // the slot for the whole pause, so the queue does not hand it another
   // address until the pause is over.

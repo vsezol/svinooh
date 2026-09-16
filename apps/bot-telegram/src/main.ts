@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import { ALERTS_QUEUE, BILLING_QUEUE, NOTICES_QUEUE, RabbitService } from '@svinooh/common';
+import { ALERTS_QUEUE, BILLING_QUEUE, NOTICES_QUEUE, QueueService } from '@svinooh/common';
 import type { AlertEvent, BillingNotice, SlowedNotice } from '@svinooh/shared';
 import { config } from './config';
 import { esc, formatAlert, formatBillingNotice, formatSlowedNotice } from './format';
@@ -22,13 +22,13 @@ async function main(): Promise<void> {
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' } });
   app.get('/health', async () => ({ ok: true }));
 
-  const rabbit = new RabbitService(config.rabbitUrl || null);
-  await rabbit.onApplicationBootstrap();
+  const queues = new QueueService(config.queue);
+  await queues.onApplicationBootstrap();
 
-  if (rabbit.enabled) {
+  if (queues.enabled) {
     // Manual ack, so a Telegram outage delays a warning rather than losing it:
     // the message stays on the queue until it has actually been sent
-    rabbit.consume<AlertEvent>(
+    queues.consume<AlertEvent>(
       ALERTS_QUEUE,
       async (event) => {
         const { text, markup } = formatAlert(event, config.webUrl);
@@ -38,7 +38,7 @@ async function main(): Promise<void> {
     );
     // Same manual ack for the same reason: a notice is worth delivering late
     // and not worth losing
-    rabbit.consume<SlowedNotice>(
+    queues.consume<SlowedNotice>(
       NOTICES_QUEUE,
       async (notice) => {
         const { text, markup } = formatSlowedNotice(notice, config.webUrl);
@@ -47,7 +47,7 @@ async function main(): Promise<void> {
       4,
     );
     // Money messages most of all: a lost renewal reminder is churn
-    rabbit.consume<BillingNotice>(
+    queues.consume<BillingNotice>(
       BILLING_QUEUE,
       async (notice) => {
         const { text, markup } = formatBillingNotice(notice, config.webUrl);
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
     );
     app.log.info(`listening on ${ALERTS_QUEUE}, ${NOTICES_QUEUE} and ${BILLING_QUEUE}`);
   } else {
-    app.log.warn('RABBITMQ_URL not set — alerts will not be delivered');
+    app.log.warn('No queue configured (QUEUE_DRIVER with REDIS_URL or RABBITMQ_URL) — alerts will not be delivered');
   }
 
   let running = true;
@@ -72,7 +72,7 @@ async function main(): Promise<void> {
 
   const stop = async () => {
     running = false;
-    await rabbit.onModuleDestroy();
+    await queues.onModuleDestroy();
     await app.close();
     process.exit(0);
   };

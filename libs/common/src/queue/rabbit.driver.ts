@@ -1,9 +1,8 @@
-import { Inject, Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import * as amqp from 'amqplib';
 import type { Options } from 'amqplib';
 import { PRIORITY_QUEUE_PREFIX, SCAN_MAX_PRIORITY } from '../scan-contract';
-
-export const RABBIT_URL = Symbol('RABBIT_URL');
+import type { PublishOptions, QueueDriver } from './queue';
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -11,22 +10,6 @@ interface Consumer {
   handler: (message: unknown) => Promise<void>;
   prefetch: number;
   attached: boolean;
-}
-
-/**
- * A thin wrapper over RabbitMQ (amqplib), shared by every service that either
- * fills a queue or works through one.
- *
- * Durable queues, manual ack, and a reconnect loop that re-asserts every queue
- * and re-attaches every consumer — a broker restart should cost a few seconds,
- * not a deploy. Without a URL it is simply disabled, and the services fall back
- * to running the same pipeline in-process, which is what makes local
- * development work without a broker.
- */
-/** What a caller can ask of a single publish */
-export interface PublishOptions {
-  /** 0 is ordinary; anything higher jumps the queue, up to its declared maximum */
-  priority?: number;
 }
 
 /**
@@ -43,9 +26,15 @@ function queueOptions(queue: string): Options.AssertQueue {
     : { durable: true };
 }
 
-@Injectable()
-export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
-  private readonly logger = new Logger(RabbitService.name);
+/**
+ * The queue on RabbitMQ (amqplib).
+ *
+ * Durable queues, manual ack, and a reconnect loop that re-asserts every queue
+ * and re-attaches every consumer — a broker restart should cost a few seconds,
+ * not a deploy.
+ */
+export class RabbitDriver implements QueueDriver {
+  private readonly logger = new Logger('RabbitMQ');
   private conn: Awaited<ReturnType<typeof amqp.connect>> | null = null;
   private channel: amqp.Channel | null = null;
   private readonly consumers = new Map<string, Consumer>();
@@ -55,24 +44,17 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
   private attaching: Promise<void> | null = null;
   private closing = false;
 
-  constructor(@Inject(RABBIT_URL) private readonly url: string | null) {}
+  constructor(private readonly url: string) {}
 
-  get enabled(): boolean {
-    return !!this.url;
-  }
-
-  async onApplicationBootstrap() {
-    if (!this.enabled) {
-      this.logger.log('RABBITMQ_URL not set — queue disabled (running in-process)');
-      return;
-    }
+  /** Resolves once connected; a broker that is down is retried every few seconds until it is not */
+  async start(): Promise<void> {
     await this.connect();
   }
 
   private async connect(): Promise<void> {
     if (this.closing) return;
     try {
-      this.conn = await amqp.connect(this.url as string);
+      this.conn = await amqp.connect(this.url);
       this.conn.on('error', () => {});
       this.conn.on('close', () => {
         if (this.closing) return;
@@ -118,7 +100,7 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
    * rather than leave an address marked as being worked on by a job that was
    * never sent. A disconnected client is `false`, not a silent success.
    */
-  async publish(queue: string, message: unknown, options: PublishOptions = {}): Promise<boolean> {
+  async publish(queue: string, message: unknown, options: PublishOptions): Promise<boolean> {
     const channel = this.channel;
     if (!channel) return false;
     try {
@@ -160,12 +142,8 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
     return total;
   }
 
-  consume<T>(queue: string, handler: (message: T) => Promise<void>, prefetch: number): void {
-    this.consumers.set(queue, {
-      handler: handler as (m: unknown) => Promise<void>,
-      prefetch,
-      attached: false,
-    });
+  consume(queue: string, handler: (message: unknown) => Promise<void>, prefetch: number): void {
+    this.consumers.set(queue, { handler, prefetch, attached: false });
     if (this.channel) void this.attachAll();
   }
 
@@ -244,7 +222,7 @@ export class RabbitService implements OnApplicationBootstrap, OnModuleDestroy {
     }
   }
 
-  async onModuleDestroy() {
+  async stop(): Promise<void> {
     this.closing = true;
     try {
       await this.channel?.close();

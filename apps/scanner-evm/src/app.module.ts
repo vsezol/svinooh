@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
-import { MetricsModule, RabbitModule } from '@svinooh/common';
+import { MetricsModule, QueueModule } from '@svinooh/common';
 import { BrowserModule } from './browser.module';
 import { config } from './config';
 import { HealthController } from './health.controller';
 import { ScanConsumerService } from './queue/scan-consumer.service';
 
 @Module({
-  imports: [MetricsModule, RabbitModule.forRoot(config.rabbitUrl), BrowserModule],
+  imports: [MetricsModule, QueueModule.forRoot(config.queue), BrowserModule],
   controllers: [HealthController],
   providers: [ScanConsumerService],
 })

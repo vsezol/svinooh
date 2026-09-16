@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { int } from '@svinooh/common';
+import { int, queueConfigFromEnv } from '@svinooh/common';
 
 const envPath = resolve(__dirname, '..', '.env');
 if (existsSync(envPath)) {
@@ -27,8 +27,8 @@ export const config = {
   syncActiveWindowMin: int(process.env.SYNC_ACTIVE_WINDOW_MIN, 15),
   // How many cycles in a row must confirm a sharp drop before we trust it.
   dropConfirmCycles: int(process.env.SYNC_DROP_CONFIRM_CYCLES, 3),
-  // Scan queue (RabbitMQ). Empty — the scan runs in-process (local dev).
-  rabbitUrl: process.env.RABBITMQ_URL || null,
+  // The scan queue: QUEUE_DRIVER with REDIS_URL or RABBITMQ_URL. None — nothing is scanned.
+  queue: queueConfigFromEnv(),
   // Pacing: a pause after each scan, to hit 429s less often.
   scanJobDelayMs: int(process.env.SCAN_JOB_DELAY_MS, 1500),
   // How many addresses to work through at once (1 = strictly one at a time).

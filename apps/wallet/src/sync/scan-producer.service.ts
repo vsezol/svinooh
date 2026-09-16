@@ -3,7 +3,7 @@ import { Interval } from '@nestjs/schedule';
 import type { Chain } from '@svinooh/shared';
 import {
   queueDepth,
-  RabbitService,
+  QueueService,
   SCAN_MAX_PRIORITY,
   scanQueueName,
   type ScanJob,
@@ -40,16 +40,16 @@ export class ScanProducerService implements OnApplicationBootstrap {
   private ticking = false;
 
   constructor(
-    private readonly rabbit: RabbitService,
+    private readonly queues: QueueService,
     private readonly sync: SyncService,
   ) {}
 
   onApplicationBootstrap() {
-    if (this.rabbit.enabled) {
+    if (this.queues.enabled) {
       this.logger.log(`Producer: topping the queue up every ${setting('scan.reloadSec')}s`);
     } else {
       this.logger.error(
-        'RABBITMQ_URL is not set — nothing will be scanned. Start the broker: docker compose up -d rabbitmq',
+        'No queue configured (QUEUE_DRIVER with REDIS_URL or RABBITMQ_URL) — nothing will be scanned. Start RabbitMQ (docker compose up -d rabbitmq), or set QUEUE_DRIVER=redis with REDIS_URL',
       );
     }
   }
@@ -69,7 +69,7 @@ export class ScanProducerService implements OnApplicationBootstrap {
    */
   @Interval('scan-top-up', setting('scan.reloadSec') * 1000)
   async tick(): Promise<void> {
-    if (this.ticking || !this.rabbit.enabled) return;
+    if (this.ticking || !this.queues.enabled) return;
     this.ticking = true;
     try {
       await this.topUp();
@@ -89,7 +89,7 @@ export class ScanProducerService implements OnApplicationBootstrap {
     let dispatched = 0;
     for (const chain of CHAINS) {
       const queue = scanQueueName(chain);
-      const room = (depth.get(chain) ?? 1) - (await this.rabbit.messageCount([queue]));
+      const room = (depth.get(chain) ?? 1) - (await this.queues.messageCount([queue]));
       if (room <= 0) continue;
 
       // Urgent first: somebody pasted an address and is watching a spinner
@@ -104,7 +104,7 @@ export class ScanProducerService implements OnApplicationBootstrap {
       await this.sync.lease(batch);
       for (const job of batch) {
         const priority = job.priority === 'urgent' ? SCAN_MAX_PRIORITY : 0;
-        if (!(await this.rabbit.publish(queue, job, { priority }))) {
+        if (!(await this.queues.publish(queue, job, { priority }))) {
           this.logger.warn('Broker would not take the job — stopping this top-up');
           return;
         }

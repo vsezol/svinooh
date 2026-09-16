@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { NOTICES_QUEUE, type RabbitService, setting } from '@svinooh/common';
+import { NOTICES_QUEUE, type QueueService, setting } from '@svinooh/common';
 import type { SlowedNotice } from '@svinooh/shared';
 
 /**
@@ -20,7 +20,7 @@ import type { SlowedNotice } from '@svinooh/shared';
 export class Slowdown {
   constructor(
     private readonly prisma: PrismaClient,
-    private readonly rabbit: RabbitService,
+    private readonly queues: QueueService,
   ) {}
 
   async sweep(now = new Date()): Promise<number> {
@@ -67,7 +67,7 @@ export class Slowdown {
       // Said before it is written down, the same way alerts are: a notice that
       // arrives twice is a nuisance, one recorded as sent but never delivered
       // is silence that looks deliberate.
-      if (!(await this.rabbit.publish(NOTICES_QUEUE, notice))) continue;
+      if (!(await this.queues.publish(NOTICES_QUEUE, notice))) continue;
       await this.prisma.portfolioOwner.update({
         where: { portfolioId: owner.portfolioId },
         data: { slowedNoticeAt: now },

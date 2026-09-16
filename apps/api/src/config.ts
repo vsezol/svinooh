@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { int } from '@svinooh/common';
+import { int, queueConfigFromEnv } from '@svinooh/common';
 
 // .env lives at the root of apps/api. At runtime __dirname is apps/api/dist
 // (after nest build) or apps/api/src (under tsx) — in both cases ../.env is
@@ -44,9 +44,10 @@ export const config = {
   // wallet service's SYNC_INTERVAL_MIN — set it lower and every wallet reads as
   // stale the moment it is scanned on time.
   syncIntervalMin: int(process.env.SYNC_INTERVAL_MIN, 5),
-  // The broker, for telling the bot a payment landed. Empty — the thank-you
-  // message is simply never sent; the payment itself works without it.
-  rabbitUrl: process.env.RABBITMQ_URL ?? '',
+  // The queue, for telling the bot a payment landed: QUEUE_DRIVER with
+  // REDIS_URL or RABBITMQ_URL. None — the thank-you message is simply never
+  // sent; the payment itself works without it.
+  queue: queueConfigFromEnv(),
   // Public URL of the site: where a checkout returns to, and what the buttons
   // under billing messages open. One name across services — the bot reads the
   // same variable.

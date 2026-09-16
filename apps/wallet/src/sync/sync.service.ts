@@ -4,7 +4,7 @@ import type { Wallet } from '@prisma/client';
 import type { Chain, TronResources } from '@svinooh/shared';
 import { config } from '../config';
 import { leaseUntil, retryAt, schedule, ScanHold, setting } from '@svinooh/common';
-import { MetricsService, RabbitService, WALLET_STATE_QUEUE, type ScanJob } from '@svinooh/common';
+import { MetricsService, QueueService, WALLET_STATE_QUEUE, type ScanJob } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import { alertableStates } from './wallet-state';
 import { scanAddress } from '../scanners';
@@ -42,7 +42,7 @@ export class SyncService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly metrics: MetricsService,
-    private readonly rabbit: RabbitService,
+    private readonly queues: QueueService,
   ) {}
 
 
@@ -236,7 +236,7 @@ export class SyncService {
     // anybody could have asked to hear about
     if (!positions.length && !tron) return;
     try {
-      await this.rabbit.publish(WALLET_STATE_QUEUE, {
+      await this.queues.publish(WALLET_STATE_QUEUE, {
         walletId: wallet.id,
         address: wallet.address,
         chain: wallet.chain as Chain,

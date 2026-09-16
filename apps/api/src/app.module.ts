@@ -6,7 +6,7 @@ import { BillingModule } from './billing/billing.module';
 import { config } from './config';
 import { AgentConfigController } from './agent-config.controller';
 import { HealthController } from './health.controller';
-import { MetricsModule, RabbitModule } from '@svinooh/common';
+import { MetricsModule, QueueModule } from '@svinooh/common';
 import { PortfolioModule } from './portfolio/portfolio.module';
 import { PrismaModule } from '@svinooh/db';
 
@@ -16,7 +16,7 @@ import { PrismaModule } from '@svinooh/db';
     MetricsModule,
     // Only billing publishes from the api (the thank-you after a payment);
     // without a broker the publish is a no-op, never an error
-    RabbitModule.forRoot(config.rabbitUrl),
+    QueueModule.forRoot(config.queue),
     JwtModule.register({
       global: true,
       secret: config.jwtSecret,

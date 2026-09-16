@@ -1,5 +1,5 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import { RabbitService, SCAN_MAX_PRIORITY, scanQueueName, type ScanJob } from '@svinooh/common';
+import { QueueService, SCAN_MAX_PRIORITY, scanQueueName, type ScanJob } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import type { Chain } from '@svinooh/shared';
 import { SyncService } from './sync/sync.service';
@@ -19,7 +19,7 @@ import { SyncService } from './sync/sync.service';
 export class InternalScanController {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly rabbit: RabbitService,
+    private readonly queues: QueueService,
     private readonly sync: SyncService,
   ) {}
 
@@ -44,6 +44,6 @@ export class InternalScanController {
     // which is the one it was going to wait for anyway
     if (!(await this.sync.takeIfFree(job.chain, job.address))) return;
     // Somebody is watching a spinner right now: ahead of whatever is queued
-    await this.rabbit.publish(scanQueueName(job.chain), job, { priority: SCAN_MAX_PRIORITY });
+    await this.queues.publish(scanQueueName(job.chain), job, { priority: SCAN_MAX_PRIORITY });
   }
 }

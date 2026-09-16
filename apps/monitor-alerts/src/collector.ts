@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import type { AlertEvent, WalletStateEvent } from '@svinooh/shared';
-import { ALERTS_QUEUE, BILLING_QUEUE, type RabbitService } from '@svinooh/common';
+import { ALERTS_QUEUE, BILLING_QUEUE, type QueueService } from '@svinooh/common';
 import { decide, type Remembered, type Settings } from './decide';
 import type { Trial } from './trial';
 
@@ -43,7 +43,7 @@ const escaped = (s: string): string => JSON.stringify(s);
 export class Collector {
   constructor(
     private readonly prisma: PrismaClient,
-    private readonly rabbit: RabbitService,
+    private readonly queues: QueueService,
     private readonly trial: Trial,
   ) {}
 
@@ -144,10 +144,10 @@ export class Collector {
             chain: event.chain,
             items,
           };
-          await this.rabbit.publish(ALERTS_QUEUE, alert);
+          await this.queues.publish(ALERTS_QUEUE, alert);
           if (call.count) await this.trial.counted(who.id);
         } else if (call.verdict === 'upsell') {
-          if (await this.rabbit.publish(BILLING_QUEUE, this.trial.notice(telegramId.toString()))) {
+          if (await this.queues.publish(BILLING_QUEUE, this.trial.notice(telegramId.toString()))) {
             await this.trial.pitched(who.id);
           }
         }
