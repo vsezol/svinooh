@@ -59,8 +59,12 @@ class YieldPool:
 
     @property
     def risk(self) -> RiskBand:
-        """The band those reasons add up to: none, one, or more than one."""
-        return ("low", "medium", "high")[min(len(self.risk_reasons), 2)]
+        """The band those reasons add up to."""
+        if not self.risk_reasons:
+            return "low"
+        if len(self.risk_reasons) == 1:
+            return "medium"
+        return "high"
 
 
 @dataclass(frozen=True, slots=True)
