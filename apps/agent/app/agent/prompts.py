@@ -115,6 +115,33 @@ def grounded_prompt(base: str, portfolio: Portfolio, max_positions: int) -> str:
     return f"{base}\n\nThe user is looking at this portfolio right now:\n{shown}"
 
 
+def earn_prompt(base: str) -> str:
+    """For a question about where to put money, not about what is already held.
+
+    The branch has one tool and one job: read the catalog, then recommend by
+    risk rather than by rate. The instruction to rank by risk is here because
+    the model would otherwise do the obvious thing and lead with the biggest
+    number, which on this list is reliably the thinnest pool with the shortest
+    reward programme behind it.
+
+    What the model must not do is invent — a pool, a rate, or a promise. The
+    tool's lines are the only inventory that exists, and they carry their own
+    caveats so an answer can be specific about why one option is safer.
+    """
+    return (
+        f"{base}\n\nThe user is asking where to put money to work. Call "
+        "earn_options — it is the only inventory there is, and you may not "
+        "name a pool, a protocol or a rate that did not come back from it. "
+        "Recommend by risk before rate: lead with what is safest that still "
+        "pays reasonably, and mention a higher rate as the trade it is, naming "
+        "the reason the tool gave for the band. Two or three options is an "
+        "answer; the whole list is a spreadsheet. Give the rate as the tool "
+        "gives it, say when it was read if it is stale, and never promise a "
+        "rate will hold. Say plainly that these are deposits into third-party "
+        "protocols and the money is at risk there, not with svinooh."
+    )
+
+
 def degraded_prompt(base: str) -> str:
     """When the portfolio API did not answer: say so, so the model does not guess."""
     return (

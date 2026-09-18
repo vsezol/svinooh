@@ -29,15 +29,19 @@ CLASSIFIER_PROMPT = (
     "tracker. Label `portfolio` when the user asks about their own money — "
     "their portfolio, wallets, positions, balance, history, yields, health "
     "factor, debt, or what changed ('my portfolio', 'how much do I have') — "
-    "in whatever language they ask. Label `general` for everything else: DeFi "
-    "concepts, how the app works, small talk. When in doubt, prefer "
-    "`portfolio` — a wrong general answer to a money question costs more than "
-    "a wasted context fetch."
+    "in whatever language they ask. Label `earn` when the user asks where to "
+    "PUT money rather than what they already hold: where to invest, park, "
+    "deposit, lend or earn, what rates are on offer, what to do with idle "
+    "funds. `earn` wins even when they say 'my' — 'put my USDC to work' is "
+    "asking where to put it, not what it is worth. Label `general` for "
+    "everything else: DeFi concepts, how the app works, small talk. When in "
+    "doubt between portfolio and general, prefer `portfolio` — a wrong general "
+    "answer to a money question costs more than a wasted context fetch."
 )
 
 
 class IntentLabel(BaseModel):
-    intent: Literal["portfolio", "general"]
+    intent: Literal["portfolio", "earn", "general"]
     reason: str = Field(description="One short sentence: why this label.")
 
 

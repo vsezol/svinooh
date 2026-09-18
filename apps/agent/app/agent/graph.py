@@ -11,6 +11,7 @@ cycles; the one loop lives inside the grounded node, the agentic tool loop.
               | no                \\-> yes+confirmed -> create_portfolio ► END
               v                   \\-> yes+declined -> cancel_creation ─► END
             classify_intent -> [intent?] -> general ───────────────────► END
+                                        \\-> earn ──────────────────────► END
                                         \\-> identity -> [?] -> grounded ► END
                                                     \\-> onboard ───────► END
                                                     \\-> unavailable ───► END
@@ -38,6 +39,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from ..adapters.earn import YieldCatalog
 from ..adapters.portfolio import PortfolioApiSource
 from ..config import Config
 from ..domain.conversation import Turn
@@ -57,6 +59,7 @@ from .prompts import (
     created_prompt,
     creation_failed_prompt,
     degraded_prompt,
+    earn_prompt,
     grounded_prompt,
     nothing_proposed_prompt,
     onboarding_prompt,
@@ -64,7 +67,7 @@ from .prompts import (
 )
 from .steps import step
 from .streaming import turn_events
-from .tools import portfolio_tools, run_tools
+from .tools import earn_tools, portfolio_tools, run_tools
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -105,6 +108,7 @@ class AgentState(TypedDict, total=False):
 #: streamed without anybody remembering to say so.
 ANSWERING_NODES = (
     "general",
+    "earn",
     "grounded",
     "onboard",
     "create_portfolio",
@@ -126,12 +130,14 @@ class LangGraphAgent:
         self,
         config: Config,
         portfolio: PortfolioApiSource,
+        catalog: YieldCatalog,
         models: Models,
         intents: IntentClassifier,
         confirmations: ConfirmationClassifier,
     ) -> None:
         self._config = config
         self._portfolio = portfolio
+        self._catalog = catalog
         self._models = models
         self._intents = intents
         self._confirmations = confirmations
@@ -241,6 +247,18 @@ class LangGraphAgent:
         """A general question: answer directly, with no portfolio fetch."""
         return await self._answer(system_prompt(self._config), state)
 
+    async def _earn(self, state: AgentState) -> AgentState:
+        """Where to put money: the catalog, and a recommendation made from it.
+
+        No portfolio fetch and no identity — "where can USDC earn" is the same
+        question for a visitor and an owner, and the answer is facts about
+        pools rather than facts about anybody. What the branch does need is the
+        tool loop, which is why that moved out of the grounded node.
+        """
+        return await self._agentic(
+            earn_prompt(system_prompt(self._config)), state, earn_tools(self._catalog)
+        )
+
     async def _grounded(self, state: AgentState) -> AgentState:
         """Ground the answer in the target portfolio, and let the model drill down.
 
@@ -265,26 +283,7 @@ class LangGraphAgent:
             logger.warning("portfolio context fetch failed for %s: %r", target, error)
             metrics.counted(metrics.errors, type="portfolio")
             system = degraded_prompt(system)
-        if not tools:
-            return await self._answer(system, state)
-
-        messages = self._messages(system, state)
-        role = self._config.answering()
-        for hop in range(self._config.tool_hops()):
-            # The first hop is thinking about the question; the ones after it
-            # are thinking about what the tools came back with.
-            async with step(f"think-{hop}", "Thinking" if hop == 0 else "Reading what came back"):
-                reply = await self._models.ask(
-                    role, messages, prepare=lambda model: model.bind_tools(tools)
-                )
-            calls = getattr(reply, "tool_calls", None) or []
-            if not calls:
-                return {"answer": extract_text(reply)}
-            messages.append(reply)
-            messages.extend(await run_tools(calls, tools))
-        async with step("answer", "Writing the answer"):
-            final = await self._models.ask(role, messages)
-        return {"answer": extract_text(final)}
+        return await self._agentic(system, state, tools)
 
     async def _onboard(self, state: AgentState) -> AgentState:
         """A portfolio question with no portfolio behind it: onboard in the chat.
@@ -409,6 +408,39 @@ class LangGraphAgent:
         messages.append(HumanMessage(content=state["question"]))
         return messages
 
+    async def _agentic(self, system: str, state: AgentState, tools: list) -> AgentState:
+        """The agentic loop: the model answers, or calls a tool and reads what came back.
+
+        Written for the grounded branch and now shared with the earn one,
+        because it is the same shape either way — what differs is the prompt
+        and which tools are bound, which is exactly what the arguments are.
+
+        With no tools it is a single answer. The loop ends on the model's own
+        word or on the hop cap, and the cap ends it gently: one last call with
+        nothing bound, so the turn finishes in prose rather than in a tool call
+        nobody will run.
+        """
+        if not tools:
+            return await self._answer(system, state)
+
+        messages = self._messages(system, state)
+        role = self._config.answering()
+        for hop in range(self._config.tool_hops()):
+            # The first hop is thinking about the question; the ones after it
+            # are thinking about what the tools came back with.
+            async with step(f"think-{hop}", "Thinking" if hop == 0 else "Reading what came back"):
+                reply = await self._models.ask(
+                    role, messages, prepare=lambda model: model.bind_tools(tools)
+                )
+            calls = getattr(reply, "tool_calls", None) or []
+            if not calls:
+                return {"answer": extract_text(reply)}
+            messages.append(reply)
+            messages.extend(await run_tools(calls, tools))
+        async with step("answer", "Writing the answer"):
+            final = await self._models.ask(role, messages)
+        return {"answer": extract_text(final)}
+
     async def _answer(self, system: str, state: AgentState) -> AgentState:
         # The model call is an operation like any other, and until it was
         # reported it was the longest unlit stretch of a turn.
@@ -425,6 +457,7 @@ class LangGraphAgent:
         builder.add_node("classify_intent", self._classify_intent)
         builder.add_node("identity", self._identity)
         builder.add_node("general", self._general)
+        builder.add_node("earn", self._earn)
         builder.add_node("grounded", self._grounded)
         builder.add_node("onboard", self._onboard)
         builder.add_node("create_portfolio", self._create_portfolio)
@@ -447,7 +480,7 @@ class LangGraphAgent:
         builder.add_conditional_edges(
             "classify_intent",
             lambda state: state["intent"],
-            {"portfolio": "identity", "general": "general"},
+            {"portfolio": "identity", "earn": "earn", "general": "general"},
         )
         builder.add_conditional_edges(
             "identity",
