@@ -10,7 +10,7 @@ actually ran, and says what it actually was".
 import pytest
 
 from app.agent.graph import ANSWERING_NODES
-from app.agent.steps import step, tool_label
+from app.agent.steps import said, step, tool_label
 from app.agent.streaming import turn_events
 from tests.support import agent, fake_model
 
@@ -73,6 +73,38 @@ class TestWhatIsReported:
             await boom()
         assert [s["state"] for s in seen] == ["running", "failed"]
         assert isinstance(seen[-1]["ms"], int)
+
+
+class TestWhatCameBackIsOnTheLine:
+    async def test_the_close_carries_what_the_operation_found(self, monkeypatch):
+        seen = []
+        import app.agent.steps as steps
+
+        monkeypatch.setattr(steps, "_writer", lambda: seen.append)
+
+        async def reads():
+            async with step("x", "Reading lending rates"):
+                said("8 pools · best 16.91%")
+
+        await reads()
+        assert seen[-1]["state"] == "done"
+        assert seen[-1]["detail"] == "8 pools · best 16.91%"
+
+    async def test_a_line_that_found_nothing_to_say_carries_nothing(self, monkeypatch):
+        seen = []
+        import app.agent.steps as steps
+
+        monkeypatch.setattr(steps, "_writer", lambda: seen.append)
+
+        async def quiet():
+            async with step("x", "Thinking"):
+                pass
+
+        await quiet()
+        assert "detail" not in seen[-1]
+
+    async def test_saying_it_outside_a_step_is_not_an_error(self):
+        said("nobody is listening")
 
 
 class TestNoPartOfTheWaitIsUnaccountedFor:

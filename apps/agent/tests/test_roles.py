@@ -120,4 +120,10 @@ class TestWhereTheDialsComeFrom:
     def test_the_prompt_can_be_overridden_from_the_environment(self):
         from app.agent.prompts import system_prompt
 
-        assert system_prompt(configured(system_prompt="be terse")) == "be terse"
+        assert system_prompt(configured(system_prompt="be terse")).startswith("be terse")
+
+    def test_a_rewritten_prompt_still_carries_the_house_rules(self):
+        from app.agent.prompts import HOUSE_STYLE, system_prompt
+
+        assert HOUSE_STYLE in system_prompt(configured(system_prompt="be terse"))
+        assert HOUSE_STYLE in system_prompt(configured())

@@ -98,6 +98,18 @@ def _composition(position: Position) -> str | None:
     return " + ".join(parts) if parts else None
 
 
+def positions_read(portfolio: Portfolio, name_at_most: int = 3) -> str:
+    if not portfolio.positions:
+        return "nothing held"
+    held = f"{len(portfolio.positions)} positions"
+    networks = sorted({p.network for p in portfolio.positions if p.network})
+    if not networks:
+        return held
+    named = ", ".join(networks[:name_at_most])
+    left = len(networks) - name_at_most
+    return f"{held} · {named}{f' +{left}' if left > 0 else ''}"
+
+
 def earning_lines(portfolio: Portfolio, limit: int = 10) -> str:
     """The positions already paying a rate, biggest first. Empty when none are."""
     earning = sorted(

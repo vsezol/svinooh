@@ -4,7 +4,7 @@ These assertions are the anti-hallucination contract: every one of them exists
 because a missing or wrong line here became a wrong answer in a chat.
 """
 
-from app.agent.context import portfolio_context, position_line, usd
+from app.agent.context import portfolio_context, position_line, positions_read, usd
 from app.domain.portfolio import total_of
 from tests import fixtures as fx
 
@@ -64,6 +64,21 @@ def test_every_wallet_appears_with_its_chain_and_status():
 def test_stale_data_is_flagged():
     stale = fx.as_portfolio(fx.portfolio([fx.wallet(fx.EVM_ADDRESS, [fx.ETH], stale=True)]))
     assert "stale data" in portfolio_context(stale, 12)
+
+
+class TestWhatAReadOfThePortfolioSays:
+    def test_it_names_the_networks_it_found(self):
+        said = positions_read(fx.as_portfolio())
+        assert said.startswith(f"{len(fx.as_portfolio().positions)} positions · ")
+        assert "eth" in said
+
+    def test_a_long_list_of_networks_is_cut_with_a_count(self):
+        said = positions_read(fx.as_portfolio(tail=40), name_at_most=2)
+        assert said.endswith("+1") or "+" in said
+
+    def test_an_empty_portfolio_says_so_rather_than_counting_to_zero(self):
+        empty = fx.as_portfolio(fx.portfolio([fx.wallet(fx.EVM_ADDRESS, [])], slug="abc123"))
+        assert positions_read(empty) == "nothing held"
 
 
 class TestPositionLine:

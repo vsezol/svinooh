@@ -45,7 +45,7 @@ from ..config import Config
 from ..domain.conversation import Turn
 from ..observability import metrics
 from ..ports import Ask, Failed, Finished, Progress, Reply, Update
-from .context import earning_lines
+from .context import earning_lines, positions_read
 from .intent import IntentClassifier
 from .llm import Models, extract_text
 from .onboarding import (
@@ -66,7 +66,7 @@ from .prompts import (
     onboarding_prompt,
     system_prompt,
 )
-from .steps import step
+from .steps import said, step
 from .streaming import turn_events
 from .tools import earn_tools, portfolio_tools, run_tools
 
@@ -266,7 +266,9 @@ class LangGraphAgent:
                     return ""
                 target = owned[0].slug
             async with step("portfolio", f"Reading portfolio · {target}"):
-                return earning_lines(await self._portfolio.portfolio(target, token))
+                portfolio = await self._portfolio.portfolio(target, token)
+                said(positions_read(portfolio))
+                return earning_lines(portfolio)
         except Exception as error:  # noqa: BLE001 — advice without it beats no advice
             logger.warning("earn: holdings unavailable (%r)", error)
             return ""
@@ -289,6 +291,7 @@ class LangGraphAgent:
         try:
             async with step("portfolio", f"Reading portfolio · {target}"):
                 portfolio = await self._portfolio.portfolio(target, token)
+                said(positions_read(portfolio))
             system = grounded_prompt(system, portfolio, self._config.context_max_positions())
             tools = portfolio_tools(self._portfolio, target, token, portfolio)
         except Exception as error:  # noqa: BLE001 — any fetch failure degrades the same way

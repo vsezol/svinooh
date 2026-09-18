@@ -41,9 +41,11 @@ export function traceOf(steps: StepEvent[], collapsed: boolean, now: number): Tr
     kind: 'trace',
     collapsed,
     summary: `${steps.length} ${steps.length === 1 ? 'step' : 'steps'} · ${secs(ms)}`,
+    failed: steps.some((step) => step.state === 'failed'),
     steps: steps.map((step) => ({
       label: step.label ?? step.id,
-      state: step.state === 'running' ? 'running' : 'done',
+      state: step.state,
+      detail: step.detail,
       time: step.ms === undefined ? running(step) : secs(step.ms),
     })),
   };

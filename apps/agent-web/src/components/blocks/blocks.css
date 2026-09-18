@@ -481,6 +481,10 @@
   color: var(--text);
 }
 
+.sv-a-b-trace-row[data-state='failed'] {
+  color: var(--down);
+}
+
 .sv-a-b-trace-mark {
   width: 14px;
   height: 14px;
@@ -506,8 +510,22 @@
   background: var(--line2);
 }
 
-.sv-a-b-trace-label {
+.sv-a-b-trace-said {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sv-a-b-trace-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sv-a-b-trace-detail {
+  color: var(--mut);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

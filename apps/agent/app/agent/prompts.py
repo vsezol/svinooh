@@ -83,6 +83,12 @@ NOTHING_IS_DONE_UNTIL_IT_IS = (
 )
 
 
+HOUSE_STYLE = (
+    "Write plain text. No emoji anywhere — not as a bullet, not as a risk "
+    "marker, not for tone. A table is fine when the answer is a comparison."
+)
+
+
 def system_prompt(config: Config) -> str:
     """The instructions, plus what the product currently says about itself.
 
@@ -90,7 +96,8 @@ def system_prompt(config: Config) -> str:
     facts arrive over HTTP and can change without a deploy, like every other
     knob (app/adapters/panel.py).
     """
-    return (config.settings.system_prompt or DEFAULT_SYSTEM_PROMPT) + product_facts(config)
+    prompt = config.settings.system_prompt or DEFAULT_SYSTEM_PROMPT
+    return f"{prompt}\n\n{HOUSE_STYLE}" + product_facts(config)
 
 
 def product_facts(config: Config) -> str:

@@ -4,6 +4,12 @@ import { secs, traceOf } from '../src/app/trace';
 import type { StepEvent } from '../src/app/wire';
 
 const done = (id: string, ms: number, label = id): StepEvent => ({ id, label, state: 'done', ms });
+const failed = (id: string, ms: number, label = id): StepEvent => ({
+  id,
+  label,
+  state: 'failed',
+  ms,
+});
 const running = (id: string, startedAt: number, label = id): StepEvent => ({
   id,
   label,
@@ -74,5 +80,27 @@ describe('WhatTheReceiptSays', () => {
   test('falls back to a step id when the service sent no label', () => {
     const block = traceOf([{ id: 'history_summary · 7d', state: 'done', ms: 100 }], false, 0);
     assert.equal(block.steps[0].label, 'history_summary · 7d');
+  });
+});
+
+describe('WhatTheTraceSaysAboutFailure', () => {
+  test('a call that failed keeps saying so', () => {
+    const block = traceOf([done('a', 100), failed('b', 33), done('c', 900)], false, 0);
+    assert.deepEqual(
+      block.steps.map((step) => step.state),
+      ['done', 'failed', 'done'],
+    );
+    assert.equal(block.failed, true);
+  });
+
+  test('a trace where everything worked is not marked failed', () => {
+    assert.equal(traceOf([done('a', 100)], false, 0).failed, false);
+  });
+
+  test('what an operation found travels with it', () => {
+    const steps: StepEvent[] = [
+      { id: 'a', label: 'Reading lending rates · USDC', state: 'done', ms: 60, detail: '8 pools' },
+    ];
+    assert.equal(traceOf(steps, false, 0).steps[0].detail, '8 pools');
   });
 });

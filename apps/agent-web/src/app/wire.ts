@@ -111,6 +111,7 @@ export interface StepEvent {
   id: string;
   label?: string;
   state: 'running' | 'done' | 'failed';
+  detail?: string;
   /** How long it took, from the service, once it is over. */
   ms?: number;
   /**

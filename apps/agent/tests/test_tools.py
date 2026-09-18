@@ -8,6 +8,7 @@ reached when something is missing or refused.
 from app.adapters import wire
 from app.agent.tools import (
     MAX_MATCHES,
+    NOTHING_CAME_BACK,
     find_positions,
     portfolio_tools,
     run_tools,
@@ -192,6 +193,13 @@ class TestToolWiring:
         )
         assert "failed" in messages[0].content and messages[0].tool_call_id == "c1"
 
+    async def test_a_failure_says_what_it_means_rather_than_only_what_broke(self):
+        tools = portfolio_tools(FakeSource(fail=True), "p", "t", fx.as_portfolio())
+        messages = await run_tools(
+            [{"name": "history_summary", "args": {"period": "7d"}, "id": "c1"}], tools
+        )
+        assert NOTHING_CAME_BACK in messages[0].content
+
     async def test_an_unknown_tool_is_reported_not_raised(self):
         tools = portfolio_tools(FakeSource(), "p", "t", fx.as_portfolio())
         messages = await run_tools([{"name": "nope", "args": {}, "id": "c9"}], tools)
@@ -211,12 +219,12 @@ class TestHowACallReadsToWhoeverAsked:
     """The trace is read by the person who asked the question, not by us."""
 
     def test_a_period_is_said_the_way_somebody_would_say_it(self):
-        assert tool_phrase("history_summary", {"period": "7d"}) == "Reading the last 7 days"
-        assert tool_phrase("history_summary", {"period": "1h"}) == "Reading the last hour"
-        assert tool_phrase("history_summary", {"period": "all"}) == "Reading the whole history"
+        said = tool_phrase("history_summary", {"period": "7d"})
+        assert said == "Reading the total over the last 7 days"
+        assert tool_phrase("history_summary", {"period": "1h"}).endswith("the last hour")
 
     def test_a_lookup_names_what_is_being_looked_up(self):
-        assert tool_phrase("position_details", {"query": "aave"}) == "Looking up aave"
+        assert tool_phrase("position_details", {"query": "aave"}) == "Reading positions · aave"
 
     def test_no_two_periods_read_the_same(self):
         # The whole point of the trace is that it can be checked against what
