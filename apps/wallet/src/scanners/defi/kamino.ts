@@ -15,6 +15,7 @@ interface ReserveMetric {
   reserve: string;
   liquidityToken?: string;
   borrowApy?: number | string;
+  supplyApy?: number | string;
 }
 
 interface Obligation {
@@ -23,7 +24,16 @@ interface Obligation {
     loanToValue?: number | string;
     liquidationLtv?: number | string;
   };
-  state?: { borrows?: Array<{ borrowReserve?: string; borrowedAmountSf?: number | string } | null> };
+  state?: {
+    borrows?: Array<{ borrowReserve?: string; borrowedAmountSf?: number | string } | null>;
+    deposits?: Array<{ depositReserve?: string; depositedAmount?: number | string } | null>;
+  };
+}
+
+interface Reserve {
+  token: string;
+  borrowApy: number;
+  supplyApy: number;
 }
 
 let markets: { at: number; list: KaminoMarket[] } | null = null;
@@ -64,7 +74,19 @@ async function orEmpty<T>(url: string): Promise<T[]> {
  * sits: at 1 the position is being liquidated. An obligation with nothing
  * borrowed is skipped — it cannot be liquidated and has no rate to climb.
  */
-function parse(obligation: Obligation, market: string, apyByReserve: Map<string, { token: string; apy: number }>): LendingFact[] {
+function supplyRates(obligation: Obligation, byReserve: Map<string, Reserve>): Record<string, number> {
+  const rates: Record<string, number> = {};
+  for (const deposit of obligation.state?.deposits ?? []) {
+    if (!deposit?.depositReserve || deposit.depositReserve === NULL_PUBKEY) continue;
+    if (deposit.depositedAmount !== undefined && Number(deposit.depositedAmount) <= 0) continue;
+    const reserve = byReserve.get(deposit.depositReserve);
+    if (!reserve || !Number.isFinite(reserve.supplyApy)) continue;
+    rates[reserve.token.toUpperCase()] = Math.round(reserve.supplyApy * 100 * 100) / 100;
+  }
+  return rates;
+}
+
+function parse(obligation: Obligation, market: string, byReserve: Map<string, Reserve>): LendingFact[] {
   const stats = obligation.refreshedStats;
   if (!stats || Number(stats.userTotalBorrow) <= 0) return [];
 
@@ -73,19 +95,21 @@ function parse(obligation: Obligation, market: string, apyByReserve: Map<string,
   if (!Number.isFinite(ltv) || ltv <= 0 || !Number.isFinite(liquidationLtv)) return [];
   const healthFactor = Math.round((liquidationLtv / ltv) * 100) / 100;
 
+  const supplied = supplyRates(obligation, byReserve);
   const facts: LendingFact[] = [];
   for (const borrow of obligation.state?.borrows ?? []) {
     if (!borrow || !borrow.borrowReserve || borrow.borrowReserve === NULL_PUBKEY) continue;
     if (borrow.borrowedAmountSf !== undefined && Number(borrow.borrowedAmountSf) <= 0) continue;
-    const meta = apyByReserve.get(borrow.borrowReserve);
-    if (!meta || !Number.isFinite(meta.apy)) continue;
+    const reserve = byReserve.get(borrow.borrowReserve);
+    if (!reserve || !Number.isFinite(reserve.borrowApy)) continue;
     facts.push({
       id: `kamino:${market}:${borrow.borrowReserve}`,
       platform: 'kamino',
       market,
-      token: meta.token.toUpperCase(),
+      token: reserve.token.toUpperCase(),
       healthFactor,
-      borrowRate: Math.round(meta.apy * 100 * 100) / 100,
+      borrowRate: Math.round(reserve.borrowApy * 100 * 100) / 100,
+      supplyRates: Object.keys(supplied).length ? supplied : null,
     });
   }
   return facts;
@@ -122,11 +146,18 @@ export async function kaminoLending(address: string): Promise<LendingFact[]> {
         const metrics = await orEmpty<ReserveMetric>(
           `${KAMINO_API}/kamino-market/${market.lendingMarket}/reserves/metrics`,
         );
-        const apyByReserve = new Map(
-          metrics.map((m) => [m.reserve, { token: m.liquidityToken ?? '?', apy: Number(m.borrowApy) }]),
+        const byReserve = new Map<string, Reserve>(
+          metrics.map((m) => [
+            m.reserve,
+            {
+              token: m.liquidityToken ?? '?',
+              borrowApy: Number(m.borrowApy),
+              supplyApy: Number(m.supplyApy),
+            },
+          ]),
         );
         const name = market.name ?? market.lendingMarket.slice(0, 8);
-        return obligations.flatMap((o) => parse(o, name, apyByReserve));
+        return obligations.flatMap((o) => parse(o, name, byReserve));
       } catch {
         return [];
       }

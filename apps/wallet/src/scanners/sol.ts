@@ -80,6 +80,9 @@ interface JupElement {
   };
 }
 
+const borrowedCount = (element: JupElement): number =>
+  (element.data?.borrowedAssets || []).length;
+
 /** Which leg of a position each Jupiter asset bucket is */
 const ASSET_BUCKETS: Array<{ key: 'assets' | 'suppliedAssets' | 'rewardAssets' | 'borrowedAssets'; role: PositionTokenRole }> = [
   { key: 'assets', role: 'supply' },
@@ -309,10 +312,6 @@ export async function scanSol(address: string): Promise<ScanResult> {
           priceUsd: typeof d.price === 'number' ? d.price : null,
           valueUsd: role === 'borrow' ? -usd : usd,
           role,
-          // What THIS debt costs. `borrowedYields` runs parallel to
-          // `borrowedAssets`, so a wallet borrowing two assets at two rates
-          // says so on each line instead of averaging them into one figure
-          // that is true of neither.
           ...(role === 'borrow'
             ? { apy: borrowCostOf(element.data?.borrowedYields?.[i]?.[0]) ?? undefined }
             : {}),
@@ -359,7 +358,11 @@ export async function scanSol(address: string): Promise<ScanResult> {
         valueUsd: value,
         platform,
         category: STAKED_LABELS.test(element.label || '') ? 'staked' : 'defi',
-        apy: typeof element.netApy === 'number' && element.netApy !== 0 ? element.netApy : null,
+        apy: borrowedCount(element)
+          ? null
+          : typeof element.netApy === 'number' && element.netApy !== 0
+            ? element.netApy
+            : null,
         healthRate: toHealthFactor(element.data?.healthRatio),
         borrowApy: borrowApyOf(element),
         range: RANGED_POOLS.test(element.name || '') ? rangeFromLegs(tokens) : null,

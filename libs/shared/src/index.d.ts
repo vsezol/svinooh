@@ -40,7 +40,6 @@ export interface PositionTokenDto {
    * `note`, where it could only be read by a human.
    */
   network?: string | null;
-  /** A borrow leg's own rate, as a fraction, where the source reports one */
   apy?: number | null;
 }
 
@@ -806,6 +805,7 @@ export interface LendingFact {
   healthFactor: number;
   /** Borrow APY as a percentage: 6.2 is 6.2% */
   borrowRate: number | null;
+  supplyRates?: Record<string, number> | null;
 }
 
 /**
