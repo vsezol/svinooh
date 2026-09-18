@@ -10,8 +10,8 @@ import type { ReactNode } from 'react';
  * the unsafe step is the one we skip.
  *
  * Deliberately partial. Bold, italic, inline code, links, headings, bullet and
- * numbered lists, fenced code, blockquotes and rules — what models emit in
- * chat. Tables and images are answered by blocks of their own, and anything
+ * numbered lists, fenced code, blockquotes, rules and pipe tables — what models
+ * emit in chat. Images are answered by a block of their own, and anything
  * unrecognised stays the literal text the model wrote.
  */
 
@@ -55,6 +55,47 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
   return out;
 }
 
+type Align = 'right' | 'center' | undefined;
+
+const DELIMITER = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+
+function cells(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split(/(?<!\\)\|/)
+    .map((cell) => cell.trim().replace(/\\\|/g, '|'));
+}
+
+/**
+ * The table starting at `start`, or null when there is none.
+ *
+ * A row is a row because the line under the header is a delimiter — pipes
+ * alone are a sentence about a price range, and models write those too.
+ */
+export function tableAt(
+  lines: string[],
+  start: number,
+): { head: string[]; align: Align[]; rows: string[][]; next: number } | null {
+  if (start + 1 >= lines.length) return null;
+  const rule = lines[start + 1];
+  if (!lines[start].includes('|') || !rule.includes('|') || !DELIMITER.test(rule)) return null;
+  const head = cells(lines[start]);
+  const marks = cells(rule);
+  if (marks.length !== head.length) return null;
+  const align: Align[] = marks.map((mark) =>
+    mark.startsWith(':') && mark.endsWith(':') ? 'center' : mark.endsWith(':') ? 'right' : undefined,
+  );
+  const rows: string[][] = [];
+  let i = start + 2;
+  while (i < lines.length && lines[i].includes('|') && lines[i].trim() !== '') {
+    const row = cells(lines[i++]);
+    rows.push(head.map((_, n) => row[n] ?? ''));
+  }
+  return { head, align, rows, next: i };
+}
+
 const BULLET = /^\s*[-*+]\s+(.*)$/;
 const NUMBERED = /^\s*\d+[.)]\s+(.*)$/;
 const HEADING = /^(#{1,4})\s+(.*)$/;
@@ -79,6 +120,38 @@ export function Markdown({ text }: { text: string }) {
           <code>{body.join('\n')}</code>
         </pre>,
       );
+      continue;
+    }
+
+    const table = tableAt(lines, i);
+    if (table) {
+      out.push(
+        <div key={`t-${i}`} className="sv-a-md-table-scroll">
+          <table className="sv-a-b-table sv-a-md-table">
+            <thead>
+              <tr>
+                {table.head.map((cell, n) => (
+                  <th key={n} data-align={table.align[n]}>
+                    {inline(cell, `th${i}-${n}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {table.rows.map((row, r) => (
+                <tr key={r}>
+                  {row.map((cell, n) => (
+                    <td key={n} data-align={table.align[n]}>
+                      {inline(cell, `td${i}-${r}-${n}`)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      );
+      i = table.next;
       continue;
     }
 
@@ -150,6 +223,7 @@ export function Markdown({ text }: { text: string }) {
       !HEADING.test(lines[i]) &&
       !QUOTE.test(lines[i]) &&
       !RULE.test(lines[i]) &&
+      !tableAt(lines, i) &&
       !lines[i].trimStart().startsWith('```')
     ) {
       para.push(lines[i++]);
