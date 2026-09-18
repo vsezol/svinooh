@@ -37,6 +37,15 @@ logger = logging.getLogger("svinooh-ai")
 
 MAX_MATCHES = 30
 
+#: Handed to the model in place of a result when a call fails. A failure it is
+#: only told about is a gap it fills: the answer that started this said the
+#: tool was unavailable and then quoted a rate anyway.
+NOTHING_CAME_BACK = (
+    "This call failed, so you have nothing from it. Say plainly that you could "
+    "not read this right now, name no figure that would have come from it, and "
+    "do not answer it from memory."
+)
+
 #: A chat answer is read, not scrolled — past a handful it is a spreadsheet.
 MAX_OPTIONS = 8
 
@@ -265,6 +274,6 @@ async def run_tools(calls: list[dict], tools: list) -> list[ToolMessage]:
         except Exception as error:  # noqa: BLE001 — the model handles tool failures
             logger.warning("tool %s failed: %r", name, error)
             metrics.counted(metrics.tool_calls, tool=counted_as, outcome="failed")
-            result = f"Tool call failed: {error}"
+            result = f"{error}\n{NOTHING_CAME_BACK}"
         results.append(ToolMessage(content=str(result), tool_call_id=call.get("id", "")))
     return results
