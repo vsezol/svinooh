@@ -110,9 +110,6 @@ class Settings(BaseSettings):
     redis_url: str = Field("", validation_alias="REDIS_URL")
     # The portfolio public API, spoken to with the caller's own token.
     portfolio_api_url: str = Field("http://localhost:3000", validation_alias="PORTFOLIO_API_URL")
-    # The earn catalog — where a token can be put to work. No token to pass:
-    # what it serves is public facts about pools, the same for every caller.
-    earn_api_url: str = Field("http://localhost:8080", validation_alias="EARN_API_URL")
 
     @field_validator("cors_origins", mode="before")
     @classmethod

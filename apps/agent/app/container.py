@@ -19,7 +19,6 @@ from limits.aio.storage import Storage
 from redis.asyncio import ConnectionPool, Redis
 
 from .adapters import memory
-from .adapters.earn import EarnApiSource
 from .adapters.panel import RemotePanel
 from .adapters.portfolio import PortfolioApiSource
 from .agent.graph import LangGraphAgent
@@ -47,7 +46,6 @@ class Container:
     panel: Panel
     config: Config
     portfolio: PortfolioApiSource
-    catalog: EarnApiSource
     identity: Identity
     store: ConversationStore
     sessions: SessionStore
@@ -110,7 +108,6 @@ def build(settings: Settings) -> Container:
     panel = RemotePanel(settings.portfolio_api_url, http)
     config = Config(settings, panel)
     portfolio = PortfolioApiSource(settings.portfolio_api_url, http)
-    catalog = EarnApiSource(settings.earn_api_url, http)
     models = Models(settings)
     identity = Identity(
         Authenticator(portfolio, settings.auth_cache_ttl_s, settings.auth_cache_max)
@@ -123,7 +120,6 @@ def build(settings: Settings) -> Container:
     agent: Agent = LangGraphAgent(
         config,
         portfolio,
-        catalog,
         models,
         IntentClassifier(models, config),
         ConfirmationClassifier(models, config),
@@ -133,7 +129,6 @@ def build(settings: Settings) -> Container:
         panel=panel,
         config=config,
         portfolio=portfolio,
-        catalog=catalog,
         identity=identity,
         store=store,
         sessions=sessions,
