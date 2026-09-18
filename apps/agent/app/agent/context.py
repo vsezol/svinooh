@@ -44,6 +44,13 @@ def _amount(amount: float | None, price: float | None) -> str | None:
     return f"{figure} @ ${shown}"
 
 
+def rate(fraction: float) -> str:
+    percent = fraction * 100
+    if 0 < percent < 0.01:
+        return "<0.01%"
+    return f"{percent:.2f}%"
+
+
 def _rates(position: Position) -> list[str]:
     """The figures a position carries when its kind has them.
 
@@ -88,10 +95,12 @@ def _composition(position: Position) -> str | None:
     """What a position is actually made of — supplied and borrowed legs."""
     parts = []
     for leg in position.legs[:6]:
-        piece = f"{leg.symbol} {usd(leg.value_usd)}"
+        piece = f"{leg.symbol} {usd(abs(leg.value_usd))}"
         amount = _amount(leg.amount, leg.price_usd)
         if amount:
             piece += f" ({amount})"
+        if leg.apy is not None:
+            piece += f" at {rate(leg.apy)}"
         if leg.role and leg.role != "supply":
             piece = f"{leg.role} {piece}"
         parts.append(piece)
@@ -111,17 +120,49 @@ def positions_read(portfolio: Portfolio, name_at_most: int = 3) -> str:
 
 
 def earning_lines(portfolio: Portfolio, limit: int = 10) -> str:
-    """The positions already paying a rate, biggest first. Empty when none are."""
     earning = sorted(
-        (p for p in portfolio.positions if p.apy and p.apy > 0),
+        (p for p in portfolio.positions if _pays_something(p)),
         key=lambda p: p.value_usd,
         reverse=True,
     )
-    return "\n".join(
-        f"- {p.symbol}{f' ({p.name})' if p.name else ''} on {p.protocol or 'wallet'}: "
-        f"{usd(p.value_usd)} at {p.apy * 100:.2f}%"
-        for p in earning[:limit]
-        if p.apy
+    return "\n".join(_earning_line(p) for p in earning[:limit])
+
+
+def _pays_something(position: Position) -> bool:
+    if position.apy and position.apy > 0:
+        return True
+    return any(leg.apy and leg.apy > 0 for leg in position.earning_legs)
+
+
+def _earning_line(position: Position) -> str:
+    name = f"{position.symbol}{f' ({position.name})' if position.name else ''}"
+    head = f"- {name} on {position.protocol or 'wallet'}: {usd(position.value_usd)}"
+    supplied = _supplied_at(position)
+    body = f"— {supplied}" if supplied else f"at {rate(position.apy or 0)}"
+    return f"{head} {body}{_owed_against(position)}"
+
+
+def _supplied_at(position: Position, limit: int = 4) -> str:
+    legs = sorted(position.earning_legs, key=lambda leg: leg.value_usd, reverse=True)
+    if not legs:
+        return ""
+    named = ", ".join(
+        f"{leg.symbol} {usd(leg.value_usd)} at {rate(leg.apy or 0)}" for leg in legs[:limit]
+    )
+    return f"supplied {named}"
+
+
+def _owed_against(position: Position) -> str:
+    if not position.has_debt:
+        return ""
+    owed = [leg for leg in position.legs if leg.role == "borrow"]
+    borrowed = ", ".join(f"{leg.symbol} {usd(abs(leg.value_usd))}" for leg in owed[:3])
+    cost = f" at {rate(position.borrow_apy)}" if position.borrow_apy else ""
+    health = f", health {position.health_rate:.2f}" if position.health_rate else ""
+    debt = f"borrowed {borrowed}{cost}{health}" if borrowed else f"a loan{cost}{health}"
+    return (
+        f"; {debt}. This is collateral for that loan, not idle money: it cannot be moved "
+        "before the loan is repaid, and taking part of it out lowers the health factor."
     )
 
 

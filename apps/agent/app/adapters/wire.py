@@ -59,6 +59,7 @@ class LegWire(Wire):
     value_usd: float = 0.0
     amount: float | None = None
     price_usd: float | None = None
+    apy: float | None = None
 
 
 class BandWire(Wire):
@@ -150,6 +151,7 @@ def _leg(wire: LegWire) -> Leg:
         value_usd=wire.value_usd,
         amount=wire.amount,
         price_usd=wire.price_usd,
+        apy=wire.apy,
     )
 
 

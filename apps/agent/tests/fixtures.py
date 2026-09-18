@@ -154,6 +154,53 @@ UNISWAP = position(
 )
 
 #: A plain holding, priced normally.
+KAMINO = position(
+    "Kamino",
+    11_746.29,
+    name="Lending",
+    network="sol",
+    platform="kamino",
+    category="defi",
+    health=2.98,
+    borrow_apy=0.0527,
+    tokens=[
+        {
+            "role": "supply",
+            "symbol": "cbBTC",
+            "amount": 0.1329,
+            "priceUsd": 80_836.0,
+            "valueUsd": 10_743.16,
+            "apy": 0.0000319,
+        },
+        {
+            "role": "supply",
+            "symbol": "SOL",
+            "amount": 40.57,
+            "priceUsd": 110.68,
+            "valueUsd": 4_490.13,
+            "apy": 0.0452,
+        },
+        {
+            "role": "borrow",
+            "symbol": "USDT",
+            "amount": 4_205.29,
+            "priceUsd": 0.999,
+            "valueUsd": -4_202.27,
+            "apy": 0.0527,
+        },
+    ],
+)
+
+FLUID = position(
+    "Fluid",
+    10_187.88,
+    name="Yield",
+    network="arb",
+    platform="fluid",
+    category="defi",
+    apy=0.042,
+)
+
 ETH = position("ETH", 16_683.65, network="eth", amount=6.7122, price=2_485.59)
 
 #: A meme token priced below a millionth — the case that printed as "$0".

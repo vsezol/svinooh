@@ -4,7 +4,13 @@ These assertions are the anti-hallucination contract: every one of them exists
 because a missing or wrong line here became a wrong answer in a chat.
 """
 
-from app.agent.context import portfolio_context, position_line, positions_read, usd
+from app.agent.context import (
+    earning_lines,
+    portfolio_context,
+    position_line,
+    positions_read,
+    usd,
+)
 from app.domain.portfolio import total_of
 from tests import fixtures as fx
 
@@ -64,6 +70,35 @@ def test_every_wallet_appears_with_its_chain_and_status():
 def test_stale_data_is_flagged():
     stale = fx.as_portfolio(fx.portfolio([fx.wallet(fx.EVM_ADDRESS, [fx.ETH], stale=True)]))
     assert "stale data" in portfolio_context(stale, 12)
+
+
+class TestWhatIsAlreadyEarning:
+    def test_a_plain_deposit_is_a_rate_and_nothing_else(self):
+        held = fx.as_portfolio(fx.portfolio([fx.wallet(fx.EVM_ADDRESS, [fx.FLUID])]))
+        line = earning_lines(held)
+        assert "Fluid (Yield) on fluid: $10,187.88 at 4.20%" in line
+        assert "collateral" not in line
+
+    def test_collateral_is_named_leg_by_leg_with_the_loan_against_it(self):
+        held = fx.as_portfolio(fx.portfolio([fx.wallet(fx.SOL_ADDRESS, [fx.KAMINO])]))
+        line = earning_lines(held)
+        assert "supplied cbBTC $10,743.16 at <0.01%, SOL $4,490.13 at 4.52%" in line
+        assert "borrowed USDT $4,202.27 at 5.27%, health 2.98" in line
+        assert "collateral for that loan, not idle money" in line
+        assert "repaid" in line
+
+    def test_a_rate_that_is_small_is_not_rounded_away_to_nothing(self):
+        held = fx.as_portfolio(fx.portfolio([fx.wallet(fx.SOL_ADDRESS, [fx.KAMINO])]))
+        assert "cbBTC $10,743.16 at <0.01%" in earning_lines(held)
+
+    def test_no_average_rate_is_invented_for_a_position_that_has_none(self):
+        held = fx.as_portfolio(fx.portfolio([fx.wallet(fx.SOL_ADDRESS, [fx.KAMINO])]))
+        assert "at 0.00%;" not in earning_lines(held)
+        assert fx.as_position(fx.KAMINO).apy is None
+
+    def test_a_position_paying_nothing_anywhere_is_not_listed(self):
+        held = fx.as_portfolio(fx.portfolio([fx.wallet(fx.EVM_ADDRESS, [fx.ETH])]))
+        assert earning_lines(held) == ""
 
 
 class TestWhatAReadOfThePortfolioSays:

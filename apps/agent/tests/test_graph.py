@@ -195,6 +195,20 @@ class TestWhereToPutMoney:
         assert ("portfolio", "on-screen", "Bearer T") in api.calls
         assert "already has earning" in model.prompts[0], "a recommendation can be a move"
 
+    async def test_collateral_reaches_the_prompt_as_collateral(self):
+        leveraged = fx.as_portfolio(fx.portfolio([fx.wallet(fx.SOL_ADDRESS, [fx.KAMINO])]))
+        bot, _, model = wire(
+            intent="earn",
+            catalog=Catalog(),
+            api=Api(portfolio=leveraged),
+            model=Model(tool_calls=[EARN_CALL]),
+        )
+        await run(bot, portfolio="on-screen", authorization="Bearer T")
+        asked = model.prompts[0]
+        assert "SOL $4,490.13 at 4.52%" in asked
+        assert "collateral for that loan, not idle money" in asked
+        assert "advice to liquidate somebody" in asked
+
     async def test_a_portfolio_that_will_not_answer_still_gets_advice(self):
         bot, _, model = wire(
             intent="earn",

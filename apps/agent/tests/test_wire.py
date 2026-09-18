@@ -25,6 +25,15 @@ class TestReadingAPortfolio:
             ("USDC", "borrow"),
         ]
 
+    def test_every_leg_keeps_the_rate_it_came_with(self):
+        parsed = wire.position(fx.KAMINO)
+        assert parsed.apy is None
+        assert [(leg.symbol, leg.apy) for leg in parsed.legs] == [
+            ("cbBTC", 0.0000319),
+            ("SOL", 0.0452),
+            ("USDT", 0.0527),
+        ]
+
     def test_a_pool_keeps_its_pair_and_its_verdict(self):
         parsed = wire.position(fx.UNISWAP)
         assert parsed.band is not None and parsed.band.pair == "cbBTC/USDC"

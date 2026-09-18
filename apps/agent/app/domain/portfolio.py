@@ -46,6 +46,7 @@ class Leg:
     value_usd: float
     amount: float | None = None
     price_usd: float | None = None
+    apy: float | None = None
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,14 @@ class Position:
     range: str | None = None
     band: Band | None = None
     legs: tuple[Leg, ...] = ()
+
+    @property
+    def has_debt(self) -> bool:
+        return bool(self.borrow_apy) or any(leg.role == "borrow" for leg in self.legs)
+
+    @property
+    def earning_legs(self) -> tuple[Leg, ...]:
+        return tuple(leg for leg in self.legs if leg.role == "supply" and leg.apy is not None)
 
     @property
     def protocol(self) -> str | None:
