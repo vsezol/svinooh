@@ -179,10 +179,11 @@ The routing ladder (D7/D8) — each step builds on the previous:
   recommendation made by RISK before rate. The band is computed here rather
   than read from the catalog — the catalog owns facts, a judgement about them
   is ours — and it is printed with the reasons that produced it, so an answer
-  can say why one option is safer instead of asserting that it is. No identity
-  and no portfolio fetch: where USDC can earn is the same question for a
-  visitor and an owner. *Lesson: a second neighbour costs a port, an adapter
-  and a node; opinions live where they can be argued with.*
+  can say why one option is safer instead of asserting that it is. A visitor
+  gets the catalog with no identity asked for; a caller we can read is also
+  shown what they ALREADY earn, so the recommendation can be a move rather
+  than only a new deposit. *Lesson: a second neighbour costs a port, an
+  adapter and a node; opinions live where they can be argued with.*
 
 Then the independence milestones, unchanged in substance:
 

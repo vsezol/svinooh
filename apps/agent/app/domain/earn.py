@@ -1,13 +1,7 @@
-"""Where a token can be put to work, and how much is risked to get the rate.
+"""What the earn catalog offers, and how risky each offer is.
 
-The facts belong to the earn service: what the pool is, what it pays, how much
-sits in it. The RISK BAND does not. It is a judgement about those facts, and a
-judgement is the agent's to make — kept here so the wording can change with
-what people misread, without a wire contract moving underneath it.
-
-Every number is a Decimal. They arrive from the catalog as strings for exactly
-that reason: these are rates and money, and a rate wrong in the fourth place is
-a rate somebody quotes to a person.
+The facts are the catalog's; the risk band is ours, because it is a judgement
+about those facts rather than one of them.
 """
 
 from dataclasses import dataclass
@@ -15,22 +9,18 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-#: How the bands are named where a person reads them.
-Risk = Literal["low", "medium", "high"]
+RiskBand = Literal["low", "medium", "high"]
 
-#: Under this much deposited, a pool is thin: the rate is real but it has not
-#: been tested by size, and getting out of it is a smaller door.
+#: Under this much deposited, the rate is real but untested by size.
 THIN_TVL_USD = Decimal("5000000")
-
-#: Above this share of the rate coming from a programme rather than from
-#: borrowers, the headline number is mostly something that ends on a date
-#: somebody else chose.
+#: Above this share of the rate coming from a programme rather than borrowers,
+#: the headline number is mostly something that ends on a date somebody chose.
 MOSTLY_PROGRAMMES = Decimal("0.5")
 
 
 @dataclass(frozen=True, slots=True)
-class Option:
-    """One place to deposit one token, as the agent reasons about it."""
+class YieldPool:
+    """One place to deposit one token and be paid for it."""
 
     id: str
     name: str
@@ -39,15 +29,11 @@ class Option:
     kind: str
     token: str
     apy_net: Decimal
+    #: What borrowers pay, and keep paying.
     apy_base: Decimal
-    #: A protocol's own reward programme.
+    #: The protocol's own reward programme, which ends.
     apy_rewards: Decimal
-    #: Somebody else's programme paid through the same pool. Kept apart from
-    #: `rewards` because the catalog keeps them apart — and counted with it
-    #: here, because to a depositor both are money that stops arriving on a
-    #: date they did not choose. The pool that made this obvious paid 7.07%
-    #: from borrowers and 4.41% from incentives, with rewards at zero: reading
-    #: only `rewards` called that a borrower-paid rate.
+    #: Somebody else's programme paid through the same pool, which also ends.
     apy_incentives: Decimal
     tvl_usd: Decimal
     url: str
@@ -60,37 +46,28 @@ class Option:
         return (self.apy_rewards + self.apy_incentives) / self.apy_net
 
     @property
-    def caveats(self) -> tuple[str, ...]:
-        """Everything about this pool that a careful person would want said.
-
-        The band below is these, counted. Stating them rather than scoring
-        silently is the whole point: a person can disagree with one, and
-        "medium" with no reasons behind it is a number pretending to be advice.
-        """
-        marks: list[str] = []
+    def risk_reasons(self) -> tuple[str, ...]:
+        """What is risky about this pool, in words a reader can disagree with."""
+        reasons = []
         if self.kind == "reserve":
-            marks.append("one market's reserve rather than a curated spread")
+            reasons.append("one market's reserve rather than a curated spread")
         if self.tvl_usd < THIN_TVL_USD:
-            marks.append("thin: under $5M deposited")
+            reasons.append("thin: under $5M deposited")
         if self.programme_share >= MOSTLY_PROGRAMMES:
-            marks.append("most of the rate is a reward programme, which ends")
-        return tuple(marks)
+            reasons.append("most of the rate is a reward programme, which ends")
+        return tuple(reasons)
 
     @property
-    def risk(self) -> Risk:
-        """The band, as the count of what is worth saying about it."""
-        return ("low", "medium", "high")[min(len(self.caveats), 2)]
+    def risk(self) -> RiskBand:
+        """The band those reasons add up to: none, one, or more than one."""
+        return ("low", "medium", "high")[min(len(self.risk_reasons), 2)]
 
 
 @dataclass(frozen=True, slots=True)
-class Listing:
-    """What the catalog answered, and when it was true.
+class CatalogSnapshot:
+    """The pools the catalog answered with, and when it read them."""
 
-    `as_of` and `stale` travel with the options rather than beside them: a rate
-    with no time on it is not a fact, and the one place that can say so out
-    loud is the answer being written from it.
-    """
-
-    options: tuple[Option, ...]
+    pools: tuple[YieldPool, ...]
     as_of: datetime | None = None
+    #: The catalog could not refresh, so these rates are older than usual.
     stale: bool = False

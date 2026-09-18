@@ -179,15 +179,32 @@ EARN_CALL = {"name": "earn_options", "args": {"token": "USDC"}, "id": "e1"}
 
 
 class TestWhereToPutMoney:
-    """The earn branch: the catalog answers, and nobody's portfolio is read."""
+    """The earn branch: the catalog is the inventory, the portfolio is the baseline."""
 
-    async def test_it_goes_to_the_catalog_and_not_to_the_portfolio(self):
+    async def test_the_catalog_is_asked(self):
         shelf = Catalog()
-        bot, api, _ = wire(intent="earn", catalog=shelf, model=Model(tool_calls=[EARN_CALL]))
+        bot, _, _ = wire(intent="earn", catalog=shelf, model=Model(tool_calls=[EARN_CALL]))
+        out = await run(bot)
+        assert out["intent"] == "earn" and shelf.asked == [("USDC", 8)]
+
+    async def test_what_is_already_earning_is_in_the_prompt_to_beat(self):
+        bot, api, model = wire(
+            intent="earn", catalog=Catalog(), model=Model(tool_calls=[EARN_CALL])
+        )
+        await run(bot, portfolio="on-screen", authorization="Bearer T")
+        assert ("portfolio", "on-screen", "Bearer T") in api.calls
+        assert "already has earning" in model.prompts[0], "a recommendation can be a move"
+
+    async def test_a_portfolio_that_will_not_answer_still_gets_advice(self):
+        bot, _, model = wire(
+            intent="earn",
+            catalog=Catalog(),
+            api=Api(refuse=True),
+            model=Model(tool_calls=[EARN_CALL]),
+        )
         out = await run(bot, portfolio="on-screen", authorization="Bearer T")
-        assert out["intent"] == "earn"
-        assert api.calls == [], "where to put money is not a question about what is held"
-        assert shelf.asked == [("USDC", 8)]
+        assert out["answer"] == "answered"
+        assert "already has earning" not in model.prompts[0]
 
     async def test_the_branch_answers_from_what_the_catalog_said(self):
         bot, _, model = wire(intent="earn", catalog=Catalog(), model=Model(tool_calls=[EARN_CALL]))
@@ -195,7 +212,7 @@ class TestWhereToPutMoney:
         said = model.seen[-1].content
         assert "Steakhouse USDC" in said and "Risk low" in said, "the tool result reached the model"
 
-    async def test_a_visitor_with_no_account_is_answered_the_same_way(self):
+    async def test_a_visitor_is_answered_without_being_asked_who_they_are(self):
         shelf = Catalog()
         bot, api, _ = wire(intent="earn", catalog=shelf, model=Model(tool_calls=[EARN_CALL]))
         out = await run(bot)

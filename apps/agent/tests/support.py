@@ -31,7 +31,7 @@ from app.application.sessions import SessionStore
 from app.application.turns import Turns
 from app.config import Config
 from app.container import Container
-from app.domain.earn import Listing, Option
+from app.domain.earn import CatalogSnapshot, YieldPool
 from app.panel import NOTHING_DECIDED, PanelValues
 from app.settings import Settings
 
@@ -80,16 +80,16 @@ class Confirmations:
 class NoCatalog:
     """The earn catalog in a test that must never reach it."""
 
-    async def options(self, token, limit):
+    async def best_pools(self, token, limit):
         raise AssertionError(f"the catalog was asked about {token or 'everything'}")
 
 
 class Catalog:
     """A catalog with one option in it, enough for a branch to answer from."""
 
-    def __init__(self, *options: Option) -> None:
-        self.options_ = options or (
-            Option(
+    def __init__(self, *pools: YieldPool) -> None:
+        self.pools = pools or (
+            YieldPool(
                 id="sol:kamino:vault:AAA",
                 name="Steakhouse USDC",
                 protocol="kamino",
@@ -105,9 +105,9 @@ class Catalog:
         )
         self.asked: list[tuple[str | None, int]] = []
 
-    async def options(self, token, limit) -> Listing:
+    async def best_pools(self, token, limit) -> CatalogSnapshot:
         self.asked.append((token, limit))
-        return Listing(options=self.options_, as_of=datetime(2026, 9, 18, 12, 0, tzinfo=UTC))
+        return CatalogSnapshot(pools=self.pools, as_of=datetime(2026, 9, 18, 12, 0, tzinfo=UTC))
 
 
 class NoHost:

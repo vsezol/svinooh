@@ -98,6 +98,21 @@ def _composition(position: Position) -> str | None:
     return " + ".join(parts) if parts else None
 
 
+def earning_lines(portfolio: Portfolio, limit: int = 10) -> str:
+    """The positions already paying a rate, biggest first. Empty when none are."""
+    earning = sorted(
+        (p for p in portfolio.positions if p.apy and p.apy > 0),
+        key=lambda p: p.value_usd,
+        reverse=True,
+    )
+    return "\n".join(
+        f"- {p.symbol}{f' ({p.name})' if p.name else ''} on {p.protocol or 'wallet'}: "
+        f"{usd(p.value_usd)} at {p.apy * 100:.2f}%"
+        for p in earning[:limit]
+        if p.apy
+    )
+
+
 def position_line(position: Position, detail: bool = False) -> str:
     head = position.symbol or "?"
     if position.name and position.name != head:

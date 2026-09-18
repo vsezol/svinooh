@@ -115,30 +115,26 @@ def grounded_prompt(base: str, portfolio: Portfolio, max_positions: int) -> str:
     return f"{base}\n\nThe user is looking at this portfolio right now:\n{shown}"
 
 
-def earn_prompt(base: str) -> str:
-    """For a question about where to put money, not about what is already held.
-
-    The branch has one tool and one job: read the catalog, then recommend by
-    risk rather than by rate. The instruction to rank by risk is here because
-    the model would otherwise do the obvious thing and lead with the biggest
-    number, which on this list is reliably the thinnest pool with the shortest
-    reward programme behind it.
-
-    What the model must not do is invent — a pool, a rate, or a promise. The
-    tool's lines are the only inventory that exists, and they carry their own
-    caveats so an answer can be specific about why one option is safer.
-    """
+def earn_prompt(base: str, already_earning: str = "") -> str:
+    """For a question about where to put money. Rank by risk, quote only tools."""
+    rules = (
+        f"{base}\n\nThe user is asking where to put money to work. Recommend only "
+        "pools your tools returned, and never name a pool, protocol or rate that "
+        "did not come from one. Rank by risk before rate: lead with the safest "
+        "that still pays reasonably, and offer a higher rate as the trade it is, "
+        "naming the reason for its band. Two or three options is an answer; the "
+        "whole list is a spreadsheet. Never promise a rate will hold, and say "
+        "plainly that a deposit goes into a third-party protocol — the money is "
+        "at risk there, not with svinooh."
+    )
+    if not already_earning:
+        return rules
     return (
-        f"{base}\n\nThe user is asking where to put money to work. Call "
-        "earn_options — it is the only inventory there is, and you may not "
-        "name a pool, a protocol or a rate that did not come back from it. "
-        "Recommend by risk before rate: lead with what is safest that still "
-        "pays reasonably, and mention a higher rate as the trade it is, naming "
-        "the reason the tool gave for the band. Two or three options is an "
-        "answer; the whole list is a spreadsheet. Give the rate as the tool "
-        "gives it, say when it was read if it is stale, and never promise a "
-        "rate will hold. Say plainly that these are deposits into third-party "
-        "protocols and the money is at risk there, not with svinooh."
+        f"{rules}\n\nWhat the user already has earning, so a recommendation can be "
+        "a MOVE and not only a new deposit. Compare the rates, name what moving "
+        "would gain, and say when it is not worth it — moving costs fees and puts "
+        "the money in a different protocol's hands:\n"
+        f"{already_earning}"
     )
 
 
