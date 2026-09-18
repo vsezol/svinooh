@@ -138,6 +138,11 @@
   text-align: right;
 }
 
+.sv-a-b-table th[data-align='center'],
+.sv-a-b-table td[data-align='center'] {
+  text-align: center;
+}
+
 .sv-a-b-table td[data-tone='down'] {
   color: var(--down);
 }
@@ -385,6 +390,20 @@
   padding: 2px 0 2px 12px;
   border-left: 2px solid var(--line2);
   color: var(--mut);
+}
+
+/* A table the model wrote in pipes, given the same frame as a table the
+   service sends as a block: same type, same rows, its own card and its own
+   sideways scroll, so a wide one never drags the transcript with it. */
+.sv-a-md-table-scroll {
+  margin: 6px 0 10px;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  background: var(--surf2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
 }
 
 .sv-a-md-rule {
