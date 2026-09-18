@@ -55,9 +55,9 @@ class TestTheBand:
         assert reserve.risk == "medium"
         assert "one market's reserve" in reserve.risk_reasons[0]
 
-    def test_a_thin_pool_is_said_to_be_thin(self):
+    def test_a_thin_pool_is_the_far_end_however_well_it_is_curated(self):
         thin = pool(tvl_usd=Decimal("900000"))
-        assert thin.risk == "medium"
+        assert thin.risk == "high"
         assert "under $5M" in thin.risk_reasons[0]
 
     def test_a_rate_that_is_mostly_a_programme_says_the_programme_ends(self):
@@ -79,8 +79,15 @@ class TestTheBand:
         )
         assert mostly.risk == "medium" and "ends" in mostly.risk_reasons[0]
 
-    def test_two_marks_or_more_is_the_far_end(self):
-        assert pool(kind="reserve", tvl_usd=Decimal("1000")).risk == "high"
+    def test_a_deep_reserve_on_a_programme_is_still_medium_marks_do_not_add_up(self):
+        farmed_reserve = pool(
+            kind="reserve",
+            apy_base=Decimal("0.01"),
+            apy_rewards=Decimal("0.09"),
+            apy_net=Decimal("0.10"),
+        )
+        assert farmed_reserve.risk == "medium"
+        assert len(farmed_reserve.risk_reasons) == 2
 
     def test_a_pool_paying_nothing_is_not_a_division_by_zero(self):
         assert pool(apy_net=Decimal(0), apy_base=Decimal(0), apy_rewards=Decimal(0)).risk == "low"

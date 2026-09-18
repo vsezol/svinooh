@@ -11,7 +11,7 @@ from typing import Literal
 
 RiskBand = Literal["low", "medium", "high"]
 
-#: Under this much deposited, the rate is real but untested by size.
+#: Under this much deposited, one withdrawal moves the pool and the exit is small.
 THIN_TVL_USD = Decimal("5000000")
 #: Above this share of the rate coming from a programme rather than borrowers,
 #: the headline number is mostly something that ends on a date somebody chose.
@@ -46,25 +46,37 @@ class YieldPool:
         return (self.apy_rewards + self.apy_incentives) / self.apy_net
 
     @property
-    def risk_reasons(self) -> tuple[str, ...]:
-        """What is risky about this pool, in words a reader can disagree with."""
-        reasons = []
-        if self.kind == "reserve":
-            reasons.append("one market's reserve rather than a curated spread")
-        if self.tvl_usd < THIN_TVL_USD:
-            reasons.append("thin: under $5M deposited")
-        if self.programme_share >= MOSTLY_PROGRAMMES:
-            reasons.append("most of the rate is a reward programme, which ends")
-        return tuple(reasons)
+    def is_thin(self) -> bool:
+        return self.tvl_usd < THIN_TVL_USD
+
+    @property
+    def is_single_market(self) -> bool:
+        return self.kind == "reserve"
+
+    @property
+    def pays_mostly_programmes(self) -> bool:
+        return self.programme_share >= MOSTLY_PROGRAMMES
 
     @property
     def risk(self) -> RiskBand:
-        """The band those reasons add up to."""
-        if not self.risk_reasons:
-            return "low"
-        if len(self.risk_reasons) == 1:
+        """Thin is what can cost the deposit; the rest only costs the rate."""
+        if self.is_thin:
+            return "high"
+        if self.is_single_market or self.pays_mostly_programmes:
             return "medium"
-        return "high"
+        return "low"
+
+    @property
+    def risk_reasons(self) -> tuple[str, ...]:
+        """The same facts the band reads, in words a reader can disagree with."""
+        reasons = []
+        if self.is_thin:
+            reasons.append("thin: under $5M deposited")
+        if self.is_single_market:
+            reasons.append("one market's reserve rather than a curated spread")
+        if self.pays_mostly_programmes:
+            reasons.append("most of the rate is a reward programme, which ends")
+        return tuple(reasons)
 
 
 @dataclass(frozen=True, slots=True)
