@@ -10,6 +10,8 @@ module: what a test wants, it hands in.
 import itertools
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from decimal import Decimal
 
 import httpx
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
@@ -29,6 +31,7 @@ from app.application.sessions import SessionStore
 from app.application.turns import Turns
 from app.config import Config
 from app.container import Container
+from app.domain.earn import CatalogSnapshot, YieldPool
 from app.panel import NOTHING_DECIDED, PanelValues
 from app.settings import Settings
 
@@ -72,6 +75,39 @@ class Confirmations:
         if self.decision is None:
             raise AssertionError("no confirmation expected on this path")
         return ConfirmationDecision(decision=self.decision, reason="stubbed")
+
+
+class NoCatalog:
+    """The earn catalog in a test that must never reach it."""
+
+    async def best_pools(self, token, limit):
+        raise AssertionError(f"the catalog was asked about {token or 'everything'}")
+
+
+class Catalog:
+    """A catalog with one option in it, enough for a branch to answer from."""
+
+    def __init__(self, *pools: YieldPool) -> None:
+        self.pools = pools or (
+            YieldPool(
+                id="sol:kamino:vault:AAA",
+                name="Steakhouse USDC",
+                protocol="kamino",
+                kind="vault",
+                token="USDC",
+                apy_net=Decimal("0.0512"),
+                apy_base=Decimal("0.0480"),
+                apy_rewards=Decimal("0.0032"),
+                apy_incentives=Decimal("0"),
+                tvl_usd=Decimal("42000000"),
+                url="https://kamino.com/earn/lend/AAA",
+            ),
+        )
+        self.asked: list[tuple[str | None, int]] = []
+
+    async def best_pools(self, token, limit) -> CatalogSnapshot:
+        self.asked.append((token, limit))
+        return CatalogSnapshot(pools=self.pools, as_of=datetime(2026, 9, 18, 12, 0, tzinfo=UTC))
 
 
 class NoHost:
@@ -150,6 +186,7 @@ def agent(
     confirmation: str | None = None,
     intents=None,
     confirmations=None,
+    catalog=None,
     settings: Settings | None = None,
     panel: PanelValues = NOTHING_DECIDED,
 ) -> LangGraphAgent:
@@ -159,6 +196,7 @@ def agent(
     return LangGraphAgent(
         config,
         portfolio if portfolio is not None else NoHost(),
+        catalog if catalog is not None else NoCatalog(),
         models_of(model if model is not None else fake_model("answered"), settings),
         intents if intents is not None else Intents(intent),
         confirmations if confirmations is not None else Confirmations(confirmation),
@@ -171,6 +209,7 @@ def container(
     portfolio=None,
     intent: str = "general",
     confirmation: str | None = None,
+    catalog=None,
     door=None,
     limiter=None,
     allowance=None,
@@ -190,12 +229,14 @@ def container(
     # Generous by default: most tests ask far more than five questions.
     meter = limiter if limiter is not None else WindowRateLimiter(1000, 60, counters)
     purse = allowance if allowance is not None else WindowAllowance(1000, 60, counters)
-    bot = LangGraphAgent(config, host, models, Intents(intent), Confirmations(confirmation))
+    shelf = catalog if catalog is not None else NoCatalog()
+    bot = LangGraphAgent(config, host, shelf, models, Intents(intent), Confirmations(confirmation))
     return Container(
         settings=settings,
         panel=panel,
         config=config,
         portfolio=host,
+        catalog=shelf,
         identity=who,
         store=kept,
         sessions=sessions,

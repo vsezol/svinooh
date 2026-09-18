@@ -174,6 +174,16 @@ The routing ladder (D7/D8) — each step builds on the previous:
   from the full series; the model narrates five computed lines. *Lesson: the
   agentic loop; tools with bodies; context injected by closure — the model
   chooses arguments, never identity.*
+- **E1 — where to put it.** A third intent, `earn`, and a branch of its own:
+  the catalog service (`apps/earn`) behind a port, one tool over it, and a
+  recommendation made by RISK before rate. The band is computed here rather
+  than read from the catalog — the catalog owns facts, a judgement about them
+  is ours — and it is printed with the reasons that produced it, so an answer
+  can say why one option is safer instead of asserting that it is. A visitor
+  gets the catalog with no identity asked for; a caller we can read is also
+  shown what they ALREADY earn, so the recommendation can be a move rather
+  than only a new deposit. *Lesson: a second neighbour costs a port, an
+  adapter and a node; opinions live where they can be argued with.*
 
 Then the independence milestones, unchanged in substance:
 

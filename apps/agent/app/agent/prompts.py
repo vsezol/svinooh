@@ -115,6 +115,29 @@ def grounded_prompt(base: str, portfolio: Portfolio, max_positions: int) -> str:
     return f"{base}\n\nThe user is looking at this portfolio right now:\n{shown}"
 
 
+def earn_prompt(base: str, already_earning: str = "") -> str:
+    """For a question about where to put money. Rank by risk, quote only tools."""
+    rules = (
+        f"{base}\n\nThe user is asking where to put money to work. Recommend only "
+        "pools your tools returned, and never name a pool, protocol or rate that "
+        "did not come from one. Rank by risk before rate: lead with the safest "
+        "that still pays reasonably, and offer a higher rate as the trade it is, "
+        "naming the reason for its band. Two or three options is an answer; the "
+        "whole list is a spreadsheet. Never promise a rate will hold, and say "
+        "plainly that a deposit goes into a third-party protocol — the money is "
+        "at risk there, not with svinooh."
+    )
+    if not already_earning:
+        return rules
+    return (
+        f"{rules}\n\nWhat the user already has earning, so a recommendation can be "
+        "a MOVE and not only a new deposit. Compare the rates, name what moving "
+        "would gain, and say when it is not worth it — moving costs fees and puts "
+        "the money in a different protocol's hands:\n"
+        f"{already_earning}"
+    )
+
+
 def degraded_prompt(base: str) -> str:
     """When the portfolio API did not answer: say so, so the model does not guess."""
     return (

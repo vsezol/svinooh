@@ -20,11 +20,14 @@ Two rules hold everywhere here:
 """
 
 import logging
+from decimal import Decimal
 
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
 
+from ..adapters.earn import YieldCatalog
 from ..adapters.portfolio import DataSource
+from ..domain.earn import CatalogSnapshot, YieldPool
 from ..domain.portfolio import History, Period, Portfolio, total_of
 from ..observability import metrics
 from .context import position_line, short_address, usd
@@ -33,6 +36,9 @@ from .steps import step, tool_label
 logger = logging.getLogger("svinooh-ai")
 
 MAX_MATCHES = 30
+
+#: A chat answer is read, not scrolled — past a handful it is a spreadsheet.
+MAX_OPTIONS = 8
 
 
 def summarize_history(history: History, period: str) -> str:
@@ -77,6 +83,75 @@ def find_positions(portfolio: Portfolio, query: str) -> str:
         for match in matches[:MAX_MATCHES]
     ]
     return "\n".join([head, *lines])
+
+
+def earn_tools(catalog: YieldCatalog) -> list:
+    """The catalog, as the one tool the earn branch reasons with."""
+
+    @tool
+    async def earn_options(token: str = "") -> str:
+        """Places that pay for a deposit of one token, best rate first.
+
+        Call whenever the user asks where to put money, what to earn on, which
+        rate a token gets, or how to make idle funds work. Pass one ticker —
+        USDC, SOL, PYUSD — to narrow it to that token; leave it empty for the
+        best rates across every token. Returns each pool's rate split by where
+        it comes from, how much is deposited, and a risk band with its reasons.
+        """
+        ticker = token.strip().upper()
+        return describe_pools(await catalog.best_pools(ticker or None, MAX_OPTIONS), ticker)
+
+    return [earn_options]
+
+
+def describe_pools(snapshot: CatalogSnapshot, asked_for: str) -> str:
+    """The catalog as the lines the model quotes: same four facts per pool."""
+    if not snapshot.pools:
+        asked = f" for {asked_for}" if asked_for else ""
+        return (
+            f"The catalog has nothing{asked} right now. Say so plainly; do not "
+            "substitute a token that was not asked about."
+        )
+    read_at = snapshot.as_of.isoformat(timespec="minutes") if snapshot.as_of else "an unknown time"
+    stale = " The catalog could not be refreshed, so these rates are older than usual."
+    lines = [f"Read at {read_at}.{stale if snapshot.stale else ''}"]
+    for pool in snapshot.pools:
+        reasons = "; ".join(pool.risk_reasons)
+        lines.append(
+            f"- {pool.name} ({pool.protocol} {pool.kind}) pays "
+            f"{as_percent(pool.apy_net)} net on {pool.token} = {rate_breakdown(pool)}. "
+            f"{as_money(pool.tvl_usd)} deposited. Risk {pool.risk}"
+            f"{f': {reasons}' if reasons else ''}. id {pool.id}"
+        )
+    lines.append(
+        "Quote the net rate, name the risk in words with its reason, and never "
+        "promise a rate will hold — base is what borrowers pay, the rest ends."
+    )
+    return "\n".join(lines)
+
+
+def rate_breakdown(pool: YieldPool) -> str:
+    """Where the rate comes from, naming only the parts that pay anything."""
+    parts = [f"{as_percent(pool.apy_base)} base"]
+    if pool.apy_rewards > 0:
+        parts.append(f"{as_percent(pool.apy_rewards)} rewards")
+    if pool.apy_incentives > 0:
+        parts.append(f"{as_percent(pool.apy_incentives)} incentives")
+    return " + ".join(parts)
+
+
+def as_percent(value: Decimal) -> str:
+    """A fraction as the percentage a person reads: 0.0508 is 5.08%."""
+    return f"{value * 100:.2f}%"
+
+
+def as_money(value: Decimal) -> str:
+    """A size at the magnitude that carries the meaning: $4.9M, $850k."""
+    if value >= 1_000_000:
+        return f"${value / 1_000_000:,.1f}M"
+    if value >= 1_000:
+        return f"${value / 1_000:,.0f}k"
+    return f"${value:,.0f}"
 
 
 def portfolio_tools(source: DataSource, slug: str, token: str | None, portfolio: Portfolio) -> list:
@@ -141,6 +216,9 @@ def tool_phrase(name: str, args: dict) -> str | None:
     if name == "position_details":
         query = str(args.get("query", "")).strip()
         return f"Looking up {query}" if query else None
+    if name == "earn_options":
+        token = str(args.get("token", "")).strip().upper()
+        return f"Reading where {token} can earn" if token else "Reading where money can earn"
     return None
 
 

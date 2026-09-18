@@ -12,7 +12,7 @@ from app.domain.conversation import Turn
 from app.domain.portfolio import Me, PortfolioRef
 from app.ports import Ask, Failed, Finished, Progress
 from tests import fixtures as fx
-from tests.support import agent
+from tests.support import Catalog, agent
 
 
 class Api:
@@ -88,11 +88,18 @@ class Model:
         return Reply()
 
 
-def wire(*, intent="portfolio", confirmation=None, api=None, model=None):
+def wire(*, intent="portfolio", confirmation=None, api=None, model=None, catalog=None):
     """The real graph over doubles; hands back all three so a test can look."""
     api = api or Api()
     model = model or Model()
-    return agent(model=model, portfolio=api, intent=intent, confirmation=confirmation), api, model
+    bot = agent(
+        model=model,
+        portfolio=api,
+        intent=intent,
+        confirmation=confirmation,
+        catalog=catalog,
+    )
+    return bot, api, model
 
 
 async def run(bot, **state):
@@ -165,6 +172,52 @@ class TestRouting:
         bot = agent(model=Model(), portfolio=Api(), intents=Broken())
         out = await run(bot, portfolio="p", authorization="Bearer T")
         assert out["intent"] == "portfolio" and out["route"] == "grounded"
+
+
+#: What the model asking "where can USDC earn" looks like on the wire.
+EARN_CALL = {"name": "earn_options", "args": {"token": "USDC"}, "id": "e1"}
+
+
+class TestWhereToPutMoney:
+    """The earn branch: the catalog is the inventory, the portfolio is the baseline."""
+
+    async def test_the_catalog_is_asked(self):
+        shelf = Catalog()
+        bot, _, _ = wire(intent="earn", catalog=shelf, model=Model(tool_calls=[EARN_CALL]))
+        out = await run(bot)
+        assert out["intent"] == "earn" and shelf.asked == [("USDC", 8)]
+
+    async def test_what_is_already_earning_is_in_the_prompt_to_beat(self):
+        bot, api, model = wire(
+            intent="earn", catalog=Catalog(), model=Model(tool_calls=[EARN_CALL])
+        )
+        await run(bot, portfolio="on-screen", authorization="Bearer T")
+        assert ("portfolio", "on-screen", "Bearer T") in api.calls
+        assert "already has earning" in model.prompts[0], "a recommendation can be a move"
+
+    async def test_a_portfolio_that_will_not_answer_still_gets_advice(self):
+        bot, _, model = wire(
+            intent="earn",
+            catalog=Catalog(),
+            api=Api(refuse=True),
+            model=Model(tool_calls=[EARN_CALL]),
+        )
+        out = await run(bot, portfolio="on-screen", authorization="Bearer T")
+        assert out["answer"] == "answered"
+        assert "already has earning" not in model.prompts[0]
+
+    async def test_the_branch_answers_from_what_the_catalog_said(self):
+        bot, _, model = wire(intent="earn", catalog=Catalog(), model=Model(tool_calls=[EARN_CALL]))
+        await run(bot)
+        said = model.seen[-1].content
+        assert "Steakhouse USDC" in said and "Risk low" in said, "the tool result reached the model"
+
+    async def test_a_visitor_is_answered_without_being_asked_who_they_are(self):
+        shelf = Catalog()
+        bot, api, _ = wire(intent="earn", catalog=shelf, model=Model(tool_calls=[EARN_CALL]))
+        out = await run(bot)
+        assert out["answer"] == "answered" and api.calls == []
+        assert shelf.asked, "a visitor gets the catalog, not a sign-in wall"
 
 
 class TestTools:
