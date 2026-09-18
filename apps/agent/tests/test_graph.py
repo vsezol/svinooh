@@ -12,7 +12,7 @@ from app.domain.conversation import Turn
 from app.domain.portfolio import Me, PortfolioRef
 from app.ports import Ask, Failed, Finished, Progress
 from tests import fixtures as fx
-from tests.support import agent
+from tests.support import Catalog, agent
 
 
 class Api:
@@ -88,11 +88,18 @@ class Model:
         return Reply()
 
 
-def wire(*, intent="portfolio", confirmation=None, api=None, model=None):
+def wire(*, intent="portfolio", confirmation=None, api=None, model=None, catalog=None):
     """The real graph over doubles; hands back all three so a test can look."""
     api = api or Api()
     model = model or Model()
-    return agent(model=model, portfolio=api, intent=intent, confirmation=confirmation), api, model
+    bot = agent(
+        model=model,
+        portfolio=api,
+        intent=intent,
+        confirmation=confirmation,
+        catalog=catalog,
+    )
+    return bot, api, model
 
 
 async def run(bot, **state):
@@ -165,6 +172,35 @@ class TestRouting:
         bot = agent(model=Model(), portfolio=Api(), intents=Broken())
         out = await run(bot, portfolio="p", authorization="Bearer T")
         assert out["intent"] == "portfolio" and out["route"] == "grounded"
+
+
+#: What the model asking "where can USDC earn" looks like on the wire.
+EARN_CALL = {"name": "earn_options", "args": {"token": "USDC"}, "id": "e1"}
+
+
+class TestWhereToPutMoney:
+    """The earn branch: the catalog answers, and nobody's portfolio is read."""
+
+    async def test_it_goes_to_the_catalog_and_not_to_the_portfolio(self):
+        shelf = Catalog()
+        bot, api, _ = wire(intent="earn", catalog=shelf, model=Model(tool_calls=[EARN_CALL]))
+        out = await run(bot, portfolio="on-screen", authorization="Bearer T")
+        assert out["intent"] == "earn"
+        assert api.calls == [], "where to put money is not a question about what is held"
+        assert shelf.asked == [("USDC", 8)]
+
+    async def test_the_branch_answers_from_what_the_catalog_said(self):
+        bot, _, model = wire(intent="earn", catalog=Catalog(), model=Model(tool_calls=[EARN_CALL]))
+        await run(bot)
+        said = model.seen[-1].content
+        assert "Steakhouse USDC" in said and "Risk low" in said, "the tool result reached the model"
+
+    async def test_a_visitor_with_no_account_is_answered_the_same_way(self):
+        shelf = Catalog()
+        bot, api, _ = wire(intent="earn", catalog=shelf, model=Model(tool_calls=[EARN_CALL]))
+        out = await run(bot)
+        assert out["answer"] == "answered" and api.calls == []
+        assert shelf.asked, "a visitor gets the catalog, not a sign-in wall"
 
 
 class TestTools:

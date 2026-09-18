@@ -20,11 +20,14 @@ Two rules hold everywhere here:
 """
 
 import logging
+from decimal import Decimal
 
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
 
+from ..adapters.earn import YieldCatalog
 from ..adapters.portfolio import DataSource
+from ..domain.earn import Listing, Option
 from ..domain.portfolio import History, Period, Portfolio, total_of
 from ..observability import metrics
 from .context import position_line, short_address, usd
@@ -33,6 +36,11 @@ from .steps import step, tool_label
 logger = logging.getLogger("svinooh-ai")
 
 MAX_MATCHES = 30
+
+#: How many places to offer. A chat answer is read, not scrolled: past a
+#: handful the list stops being a recommendation and becomes a table somebody
+#: has to work through themselves.
+MAX_OPTIONS = 8
 
 
 def summarize_history(history: History, period: str) -> str:
@@ -77,6 +85,93 @@ def find_positions(portfolio: Portfolio, query: str) -> str:
         for match in matches[:MAX_MATCHES]
     ]
     return "\n".join([head, *lines])
+
+
+def _rate(value: Decimal) -> str:
+    """A fraction as the percentage a person reads: 0.0508 is 5.08%."""
+    return f"{value * 100:.2f}%"
+
+
+def _size(value: Decimal) -> str:
+    """Deposited size, at the magnitude that carries the meaning."""
+    if value >= 1_000_000:
+        return f"${value / 1_000_000:,.1f}M"
+    if value >= 1_000:
+        return f"${value / 1_000:,.0f}k"
+    return f"${value:,.0f}"
+
+
+def _split(option: Option) -> str:
+    """What the rate is made of, naming only the parts that pay anything.
+
+    Printing every part would put "0.00% rewards" in most lines; flattening
+    them into one number would hide that a rate is a programme. So the parts
+    that are zero are simply not mentioned.
+    """
+    parts = [f"{_rate(option.apy_base)} base"]
+    if option.apy_rewards > 0:
+        parts.append(f"{_rate(option.apy_rewards)} rewards")
+    if option.apy_incentives > 0:
+        parts.append(f"{_rate(option.apy_incentives)} incentives")
+    return " + ".join(parts)
+
+
+def earn_lines(listing: Listing, asked_for: str) -> str:
+    """The catalog as the lines the model will quote.
+
+    Every line carries the same four things — what it is, what it pays, how big
+    it is, and what is risky about it — so a model comparing two of them is
+    comparing like with like. The caveats are printed rather than summed into
+    the band alone: a person can argue with "thin: under $5M deposited" and
+    cannot argue with "medium".
+    """
+    if not listing.options:
+        asked = f" for {asked_for}" if asked_for else ""
+        return (
+            f"The catalog has nothing{asked} right now. Say so plainly; do not "
+            "substitute a token that was not asked about."
+        )
+    read_at = listing.as_of.isoformat(timespec="minutes") if listing.as_of else "an unknown time"
+    stale = (
+        " The catalog could not be refreshed, so these rates are older than usual."
+        if listing.stale
+        else ""
+    )
+    lines = [f"Read at {read_at}.{stale}"]
+    for option in listing.options:
+        caveats = "; ".join(option.caveats)
+        split = _split(option)
+        lines.append(
+            f"- {option.name} ({option.protocol} {option.kind}) pays "
+            f"{_rate(option.apy_net)} net on {option.token} = {split}. "
+            f"{_size(option.tvl_usd)} deposited. Risk {option.risk}"
+            f"{f': {caveats}' if caveats else ''}. id {option.id}"
+        )
+    lines.append(
+        "Quote the net rate, name the risk in words with its reason, and never "
+        "promise a rate will hold — base is what borrowers pay, rewards end."
+    )
+    return "\n".join(lines)
+
+
+def earn_tools(catalog: YieldCatalog) -> list:
+    """The catalog, as the one tool the earn branch reasons with."""
+
+    @tool
+    async def earn_options(token: str = "") -> str:
+        """Places that pay for a deposit of one token, best rate first.
+
+        Call whenever the user asks where to put money, what to earn on, which
+        rate a token gets, or how to make idle funds work. Pass one ticker —
+        USDC, SOL, PYUSD — to narrow it to that token; leave it empty for the
+        best rates across every token. Returns the rate split into what
+        borrowers pay and what a reward programme pays, how much is deposited,
+        and a risk band with the reasons behind it.
+        """
+        listing = await catalog.options(token.strip().upper() or None, MAX_OPTIONS)
+        return earn_lines(listing, token.strip().upper())
+
+    return [earn_options]
 
 
 def portfolio_tools(source: DataSource, slug: str, token: str | None, portfolio: Portfolio) -> list:
@@ -141,6 +236,9 @@ def tool_phrase(name: str, args: dict) -> str | None:
     if name == "position_details":
         query = str(args.get("query", "")).strip()
         return f"Looking up {query}" if query else None
+    if name == "earn_options":
+        token = str(args.get("token", "")).strip().upper()
+        return f"Reading where {token} can earn" if token else "Reading where money can earn"
     return None
 
 
