@@ -32,6 +32,10 @@ export function secs(ms: number): string {
  * side's rather than the service's on purpose — what somebody watching wants
  * to know is how long they have been waiting, and a line that sits there with
  * a spinner and no number is the thing that reads as frozen.
+ *
+ * A call that failed stays failed. Folding it into "done" drew a tick over a
+ * tool that never answered, and the model's retry underneath it read as the
+ * same work done twice.
  */
 export function traceOf(steps: StepEvent[], collapsed: boolean, now: number): TraceBlock {
   const ms = steps.reduce((sum, step) => sum + (step.ms ?? 0), 0);
@@ -41,9 +45,11 @@ export function traceOf(steps: StepEvent[], collapsed: boolean, now: number): Tr
     kind: 'trace',
     collapsed,
     summary: `${steps.length} ${steps.length === 1 ? 'step' : 'steps'} · ${secs(ms)}`,
+    failed: steps.some((step) => step.state === 'failed'),
     steps: steps.map((step) => ({
       label: step.label ?? step.id,
-      state: step.state === 'running' ? 'running' : 'done',
+      state: step.state,
+      detail: step.detail,
       time: step.ms === undefined ? running(step) : secs(step.ms),
     })),
   };

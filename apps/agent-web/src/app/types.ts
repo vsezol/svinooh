@@ -64,9 +64,16 @@ export interface NoteBlock {
  */
 export interface TraceBlock {
   kind: 'trace';
-  steps: { label: string; state: 'waiting' | 'running' | 'done'; time?: string }[];
+  steps: {
+    label: string;
+    state: 'waiting' | 'running' | 'done' | 'failed';
+    detail?: string;
+    time?: string;
+  }[];
   /** Once folded: "3 steps · 1.9s" */
   summary: string;
+  /** Whether anything in it failed — the folded line says so too. */
+  failed?: boolean;
   collapsed: boolean;
 }
 

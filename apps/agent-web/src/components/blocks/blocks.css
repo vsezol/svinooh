@@ -481,6 +481,12 @@
   color: var(--text);
 }
 
+/* A call that failed says so on its own line, or the retry under it reads as
+   the same work done twice. */
+.sv-a-b-trace-row[data-state='failed'] {
+  color: var(--down);
+}
+
 .sv-a-b-trace-mark {
   width: 14px;
   height: 14px;
@@ -506,8 +512,25 @@
   background: var(--line2);
 }
 
-.sv-a-b-trace-label {
+.sv-a-b-trace-said {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sv-a-b-trace-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* What the operation found, under what it was. Its own line because the card
+   is 380 wide: beside the label, both ended in ellipses and the name of the
+   portfolio being read — the concrete part — was the half that was cut. */
+.sv-a-b-trace-detail {
+  color: var(--mut);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

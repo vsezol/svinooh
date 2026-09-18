@@ -20,10 +20,25 @@ nobody. That is why every node can use it without asking which path it is on.
 import logging
 import time
 from contextlib import asynccontextmanager, contextmanager
+from contextvars import ContextVar
 
 from langgraph.config import get_stream_writer
 
 logger = logging.getLogger("svinooh-ai")
+
+_running: ContextVar[dict | None] = ContextVar("running_step", default=None)
+
+
+def said(detail: str) -> None:
+    """What the operation running right now found, closed onto its own line.
+
+    Called by the operation itself, once it knows: eight pools, fourteen
+    positions. Outside a step it does nothing, which is what lets a tool report
+    without knowing whether anybody is watching.
+    """
+    box = _running.get()
+    if box is not None:
+        box["detail"] = detail
 
 
 def _writer():
@@ -48,13 +63,21 @@ def _say(event: dict) -> None:
 def _timed(key: str, label: str):
     """The shared body: announce, time, and close with what actually happened."""
     _say({"id": key, "label": label, "state": "running"})
+    found: dict = {}
+    token = _running.set(found)
     started = time.monotonic()
     try:
         yield
     except Exception:
-        _say({"id": key, "state": "failed", "ms": round((time.monotonic() - started) * 1000)})
+        _say({"id": key, "state": "failed", "ms": _ms(started), **found})
         raise
-    _say({"id": key, "state": "done", "ms": round((time.monotonic() - started) * 1000)})
+    finally:
+        _running.reset(token)
+    _say({"id": key, "state": "done", "ms": _ms(started), **found})
+
+
+def _ms(started: float) -> int:
+    return round((time.monotonic() - started) * 1000)
 
 
 @asynccontextmanager

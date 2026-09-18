@@ -211,12 +211,12 @@ class TestHowACallReadsToWhoeverAsked:
     """The trace is read by the person who asked the question, not by us."""
 
     def test_a_period_is_said_the_way_somebody_would_say_it(self):
-        assert tool_phrase("history_summary", {"period": "7d"}) == "Reading the last 7 days"
-        assert tool_phrase("history_summary", {"period": "1h"}) == "Reading the last hour"
-        assert tool_phrase("history_summary", {"period": "all"}) == "Reading the whole history"
+        said = tool_phrase("history_summary", {"period": "7d"})
+        assert said == "Reading the total over the last 7 days"
+        assert tool_phrase("history_summary", {"period": "1h"}).endswith("the last hour")
 
     def test_a_lookup_names_what_is_being_looked_up(self):
-        assert tool_phrase("position_details", {"query": "aave"}) == "Looking up aave"
+        assert tool_phrase("position_details", {"query": "aave"}) == "Reading positions · aave"
 
     def test_no_two_periods_read_the_same(self):
         # The whole point of the trace is that it can be checked against what

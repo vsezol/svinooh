@@ -98,6 +98,15 @@ def _composition(position: Position) -> str | None:
     return " + ".join(parts) if parts else None
 
 
+def positions_read(portfolio: Portfolio) -> str:
+    """What a portfolio read came back with, for the line reporting it."""
+    networks = {p.network for p in portfolio.positions if p.network}
+    if not portfolio.positions:
+        return "nothing held"
+    kinds = f"{len(networks)} networks" if len(networks) > 1 else f"{len(networks)} network"
+    return f"{len(portfolio.positions)} positions · {kinds}"
+
+
 def earning_lines(portfolio: Portfolio, limit: int = 10) -> str:
     """The positions already paying a rate, biggest first. Empty when none are."""
     earning = sorted(

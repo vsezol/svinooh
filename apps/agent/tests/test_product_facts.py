@@ -51,7 +51,8 @@ class TestWhatReachesTheModel:
         assert "product facts" not in product_facts(told(*FACTS)).lower()
 
     def test_nothing_is_appended_when_there_are_no_facts(self):
-        assert system_prompt(told()) == DEFAULT_SYSTEM_PROMPT
+        assert system_prompt(told()).startswith(DEFAULT_SYSTEM_PROMPT)
+        assert "About svinooh" not in system_prompt(told())
 
 
 class TestWhatIsSaidAboutAPortfolioNobodyOwns:

@@ -179,8 +179,8 @@ class TestWhatTheModelReads:
         assert asked == [None]
 
     def test_the_trace_says_what_it_went_looking_for(self):
-        assert tool_phrase("earn_options", {"token": "usdc"}) == "Reading where USDC can earn"
-        assert tool_phrase("earn_options", {}) == "Reading where money can earn"
+        assert tool_phrase("earn_options", {"token": "usdc"}) == "Reading lending rates · USDC"
+        assert tool_phrase("earn_options", {}) == "Reading lending rates"
 
 
 def _source(payload: dict, seen: dict | None = None) -> EarnApiSource:

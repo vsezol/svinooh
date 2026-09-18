@@ -111,6 +111,8 @@ export interface StepEvent {
   id: string;
   label?: string;
   state: 'running' | 'done' | 'failed';
+  /** What the operation found, once it knows: "8 pools · best 16.91%". */
+  detail?: string;
   /** How long it took, from the service, once it is over. */
   ms?: number;
   /**

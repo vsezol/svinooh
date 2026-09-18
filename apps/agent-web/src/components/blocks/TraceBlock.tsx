@@ -6,6 +6,12 @@ const Tick = () => (
   </svg>
 );
 
+const Cross = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--down)" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+);
+
 const Chevron = () => (
   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M9 6l6 6-6 6" />
@@ -35,7 +41,7 @@ export default function TraceBlockView({
   if (block.collapsed) {
     return (
       <button type="button" className="sv-a-b-trace-sum mono" onClick={onToggle}>
-        <Tick />
+        {block.failed ? <Cross /> : <Tick />}
         <span>{block.summary}</span>
         <Chevron />
       </button>
@@ -48,10 +54,14 @@ export default function TraceBlockView({
         <div key={i} className="sv-a-b-trace-row mono" data-state={step.state}>
           <span className="sv-a-b-trace-mark">
             {step.state === 'done' ? <Tick /> : null}
+            {step.state === 'failed' ? <Cross /> : null}
             {step.state === 'running' ? <span className="sv-a-b-trace-spin" /> : null}
             {step.state === 'waiting' ? <span className="sv-a-b-trace-dot" /> : null}
           </span>
-          <span className="sv-a-b-trace-label">{step.label}</span>
+          <span className="sv-a-b-trace-said">
+            <span className="sv-a-b-trace-label">{step.label}</span>
+            {step.detail ? <span className="sv-a-b-trace-detail">{step.detail}</span> : null}
+          </span>
           {step.time ? <span className="sv-a-b-trace-time">{step.time}</span> : null}
         </div>
       ))}

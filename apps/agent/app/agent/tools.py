@@ -31,7 +31,7 @@ from ..domain.earn import CatalogSnapshot, YieldPool
 from ..domain.portfolio import History, Period, Portfolio, total_of
 from ..observability import metrics
 from .context import position_line, short_address, usd
-from .steps import step, tool_label
+from .steps import said, step, tool_label
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -45,7 +45,9 @@ def summarize_history(history: History, period: str) -> str:
     """A period's change, said in the words the model will quote."""
     change = history.change(period)
     if change is None:
+        said("not enough history")
         return "Not enough history recorded for this period yet."
+    said(f"{len(change.readings)} readings · {change.percent:+.1f}%")
     return (
         f"Period {period}: {len(change.readings)} readings.\n"
         f"Start {usd(change.first.usd)} at {change.first.at} -> "
@@ -64,6 +66,7 @@ def find_positions(portfolio: Portfolio, query: str) -> str:
     if not query.strip():
         return "Empty query."
     matches = portfolio.matching(query)
+    said(f"{len(matches)} matched" if matches else "nothing matched")
     if not matches:
         # A miss names what IS there, so the model's next guess is informed
         # rather than another word from the same question.
@@ -106,6 +109,7 @@ def earn_tools(catalog: YieldCatalog) -> list:
 
 def describe_pools(snapshot: CatalogSnapshot, asked_for: str) -> str:
     """The catalog as the lines the model quotes: same four facts per pool."""
+    said(pools_found(snapshot))
     if not snapshot.pools:
         asked = f" for {asked_for}" if asked_for else ""
         return (
@@ -128,6 +132,14 @@ def describe_pools(snapshot: CatalogSnapshot, asked_for: str) -> str:
         "promise a rate will hold — base is what borrowers pay, the rest ends."
     )
     return "\n".join(lines)
+
+
+def pools_found(snapshot: CatalogSnapshot) -> str:
+    """What the catalog answered with, for the line the reader is watching."""
+    if not snapshot.pools:
+        return "nothing listed"
+    pools = f"{len(snapshot.pools)} pools" if len(snapshot.pools) > 1 else "1 pool"
+    return f"{pools} · best {as_percent(max(pool.apy_net for pool in snapshot.pools))}"
 
 
 def rate_breakdown(pool: YieldPool) -> str:
@@ -212,13 +224,13 @@ def tool_phrase(name: str, args: dict) -> str | None:
     """
     if name == "history_summary":
         period = str(args.get("period", ""))
-        return f"Reading {_PERIODS[period]}" if period in _PERIODS else None
+        return f"Reading the total over {_PERIODS[period]}" if period in _PERIODS else None
     if name == "position_details":
         query = str(args.get("query", "")).strip()
-        return f"Looking up {query}" if query else None
+        return f"Reading positions · {query}" if query else None
     if name == "earn_options":
         token = str(args.get("token", "")).strip().upper()
-        return f"Reading where {token} can earn" if token else "Reading where money can earn"
+        return f"Reading lending rates · {token}" if token else "Reading lending rates"
     return None
 
 
