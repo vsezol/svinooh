@@ -171,6 +171,8 @@ export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPositio
         // because DeBank happened to report the health factor first
         patch.loan = { market: loan.market, token: loan.token };
         if (position.healthRate == null) patch.healthRate = loan.healthFactor;
+        const before = position.tokens ?? [];
+        let tokens = before;
         // The rate REPLACES the aggregator's, the same way a pool's own tick
         // replaces the inferred range: what a loan costs is the lending
         // protocol's own number, and the one time the two were compared the
@@ -181,12 +183,20 @@ export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPositio
           patch.borrowApy = rate;
           // The borrowed LEG carries its own rate too — it is what the row's
           // "USDT · 8.1%" label is printed from — so it takes the same truth
-          patch.tokens = (position.tokens ?? []).map((t) =>
+          tokens = tokens.map((t) =>
             t.role === 'borrow' && t.symbol.trim().toUpperCase() === loan.token
               ? { ...t, apy: rate }
               : t,
           );
         }
+        const supplied = loan.supplyRates;
+        if (supplied) {
+          tokens = tokens.map((t) => {
+            const rate = supplied[t.symbol.trim().toUpperCase()];
+            return t.role === 'supply' && typeof rate === 'number' ? { ...t, apy: rate / 100 } : t;
+          });
+        }
+        if (tokens !== before) patch.tokens = tokens;
       }
     }
 

@@ -308,6 +308,39 @@ describe('enrich — what a loan costs is the lending protocol\'s own number', (
     assert.equal((p.tokens ?? []).find((t) => t.role === 'supply')!.apy, undefined);
   });
 
+  test('each supplied asset earns its own rate, from the protocol itself', () => {
+    const [p] = enrich(
+      [
+        borrower({
+          apy: null,
+          tokens: [
+            leg('cbBTC', 'supply', 10_424),
+            leg('SOL', 'supply', 4_354),
+            leg('USDT', 'borrow', -4_200),
+          ],
+        }),
+      ],
+      facts([loanFact({ supplyRates: { CBBTC: 0.0032, SOL: 5.84 } })]),
+    );
+    const bySymbol = new Map((p.tokens ?? []).map((t) => [t.symbol, t.apy]));
+    assert.equal(bySymbol.get('cbBTC'), 0.000032);
+    assert.equal(bySymbol.get('SOL'), 0.0584);
+    assert.equal(bySymbol.get('USDT'), 0.0501);
+    assert.equal(p.apy, null);
+  });
+
+  test('a supplied asset the protocol said nothing about keeps no rate', () => {
+    const [p] = enrich(
+      [
+        borrower({
+          tokens: [leg('JUP', 'supply', 900), leg('USDT', 'borrow', -100)],
+        }),
+      ],
+      facts([loanFact({ supplyRates: { SOL: 5.84 } })]),
+    );
+    assert.equal((p.tokens ?? []).find((t) => t.symbol === 'JUP')!.apy, undefined);
+  });
+
   test('no matching fact leaves the aggregator rate alone', () => {
     const [p] = enrich(
       [borrower({ borrowApy: 0.0807, tokens: [{ ...leg('USDC', 'borrow', -100), apy: 0.0807 }] })],
