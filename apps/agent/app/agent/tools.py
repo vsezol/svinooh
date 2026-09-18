@@ -37,9 +37,6 @@ logger = logging.getLogger("svinooh-ai")
 
 MAX_MATCHES = 30
 
-#: Handed to the model in place of a result when a call fails. A failure it is
-#: only told about is a gap it fills: the answer that started this said the
-#: tool was unavailable and then quoted a rate anyway.
 NOTHING_CAME_BACK = (
     "This call failed, so you have nothing from it. Say plainly that you could "
     "not read this right now, name no figure that would have come from it, and "
@@ -144,7 +141,6 @@ def describe_pools(snapshot: CatalogSnapshot, asked_for: str) -> str:
 
 
 def pools_found(snapshot: CatalogSnapshot) -> str:
-    """What the catalog answered with, for the line the reader is watching."""
     if not snapshot.pools:
         return "nothing listed"
     pools = f"{len(snapshot.pools)} pools" if len(snapshot.pools) > 1 else "1 pool"

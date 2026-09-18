@@ -30,12 +30,6 @@ _running: ContextVar[dict | None] = ContextVar("running_step", default=None)
 
 
 def said(detail: str) -> None:
-    """What the operation running right now found, closed onto its own line.
-
-    Called by the operation itself, once it knows: eight pools, fourteen
-    positions. Outside a step it does nothing, which is what lets a tool report
-    without knowing whether anybody is watching.
-    """
     box = _running.get()
     if box is not None:
         box["detail"] = detail

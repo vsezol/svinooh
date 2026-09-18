@@ -72,7 +72,6 @@ export interface TraceBlock {
   }[];
   /** Once folded: "3 steps · 1.9s" */
   summary: string;
-  /** Whether anything in it failed — the folded line says so too. */
   failed?: boolean;
   collapsed: boolean;
 }

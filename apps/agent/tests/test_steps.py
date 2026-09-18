@@ -76,13 +76,6 @@ class TestWhatIsReported:
 
 
 class TestWhatCameBackIsOnTheLine:
-    """A line that only says an operation ran is half a receipt.
-
-    "Reading lending rates" for a second, and then what? Eight pools or none
-    is the difference between an answer and a retry, and the reader watching
-    the trace is the one who can tell.
-    """
-
     async def test_the_close_carries_what_the_operation_found(self, monkeypatch):
         seen = []
         import app.agent.steps as steps
@@ -111,8 +104,6 @@ class TestWhatCameBackIsOnTheLine:
         assert "detail" not in seen[-1]
 
     async def test_saying_it_outside_a_step_is_not_an_error(self):
-        # A tool is called by the model here and directly in tests; neither
-        # should have to know whether a step is wrapped around it.
         said("nobody is listening")
 
 

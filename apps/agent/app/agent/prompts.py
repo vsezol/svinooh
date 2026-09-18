@@ -83,8 +83,6 @@ NOTHING_IS_DONE_UNTIL_IT_IS = (
 )
 
 
-#: Appended to whatever prompt is in force, including one edited in the panel:
-#: a house rule that a prompt someone rewrites must not be able to lose.
 HOUSE_STYLE = (
     "Write plain text. No emoji anywhere — not as a bullet, not as a risk "
     "marker, not for tone. A table is fine when the answer is a comparison."

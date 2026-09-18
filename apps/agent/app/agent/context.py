@@ -99,12 +99,6 @@ def _composition(position: Position) -> str | None:
 
 
 def positions_read(portfolio: Portfolio, name_at_most: int = 3) -> str:
-    """What a portfolio read came back with, for the line reporting it.
-
-    The networks by name rather than counted: "3 networks" is a number, and
-    what the reader is checking is whether the thing they asked about was
-    looked at.
-    """
     if not portfolio.positions:
         return "nothing held"
     held = f"{len(portfolio.positions)} positions"

@@ -123,8 +123,6 @@ class TestWhereTheDialsComeFrom:
         assert system_prompt(configured(system_prompt="be terse")).startswith("be terse")
 
     def test_a_rewritten_prompt_still_carries_the_house_rules(self):
-        # The panel can replace every word of the prompt; it cannot replace
-        # the rules that hold whatever the prompt says.
         from app.agent.prompts import HOUSE_STYLE, system_prompt
 
         assert HOUSE_STYLE in system_prompt(configured(system_prompt="be terse"))

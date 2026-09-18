@@ -67,12 +67,6 @@ def test_stale_data_is_flagged():
 
 
 class TestWhatAReadOfThePortfolioSays:
-    """The line under "Reading portfolio · main", which a reader checks.
-
-    What they are checking is whether the thing they asked about was looked
-    at, so the networks are named rather than counted.
-    """
-
     def test_it_names_the_networks_it_found(self):
         said = positions_read(fx.as_portfolio())
         assert said.startswith(f"{len(fx.as_portfolio().positions)} positions · ")

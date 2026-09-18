@@ -194,9 +194,6 @@ class TestToolWiring:
         assert "failed" in messages[0].content and messages[0].tool_call_id == "c1"
 
     async def test_a_failure_says_what_it_means_rather_than_only_what_broke(self):
-        # An error on its own is a gap, and a gap is what gets filled: the
-        # answer that started this said the tool was unavailable and quoted a
-        # rate in the next sentence.
         tools = portfolio_tools(FakeSource(fail=True), "p", "t", fx.as_portfolio())
         messages = await run_tools(
             [{"name": "history_summary", "args": {"period": "7d"}, "id": "c1"}], tools

@@ -85,8 +85,6 @@ describe('WhatTheReceiptSays', () => {
 
 describe('WhatTheTraceSaysAboutFailure', () => {
   test('a call that failed keeps saying so', () => {
-    // It used to fold into "done": a tool that never answered was drawn with
-    // a tick, and the model's retry under it read as the same work twice.
     const block = traceOf([done('a', 100), failed('b', 33), done('c', 900)], false, 0);
     assert.deepEqual(
       block.steps.map((step) => step.state),
