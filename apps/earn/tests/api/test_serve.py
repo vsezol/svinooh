@@ -1,8 +1,4 @@
-"""The socket itself, because two deploys in a row died on it.
-
-The service was serving and the healthcheck never reached it: the probe comes
-from an IPv4 address, and a v6-only socket has nothing to say to one.
-"""
+"""The socket takes IPv4 callers too, which is what two failed deploys turned on."""
 import socket
 
 from earn.api.serve import listening_socket

@@ -9,7 +9,5 @@ COPY apps/earn/ ./
 RUN pip install --no-cache-dir .
 
 EXPOSE 3000
-# Served through earn/api/serve.py rather than the uvicorn CLI: the CLI can
-# bind one address family, and this service needs both — Railway's healthcheck
-# arrives over IPv4 and its private network resolves only AAAA.
+# Through serve.py, not the uvicorn CLI: the CLI binds one address family.
 CMD ["python", "-m", "earn.api.serve"]
