@@ -168,6 +168,35 @@ KAMINO = position(
     ],
 )
 
+AAVE_NAMELESS = position(
+    "AAVE-V3",
+    11_821.80,
+    name="Aave V3 (Lending)",
+    platform="aave3",
+    category="defi",
+    tokens=[
+        {
+            "role": "supply",
+            "symbol": "cbBTC",
+            "amount": 0.1188,
+            "priceUsd": 91_066.0,
+            "valueUsd": 10_818.65,
+            "apy": 0.0001,
+        },
+        {
+            "role": "supply",
+            "symbol": "",
+            "amount": None,
+            "priceUsd": None,
+            "valueUsd": 1_003.15,
+            "apy": 0.0,
+        },
+    ],
+)
+
+NAMELESS = position("", 1_003.15, network="eth", platform="aave3", category="defi")
+
+
 FLUID = position(
     "Fluid",
     10_187.88,

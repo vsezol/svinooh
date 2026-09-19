@@ -130,3 +130,39 @@ class TestPositionLine:
     def test_missing_fields_are_simply_absent(self):
         bare = fx.as_position(fx.position("X", 1.0, network="", platform=""))
         assert position_line(bare) == "X: $1.00"
+
+
+class TestWhatTheDataDoesNotName:
+    def test_a_leg_without_a_symbol_is_said_to_have_none(self):
+        held = fx.as_portfolio(fx.portfolio([fx.wallet(fx.EVM_ADDRESS, [fx.AAVE_NAMELESS])]))
+        line = earning_lines(held)
+        assert "unnamed token $1,003.15 at 0.00%" in line
+        assert "? $1,003.15" not in line
+
+    def test_a_position_without_a_symbol_is_said_to_have_none(self):
+        line = position_line(fx.as_position(fx.NAMELESS))
+        assert line.startswith("unnamed position: $1,003.15")
+        assert "?" not in line
+
+    def test_a_position_that_pays_without_a_rate_of_its_own_quotes_no_rate(self):
+        rewarding = fx.position(
+            "REWARD",
+            500.0,
+            platform="somewhere",
+            tokens=[{"role": "reward", "symbol": "ARB", "valueUsd": 5.0, "apy": 0.1}],
+        )
+        held = fx.as_portfolio(fx.portfolio([fx.wallet(fx.EVM_ADDRESS, [rewarding])]))
+        assert "at 0.00%" not in earning_lines(held)
+
+
+class TestWhenTheBlockRunsOutOfRoom:
+    def test_the_last_line_is_a_whole_line(self):
+        block = portfolio_context(fx.as_portfolio(tail=300), 400)
+        assert len(block) <= 6000
+        assert block.splitlines()[-1].startswith("…and ")
+
+    def test_every_printed_position_is_printed_whole(self):
+        block = portfolio_context(fx.as_portfolio(tail=300), 400)
+        printed = [line for line in block.splitlines() if line.startswith("  - SMALL")]
+        assert printed
+        assert all(line.endswith(", eth") for line in printed)

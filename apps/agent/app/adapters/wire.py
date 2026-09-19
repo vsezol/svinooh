@@ -28,7 +28,7 @@ class Wire(BaseModel):
 
 
 class LegWire(Wire):
-    symbol: str = "?"
+    symbol: str = ""
     role: str = "supply"
     value_usd: float = 0.0
     amount: float | None = None
@@ -42,7 +42,7 @@ class BandWire(Wire):
 
 
 class PositionWire(Wire):
-    symbol: str = "?"
+    symbol: str = ""
     value_usd: float = 0.0
     name: str | None = None
     network: str | None = None
