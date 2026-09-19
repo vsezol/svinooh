@@ -94,6 +94,20 @@ export interface PositionDto {
   tokens?: PositionTokenDto[] | null;
 }
 
+export interface DepositBuildDto {
+  poolId: string;
+  amount: string;
+  owner: string;
+}
+
+export interface DepositBuiltDto {
+  transaction: string;
+  feePayer: string;
+  instructions: number;
+  blockhash: string;
+  lastValidBlockHeight: string;
+}
+
 export interface WalletDto {
   id: string;
   address: string;

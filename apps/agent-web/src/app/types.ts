@@ -90,17 +90,6 @@ export interface SignInBlock {
   pendingQuestion?: string;
 }
 
-export interface DepositAccounts {
-  programId: string;
-  address: string;
-  tokenMint: string;
-  tokenDecimals?: number | null;
-  sharesMint?: string | null;
-  sharesDecimals?: number | null;
-  tokenProgram?: string | null;
-  lendingMarket?: string | null;
-}
-
 export interface DepositBlock {
   kind: 'deposit';
   poolId: string;
@@ -113,7 +102,6 @@ export interface DepositBlock {
   apy: string;
   risk: string;
   url: string;
-  accounts: DepositAccounts;
 }
 
 export interface DepositRequest {
@@ -124,7 +112,6 @@ export interface DepositRequest {
   network: string;
   token: string;
   amount: string;
-  accounts: DepositAccounts;
 }
 
 export type DepositOutcome = { ok: true; signature?: string } | { ok: false; reason: string };

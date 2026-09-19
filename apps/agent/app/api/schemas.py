@@ -54,17 +54,6 @@ class SignInBlock(BaseModel):
     pending_question: str | None = Field(default=None, serialization_alias="pendingQuestion")
 
 
-class DepositAccounts(BaseModel):
-    program_id: str = Field(serialization_alias="programId")
-    address: str
-    token_mint: str = Field(serialization_alias="tokenMint")
-    token_decimals: int | None = Field(default=None, serialization_alias="tokenDecimals")
-    shares_mint: str | None = Field(default=None, serialization_alias="sharesMint")
-    shares_decimals: int | None = Field(default=None, serialization_alias="sharesDecimals")
-    token_program: str | None = Field(default=None, serialization_alias="tokenProgram")
-    lending_market: str | None = Field(default=None, serialization_alias="lendingMarket")
-
-
 class DepositBlock(BaseModel):
     kind: Literal["deposit"] = "deposit"
     pool_id: str = Field(serialization_alias="poolId")
@@ -77,7 +66,6 @@ class DepositBlock(BaseModel):
     apy: str
     risk: str
     url: str
-    accounts: DepositAccounts
 
 
 class ChatSummary(BaseModel):

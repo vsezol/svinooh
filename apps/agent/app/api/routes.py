@@ -32,7 +32,6 @@ from .schemas import (
     ChatResponse,
     ChatSummary,
     ChatTurn,
-    DepositAccounts,
     DepositBlock,
     SignInBlock,
     TextBlock,
@@ -108,7 +107,7 @@ def _blocks(answered: Answered) -> list[TextBlock | SignInBlock | DepositBlock]:
 
 
 def _deposit_card(deposit: Deposit) -> DepositBlock:
-    pool, terms = deposit.pool, deposit.terms
+    pool = deposit.pool
     return DepositBlock(
         pool_id=pool.id,
         pool=pool.name,
@@ -120,16 +119,6 @@ def _deposit_card(deposit: Deposit) -> DepositBlock:
         apy=f"{pool.apy_net * 100:.2f}%",
         risk=pool.risk,
         url=pool.url,
-        accounts=DepositAccounts(
-            program_id=terms.program_id,
-            address=terms.address,
-            token_mint=terms.token_mint,
-            token_decimals=terms.token_decimals,
-            shares_mint=terms.shares_mint,
-            shares_decimals=terms.shares_decimals,
-            token_program=terms.token_program,
-            lending_market=terms.lending_market,
-        ),
     )
 
 

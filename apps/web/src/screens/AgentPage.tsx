@@ -5,6 +5,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { AppHeader, Button } from '../ui';
 import { AccountMenu } from '../components/AccountMenu';
 import { AgentEmbed, type AgentControl, type ConversationRef } from '../components/agent/AgentEmbed';
+import { DepositDialog } from '../components/agent/DepositDialog';
+import { useDeposits } from '../components/agent/useDeposits';
 import { AuthModal } from '../components/AuthModal';
 import { SideNav, type Tab } from '../components/SideNav';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -77,6 +79,7 @@ export function AgentPage({ conversationId }: { conversationId?: string } = {}) 
     setActiveId(id);
   }, []);
   const [authOpen, setAuthOpen] = useState(false);
+  const { onDeposit, asked } = useDeposits();
   /** Which of the three the strip is pointing at. */
   const [view, setView] = useState<Tab>('agent');
   /**
@@ -304,6 +307,7 @@ export function AgentPage({ conversationId }: { conversationId?: string } = {}) 
                 initialQuestion={known ? parked : undefined}
                 onConversations={setConversations}
                 onConversationId={onConversationId}
+                onDeposit={onDeposit}
                 control={agent}
               />
             )}
@@ -316,6 +320,7 @@ export function AgentPage({ conversationId }: { conversationId?: string } = {}) 
           what they are signing in to keep — so it comes back to this address,
           conversation and all, rather than to the new portfolio. */}
       {authOpen ? <AuthModal onClose={() => setAuthOpen(false)} returnTo={pathname} /> : null}
+      {asked ? <DepositDialog request={asked.request} settle={asked.settle} /> : null}
     </div>
   );
 }

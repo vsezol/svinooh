@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { describe, test } from 'node:test';
-import { buildDeposit, builderFor, DepositNotSupportedError } from '../src/lib/deposit';
-import type { DepositRequest } from '../src/lib/deposit';
+import { buildDeposit, builderFor, DepositNotSupportedError } from '../src/deposits';
+import type { DepositRequest } from '../src/deposits';
 
 const request = (over: Partial<DepositRequest> = {}): DepositRequest => ({
   poolId: 'sol:kamino:vault:AAA',

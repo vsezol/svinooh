@@ -22,7 +22,6 @@ export const requestOf = (block: DepositBlock): DepositRequest => ({
   network: block.network,
   token: block.token,
   amount: block.amount,
-  accounts: block.accounts,
 });
 
 export default function DepositBlockView({ block, onDeposit }: Props) {
