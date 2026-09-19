@@ -1,6 +1,11 @@
 import { BadRequestException, Body, Controller, Post, UseGuards } from '@nestjs/common';
-import { RequiredAuthGuard } from '@svinooh/common';
-import type { DepositBuildDto, DepositBuiltDto } from '@svinooh/shared';
+import { CurrentUserId, RequiredAuthGuard } from '@svinooh/common';
+import type {
+  DepositBuildDto,
+  DepositBuiltDto,
+  DepositLandedDto,
+  DepositLandingDto,
+} from '@svinooh/shared';
 import { DepositsService } from './deposits.service';
 
 @Controller('deposits')
@@ -15,5 +20,18 @@ export class DepositsController {
       throw new BadRequestException('poolId, amount and owner are all required');
     }
     return this.deposits.build(poolId, amount, owner);
+  }
+
+  @Post('landed')
+  @UseGuards(RequiredAuthGuard)
+  async landed(
+    @Body() body: DepositLandedDto,
+    @CurrentUserId() userId: string,
+  ): Promise<DepositLandingDto> {
+    const { signature, owner, network } = body ?? {};
+    if (!signature || !owner || !network) {
+      throw new BadRequestException('signature, owner and network are all required');
+    }
+    return this.deposits.landed(signature, owner, network, userId);
   }
 }

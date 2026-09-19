@@ -8,4 +8,14 @@ export interface DepositRequest {
   amount: string;
 }
 
-export type DepositOutcome = { ok: true; signature?: string } | { ok: false; reason: string };
+export type DepositLanding = 'pending' | 'landed' | 'failed';
+
+export type DepositOutcome =
+  | {
+      ok: true;
+      signature?: string;
+      landed?: DepositLanding;
+      tracked?: boolean;
+      error?: string | null;
+    }
+  | { ok: false; reason: string };

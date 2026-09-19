@@ -7,7 +7,7 @@ import {
   type PoolSelection,
   type SortOrder,
 } from '../domain/selection';
-import { isNetwork, isPoolKind, isProtocol } from '../domain/values';
+import { isNetwork, isPoolKind, isProtocol, type Network } from '../domain/values';
 
 export class InvalidParameter extends EarnError {}
 
@@ -110,4 +110,21 @@ export function depositBody(body: unknown): DepositBody {
     throw new InvalidParameter('owner: Input should be a base58 account address');
   }
   return { amount: parsed, owner };
+}
+
+const SIGNATURE = /^[1-9A-HJ-NP-Za-km-z]{64,90}$/;
+
+export function signatureOf(raw: string): string {
+  if (!SIGNATURE.test(raw)) {
+    throw new InvalidParameter('signature: Input should be a base58 transaction signature');
+  }
+  return raw;
+}
+
+export function networkOf(query: Query): Network {
+  const network = one(query, 'network');
+  if (network === null || !isNetwork(network)) {
+    throw new InvalidParameter("network: Input should be 'sol'");
+  }
+  return network;
 }

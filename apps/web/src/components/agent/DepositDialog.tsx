@@ -1,16 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { buildDeposit, type DepositOutcome, type DepositRequest } from '../../lib/deposit';
+import {
+  buildDeposit,
+  followDeposit,
+  type DepositOutcome,
+  type DepositRequest,
+} from '../../lib/deposit';
 import { useDepositWallets, type DepositWallet } from '../../lib/deposit/wallet';
 import { Button, Dialog, Note } from '../../ui';
 
-type Stage = 'choosing' | 'building' | 'signing';
+type Stage = 'choosing' | 'building' | 'signing' | 'landing';
 
 const STAGE: Record<Stage, string> = {
   choosing: '',
   building: 'Reading the pool and building the deposit…',
   signing: 'Waiting for your wallet…',
+  landing: 'Sent. Waiting for the network to confirm it…',
 };
 
 export function DepositDialog({
@@ -22,6 +28,7 @@ export function DepositDialog({
 }) {
   const wallets = useDepositWallets();
   const [stage, setStage] = useState<Stage>('choosing');
+  const [sent, setSent] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
 
   const deposit = async (wallet: DepositWallet) => {
@@ -37,7 +44,19 @@ export function DepositDialog({
       setStage('building');
       const built = await buildDeposit(request, signer.address);
       setStage('signing');
-      settle({ ok: true, signature: await signer.signAndSend(built.transaction) });
+      const signature = await signer.signAndSend(built.transaction);
+      setSent(signature);
+      setStage('landing');
+      const seen = await followDeposit(signature, signer.address, request.network).catch(
+        () => null,
+      );
+      settle({
+        ok: true,
+        signature,
+        landed: seen?.status,
+        tracked: seen?.tracked,
+        error: seen?.error ?? null,
+      });
     } catch (error) {
       setStage('choosing');
       setFailed(why(error, 'the deposit was not sent'));
@@ -45,7 +64,16 @@ export function DepositDialog({
   };
 
   return (
-    <Dialog onClose={() => settle({ ok: false, reason: 'cancelled' })} title="Deposit">
+    <Dialog
+      onClose={() =>
+        settle(
+          sent
+            ? { ok: true, signature: sent, landed: 'pending' }
+            : { ok: false, reason: 'cancelled' },
+        )
+      }
+      title="Deposit"
+    >
       <Note>
         {request.amount} {request.token} into {request.pool}. The money leaves your wallet for{' '}
         {request.protocol} and never touches svinooh. You sign it; nothing happens until you do.

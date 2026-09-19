@@ -1,17 +1,43 @@
 import { useState } from 'react';
 import type { DepositBlock, DepositOutcome, DepositRequest } from '../../app/types';
 
-type State = 'idle' | 'working' | 'signed' | 'refused';
+type State = 'idle' | 'working' | 'signed' | 'landed' | 'refused';
+
+interface Settled {
+  state: State;
+  note: string | null;
+  signature: string | null;
+}
 
 interface Props {
   block: DepositBlock;
   onDeposit?: (request: DepositRequest) => Promise<DepositOutcome | void> | void;
 }
 
-export function afterDeposit(outcome: DepositOutcome | void): { state: State; note: string | null } {
-  if (outcome && outcome.ok === false) return { state: 'refused', note: outcome.reason };
-  if (outcome && outcome.ok) return { state: 'signed', note: outcome.signature ?? null };
-  return { state: 'signed', note: null };
+const REJECTED = 'the network rejected it — nothing left your wallet';
+
+export function afterDeposit(outcome: DepositOutcome | void): Settled {
+  if (outcome && outcome.ok === false) {
+    return { state: 'refused', note: outcome.reason, signature: null };
+  }
+  if (!outcome) return { state: 'signed', note: null, signature: null };
+  const signature = outcome.signature ?? null;
+  if (outcome.landed === 'failed') {
+    return { state: 'refused', note: outcome.error ?? REJECTED, signature };
+  }
+  if (outcome.landed === 'landed') {
+    return {
+      state: 'landed',
+      note: outcome.tracked
+        ? 'your portfolio is being read again right now'
+        : 'this address is not in your portfolio, so it will not show up there',
+      signature,
+    };
+  }
+  if (outcome.landed === 'pending') {
+    return { state: 'signed', note: 'the network has not confirmed it yet', signature };
+  }
+  return { state: 'signed', note: signature, signature };
 }
 
 export const requestOf = (block: DepositBlock): DepositRequest => ({
@@ -25,22 +51,31 @@ export const requestOf = (block: DepositBlock): DepositRequest => ({
 });
 
 export default function DepositBlockView({ block, onDeposit }: Props) {
-  const [state, setState] = useState<State>('idle');
-  const [note, setNote] = useState<string | null>(null);
+  const [settled, setSettled] = useState<Settled>({ state: 'idle', note: null, signature: null });
+  const { state, note, signature } = settled;
 
   const sign = async () => {
     if (!onDeposit || state === 'working') return;
-    setState('working');
-    setNote(null);
+    setSettled({ state: 'working', note: null, signature: null });
     try {
-      const settled = afterDeposit(await onDeposit(requestOf(block)));
-      setState(settled.state);
-      setNote(settled.note);
+      setSettled(afterDeposit(await onDeposit(requestOf(block))));
     } catch (error) {
-      setState('refused');
-      setNote(error instanceof Error ? error.message : 'the wallet did not sign it');
+      setSettled({
+        state: 'refused',
+        note: error instanceof Error ? error.message : 'the wallet did not sign it',
+        signature: null,
+      });
     }
   };
+
+  const done = state === 'signed' || state === 'landed';
+  const says = !onDeposit
+    ? 'No wallet is connected here — open it on svinooh.com to sign.'
+    : state === 'refused'
+      ? (note ?? 'not signed')
+      : done
+        ? null
+        : 'Your money goes straight to the protocol. Nothing moves until you sign.';
 
   return (
     <div className="sv-a-b-card sv-a-b-deposit" data-state={state}>
@@ -60,8 +95,11 @@ export default function DepositBlockView({ block, onDeposit }: Props) {
         </span>
       </div>
       <div className="sv-a-b-deposit-foot">
-        {state === 'signed' ? (
-          <span className="sv-a-b-deposit-done mono">Signed{note ? ` · ${note}` : ''}</span>
+        {done ? (
+          <span className="sv-a-b-deposit-done mono">
+            {state === 'landed' ? 'Landed' : 'Signed'}
+            {note ? ` · ${note}` : ''}
+          </span>
         ) : (
           <button
             type="button"
@@ -74,13 +112,17 @@ export default function DepositBlockView({ block, onDeposit }: Props) {
             {state === 'working' ? 'Waiting for your wallet…' : 'Deposit from my wallet'}
           </button>
         )}
-        <span className="sv-a-b-deposit-note mono">
-          {!onDeposit
-            ? 'No wallet is connected here — open it on svinooh.com to sign.'
-            : state === 'refused'
-              ? (note ?? 'not signed')
-              : 'Your money goes straight to the protocol. Nothing moves until you sign.'}
-        </span>
+        {says ? <span className="sv-a-b-deposit-note mono">{says}</span> : null}
+        {signature && block.network === 'sol' ? (
+          <a
+            className="sv-a-b-deposit-tx mono"
+            href={`https://solscan.io/tx/${signature}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {signature.slice(0, 8)}…{signature.slice(-8)}
+          </a>
+        ) : null}
       </div>
     </div>
   );

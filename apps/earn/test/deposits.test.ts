@@ -15,7 +15,7 @@ import {
 import { LendQueries } from '../src/application/queries';
 import { CatalogStore } from '../src/application/store';
 import { buildCatalog } from '../src/domain/catalog';
-import { baseUnits, belowMinimum, type Deposit } from '../src/domain/deposit';
+import { baseUnits, belowMinimum, type Deposit, type Landing } from '../src/domain/deposit';
 import type { Pool } from '../src/domain/pool';
 import { idOf } from '../src/domain/values';
 import { KaminoApi } from '../src/infrastructure/kamino/api';
@@ -33,6 +33,11 @@ const TRANSACTION: BuiltDeposit = {
 };
 
 const OWNER = 'EiN7zKfhj7TAwibNDRDhWqELSv9bgMcRsmG6Kz8DcYNL';
+
+const SIGNATURE =
+  '5ndCyVRV3mQRLmTdhKbJdFVWEPfYhfqZmAaLvQnqaJ8pZJqvHkBQ7kkbXHbPMRLzrXhDcQAqfHuNvAhVQDWkZqYh';
+
+const PENDING: Landing = { signature: SIGNATURE, status: 'pending', slot: null, error: null };
 
 const catalogOf = (...pools: Pool[]) =>
   buildCatalog({ version: 1, takenAt: new Date('2026-09-10T12:00:00Z'), pools, policy });
@@ -153,6 +158,24 @@ describe('WhichProtocolBuildsADeposit', () => {
   });
 });
 
+describe('WhetherADepositLanded', () => {
+  const landings = { sol: async (signature: string) => ({ ...PENDING, signature }) };
+
+  test('a chain nobody follows yet is named in the refusal', async () => {
+    const error = await refused(() =>
+      new LendDeposits(queriesOver(pool()), {}, landings).landing('eth', SIGNATURE),
+    );
+    assert.ok(error instanceof DepositNotSupported);
+    assert.match(error.message, /eth deposits are not followed/);
+  });
+
+  test('the chain is asked for the signature it was given', async () => {
+    const seen = await new LendDeposits(queriesOver(pool()), {}, landings).landing('sol', SIGNATURE);
+    assert.equal(seen.signature, SIGNATURE);
+    assert.equal(seen.status, 'pending');
+  });
+});
+
 describe('TheDepositEndpoint', () => {
   let app: INestApplication;
   let base = '';
@@ -177,6 +200,9 @@ describe('TheDepositEndpoint', () => {
             asked = deposit;
             return TRANSACTION;
           },
+        },
+        landings: {
+          sol: async (signature) => ({ signature, status: 'landed', slot: 42, error: null }),
         },
       }),
       { logger: false },
@@ -240,6 +266,30 @@ describe('TheDepositEndpoint', () => {
     });
     assert.equal(status, 422);
     assert.match(body.detail, /^owner:/);
+  });
+
+  test('a landing is answered from the chain, not from the catalog', async () => {
+    const answered = await fetch(`${base}/v1/lend/deposits/${SIGNATURE}?network=sol`);
+    const body = (await answered.json()) as any;
+    assert.equal(answered.status, 200);
+    assert.equal(body.data.signature, SIGNATURE);
+    assert.equal(body.data.status, 'landed');
+    assert.equal(body.data.slot, 42);
+    assert.equal(body.meta.catalog, null);
+  });
+
+  test('a signature that is not one is refused before the chain is asked', async () => {
+    const answered = await fetch(`${base}/v1/lend/deposits/nope?network=sol`);
+    const body = (await answered.json()) as any;
+    assert.equal(answered.status, 422);
+    assert.match(body.detail, /^signature:/);
+  });
+
+  test('the chain has to be named', async () => {
+    const answered = await fetch(`${base}/v1/lend/deposits/${SIGNATURE}`);
+    const body = (await answered.json()) as any;
+    assert.equal(answered.status, 422);
+    assert.match(body.detail, /^network:/);
   });
 
   test('a pool the catalog does not have answers 404', async () => {
