@@ -43,6 +43,14 @@ class IntentLabel(BaseModel):
             "then label."
         )
     )
+    language: str = Field(
+        description=(
+            "The language the user's last message is written in, named in "
+            "English in one word — Russian, Ukrainian, English, Spanish. Name "
+            "the language of the words they typed, not the language of what "
+            "they are asking about."
+        )
+    )
     intent: Literal["portfolio", "earn", "general"]
     stance: Literal["asking", "placing"] = Field(
         description=(

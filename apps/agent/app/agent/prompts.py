@@ -96,6 +96,16 @@ def product_facts(config: Config) -> str:
     return f"\n\nAbout svinooh — this, and nothing beyond it:\n{said}"
 
 
+def in_language(system: str, language: str | None) -> str:
+    if not language:
+        return system
+    return (
+        f"{system}\n\nThe user wrote to you in {language}. Write the whole "
+        f"answer in {language} — not in a language next to it, and not in the "
+        "language of the rules above."
+    )
+
+
 def grounded_prompt(system: str, portfolio: Portfolio, max_positions: int) -> str:
     shown = portfolio_context(portfolio, max_positions)
     return f"{system}\n\nThe user is looking at this portfolio right now:\n{shown}"

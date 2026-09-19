@@ -38,15 +38,20 @@ def fake_model(text: str) -> FakeChatModel:
 
 
 class Intents:
-    def __init__(self, label: str = "general", asked_to_place: bool = False):
+    def __init__(
+        self, label: str = "general", asked_to_place: bool = False, language: str = "English"
+    ):
         self.label = label
         self.asked_to_place = asked_to_place
+        self.language = language
         self.heard: tuple = ()
 
     async def classify(self, _question: str, history: tuple = ()) -> IntentLabel:
         self.heard = history
         stance = "placing" if self.asked_to_place else "asking"
-        return IntentLabel(intent=self.label, reason="stubbed", stance=stance)
+        return IntentLabel(
+            intent=self.label, reason="stubbed", stance=stance, language=self.language
+        )
 
 
 class Confirmations:

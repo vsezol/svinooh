@@ -84,10 +84,11 @@ def wire(
     model=None,
     catalog=None,
     asked_to_place=False,
+    language="English",
 ):
     api = api or Api()
     model = model or Model()
-    intents = Intents(intent, asked_to_place=asked_to_place)
+    intents = Intents(intent, asked_to_place=asked_to_place, language=language)
     bot = agent(
         model=model,
         portfolio=api,
@@ -104,6 +105,18 @@ async def run(bot, **state):
 
 
 class TestRouting:
+    async def test_the_answer_is_written_in_the_language_of_the_question(self):
+        bot, _, model = wire(intent="general", language="Russian")
+        await run(bot)
+        said = model.prompts[0]
+        assert "The user wrote to you in Russian" in said
+        assert "not in a language next to it" in said
+
+    async def test_a_turn_with_no_language_named_adds_no_instruction(self):
+        bot, _, model = wire(intent="general", language="")
+        await run(bot)
+        assert "wrote to you in" not in model.prompts[0]
+
     async def test_the_question_is_labelled_with_the_conversation_it_is_in(self):
         bot, _, _ = wire(intent="earn")
         spoken = (Turn(q="put it to the highest rate", a="how much?", at=0),)
