@@ -25,10 +25,10 @@ Four layers, and the dependency arrow only ever points inwards:
 
 | package | what lives there | what it may import |
 | :-- | :-- | :-- |
-| `earn/domain` | `Pool`, `Catalog`, `ListingPolicy`, `PoolSelection`, `Rate`, `Usd` | itself, the standard library |
-| `earn/application` | the ports (`YieldSource`, `Clock`), the refresh loop, the three use cases | domain |
-| `earn/infrastructure` | Kamino's API and mapping, the HTTP client, settings, logging | domain, application |
-| `earn/api` | routes, schemas, presenters, cursors, problem documents, the composition root | everything |
+| `src/domain` | `Pool`, `Catalog`, `ListingPolicy`, `PoolSelection` | itself, `decimal.js` |
+| `src/application` | the ports (`YieldSource`, `Clock`), the refresh loop, the three use cases | domain |
+| `src/infrastructure` | Kamino's API and mapping, the HTTP client | domain, application |
+| `src/api` | controllers, presenters, cursors, problem documents, parameter parsing | everything |
 
 Two of those rules are worth spelling out, because they are what the
 arrangement buys:
@@ -43,8 +43,9 @@ needs, in the application's words; `KaminoSource` exists to satisfy it. A second
 protocol is a new class in `infrastructure` and a line in the composition root,
 and nothing else moves.
 
-`tests/test_layering.py` walks the source with `ast` and fails the build if an
-import points the wrong way, so the arrow cannot rot into a comment.
+`test/layering.test.ts` walks the source and fails the build if an import points
+the wrong way, so the arrow cannot rot into a comment. It also keeps the web
+framework out of the two inner layers: the domain may not name Nest at all.
 
 ## What it reads
 
@@ -140,7 +141,7 @@ on it is not a fact.
 reads `title` and `detail`; a program branches on `type`, which is a stable URI:
 `not-ready`, `not-found`, `invalid-cursor`, `cursor-expired`,
 `cursor-query-mismatch`, `invalid-parameter`. The whole translation table is
-`earn/api/problems.py`, and anything not in it surfaces as the 500 it is rather
+`src/api/problems.ts`, and anything not in it surfaces as the 500 it is rather
 than being flattened into a polite 400.
 
 ### Why the token is not in the path
@@ -203,29 +204,26 @@ about the chain.
 ## Running it
 
 ```bash
-python -m venv .venv && .venv/bin/pip install -e ".[dev]"
-.venv/bin/uvicorn earn.api.app:create_app --factory --port 3311
+npm run -w apps/earn dev      # watch mode on PORT (3000 by default)
 ```
 
-Three gates, all of which must be green:
+Two gates, both of which must be green:
 
 ```bash
-.venv/bin/python -m pytest    # 119 tests, no network
-.venv/bin/ruff check .        # lint, import order, annotations
-.venv/bin/mypy earn tests     # strict
+npm run -w apps/earn test         # 48 tests, no network
+npx tsc --noEmit -p apps/earn     # strict
 ```
 
-The tests reach no socket. `tests/fixtures/kamino.py` holds recorded Kamino
+The tests reach no socket. `test/fixtures/kamino.ts` holds recorded Kamino
 payloads — kept verbatim in shape, thirty-digit decimals and scientific notation
 included, because those are exactly what a naive parser gets wrong — behind a
 `JsonTransport`, so the *real* `KaminoApi` and the *real* mapping are what runs.
-The api tests build the real application around a stub source and a frozen
-clock: nothing is patched, and no test reaches into a private attribute.
+The api tests boot the real application around that recorded source: nothing is
+patched, and no test reaches into a private field.
 
-`GET /docs` is the generated OpenAPI page. Configuration is in `.env.example`,
-one line each, and it is parsed by pydantic — a typo in a variable fails at
-startup with a message rather than silently falling back to a default nobody
-chose.
+Configuration is environment variables with an `EARN_` prefix, parsed in
+`src/settings.ts` — a typo in a number fails at startup with a message rather
+than silently falling back to a default nobody chose.
 
 ## What is deliberately not here
 

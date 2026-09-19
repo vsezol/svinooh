@@ -18,3 +18,4 @@ apps/scanner-evm/bin/
 .beads/
 .design-preview/
 .compare/
+*.tsbuildinfo
