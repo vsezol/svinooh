@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
-import { AdminProxyModule } from './admin-proxy/admin-proxy.module';
+import { AdminModule } from './admin/admin.module';
 import { AuthProxyModule } from './auth-proxy/auth-proxy.module';
 import { BillingModule } from './billing/billing.module';
 import { config } from './config';
@@ -27,7 +27,7 @@ import { PrismaModule } from '@svinooh/db';
     DepositsModule,
     PortfolioModule,
     BillingModule,
-    AdminProxyModule,
+    AdminModule,
   ],
   controllers: [HealthController, AgentConfigController],
 })

@@ -39,7 +39,7 @@
 #   TELEGRAM_BOT_TOKEN       shared by api + auth
 #   TELEGRAM_BOT_USERNAME    the bot's @handle (public, but set explicitly)
 #   GRAFANA_ADMIN_PASSWORD   grafana admin login
-#   INTERNAL_SECRET          shared by auth, bot-telegram, api + admin (identical).
+#   INTERNAL_SECRET          shared by auth + bot-telegram (identical).
 #                            It guards the one route that mints a signed-in link
 #                            for any Telegram id — auth refuses everything when
 #                            it is unset, so this is not optional.
@@ -81,7 +81,6 @@ LOKI_URL='http://${{loki.RAILWAY_PRIVATE_DOMAIN}}:3100'
 # anyone meets.
 NODE_MEMORY=("MALLOC_ARENA_MAX=2" "NODE_OPTIONS=--max-old-space-size=256")
 AUTH_URL='http://${{auth.RAILWAY_PRIVATE_DOMAIN}}:3000'
-ADMIN_URL='http://${{admin.RAILWAY_PRIVATE_DOMAIN}}:3000'
 WALLET_URL='http://${{wallet.RAILWAY_PRIVATE_DOMAIN}}:3000'
 API_PUBLIC='https://${{api.RAILWAY_PUBLIC_DOMAIN}}'
 
@@ -137,13 +136,21 @@ setvars grafana \
 echo "== application services (all from ${REPO}@${BRANCH}) =="
 
 # api — public HTTP gateway. Dockerfile apps/api/Dockerfile ; healthcheck /api/health
+#
+# The tunables behind the Admin tab are served from here, by a module fenced off
+# inside the app (apps/api/src/admin). They were their own service until the
+# hop and the shared secret stopped paying for themselves; the guard that reads
+# isAdmin from the database on every request is unchanged, so nothing has to be
+# wired for it — no variable, no service, no private URL.
+#
+# Who is an admin is a column on User, set in the database and nowhere else.
+# Nothing in the product grants it, so there is no flow to get wrong.
 add_repo api
 setvars api \
   "NODE_ENV=production" "PORT=3000" \
   "DATABASE_URL=${PG_URL}" "REDIS_URL=${REDIS_URL}" \
   "JWT_SECRET=${JWT_SECRET}" \
   "AUTH_SERVICE_URL=${AUTH_URL}" "WALLET_SERVICE_URL=${WALLET_URL}" \
-  "ADMIN_SERVICE_URL=${ADMIN_URL}" "INTERNAL_SECRET=${INTERNAL_SECRET}" \
   "WEB_ORIGIN=${PUBLIC_WEB_ORIGIN}" \
   "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" "TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}" \
   "SYNC_INTERVAL_MIN=5" \
@@ -177,6 +184,11 @@ setvars wallet \
 # outage: it declares and drains scan.evm and publishes scan.result.
 # Give it ≥ 1GB if SCANNER_ENGINE=chrome; ~512MB is enough for lightpanda.
 # config apps/scanner-evm/railway.json (downloads the lightpanda binary at build)
+#
+# It also takes ZERION_API_KEY when scan.evmSource is set to `zerion` in the
+# admin panel. It is a secret, so it lives in this service's variables rather
+# than in the registry — that file is public and the panel shows every value
+# in it.
 add_repo scanner-evm
 setvars scanner-evm \
   "PORT=3000" \
@@ -211,32 +223,6 @@ setvars bot-telegram \
   "AUTH_URL=${AUTH_URL}" \
   "WEB_URL=${PUBLIC_WEB_ORIGIN}" \
   "RABBITMQ_URL=${RABBIT_URL}" \
-  "${NODE_MEMORY[@]}"
-
-# admin — the tunables, behind the Admin tab in the product.
-#
-# NOT public, and it must stay that way: no Railway domain, no ingress. Every
-# route sits under /internal and refuses anything without INTERNAL_SECRET, so
-# the api is the only way in — and the api has already verified the caller's
-# token and looked their isAdmin flag up in the database. Two locks checking two
-# different things.
-#
-# Who is an admin is a column on User, set in the database and nowhere else.
-# Nothing in the product grants it, so there is no flow to get wrong.
-#
-# scanner-evm also takes ZERION_API_KEY when scan.evmSource is set to `zerion`
-# in the panel. It is a secret, so it lives in that service's variables rather
-# than in the registry — that file is public and the panel shows every value in
-# it.
-#
-# If you give this service a watch pattern, it has to cover
-# libs/common/src/settings/** as well as apps/admin/**: the registry is where
-# the knobs are declared, and a knob added there is a knob this service serves.
-add_repo admin
-setvars admin \
-  "PORT=3000" \
-  "DATABASE_URL=${PG_URL}" \
-  "INTERNAL_SECRET=${INTERNAL_SECRET}" \
   "${NODE_MEMORY[@]}"
 
 # web — Next.js. PUBLIC (svinooh.com). Dockerfile apps/web/Dockerfile ; port 4173
@@ -290,7 +276,6 @@ The Railway CLI does not set these reliably; do them once in the dashboard
 6. Serverless (Service → Settings → Deploy → Serverless) — a sleeping service
    costs nothing. The setting takes effect on the service's next deploy.
      loki   → nothing ships logs to it or scrapes it (see observability)
-     admin  → woken by the Admin tab, through the api
      earn   → also needs EARN_REFRESH_INTERVAL_S=604800, or its five-minute
               refresh counts as traffic and it never sleeps
    Not agent-web: the first request to a sleeping service can fail, and the
