@@ -1,33 +1,15 @@
-import { buildKaminoDeposit } from './kamino';
-import {
-  DepositNotSupportedError,
-  type BuildDeposit,
-  type BuiltDeposit,
-  type DepositOutcome,
-  type DepositRequest,
-} from './types';
+import type { DepositBuiltDto } from '@svinooh/shared';
+import { api } from '../api';
+import type { DepositOutcome, DepositRequest } from './types';
 
-export { DepositNotSupportedError };
-export type { BuiltDeposit, DepositOutcome, DepositRequest };
-
-const BUILDERS: Record<string, BuildDeposit> = {
-  'sol:kamino': buildKaminoDeposit,
-};
-
-export function builderFor(request: DepositRequest): BuildDeposit | null {
-  return BUILDERS[`${request.network}:${request.protocol}`] ?? null;
-}
+export type { DepositOutcome, DepositRequest };
 
 export async function buildDeposit(
   request: DepositRequest,
   owner: string,
-  rpcUrl: string,
-): Promise<BuiltDeposit> {
-  const build = builderFor(request);
-  if (!build) {
-    throw new DepositNotSupportedError(
-      `${request.protocol} on ${request.network} is not wired for deposits here yet`,
-    );
-  }
-  return build(request, owner, rpcUrl);
+): Promise<DepositBuiltDto> {
+  return api<DepositBuiltDto>('/deposits/build', {
+    method: 'POST',
+    body: JSON.stringify({ poolId: request.poolId, amount: request.amount, owner }),
+  });
 }

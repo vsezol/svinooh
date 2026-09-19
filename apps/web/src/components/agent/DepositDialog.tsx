@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { buildDeposit, type DepositOutcome, type DepositRequest } from '../../lib/deposit';
-import { useDepositWallets, RPC_URL, type DepositWallet } from '../../lib/deposit/wallet';
+import { useDepositWallets, type DepositWallet } from '../../lib/deposit/wallet';
 import { Button, Dialog, Note } from '../../ui';
 
 type Stage = 'choosing' | 'building' | 'signing';
@@ -35,7 +35,7 @@ export function DepositDialog({
     }
     try {
       setStage('building');
-      const built = await buildDeposit(request, signer.address, RPC_URL);
+      const built = await buildDeposit(request, signer.address);
       setStage('signing');
       settle({ ok: true, signature: await signer.signAndSend(built.transaction) });
     } catch (error) {

@@ -7,6 +7,7 @@ import { config } from './config';
 import { AgentConfigController } from './agent-config.controller';
 import { HealthController } from './health.controller';
 import { MetricsModule, RabbitModule } from '@svinooh/common';
+import { DepositsModule } from './deposits/deposits.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
 import { PrismaModule } from '@svinooh/db';
 
@@ -23,6 +24,7 @@ import { PrismaModule } from '@svinooh/db';
       signOptions: { expiresIn: '30d' },
     }),
     AuthProxyModule,
+    DepositsModule,
     PortfolioModule,
     BillingModule,
     AdminProxyModule,

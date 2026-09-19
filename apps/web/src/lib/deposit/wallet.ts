@@ -7,9 +7,6 @@ const DISCONNECT = 'standard:disconnect';
 const SIGN_AND_SEND = 'solana:signAndSendTransaction';
 const MAINNET = 'solana:mainnet';
 
-export const RPC_URL: string =
-  process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-
 export interface DepositSigner {
   address: string;
   signAndSend(transaction: string): Promise<string>;
@@ -48,9 +45,25 @@ export const canSendOnSolana = (wallet: StandardWallet): boolean =>
 const fromBase64 = (value: string): Uint8Array =>
   Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
 
-async function toSignature(bytes: Uint8Array): Promise<string> {
-  const { getBase58Decoder } = await import('@solana/kit');
-  return getBase58Decoder().decode(bytes);
+const BASE58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+export function base58(bytes: Uint8Array): string {
+  let zeros = 0;
+  while (zeros < bytes.length && bytes[zeros] === 0) zeros++;
+  const digits: number[] = [];
+  for (const byte of bytes.subarray(zeros)) {
+    let carry = byte;
+    for (let i = 0; i < digits.length; i++) {
+      carry += digits[i] << 8;
+      digits[i] = carry % 58;
+      carry = (carry / 58) | 0;
+    }
+    while (carry > 0) {
+      digits.push(carry % 58);
+      carry = (carry / 58) | 0;
+    }
+  }
+  return BASE58[0].repeat(zeros) + digits.reverse().map((digit) => BASE58[digit]).join('');
 }
 
 export function depositWallet(wallet: StandardWallet): DepositWallet {
@@ -76,7 +89,7 @@ export function depositWallet(wallet: StandardWallet): DepositWallet {
             chain: account.chains.find((c) => c.startsWith('solana:')) ?? MAINNET,
           });
           if (!sent?.signature) throw new Error('The wallet sent nothing back');
-          return toSignature(sent.signature);
+          return base58(sent.signature);
         },
         end: async () => {
           await feature<DisconnectFeature>(wallet, DISCONNECT)?.disconnect();

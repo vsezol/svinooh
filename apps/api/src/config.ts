@@ -37,6 +37,8 @@ export const config = {
    * — the same as they do for everybody who is not an admin.
    */
   internalSecret: process.env.INTERNAL_SECRET ?? '',
+  earnApiUrl: (process.env.EARN_API_URL || 'http://localhost:8080').replace(/\/+$/, ''),
+  solanaRpcUrl: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
   // Internal URL of the wallet service — scan-on-add is delegated to it.
   walletServiceUrl: (process.env.WALLET_SERVICE_URL || 'http://localhost:3002').replace(/\/+$/, ''),
   // How often the wallet service rescans a wallet that's in use. Used for the

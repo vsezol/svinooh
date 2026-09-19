@@ -15,7 +15,6 @@ const card: DepositBlock = {
   apy: '5.12%',
   risk: 'low',
   url: 'https://kamino.finance/earn/lend/AAA',
-  accounts: { programId: 'KLend', address: 'AAA', tokenMint: 'EPjF', tokenDecimals: 6 },
 };
 
 describe('WhatTheHostIsHandedAndWhatComesBack', () => {
@@ -28,7 +27,6 @@ describe('WhatTheHostIsHandedAndWhatComesBack', () => {
       network: card.network,
       token: card.token,
       amount: card.amount,
-      accounts: card.accounts,
     });
   });
 
