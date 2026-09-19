@@ -16,7 +16,8 @@ import { SyncService } from './sync.service';
     ScanResultConsumerService,
     MetricsCollectorsService,
   ],
-  // InternalScanController reaches for these to scan a just-added wallet
-  exports: [SyncService, ScanConsumerService, ScanResultConsumerService],
+  // ScanRequests takes the claim on an address before it publishes; nothing
+  // else outside this directory sees any of these
+  exports: [SyncService],
 })
 export class SyncModule {}

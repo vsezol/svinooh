@@ -122,8 +122,8 @@ async function answer(update: TgUpdate, log: Log): Promise<void> {
 
   try {
     // Not under /auth: that prefix belongs to the routes the public gateway
-    // proxies, and this one is only ever reached over the private network —
-    // same shape as the wallet service's /internal/scan
+    // proxies, and this one is only ever reached over the private network,
+    // which is what /internal means everywhere here
     const res = await fetch(`${config.authUrl}/internal/telegram/start`, {
       method: 'POST',
       headers: {

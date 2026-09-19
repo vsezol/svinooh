@@ -1,6 +1,5 @@
 import type { Chain } from '@svinooh/shared';
 import { Semaphore, setting } from '@svinooh/common';
-import { config } from '../config';
 
 /**
  * How many of this service's own scans run at once. EVM is not among them — it

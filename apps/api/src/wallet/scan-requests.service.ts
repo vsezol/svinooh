@@ -1,32 +1,35 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { RabbitService, SCAN_MAX_PRIORITY, scanQueueName, type ScanJob } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import type { Chain } from '@svinooh/shared';
 import { SyncService } from './sync/sync.service';
 
 /**
- * Internal endpoint the api gateway calls when a wallet is just added, so it
- * gets scanned now instead of waiting for the next queue cycle.
- * Fire-and-forget: the call returns at once and the scan happens behind it.
+ * "Scan this one now" — the whole of what the rest of the api may ask of the
+ * scan pipeline.
  *
- * "Now" is what makes this racy: the address is at its most likely to already be
- * on a queue exactly when somebody has just asked for it — the producer holds
- * every never-scanned address at the top of its due list, and two people opening
- * the same wallet is one address asked for twice. So this claims the address the
- * same way the producer does, and publishes only if it got it.
+ * It was a POST to the wallet service's /internal/scan, called with fetch and
+ * a five-second timeout from two places that did not wait for the answer. The
+ * call is in-process now, and just as much of a no-wait: the scan takes tens of
+ * seconds and the caller is answering a request.
+ *
+ * "Now" is what makes this racy: the address is at its most likely to already
+ * be on a queue exactly when somebody has just asked for it — the producer
+ * holds every never-scanned address at the top of its due list, and two people
+ * opening the same wallet is one address asked for twice. So this claims the
+ * address the same way the producer does, and publishes only if it got it.
  */
-@Controller('internal')
-export class InternalScanController {
+@Injectable()
+export class ScanRequests {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbit: RabbitService,
     private readonly sync: SyncService,
   ) {}
 
-  @Post('scan')
-  scan(@Body() body: { walletId?: string }): { ok: true } {
-    if (body?.walletId) void this.enqueue(body.walletId).catch(() => {});
-    return { ok: true };
+  /** Fire and forget: the caller has an HTTP response to return */
+  now(walletId: string): void {
+    void this.enqueue(walletId).catch(() => {});
   }
 
   private async enqueue(walletId: string): Promise<void> {
@@ -38,8 +41,6 @@ export class InternalScanController {
       previousTotal: wallet.lastTotalUsd,
       tronResourcesAt: wallet.tronResourcesAt?.toISOString() ?? null,
     };
-    // Somebody is already scanning this address — the wallet gets that result,
-    // which is the one it was going to wait for anyway
     // Somebody is already scanning this address — the wallet gets that result,
     // which is the one it was going to wait for anyway
     if (!(await this.sync.takeIfFree(job.chain, job.address))) return;

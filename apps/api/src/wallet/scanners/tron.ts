@@ -1,6 +1,6 @@
 import { fetchJson } from './http';
 import type { ScanPosition, ScanPositionToken, ScanResult } from '@svinooh/shared';
-import { config } from '../config';
+import { config } from '../../config';
 import { getTronResources } from './tron-resources';
 
 /**

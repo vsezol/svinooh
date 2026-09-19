@@ -34,6 +34,7 @@ import { config } from '../config';
 import { PrismaService } from '@svinooh/db';
 import { detectChain, normalizeAddress, RESERVED_SLUGS, setting, slugifyName, wordSlug } from '@svinooh/common';
 import { PremiumService } from '../billing/premium.service';
+import { ScanRequests } from '../wallet/scan-requests.service';
 
 /**
  * A wallet as a portfolio holds it: the address and its readings, plus the
@@ -348,6 +349,7 @@ export class PortfolioService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly premium: PremiumService,
+    private readonly scans: ScanRequests,
   ) {}
 
   /**
@@ -468,7 +470,7 @@ export class PortfolioService {
     });
     // Only if nobody has scanned this address before — an address already known
     // to another portfolio arrives with its value and needs no queue jump
-    if (wallet.lastSyncedAt === null) this.requestScan(wallet.id);
+    if (wallet.lastSyncedAt === null) this.scans.now(wallet.id);
     return { slug: portfolio.slug };
   }
 
@@ -477,7 +479,7 @@ export class PortfolioService {
    *
    * Read straight from Postgres, one query per request. It used to be served
    * from a Redis entry with a TTL, and nothing invalidated that entry when a
-   * scan landed — the wallet service writes to Postgres and had never heard of
+   * scan landed — the pipeline writes to Postgres and had never heard of
    * Redis — so the TTL was simply a delay on every number on the page, longest
    * exactly where it was felt most: a wallet waiting for its first scan, polled
    * every 3 seconds for a result the cache already had and would not hand over.
@@ -487,7 +489,7 @@ export class PortfolioService {
    */
   async getBySlug(slug: string, userId: string | null, viewing = false): Promise<PortfolioDto> {
     const view = await this.buildView(slug);
-    // Somebody is looking at this portfolio, so the wallet service keeps it
+    // Somebody is looking at this portfolio, so the pipeline keeps it
     // fresh. Never in the way of the response, and at most once a minute — see
     // VISIT_WINDOW_MS for why that is enough.
     if (viewing && !visitIsFresh(slug, Date.now())) this.touchViewed(slug);
@@ -907,7 +909,7 @@ export class PortfolioService {
     });
     // An address somebody else already tracks arrives with its readings and its
     // positions; only one nobody has scanned yet needs to jump the queue
-    if (wallet.lastSyncedAt === null) this.requestScan(wallet.id);
+    if (wallet.lastSyncedAt === null) this.scans.now(wallet.id);
     return this.toWalletDto(held, 0);
   }
 
@@ -1206,20 +1208,6 @@ export class PortfolioService {
   }
 
   /**
-   * The scan is async: the endpoint responds immediately (status=pending) and
-   * the frontend polls. An EVM scan takes 20–40 seconds — we can't hold an HTTP
-   * request open that long.
-   */
-  private requestScan(walletId: string): void {
-    void fetch(`${config.walletServiceUrl}/internal/scan`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ walletId }),
-      signal: AbortSignal.timeout(5000),
-    }).catch(() => {});
-  }
-
-  /**
    * One address's series for the charts. The short windows use raw points
    * (step = sync interval); the longer ones are aggregated into date_bin buckets
    * on the Postgres side, at the resolution their window is drawn at.
@@ -1310,7 +1298,7 @@ export class PortfolioService {
         borrowApy: p.borrowApy,
         range: (p.range as PositionRange | null) ?? null,
         band: (p.band as PositionBand | null) ?? null,
-        // Written by the wallet service as PositionTokenDto[]; Prisma types it as
+        // Written by the scan pipeline as PositionTokenDto[]; Prisma types it as
         // opaque JSON, so this is the one place the shape is asserted
         tokens: (p.tokens as PositionTokenDto[] | null) ?? null,
       }));

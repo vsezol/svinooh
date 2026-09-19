@@ -10,7 +10,7 @@ import {
 } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import type { ScanResult } from '@svinooh/shared';
-import { config } from '../config';
+import { config } from '../../config';
 import { SyncService } from './sync.service';
 
 /**

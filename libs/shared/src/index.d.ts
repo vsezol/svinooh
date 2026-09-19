@@ -566,7 +566,7 @@ export interface CheckoutDto {
   url: string;
 }
 
-/* ───────── scanning: the contract between the wallet service and the scanners ───────── */
+/* ───────── scanning: the contract between the pipeline and the scanners ───────── */
 /** One underlying leg of a DeFi position (supplied / accrued / borrowed) */
 export interface ScanPositionToken {
   symbol: string;
@@ -885,7 +885,7 @@ export interface WalletPositionState {
 /**
  * What a wallet looked like the moment a scan landed.
  *
- * Published by the wallet service and read by whatever decides who should hear
+ * Published by the scan pipeline and read by whatever decides who should hear
  * about it. It carries no owner and no settings on purpose: who watches this
  * wallet and what they asked to be told is the reader's business, and a scan
  * should not have to know.

@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert';
 import { describe, test } from 'node:test';
 import type { PrismaService } from '@svinooh/db';
 import { DepositsService } from '../src/deposits/deposits.service';
+import type { ScanRequests } from '../src/wallet/scan-requests.service';
 
 const SIGNATURE = '5ndCyVRV3mQRLmTdhKbJdFVWEPfYhfqZmAaLvQnqaJ8pZJqvHkBQ7kkbXHbPMRLzrXhDcQAqfHuNvAhVQDWkZqYh';
 const OWNER = 'EiN7zKfhj7TAwibNDRDhWqELSv9bgMcRsmG6Kz8DcYNL';
@@ -22,7 +23,12 @@ const standing = (
     portfolioWallet: { findFirst: async () => tracked },
   } as unknown as PrismaService;
 
-  return { calls, deposits: new DepositsService(prisma) };
+  // The re-read used to be an HTTP call to the wallet service and showed up in
+  // `calls`; the pipeline is in this process now, so it is asked directly
+  const rescanned: string[] = [];
+  const scans = { now: (walletId: string) => rescanned.push(walletId) } as unknown as ScanRequests;
+
+  return { calls, rescanned, deposits: new DepositsService(prisma, scans) };
 };
 
 const LANDED = { status: 'landed', slot: 4, error: null };
@@ -38,7 +44,7 @@ describe('WhenADepositLands', () => {
   });
 
   test('a landing on a tracked address asks for that wallet to be read again', async () => {
-    const { calls, deposits } = standing(LANDED, {
+    const { calls, rescanned, deposits } = standing(LANDED, {
       walletId: 'w-1',
       portfolio: { slug: 'my-money' },
     });
@@ -50,17 +56,20 @@ describe('WhenADepositLands', () => {
       tracked: true,
       portfolio: 'my-money',
     });
-    assert.equal(calls.length, 2);
-    assert.match(calls[1], /\/internal\/scan$/);
+    // Nothing left the process: one call to earn, and the wallet asked for
+    // by id, in-process
+    assert.equal(calls.length, 1);
+    assert.deepEqual(rescanned, ['w-1']);
   });
 
   test('a landing from an address this account does not hold scans nothing', async () => {
-    const { calls, deposits } = standing(LANDED, null);
+    const { calls, rescanned, deposits } = standing(LANDED, null);
     const seen = await deposits.landed(SIGNATURE, OWNER, 'sol', 'user-1');
     assert.equal(seen.status, 'landed');
     assert.equal(seen.tracked, false);
     assert.equal(seen.portfolio, null);
     assert.equal(calls.length, 1);
+    assert.deepEqual(rescanned, []);
   });
 
   test('a chain nobody follows is refused before earn is asked', async () => {

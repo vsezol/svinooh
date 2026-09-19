@@ -159,7 +159,7 @@ export const REGISTRY = {
     env: 'SCAN_JOB_DELAY_MS',
     readBy: ['scanner-evm', 'wallet'],
     live: false,
-    note: "The scanner service has no database and cannot pick this up live; it applies there on the next deploy. The wallet service's own in-process loop reads it live.",
+    note: "The scanner service has no database and cannot pick this up live; it applies there on the next deploy. The api's own in-process loop reads it live.",
   },
   'scan.httpConcurrency': {
     kind: 'number',

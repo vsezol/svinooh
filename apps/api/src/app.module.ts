@@ -9,6 +9,7 @@ import { HealthController } from './health.controller';
 import { MetricsModule, RabbitModule } from '@svinooh/common';
 import { DepositsModule } from './deposits/deposits.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
+import { WalletModule } from './wallet/wallet.module';
 import { PrismaModule } from '@svinooh/db';
 
 @Module({
@@ -28,6 +29,7 @@ import { PrismaModule } from '@svinooh/db';
     PortfolioModule,
     BillingModule,
     AdminModule,
+    WalletModule,
   ],
   controllers: [HealthController, AgentConfigController],
 })

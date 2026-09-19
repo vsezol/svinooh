@@ -1,4 +1,3 @@
-import { config } from '../config';
 import { sleep, setting } from '@svinooh/common';
 
 export class HttpError extends Error {

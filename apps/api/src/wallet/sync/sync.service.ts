@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Wallet } from '@prisma/client';
 import type { Chain, TronResources } from '@svinooh/shared';
-import { config } from '../config';
 import { leaseUntil, retryAt, schedule, ScanHold, setting } from '@svinooh/common';
 import { MetricsService, RabbitService, WALLET_STATE_QUEUE, type ScanJob } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';

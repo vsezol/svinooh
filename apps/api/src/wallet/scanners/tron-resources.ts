@@ -1,6 +1,6 @@
 import type { TronDelegation, TronFlags, TronResources } from '@svinooh/shared';
 import { sleep } from '@svinooh/common';
-import { config } from '../config';
+import { config } from '../../config';
 
 /**
  * What a Tron wallet can spend, and what it has lent out.
