@@ -254,6 +254,19 @@ class TestWhereToPutMoney:
         assert "wallet address is not yours to ask for" in asked
         assert "asking what the options are" not in asked
 
+    async def test_a_turn_that_spends_every_hop_says_so(self, caplog):
+        import logging
+
+        class Greedy(Model):
+            async def ainvoke(self, messages):
+                self._tool_calls = [EARN_CALL]
+                return await super().ainvoke(messages)
+
+        bot, _, _ = wire(intent="earn", catalog=Catalog(), model=Greedy())
+        with caplog.at_level(logging.WARNING, logger="svinooh-ai"):
+            await run(bot)
+        assert "tool budget spent" in caplog.text, "a silent ceiling is a defect nobody can see"
+
     async def test_the_tool_that_prepares_a_deposit_is_there_either_way(self):
         bot, _, model = wire(intent="earn", catalog=Catalog(), model=Model(tool_calls=[EARN_CALL]))
         await run(bot)

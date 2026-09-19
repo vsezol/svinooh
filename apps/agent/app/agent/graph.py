@@ -310,7 +310,12 @@ class LangGraphAgent:
                 return {"answer": extract_text(reply)}
             messages.append(reply)
             messages.extend(await run_tools(calls, tools))
+        logger.warning(
+            "tool budget spent after %d hops — answering without another tool",
+            self._config.tool_hops(),
+        )
         async with step("answer", "Writing the answer"):
+            said("the tool budget was spent")
             final = await self._models.ask(role, messages)
         return {"answer": extract_text(final)}
 
