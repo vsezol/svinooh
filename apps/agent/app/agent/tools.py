@@ -78,7 +78,11 @@ def earn_tools(catalog: YieldCatalog) -> list:
         rate a token gets, or how to make idle funds work. Pass one ticker —
         USDC, SOL, PYUSD — to narrow it to that token; leave it empty for the
         best rates across every token. Returns each pool's rate split by where
-        it comes from, how much is deposited, and a risk band with its reasons.
+        it comes from, how much is deposited, its minimum deposit, and a risk
+        band with its reasons.
+
+        Once per turn is enough: the same catalog answers every call, so a
+        second one spends a step you may need to prepare the deposit with.
         """
         ticker = token.strip().upper()
         return describe_pools(await catalog.best_pools(ticker or None, MAX_OPTIONS), ticker)
