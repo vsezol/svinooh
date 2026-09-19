@@ -99,7 +99,12 @@ def grounded_prompt(system: str, portfolio: Portfolio, max_positions: int) -> st
     return f"{system}\n\nThe user is looking at this portfolio right now:\n{shown}"
 
 
-def earn_prompt(system: str, already_earning: str = "", asked_to_place: bool = False) -> str:
+def earn_prompt(
+    system: str,
+    idle: str = "",
+    already_earning: str = "",
+    asked_to_place: bool = False,
+) -> str:
     rules = (
         f"{system}\n\nThe user is asking where to put money to work. Recommend only "
         "pools your tools returned, and never name a pool, protocol or rate that "
@@ -111,6 +116,8 @@ def earn_prompt(system: str, already_earning: str = "", asked_to_place: bool = F
         "at risk there, not with svinooh."
     )
     rules = f"{rules}\n\n{PLACING if asked_to_place else ASKING}"
+    if idle:
+        rules = f"{rules}\n\n{HOLDING}\n{idle}"
     if not already_earning:
         return rules
     return (
@@ -127,6 +134,16 @@ def earn_prompt(system: str, already_earning: str = "", asked_to_place: bool = F
         f"{already_earning}"
     )
 
+
+HOLDING = (
+    "What the user is holding that earns nothing — the money a deposit would "
+    "come from, and the amounts as they stand right now. These lines are the "
+    "answer to 'how much': 'all of it', 'everything I have', 'my USDC' mean the "
+    "figure on the line, so never ask for a number that is already here. You "
+    "are reading their portfolio as you answer — never say you cannot see it, "
+    "and never ask which wallet. A token sits on one network and a pool on "
+    "another cannot take it."
+)
 
 ASKING = (
     "They are asking what the options are, not asking you to act. Answer the "

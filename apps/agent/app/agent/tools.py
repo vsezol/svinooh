@@ -151,15 +151,21 @@ def describe_pools(snapshot: CatalogSnapshot, asked_for: str) -> str:
     lines = [f"Read at {read_at}.{stale if snapshot.stale else ''}"]
     for pool in snapshot.pools:
         reasons = "; ".join(pool.risk_reasons)
+        least = pool.terms.min_amount if pool.terms else None
         lines.append(
             f"- {pool.name} ({pool.protocol} {pool.kind}) pays "
             f"{as_percent(pool.apy_net)} net on {pool.token} = {rate_breakdown(pool)}. "
             f"{as_money(pool.tvl_usd)} deposited. Risk {pool.risk}"
-            f"{f': {reasons}' if reasons else ''}. id {pool.id}"
+            f"{f': {reasons}' if reasons else ''}."
+            f"{f' Takes {least:f} {pool.token} at least.' if least else ''}"
+            f" id {pool.id}"
         )
     lines.append(
         "Quote the net rate, name the risk in words with its reason, and never "
-        "promise a rate will hold — base is what borrowers pay, the rest ends."
+        "promise a rate will hold — base is what borrowers pay, the rest ends. "
+        "Where a pool states a minimum, check it against what the user has "
+        "before you name that pool: proposing one they cannot reach spends "
+        "their turn on a refusal you could have read here."
     )
     return "\n".join(lines)
 

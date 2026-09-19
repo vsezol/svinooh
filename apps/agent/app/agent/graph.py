@@ -13,7 +13,7 @@ from ..domain.conversation import Turn
 from ..domain.earn import Deposit
 from ..observability import metrics
 from ..ports import Ask, Failed, Finished, Progress, Reply, Update
-from .context import earning_lines, positions_read
+from .context import earning_lines, idle_lines, positions_read
 from .intent import IntentClassifier
 from .llm import Models, extract_text
 from .onboarding import (
@@ -123,12 +123,12 @@ class LangGraphAgent:
             logger.info(
                 "intent: %s%s (%s) q=%.80s",
                 label.intent,
-                " place" if label.asked_to_place else "",
+                f" {label.stance}",
                 label.reason,
                 state["question"],
             )
             metrics.counted(metrics.intents, intent=label.intent)
-            return {"intent": label.intent, "asked_to_place": label.asked_to_place}
+            return {"intent": label.intent, "asked_to_place": label.stance == "placing"}
         except Exception as error:  # noqa: BLE001 — the fail-safe IS the handling
             logger.warning("intent classifier failed (%r) — routing to portfolio", error)
             metrics.counted(metrics.intents, intent="unreadable")

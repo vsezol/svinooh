@@ -1,5 +1,6 @@
 from app.agent.context import (
     earning_lines,
+    idle_lines,
     portfolio_context,
     position_line,
     positions_read,
@@ -166,3 +167,23 @@ class TestWhenTheBlockRunsOutOfRoom:
         printed = [line for line in block.splitlines() if line.startswith("  - SMALL")]
         assert printed
         assert all(line.endswith(", eth") for line in printed)
+
+
+class TestWhatIsLyingAround:
+    def test_a_plain_holding_is_named_with_what_there_is_of_it(self):
+        held = fx.as_portfolio(
+            fx.portfolio([fx.wallet(fx.SOL_ADDRESS, [fx.USDC_SOL], chain="SOL")])
+        )
+        line = idle_lines(held)
+        assert "USDC" in line and "12.0014" in line and "$12.00" in line
+        assert "on sol" in line
+
+    def test_money_already_earning_is_not_lying_around(self):
+        held = fx.as_portfolio(fx.portfolio([fx.wallet(fx.EVM_ADDRESS, [fx.FLUID])]))
+        assert "nothing idle" in idle_lines(held)
+
+    def test_nothing_idle_says_so_rather_than_saying_nothing(self):
+        held = fx.as_portfolio(fx.portfolio([fx.wallet(fx.SOL_ADDRESS, [fx.KAMINO])]))
+        said = idle_lines(held)
+        assert said.startswith("nothing idle")
+        assert "collateral" in said

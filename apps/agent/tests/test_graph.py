@@ -189,6 +189,33 @@ class TestWhereToPutMoney:
         assert ("portfolio", "on-screen", "Bearer T") in api.calls
         assert "already has earning" in model.prompts[0], "a recommendation can be a move"
 
+    async def test_the_money_lying_around_is_what_a_deposit_comes_from(self):
+        holding = fx.as_portfolio(
+            fx.portfolio([fx.wallet(fx.SOL_ADDRESS, [fx.USDC_SOL], chain="SOL")])
+        )
+        bot, _, model = wire(
+            intent="earn",
+            catalog=Catalog(),
+            api=Api(portfolio=holding),
+            model=Model(tool_calls=[EARN_CALL]),
+            asked_to_place=True,
+        )
+        await run(bot, portfolio="on-screen", authorization="Bearer T")
+        asked = model.prompts[0]
+        assert "USDC 12.0014" in asked, "the amount is in the prompt, so it is not a question"
+        assert "never ask for a number that is already here" in asked
+        assert "never say you cannot see it" in asked
+
+    async def test_a_portfolio_that_could_not_be_read_adds_nothing(self):
+        bot, _, model = wire(
+            intent="earn",
+            catalog=Catalog(),
+            api=Api(refuse=True),
+            model=Model(tool_calls=[EARN_CALL]),
+        )
+        await run(bot, portfolio="on-screen", authorization="Bearer T")
+        assert "money a deposit would come from" not in model.prompts[0]
+
     async def test_collateral_reaches_the_prompt_as_collateral(self):
         leveraged = fx.as_portfolio(fx.portfolio([fx.wallet(fx.SOL_ADDRESS, [fx.KAMINO])]))
         bot, _, model = wire(
