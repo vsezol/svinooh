@@ -205,6 +205,8 @@ class TestWhereToPutMoney:
         assert "USDC 12.0014" in asked, "the amount is in the prompt, so it is not a question"
         assert "never ask for a number that is already here" in asked
         assert "never say you cannot see it" in asked
+        assert "Place what they named and nothing else" in asked
+        assert "just moved money and the figure has not caught up" in asked
 
     async def test_a_portfolio_that_could_not_be_read_adds_nothing(self):
         bot, _, model = wire(
