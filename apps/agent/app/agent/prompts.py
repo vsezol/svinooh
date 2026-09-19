@@ -140,7 +140,13 @@ def earn_prompt(base: str, already_earning: str = "") -> str:
         f"{rules}\n\nWhat the user already has earning, so a recommendation can be "
         "a MOVE and not only a new deposit. Compare the rates, name what moving "
         "would gain, and say when it is not worth it — moving costs fees and puts "
-        "the money in a different protocol's hands:\n"
+        "the money in a different protocol's hands. A rate belongs to what is "
+        "supplied, not to a position: quote the leg, never an average of legs, "
+        "and never a figure for a position that has none. Where a line says the "
+        "money is collateral for a loan, treat it as held, not idle: it moves "
+        "only by repaying or by withdrawing part of it against the health "
+        "factor, and a suggestion that skips that is advice to liquidate "
+        "somebody.\n"
         f"{already_earning}"
     )
 
