@@ -86,7 +86,7 @@ describe('hasRange — which kinds have a range at all', () => {
 });
 
 describe('enrich — finding the pool a position belongs to', () => {
-  const facts = (pools: PoolFact[]): DefiFacts => ({ pools, lending: [] }) as DefiFacts;
+  const facts = (pools: PoolFact[]): DefiFacts => ({ pools, lending: [], failed: [] });
 
   /**
    * A lending position supplying one asset and earning a reward in another has
@@ -273,7 +273,7 @@ describe('enrich — what a loan costs is the lending protocol\'s own number', (
       borrowRate: 5.01,
       ...over,
     }) as LendingFact;
-  const facts = (lending: LendingFact[]): DefiFacts => ({ pools: [], lending }) as DefiFacts;
+  const facts = (lending: LendingFact[]): DefiFacts => ({ pools: [], lending, failed: [] });
   /** Every fact here is Kamino's, so every position that may have one is a Kamino position */
   const borrower = (over: Partial<ScanPosition>): ScanPosition =>
     position({ symbol: 'Kamino', platform: 'kamino', name: 'Lending', ...over });

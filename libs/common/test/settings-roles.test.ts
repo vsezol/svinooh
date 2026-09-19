@@ -113,8 +113,9 @@ describe('the pairing the panel is told about', () => {
   test('every thinking knob can be told to ask for nothing', () => {
     for (const { effort } of ROLE_PAIRS) {
       const spec = REGISTRY[effort];
+      const options: readonly string[] = spec.kind === 'choice' ? spec.options : [];
       assert.ok(
-        spec.kind === 'choice' && spec.options.includes(NO_THINKING),
+        options.includes(NO_THINKING),
         `${effort} has no way to send no reasoning parameter at all`,
       );
     }

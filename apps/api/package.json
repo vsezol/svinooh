@@ -11,7 +11,8 @@
     "check:flow": "tsx scripts/billing.flow.check.ts",
     "check:sandbox": "tsx scripts/billing.sandbox.check.ts",
     "test": "tsx --test test/*.test.ts",
-    "check:boundary": "tsx scripts/admin.boundary.check.ts"
+    "check:boundary": "tsx scripts/admin.boundary.check.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",

@@ -166,6 +166,7 @@ export interface SettingView {
   live: boolean;
   note?: string;
   readBy: string[];
+  role?: { effort: SettingKey; noThinking: string };
 }
 
 export const settingsView = (values: SettingValues): SettingView[] =>

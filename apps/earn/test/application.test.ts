@@ -12,6 +12,9 @@ import { policy, pool } from './support';
 
 const clock = () => new Date('2026-09-10T12:00:00Z');
 
+const timersRunning = (): number =>
+  process.getActiveResourcesInfo().filter((held) => held === 'Timeout').length;
+
 const withPools = (count: number, version = 1) =>
   buildCatalog({
     version,
@@ -154,6 +157,17 @@ describe('KeepingTheCatalogCurrent', () => {
     const refresher = new CatalogRefresher([source('kamino', [], true)], store, policy, clock, 60_000);
     assert.equal(await refresher.refreshOnce(), null);
     assert.equal(store.isReady, false);
+  });
+
+  test('the startup grace does not outlive the pass it was waiting for', async () => {
+    const store = new CatalogStore(3);
+    const refresher = new CatalogRefresher([source('kamino', [pool()])], store, policy, clock, 60_000);
+    const before = timersRunning();
+    refresher.start();
+    await refresher.waitForFirstPass(2000);
+    refresher.stop();
+    assert.equal(store.isReady, true);
+    assert.equal(timersRunning(), before);
   });
 
   test('the store keeps a bounded history', () => {
