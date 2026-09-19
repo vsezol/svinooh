@@ -1,5 +1,6 @@
-import { PrismaClient } from '@prisma/client';
-import { NOTICES_QUEUE, type RabbitService, setting } from '@svinooh/common';
+import { Injectable } from '@nestjs/common';
+import { NOTICES_QUEUE, RabbitService, setting } from '@svinooh/common';
+import { PrismaService } from '@svinooh/db';
 import type { SlowedNotice } from '@svinooh/shared';
 
 /**
@@ -17,9 +18,10 @@ import type { SlowedNotice } from '@svinooh/shared';
  * time it ran, forever; instead we send only when there has been no notice
  * SINCE their last visit, which makes returning the thing that re-arms it.
  */
+@Injectable()
 export class Slowdown {
   constructor(
-    private readonly prisma: PrismaClient,
+    private readonly prisma: PrismaService,
     private readonly rabbit: RabbitService,
   ) {}
 

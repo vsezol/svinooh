@@ -1,8 +1,9 @@
-import { PrismaClient } from '@prisma/client';
+import { Injectable, Logger } from '@nestjs/common';
 import type { AlertEvent, WalletStateEvent } from '@svinooh/shared';
-import { ALERTS_QUEUE, BILLING_QUEUE, type RabbitService } from '@svinooh/common';
+import { ALERTS_QUEUE, BILLING_QUEUE, RabbitService } from '@svinooh/common';
+import { PrismaService } from '@svinooh/db';
 import { decide, type Remembered, type Settings } from './decide';
-import type { Trial } from './trial';
+import { Trial } from './trial.service';
 
 /**
  * What a wallet is watched for when nobody has said otherwise. The same list
@@ -21,9 +22,8 @@ const DEFAULTS: Settings = {
  * Postgres refuses NUL in text outright (22021), and the alert states are
  * written in one transaction per wallet — so a single key carrying one, from a
  * scam token's padded bytes32 symbol, vetoes the state of every position
- * beside it, every scan. The producer cleans its keys too, but this consumer
- * outlives any one producer version and takes events from all of them; what it
- * is about to write is its own to guarantee.
+ * beside it, every scan. alertableStates cleans its keys too; what this is
+ * about to write is still its own to guarantee, and the cleaning is cheap.
  */
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f]/g;
@@ -35,14 +35,22 @@ const escaped = (s: string): string => JSON.stringify(s);
  * Turns "here is what this wallet looks like" into "here is what its owner
  * asked to be told".
  *
- * The whole service is this function. It knows who owns the wallet, what they
- * asked for, and what was true last time; it decides what changed and says so.
- * It does not format anything — the bot does that — and it does not scan
- * anything, because by the time it hears about a wallet the scanning is done.
+ * This was a service of its own, and the only thing it ever heard was one
+ * message per scan on a queue that the scan pipeline published and nothing
+ * else read. Both ends of that queue now live in this process, so the writer
+ * calls `handle` directly and the message stays a method argument.
+ *
+ * It knows who owns the wallet, what they asked for, and what was true last
+ * time; it decides what changed and says so. It does not format anything — the
+ * bot does that — and it does not scan anything, because by the time it hears
+ * about a wallet the scanning is done.
  */
-export class Collector {
+@Injectable()
+export class AlertsCollector {
+  private readonly logger = new Logger(AlertsCollector.name);
+
   constructor(
-    private readonly prisma: PrismaClient,
+    private readonly prisma: PrismaService,
     private readonly rabbit: RabbitService,
     private readonly trial: Trial,
   ) {}
@@ -58,13 +66,13 @@ export class Collector {
    */
   async handle(event: WalletStateEvent): Promise<void> {
     // The keys are about to become database rows, so they are cleaned at this
-    // door whatever the producer did — and a cleaning that changed anything is
-    // said out loud with the bytes made visible, because it means some producer
-    // is still emitting them and the log is what will name it.
+    // door whatever the writer did — and a cleaning that changed anything is
+    // said out loud with the bytes made visible, because it means something
+    // upstream is still emitting them and the log is what will name it.
     const positions = event.positions.map((position) => {
       const key = position.key.replace(CONTROL, '');
       if (key !== position.key) {
-        console.warn(
+        this.logger.warn(
           `control bytes in position key from ${event.chain} ${event.address}: ${escaped(position.key)}`,
         );
       }

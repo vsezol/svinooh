@@ -154,6 +154,13 @@ echo "== application services (all from ${REPO}@${BRANCH}) =="
 #
 # It needs ≥ 512MB on top of what the gateway itself uses; the scanners are
 # HTTP-bound, not CPU-bound (the browser one is scanner-evm, still separate).
+#
+# Deciding who to alert is in here too (apps/api/src/alerts). It was
+# monitor-alerts, a service whose whole input was a queue this one published
+# to and nothing else read. It still publishes alerts.telegram,
+# notices.telegram and billing.telegram — the bot is a real service on the
+# other side of those — and it still sweeps every 15 minutes for portfolios
+# that have gone quiet and subscriptions about to lapse.
 add_repo api
 setvars api \
   "NODE_ENV=production" "PORT=3000" \
@@ -196,18 +203,6 @@ setvars scanner-evm \
   "LOKI_URL=" \
   "SERVICE_NAME=svinooh-scanner-evm"
 
-# monitor-alerts — reads wallet.state, decides what each owner should be told,
-# publishes alerts.telegram. THE second service whose absence is felt silently:
-# wallet publishes wallet.state to a durable queue whether or not anything
-# drains it, so without this the queue grows and nobody is ever told anything.
-# config apps/monitor-alerts/railway.json
-add_repo monitor-alerts
-setvars monitor-alerts \
-  "NODE_ENV=production" "PORT=3000" \
-  "DATABASE_URL=${PG_URL}" \
-  "RABBITMQ_URL=${RABBIT_URL}" \
-  "${NODE_MEMORY[@]}"
-
 # bot-telegram — the Telegram bot: long-polls for /start, and drains
 # alerts.telegram. It must run as EXACTLY ONE replica — Telegram allows a single
 # long-poll consumer per bot token, and two would fight over updates.
@@ -242,7 +237,6 @@ The Railway CLI does not set these reliably; do them once in the dashboard
      api          → apps/api/railway.json          (or set Dockerfile path apps/api/Dockerfile)
      auth         → apps/auth/railway.json
      scanner-evm  → apps/scanner-evm/railway.json
-     monitor-alerts → apps/monitor-alerts/railway.json
      bot-telegram → apps/bot-telegram/railway.json
      web          → apps/web/railway.json          (or Dockerfile path apps/web/Dockerfile)
      prometheus   → ops/prometheus/railway.json

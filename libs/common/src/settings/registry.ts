@@ -173,20 +173,6 @@ export const REGISTRY = {
     readBy: ['api'],
     live: true,
   },
-  'alerts.prefetch': {
-    kind: 'number',
-    group: 'queue',
-    label: 'Alert events at once',
-    about:
-      'How many wallet-state events the collector works through in parallel. The work is a couple of queries.',
-    default: 4,
-    min: 1,
-    max: 32,
-    env: 'ALERTS_PREFETCH',
-    readBy: ['monitor-alerts'],
-    live: false,
-    note: "A consumer's prefetch is fixed when it subscribes, so this one takes effect on the next deploy of monitor-alerts.",
-  },
 
   'scan.leaseMin': {
     kind: 'number',
@@ -250,7 +236,7 @@ export const REGISTRY = {
     options: ['off', 'on'],
     default: 'off',
     env: 'BILLING_ENFORCE',
-    readBy: ['api', 'monitor-alerts'],
+    readBy: ['api'],
     live: true,
   },
   'billing.proPriceUsd': {
@@ -263,7 +249,7 @@ export const REGISTRY = {
     min: 1,
     max: 1000,
     env: 'BILLING_PRO_PRICE_USD',
-    readBy: ['api', 'monitor-alerts'],
+    readBy: ['api'],
     live: true,
   },
   'billing.proWasPriceUsd': {
@@ -276,7 +262,7 @@ export const REGISTRY = {
     min: 1,
     max: 1000,
     env: 'BILLING_PRO_WAS_PRICE_USD',
-    readBy: ['api', 'monitor-alerts'],
+    readBy: ['api'],
     live: true,
   },
   'billing.firstMonthUsd': {
@@ -289,7 +275,7 @@ export const REGISTRY = {
     min: 1,
     max: 1000,
     env: 'BILLING_FIRST_MONTH_USD',
-    readBy: ['api', 'monitor-alerts'],
+    readBy: ['api'],
     live: true,
   },
   'billing.payCoin': {
@@ -324,7 +310,7 @@ export const REGISTRY = {
     min: 0,
     max: 10000,
     env: 'BILLING_FREE_ALERTS',
-    readBy: ['monitor-alerts', 'api'],
+    readBy: ['api'],
     live: true,
   },
   'billing.freePortfolios': {

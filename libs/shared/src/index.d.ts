@@ -885,8 +885,9 @@ export interface WalletPositionState {
 /**
  * What a wallet looked like the moment a scan landed.
  *
- * Published by the scan pipeline and read by whatever decides who should hear
- * about it. It carries no owner and no settings on purpose: who watches this
+ * Handed by the scan pipeline to whatever decides who should hear about it.
+ * It travelled on a queue between two services until both ends became one
+ * process; it is an argument now, and the shape is unchanged. It carries no owner and no settings on purpose: who watches this
  * wallet and what they asked to be told is the reader's business, and a scan
  * should not have to know.
  *
@@ -1000,7 +1001,7 @@ export interface AlertEvent {
 
 /**
  * Everything money ever says to a person, addressed to them. Published by the
- * api (a payment landing) and by the billing sweep in monitor-alerts (the
+ * api — a payment landing, and the billing sweep in its alerts module (the
  * trial running out, Pro about to end or ended); read by the bot.
  *
  * The prices and limits ride along rather than being read back by the bot: the

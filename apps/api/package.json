@@ -12,7 +12,9 @@
     "check:sandbox": "tsx scripts/billing.sandbox.check.ts",
     "test": "tsx --test test/*.test.ts",
     "check:boundary": "tsx scripts/boundaries.check.ts",
-    "verify:scanners": "tsx scripts/verify-scanners.ts"
+    "verify:scanners": "tsx scripts/verify-scanners.ts",
+    "check:alerts": "tsx scripts/alerts.check.ts",
+    "check:trial": "tsx scripts/alerts.trial.check.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",

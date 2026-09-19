@@ -1,10 +1,11 @@
 /**
  * The transition rules, exercised.
  *
- * `decide` is the whole point of this service and it is pure, so it can be run
- * for real rather than reasoned about. Run with `npm run -w apps/monitor-alerts check`.
+ * `decide` is the whole point of the alerts module and it is pure, so it can
+ * be run for real rather than reasoned about.
+ * Run with `npm run -w apps/api check:alerts`.
  */
-import { decide, type Remembered, type Settings } from '../src/decide';
+import { decide, type Remembered, type Settings } from '../src/alerts/decide';
 import type { WalletPositionState } from '@svinooh/shared';
 
 const ON: Settings = { rangeAlerts: true, healthFactorBelow: 1.1, borrowApyAbove: 12 };

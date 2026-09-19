@@ -99,14 +99,6 @@ export type ScanOutcome =
     }
   | { chain: Chain; address: string; ok: false; error: string };
 
-/**
- * Where a scan announces what it found, for whoever decides who should hear
- * about it. Separate from the scan-result queue on purpose: that one is how a
- * scanner hands work back to the pipeline, and this one is what the pipeline
- * says once the work is done and written.
- */
-export const WALLET_STATE_QUEUE = 'wallet.state';
-
 /** Where the collector puts what somebody should be told. Read by the bot. */
 export const ALERTS_QUEUE = 'alerts.telegram';
 

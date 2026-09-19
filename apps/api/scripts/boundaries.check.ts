@@ -38,8 +38,16 @@ const FENCES: Fence[] = [
     dir: 'wallet',
     // "scan this wallet now" is the whole of what the api may ask of it
     doors: ['wallet.module', 'scan-requests.service'],
-    neighbours: [],
+    // The writer tells the collector what it stored — the one direction
+    // between these two, and it points this way
+    neighbours: ['alerts'],
     exports: ['ScanRequests'],
+  },
+  {
+    dir: 'alerts',
+    doors: ['alerts.module', 'collector.service'],
+    neighbours: [],
+    exports: ['AlertsCollector'],
   },
 ];
 

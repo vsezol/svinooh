@@ -1,5 +1,6 @@
-import { PrismaClient } from '@prisma/client';
-import { BILLING_QUEUE, type RabbitService, setting } from '@svinooh/common';
+import { Injectable } from '@nestjs/common';
+import { BILLING_QUEUE, RabbitService, setting } from '@svinooh/common';
+import { PrismaService } from '@svinooh/db';
 import type { BillingNotice } from '@svinooh/shared';
 
 /**
@@ -38,9 +39,10 @@ export function expiredNoticeDue(
   return expiredNoticeAt === null || expiredNoticeAt < paidUntil;
 }
 
+@Injectable()
 export class Renewals {
   constructor(
-    private readonly prisma: PrismaClient,
+    private readonly prisma: PrismaService,
     private readonly rabbit: RabbitService,
   ) {}
 
