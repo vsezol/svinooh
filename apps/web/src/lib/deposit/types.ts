@@ -28,6 +28,8 @@ export interface BuiltDeposit {
   lastValidBlockHeight: string;
 }
 
+export type DepositOutcome = { ok: true; signature?: string } | { ok: false; reason: string };
+
 export class DepositNotSupportedError extends Error {}
 
 export type BuildDeposit = (

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import * as ReactDOMClient from 'react-dom/client';
+import type { DepositOutcome, DepositRequest } from '../../lib/deposit';
 
 /**
  * The agent chat, loaded from its own deployment at runtime.
@@ -39,6 +40,7 @@ interface AgentMount {
       onConversations?: (list: ConversationRef[]) => void;
       /** Which conversation is on screen, so the page can be its address. */
       onConversationId?: (id: string | null) => void;
+      onDeposit?: (request: DepositRequest) => Promise<DepositOutcome>;
     },
   ): AgentHandle;
 }
@@ -158,6 +160,7 @@ interface Props {
    * been spoken to — there is nothing at an address that does not exist yet.
    */
   onConversationId?: (id: string | null) => void;
+  onDeposit?: (request: DepositRequest) => Promise<DepositOutcome>;
   /** Filled in once the widget is up, so the rail can drive it. */
   control?: { current: AgentControl | null };
 }
@@ -186,6 +189,7 @@ export function AgentEmbed({
   initialQuestion,
   onConversations,
   onConversationId,
+  onDeposit,
   control,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
@@ -263,6 +267,7 @@ export function AgentEmbed({
           initialQuestion: asked.current ? undefined : now.initialQuestion,
           onConversations,
           onConversationId,
+          onDeposit,
         });
         asked.current = true;
         handle.current = mounted;

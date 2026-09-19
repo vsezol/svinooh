@@ -3,11 +3,12 @@ import {
   DepositNotSupportedError,
   type BuildDeposit,
   type BuiltDeposit,
+  type DepositOutcome,
   type DepositRequest,
 } from './types';
 
 export { DepositNotSupportedError };
-export type { BuiltDeposit, DepositRequest };
+export type { BuiltDeposit, DepositOutcome, DepositRequest };
 
 const BUILDERS: Record<string, BuildDeposit> = {
   'sol:kamino': buildKaminoDeposit,
