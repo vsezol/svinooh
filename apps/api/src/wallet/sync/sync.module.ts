@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
+import { AlertsModule } from '../../alerts/alerts.module';
 import { MetricsCollectorsService } from './metrics-collectors.service';
 import { ScanConsumerService } from './scan-consumer.service';
 import { ScanProducerService } from './scan-producer.service';
@@ -7,8 +7,9 @@ import { ScanResultConsumerService } from './scan-result-consumer.service';
 import { SyncService } from './sync.service';
 
 @Module({
-  // Drives ScanProducerService's @Interval, and stops it with the app
-  imports: [ScheduleModule.forRoot()],
+  // The writer tells the collector what an address looks like once the
+  // reading is stored — see SyncService.announce
+  imports: [AlertsModule],
   providers: [
     SyncService,
     ScanProducerService,

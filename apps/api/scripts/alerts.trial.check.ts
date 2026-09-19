@@ -3,10 +3,10 @@
  *
  * All three are pure and all three guard messages to real people — a wrong
  * verdict is either spam or silence about money. Run with
- * `npm run -w apps/monitor-alerts check:billing`.
+ * `npm run -w apps/api check:trial`.
  */
-import { judgeAlert } from '../src/trial';
-import { expiredNoticeDue, reminderDue } from '../src/renewals';
+import { judgeAlert } from '../src/alerts/trial.service';
+import { expiredNoticeDue, reminderDue } from '../src/alerts/renewals.service';
 
 let failures = 0;
 const check = (name: string, got: unknown, want: unknown) => {

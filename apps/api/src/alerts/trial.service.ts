@@ -1,5 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { Injectable } from '@nestjs/common';
 import { option, setting } from '@svinooh/common';
+import { PrismaService } from '@svinooh/db';
 import type { BillingNotice } from '@svinooh/shared';
 
 /**
@@ -36,8 +37,9 @@ export function judgeAlert(input: {
   return quiet ? { verdict: 'silent', count: false } : { verdict: 'upsell', count: false };
 }
 
+@Injectable()
 export class Trial {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async judge(userId: string, paidUntil: Date | null, now = new Date()): Promise<TrialCall> {
     const pro = paidUntil !== null && paidUntil > now;

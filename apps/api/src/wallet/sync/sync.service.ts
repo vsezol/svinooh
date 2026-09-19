@@ -3,8 +3,9 @@ import { Prisma } from '@prisma/client';
 import type { Wallet } from '@prisma/client';
 import type { Chain, TronResources } from '@svinooh/shared';
 import { leaseUntil, retryAt, schedule, ScanHold, setting } from '@svinooh/common';
-import { MetricsService, RabbitService, WALLET_STATE_QUEUE, type ScanJob } from '@svinooh/common';
+import { MetricsService, RabbitService, type ScanJob } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
+import { AlertsCollector } from '../../alerts/collector.service';
 import { alertableStates } from './wallet-state';
 import { scanAddress } from '../scanners';
 import type { ScanPosition, ScanResult } from '@svinooh/shared';
@@ -42,6 +43,7 @@ export class SyncService {
     private readonly prisma: PrismaService,
     private readonly metrics: MetricsService,
     private readonly rabbit: RabbitService,
+    private readonly alerts: AlertsCollector,
   ) {}
 
 
@@ -211,19 +213,23 @@ export class SyncService {
   }
 
   /**
-   * Says what the address looks like now, for whoever decides who should hear
+   * Says what the address looks like now, to whoever decides who should hear
    * about it.
    *
-   * Published after the positions are written, not before: a reader that came
-   * to look would otherwise find the previous scan's rows and answer about the
-   * wrong state. It carries no owner and no settings — who watches this address
-   * and what they asked for is the reader's business, and a scan should not
-   * have to know. One message per address, however many portfolios hold it; the
-   * collector is what fans it out to their separate thresholds.
+   * Told after the positions are written, not before: the collector goes and
+   * reads, and would otherwise find the previous scan's rows and answer about
+   * the wrong state. It carries no owner and no settings — who watches this
+   * address and what they asked for is the collector's business, and a scan
+   * should not have to know. One call per address, however many portfolios
+   * hold it; the collector is what fans it out to their separate thresholds.
    *
-   * A failure to publish is logged and swallowed. The scan succeeded and its
-   * result is stored; losing the announcement costs one cycle of alerts, and
-   * failing the scan over it would cost the balance too.
+   * This used to be a publish to `wallet.state`, a queue with this one
+   * producer and one consumer in a service of its own. The call is in-process
+   * now and the failure rule is unchanged: logged and swallowed. The scan
+   * succeeded and its result is stored; losing the announcement costs one
+   * cycle of alerts, and failing the scan over it would cost the balance too —
+   * which is also why the collector is awaited HERE, after the transaction,
+   * and never inside it.
    */
   private async announce(wallet: Wallet, result: ScanResult): Promise<void> {
     const positions = alertableStates(result.positions);
@@ -235,15 +241,15 @@ export class SyncService {
     // anybody could have asked to hear about
     if (!positions.length && !tron) return;
     try {
-      await this.rabbit.publish(WALLET_STATE_QUEUE, {
+      await this.alerts.handle({
         walletId: wallet.id,
         address: wallet.address,
         chain: wallet.chain as Chain,
         positions,
         tron,
         // The scanners drop what they could not reach before this point, so
-        // nothing here can name it yet. Carrying it is what will let a reader
-        // hold a position's previous state instead of calling it gone.
+        // nothing here can name it yet. Carrying it is what will let the
+        // collector hold a position's previous state instead of calling it gone.
         unreachable: [],
         at: new Date().toISOString(),
       });

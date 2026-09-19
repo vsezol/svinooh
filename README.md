@@ -18,7 +18,8 @@ apps/
             /auth/* proxied to the auth service. It also carries two fenced-off
             modules that were services of their own: src/admin (the tunables)
             and src/wallet (the scan pipeline — what is due, one RabbitMQ queue
-            per chain, the SOL/TRON/BTC scanners, snapshots)
+            per chain, the SOL/TRON/BTC scanners, snapshots), and src/alerts
+            (who should be told what, the trial meter, the renewal sweeps)
   auth/   — sign-in (NestJS): Telegram bot and login widget, X, wallet
             signatures; issues JWTs, owns User
   scanner-evm/ — the EVM scanner (NestJS): a headless browser (lightpanda or
@@ -57,10 +58,9 @@ Postgres is shared, with ownership by table: **auth** writes `User` and the
 first `Portfolio` an account is given — with, for a wallet sign-in, the one
 `Wallet` it is created holding; **api** writes `Portfolio`, the billing tables
 (`Subscription` / `Payment` / `FeatureUsage`) and — since the scan pipeline
-moved into it — `Wallet` / `Position` / `AddressSnapshot`; **monitor-alerts**
-owns the alert-trial meter on `FeatureUsage` and the reminder stamps on
-`Subscription`. Only the api is exposed publicly; the others are reachable
-over Railway's private network. JWTs are signed by auth and verified by api,
+moved into it — `Wallet` / `Position` / `AddressSnapshot`, plus the alert-trial
+meter on `FeatureUsage` and the reminder stamps on `Subscription`. Only the api
+is exposed publicly; the others are reachable over Railway's private network. JWTs are signed by auth and verified by api,
 which means both need the same `JWT_SECRET`.
 
 ## Quick start locally
@@ -365,8 +365,7 @@ advertise a number the checkout would contradict.
 
 Crypto has no dependable auto-debit — nothing can pull money out of a wallet —
 so a subscription is **prepaid time**: `Subscription.paidUntil`, moved forward
-by each finished payment, asked about by the renewal sweep in monitor-alerts
-(3 days before the end, and once when it ends, over Telegram — the same road
+by each finished payment, asked about by the renewal sweep (3 days before the end, and once when it ends, over Telegram — the same road
 alerts travel). That is the pattern the crypto-native products themselves ship
 (Nansen, DexTools, LunarCrush: invoice per period, reminders, manual renewal).
 
@@ -399,8 +398,8 @@ per-coin minimums against both prices.
 `billing.enforce` ships **off**: every gate stands open while the meters run,
 so the counters are honest the day the web has a paywall to show and the knob
 is flipped. Table ownership: the api writes `Subscription` / `Payment` /
-`FeatureUsage`; monitor-alerts increments the alert meter and stamps the
-reminder fields.
+`FeatureUsage`, and the alerts module inside it increments the alert meter and
+stamps the reminder fields.
 
 ### Portfolios nobody owns
 
