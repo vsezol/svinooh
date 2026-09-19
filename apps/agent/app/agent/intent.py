@@ -2,11 +2,12 @@ import logging
 from typing import Any, Literal
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import Runnable
 from pydantic import BaseModel, Field
 
 from ..config import Config
+from ..domain.conversation import Turn
 from .llm import Models, structured
 
 logger = logging.getLogger("svinooh-ai")
@@ -23,8 +24,15 @@ CLASSIFIER_PROMPT = (
     "asking where to put it, not what it is worth. Label `general` for "
     "everything else: DeFi concepts, how the app works, small talk. When in "
     "doubt between portfolio and general, prefer `portfolio` — a wrong general "
-    "answer to a money question costs more than a wasted context fetch."
+    "answer to a money question costs more than a wasted context fetch.\n"
+    "\n"
+    "What came before decides what the latest line means. An answer to a "
+    "question the assistant just asked carries that question's intent: after "
+    "'which token and how much?', 'all my USDC' is the user placing money, "
+    "not asking what they hold. Label the conversation, not the line."
 )
+
+RECENT_TURNS = 2
 
 
 class IntentLabel(BaseModel):
@@ -48,8 +56,11 @@ class IntentClassifier:
         self._models = models
         self._config = config
 
-    async def classify(self, question: str) -> IntentLabel:
-        messages = [SystemMessage(content=CLASSIFIER_PROMPT), HumanMessage(content=question)]
+    async def classify(self, question: str, history: tuple[Turn, ...] = ()) -> IntentLabel:
+        messages: list[Any] = [SystemMessage(content=CLASSIFIER_PROMPT)]
+        for turn in history[-RECENT_TURNS:]:
+            messages += [HumanMessage(content=turn.q), AIMessage(content=turn.a)]
+        messages.append(HumanMessage(content=question))
         labelling, answering = self._config.labelling(), self._config.answering()
         try:
             label: IntentLabel = await self._models.ask(labelling, messages, prepare=_as_label)

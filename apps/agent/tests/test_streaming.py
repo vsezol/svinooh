@@ -63,7 +63,7 @@ class TestWhenItGoesWrong:
 
     async def test_a_broken_labeller_is_not_a_broken_turn(self):
         class Broken:
-            async def classify(self, _question):
+            async def classify(self, _question, _history=()):
                 raise RuntimeError("no endpoints")
 
         class PublicPortfolio:

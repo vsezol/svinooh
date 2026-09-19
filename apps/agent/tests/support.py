@@ -41,8 +41,10 @@ class Intents:
     def __init__(self, label: str = "general", asked_to_place: bool = False):
         self.label = label
         self.asked_to_place = asked_to_place
+        self.heard: tuple = ()
 
-    async def classify(self, _question: str) -> IntentLabel:
+    async def classify(self, _question: str, history: tuple = ()) -> IntentLabel:
+        self.heard = history
         return IntentLabel(intent=self.label, reason="stubbed", asked_to_place=self.asked_to_place)
 
 
