@@ -1,10 +1,3 @@
-"""The one place the host's JSON becomes the domain's types.
-
-Everything above the adapter is typed, which is only true if this holds: the
-camelCase names, the nulls where the DTO promises a number, the lists that
-arrive as `null`, and the fields we do not read at all.
-"""
-
 import pytest
 from pydantic import ValidationError
 
@@ -40,19 +33,14 @@ class TestReadingAPortfolio:
         assert (parsed.band.fee_pct, parsed.range) == (0.05, "in")
 
     def test_a_band_with_no_pair_is_no_band(self):
-        # The field exists on every position; only a liquidity one fills it.
         assert wire.position({"symbol": "X", "valueUsd": 1.0, "band": {}}).band is None
 
     def test_a_null_list_is_an_empty_one(self):
-        # `tokens: null` on every plain holding, `positions: null` on a wallet
-        # that has not been scanned. Both mean none of them.
         assert wire.position({"symbol": "X", "valueUsd": 1.0, "tokens": None}).legs == ()
         parsed = wire.portfolio({"slug": "s", "totalUsd": 0, "wallets": None})
         assert parsed.wallets == ()
 
     def test_a_field_we_do_not_read_is_not_an_error(self):
-        # The API sends ids, timestamps and TRON resources this service never
-        # reads, and a new one there must never be a failed turn here.
         parsed = wire.portfolio(
             {"slug": "s", "totalUsd": 1.0, "somethingNew": {"deeply": ["nested"]}, "wallets": []}
         )
@@ -65,8 +53,6 @@ class TestReadingAPortfolio:
         assert parsed.total_usd == fx.rich_portfolio(tail=3)["totalUsd"]
 
     def test_a_payload_of_the_wrong_shape_is_refused(self):
-        # Rather than read as an empty portfolio: the caller degrades honestly
-        # and says the numbers are unavailable, which beats a prompt of "n/a".
         with pytest.raises(ValidationError):
             wire.portfolio({"slug": "s", "totalUsd": "a lot"})
 

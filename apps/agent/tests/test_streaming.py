@@ -1,15 +1,3 @@
-"""A turn reported while it happens, rather than after.
-
-The answer took four to six seconds and the chat showed nothing for all of
-them — almost none of it thinking, nearly all of it a model writing into a
-buffer nobody could see.
-
-These run the real graph with fake models, so what is under test is the wiring
-the feature actually depends on: that the tokens of an answer can be told apart
-from the tokens of a label, and that watching a turn still ends in the same
-state as awaiting one.
-"""
-
 from app.agent.graph import ANSWERING_NODES
 from app.agent.streaming import turn_events
 from tests.support import agent, fake_model
@@ -18,7 +6,6 @@ ANSWER = "Impermanent loss is a drop against holding."
 
 
 def watching(**overrides):
-    """The simplest complete turn, or one shaped by the overrides."""
     return agent(model=fake_model(ANSWER), **overrides)
 
 
@@ -46,15 +33,11 @@ class TestWatchingATurn:
         assert events[-1][0] == "done"
 
     async def test_the_label_is_not_streamed_at_the_reader(self):
-        # The classifier runs a model too. Its output is a routing decision and
-        # was never for anybody to read.
         tokens, _ = await collect({"question": "q"}, watching(intent="general"))
         assert "general" not in tokens
 
 
 class Failing:
-    """A model that refuses, however it is called."""
-
     def __init__(self, saying="upstream is on fire"):
         self.saying = saying
 
@@ -68,8 +51,6 @@ class Failing:
 
 class TestWhenItGoesWrong:
     async def test_a_failure_ends_the_stream_rather_than_hanging(self):
-        # A reader owed an answer is owed an ending; a connection that simply
-        # stops leaves a spinner turning forever.
         _, events = await collect({"question": "q"}, agent(model=Failing()))
         name, data = events[-1]
         assert name == "error"
@@ -81,10 +62,6 @@ class TestWhenItGoesWrong:
         assert "sk-or-v1" not in str(events), "an upstream message is not ours to forward"
 
     async def test_a_broken_labeller_is_not_a_broken_turn(self):
-        # Deliberately not an error: a classifier that cannot be reached routes
-        # to the portfolio branch rather than failing the question, which is
-        # the fail-safe two production outages were hiding behind. The turn
-        # still has to end in an answer.
         class Broken:
             async def classify(self, _question):
                 raise RuntimeError("no endpoints")
@@ -108,8 +85,6 @@ class TestWhenItGoesWrong:
 
 
 class _OneNode:
-    """A graph stand-in that yields a final state and no tokens."""
-
     def __init__(self, node):
         self.node = node
 
@@ -119,8 +94,6 @@ class _OneNode:
 
 class TestTheNodesThatSpeak:
     def test_every_leaf_is_one_the_reader_hears(self):
-        # A node that ends a turn writes the reply, so the two lists are the
-        # same list — which is why there is only one of them.
         edges = watching().graph.get_graph().edges
         ends_a_turn = {edge.source for edge in edges if edge.target == "__end__"}
         assert ends_a_turn == set(ANSWERING_NODES)

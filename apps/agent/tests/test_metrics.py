@@ -1,14 +1,3 @@
-"""What the service counts, and the labels it refuses to invent.
-
-A metric is only worth having if it is bounded: a route labelled by its path
-is one series per conversation, and a tool labelled by whatever the model
-called it is one series per hallucination. Both are here because both are
-one line away in the code that produces them.
-
-The instruments are process-wide, so these read a counter before and after
-rather than asserting a total.
-"""
-
 import httpx
 import pytest
 from prometheus_client import Counter
@@ -20,7 +9,6 @@ from tests.support import client_for, container, fake_model
 
 
 def reading(metric: Counter, **labels: str) -> float:
-    """One counter's value right now, zero if it has never been touched."""
     value = metrics.registry.get_sample_value(
         f"{metric._name}_total", {"app": metrics._APP, **labels}
     )
@@ -79,8 +67,6 @@ class TestATurnIsCounted:
         assert reading(metrics.turns, outcome="walled") - before == 1
 
     async def test_the_routing_decision_is_counted_apart_from_its_fail_safe(self):
-        # A router that fails on every request looks exactly like one that
-        # finds every question to be about money. It hid twice that way.
         before = reading(metrics.intents, intent="general")
         async with client_for(container(model=fake_model("answered"))) as client:
             await client.post("/chat", json={"message": "what is impermanent loss?"})
@@ -126,12 +112,6 @@ class TestTheScrape:
 
 
 class TestOneTurnCanBeReadBack:
-    """Every line a turn writes carries the id of the request that wrote it.
-
-    Half a dozen lines per turn, interleaved with everybody else's under any
-    load. The id is what turns that back into one story.
-    """
-
     @staticmethod
     async def _ids(times: int) -> list[str]:
         from app import create_app

@@ -1,11 +1,3 @@
-"""A refusal, from the rule that raised it to the status code it becomes.
-
-Every layer below the wire raises what it means — no message, no known
-token, no budget left, no such conversation — and one module decides what
-each is worth in HTTP. These pin both halves: that the rules refuse, and
-that the door translates.
-"""
-
 import pathlib
 
 import pytest
@@ -15,8 +7,6 @@ from tests.support import Meter, client_for, container
 
 
 class Rejecting:
-    """A host that will not vouch for the token, as an expired one is refused."""
-
     async def authenticate(self, _token: str | None):
         raise UnknownTokenError
 
@@ -29,8 +19,6 @@ class TestWhatARefusalLooksLike:
         assert response.json() == {"detail": "empty message"}
 
     async def test_a_token_the_host_rejects_is_a_401(self):
-        # Only an outright rejection. A host that cannot answer leaves the
-        # caller anonymous, because this gate names callers and guards nothing.
         async with client_for(container(door=Rejecting())) as client:
             response = await client.post(
                 "/chat", json={"message": "hello"}, headers={"authorization": "Bearer stale"}
@@ -53,7 +41,6 @@ class TestWhatARefusalLooksLike:
         assert response.json() == {"detail": "no such conversation"}
 
     async def test_the_stream_refuses_before_it_opens(self):
-        # A status code, not a stream that opens and immediately apologises.
         async with client_for(container()) as client:
             response = await client.post("/chat/stream", json={"message": " "})
         assert response.status_code == 400
@@ -61,12 +48,6 @@ class TestWhatARefusalLooksLike:
 
 
 class TestTheLayeringThisRestsOn:
-    """The rules can only be reused if they do not name a framework.
-
-    A grep rather than a diagram: the moment one of these files imports
-    fastapi again, the translation has leaked back down and this fails.
-    """
-
     @staticmethod
     def _sources(package: str) -> list[tuple[str, str]]:
         root = pathlib.Path(__file__).parent.parent / "app" / package
