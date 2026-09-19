@@ -30,6 +30,7 @@ from .prompts import (
     degraded_prompt,
     earn_prompt,
     grounded_prompt,
+    in_language,
     nothing_proposed_prompt,
     onboarding_prompt,
     system_prompt,
@@ -49,6 +50,7 @@ class AgentState(TypedDict, total=False):
     pending_addresses: list[str] | None
     intent: str
     asked_to_place: bool
+    language: str
     deposit: Deposit | None
     route: str
     target_portfolio: str
@@ -128,7 +130,11 @@ class LangGraphAgent:
                 state["question"],
             )
             metrics.counted(metrics.intents, intent=label.intent)
-            return {"intent": label.intent, "asked_to_place": label.stance == "placing"}
+            return {
+                "intent": label.intent,
+                "asked_to_place": label.stance == "placing",
+                "language": label.language,
+            }
         except Exception as error:  # noqa: BLE001 — the fail-safe IS the handling
             logger.warning("intent classifier failed (%r) — routing to portfolio", error)
             metrics.counted(metrics.intents, intent="unreadable")
@@ -288,7 +294,9 @@ class LangGraphAgent:
 
     @staticmethod
     def _messages(system: str, state: AgentState) -> list[BaseMessage]:
-        messages: list[BaseMessage] = [SystemMessage(content=system)]
+        messages: list[BaseMessage] = [
+            SystemMessage(content=in_language(system, state.get("language")))
+        ]
         for turn in state.get("history", ()):
             messages += [HumanMessage(content=turn.q), AIMessage(content=turn.a)]
         messages.append(HumanMessage(content=state["question"]))

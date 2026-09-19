@@ -27,7 +27,7 @@ class Stub:
         self.calls += 1
         if self.refusing:
             raise RuntimeError(self.refusing)
-        return IntentLabel(intent=self.label, reason="stubbed", stance="asking")
+        return IntentLabel(intent=self.label, reason="stubbed", stance="asking", language="English")
 
 
 def classifier(*, answering: Stub, labelling: Stub | None = None) -> IntentClassifier:
@@ -84,7 +84,7 @@ class TestAskingApartFromTelling:
 
     def test_and_it_is_one_of_two_words(self):
         schema = IntentLabel.model_json_schema()
-        assert set(schema["required"]) == {"reason", "intent", "stance"}
+        assert set(schema["required"]) == {"reason", "language", "intent", "stance"}
         stance = schema["$defs"]["Stance"]["enum"] if "$defs" in schema else None
         told = schema["properties"]["stance"]
         assert stance == ["asking", "placing"] or told.get("enum") == ["asking", "placing"]
