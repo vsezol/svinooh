@@ -30,9 +30,8 @@ export interface BuiltDeposit {
 
 export class DepositNotSupportedError extends Error {}
 
-export interface SolanaDeposits {
-  readonly network: 'sol';
-  readonly protocol: string;
-  supports(request: DepositRequest): boolean;
-  instructions(request: DepositRequest, owner: string, rpcUrl: string): Promise<unknown[]>;
-}
+export type BuildDeposit = (
+  request: DepositRequest,
+  owner: string,
+  rpcUrl: string,
+) => Promise<BuiltDeposit>;

@@ -1,5 +1,6 @@
 import type { KaminoVault } from '@kamino-finance/klend-sdk';
-import { DepositNotSupportedError, type DepositRequest, type SolanaDeposits } from './types';
+import { assemble } from './solana';
+import { DepositNotSupportedError, type BuiltDeposit, type DepositRequest } from './types';
 
 type SdkRpc = ConstructorParameters<typeof KaminoVault>[0];
 type Sdk = typeof import('@kamino-finance/klend-sdk');
@@ -8,26 +9,28 @@ type Amount = InstanceType<typeof import('decimal.js').default>;
 const SLOT_DURATION_MS = 450;
 const KINDS = ['vault', 'reserve'];
 
-export const kaminoDeposits: SolanaDeposits = {
-  network: 'sol',
-  protocol: 'kamino',
-
-  supports(request) {
-    return KINDS.includes(request.poolKind);
-  },
-
-  async instructions(request, owner, rpcUrl) {
-    const kit = await import('@solana/kit');
-    const klend = await import('@kamino-finance/klend-sdk');
-    const { default: Decimal } = await import('decimal.js');
-    const rpc = kit.createSolanaRpc(rpcUrl) as unknown as SdkRpc;
-    const signer = kit.createNoopSigner(kit.address(owner));
-    const amount = new Decimal(request.amount);
-    return request.poolKind === 'vault'
-      ? intoVault(klend, rpc, signer, request, amount)
-      : intoReserve(klend, kit, rpc, signer, request, amount, Decimal);
-  },
-};
+export async function buildKaminoDeposit(
+  request: DepositRequest,
+  owner: string,
+  rpcUrl: string,
+): Promise<BuiltDeposit> {
+  if (!KINDS.includes(request.poolKind)) {
+    throw new DepositNotSupportedError(
+      `kamino ${request.poolKind} pools are not wired for deposits here yet`,
+    );
+  }
+  const kit = await import('@solana/kit');
+  const klend = await import('@kamino-finance/klend-sdk');
+  const { default: Decimal } = await import('decimal.js');
+  const rpc = kit.createSolanaRpc(rpcUrl) as unknown as SdkRpc;
+  const signer = kit.createNoopSigner(kit.address(owner));
+  const amount = new Decimal(request.amount);
+  const instructions =
+    request.poolKind === 'vault'
+      ? await intoVault(klend, rpc, signer, request, amount)
+      : await intoReserve(klend, kit, rpc, signer, request, amount, Decimal);
+  return assemble(instructions, owner, rpcUrl);
+}
 
 async function intoVault(
   klend: Sdk,

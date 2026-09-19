@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { describe, test } from 'node:test';
-import { buildDeposit, depositsInto, DepositNotSupportedError } from '../src/lib/deposit';
+import { buildDeposit, builderFor, DepositNotSupportedError } from '../src/lib/deposit';
 import type { DepositRequest } from '../src/lib/deposit';
 
 const request = (over: Partial<DepositRequest> = {}): DepositRequest => ({
@@ -26,24 +26,22 @@ const refused = async (over: Partial<DepositRequest>): Promise<string> => {
 };
 
 describe('WhichProtocolBuildsADeposit', () => {
-  test('kamino on solana has one', () => {
-    const into = depositsInto(request());
-    assert.equal(into?.protocol, 'kamino');
-    assert.equal(into?.network, 'sol');
+  test('kamino on solana has a builder', () => {
+    assert.notEqual(builderFor(request()), null);
   });
 
   test('a protocol nobody wired yet is named in the refusal', async () => {
-    assert.equal(depositsInto(request({ protocol: 'meteora' })), null);
+    assert.equal(builderFor(request({ protocol: 'meteora' })), null);
     assert.match(await refused({ protocol: 'meteora' }), /meteora on sol is not wired/);
   });
 
   test('a chain nobody wired yet is refused before any SDK loads', async () => {
-    assert.equal(depositsInto(request({ network: 'eth', protocol: 'aave3' })), null);
+    assert.equal(builderFor(request({ network: 'eth', protocol: 'aave3' })), null);
     assert.match(await refused({ network: 'eth', protocol: 'aave3' }), /aave3 on eth is not wired/);
   });
 
-  test('a pool shape its own protocol does not handle is refused too', async () => {
-    assert.equal(depositsInto(request({ poolKind: 'farm' }))?.supports(request({ poolKind: 'farm' })), false);
+  test('a pool shape is refused by the protocol that owns the question', async () => {
+    assert.notEqual(builderFor(request({ poolKind: 'farm' })), null);
     assert.match(await refused({ poolKind: 'farm' }), /kamino farm pools are not wired/);
   });
 });

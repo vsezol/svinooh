@@ -1,20 +1,20 @@
-import { kaminoDeposits } from './kamino';
-import { assemble } from './solana';
+import { buildKaminoDeposit } from './kamino';
 import {
   DepositNotSupportedError,
+  type BuildDeposit,
   type BuiltDeposit,
   type DepositRequest,
-  type SolanaDeposits,
 } from './types';
 
 export { DepositNotSupportedError };
 export type { BuiltDeposit, DepositRequest };
 
-const SOLANA: SolanaDeposits[] = [kaminoDeposits];
+const BUILDERS: Record<string, BuildDeposit> = {
+  'sol:kamino': buildKaminoDeposit,
+};
 
-export function depositsInto(request: DepositRequest): SolanaDeposits | null {
-  if (request.network !== 'sol') return null;
-  return SOLANA.find((into) => into.protocol === request.protocol) ?? null;
+export function builderFor(request: DepositRequest): BuildDeposit | null {
+  return BUILDERS[`${request.network}:${request.protocol}`] ?? null;
 }
 
 export async function buildDeposit(
@@ -22,16 +22,11 @@ export async function buildDeposit(
   owner: string,
   rpcUrl: string,
 ): Promise<BuiltDeposit> {
-  const into = depositsInto(request);
-  if (!into) {
+  const build = builderFor(request);
+  if (!build) {
     throw new DepositNotSupportedError(
       `${request.protocol} on ${request.network} is not wired for deposits here yet`,
     );
   }
-  if (!into.supports(request)) {
-    throw new DepositNotSupportedError(
-      `${request.protocol} ${request.poolKind} pools are not wired for deposits here yet`,
-    );
-  }
-  return assemble(await into.instructions(request, owner, rpcUrl), owner, rpcUrl);
+  return build(request, owner, rpcUrl);
 }
