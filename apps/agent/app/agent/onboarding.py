@@ -50,8 +50,13 @@ CONFIRMATION_PROMPT = (
 
 
 class ConfirmationDecision(BaseModel):
+    reason: str = Field(
+        description=(
+            "One short sentence, written BEFORE you choose: what the reply "
+            "says about the proposal. Work it out here, then decide."
+        )
+    )
     decision: Literal["confirm", "cancel", "other"]
-    reason: str = Field(description="One short sentence: why this label.")
 
 
 class ConfirmationClassifier:

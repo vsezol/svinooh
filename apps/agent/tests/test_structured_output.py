@@ -4,7 +4,9 @@ import pytest
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
+from app.agent.intent import IntentLabel
 from app.agent.llm import structured
+from app.agent.onboarding import ConfirmationDecision
 
 
 class Shape(BaseModel):
@@ -37,3 +39,21 @@ class TestTheWayWeAsk:
 
     def test_the_library_default_is_still_the_narrow_one(self, model):
         assert "response_format" in bound(model.with_structured_output(Shape))
+
+
+class TestWhatTheLabellerWritesFirst:
+    def test_the_reason_is_asked_for_before_the_label(self):
+        fields = list(IntentLabel.model_json_schema()["properties"])
+        assert fields[0] == "reason", (
+            "a model writes the schema in order, so a reason after the label "
+            "is a justification of a choice already made"
+        )
+        assert fields.index("intent") < fields.index("asked_to_place")
+
+    def test_the_same_holds_for_reading_a_yes(self):
+        fields = list(ConfirmationDecision.model_json_schema()["properties"])
+        assert fields[0] == "reason"
+
+    def test_the_reason_says_it_is_the_thinking_and_not_a_note(self):
+        said = IntentLabel.model_json_schema()["properties"]["reason"]["description"]
+        assert "BEFORE" in said and "then label" in said

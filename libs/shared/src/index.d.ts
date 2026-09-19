@@ -281,6 +281,7 @@ export interface AgentConfigDto {
   maxTokens: number;
   routerModel: string;
   routerReasoningEffort: string;
+  routerMaxTokens: number;
   toolHops: number;
   contextMaxPositions: number;
   providerSort: string;

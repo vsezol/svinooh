@@ -28,6 +28,7 @@ export class AgentConfigController {
       maxTokens: setting('agent.maxTokens'),
       routerModel: text('agent.routerModel'),
       routerReasoningEffort: option('agent.routerReasoningEffort'),
+      routerMaxTokens: setting('agent.routerMaxTokens'),
       toolHops: setting('agent.toolHops'),
       contextMaxPositions: setting('agent.contextMaxPositions'),
       providerSort: option('agent.providerSort'),

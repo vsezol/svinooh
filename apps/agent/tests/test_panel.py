@@ -13,6 +13,7 @@ FULL = {
     "maxTokens": 2048,
     "routerModel": "openai:labels",
     "routerReasoningEffort": "default",
+    "routerMaxTokens": 400,
     "toolHops": 2,
     "contextMaxPositions": 20,
     "providerSort": "throughput",
@@ -30,6 +31,7 @@ class TestReadingTheWire:
             2048,
         )
         assert (values.router_model, values.router_provider_sort) == ("openai:labels", "latency")
+        assert values.router_max_tokens == 400, "the labeller's budget is the panel's to set"
         assert (values.tool_hops, values.context_max_positions) == (2, 20)
         assert values.product == (
             ProductFact(q="Which chains?", a="EVM, Solana, TRON and Bitcoin."),

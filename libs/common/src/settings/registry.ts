@@ -458,6 +458,20 @@ export const REGISTRY = {
     readBy: ['agent'],
     live: true,
   },
+  'agent.routerMaxTokens': {
+    kind: 'number',
+    group: 'agent',
+    label: 'Label length cap',
+    about:
+      'The longest the labelling model may write, in tokens. A label is a word, a sentence of reason and a flag — a hundred tokens of room is plenty. It matters anyway: a model asked to think spends its thinking out of this same budget, so a cap sized for the label alone turns thinking into an empty answer, and an empty answer sends every question down the fail-safe route.',
+    unit: 'tokens',
+    default: 200,
+    min: 64,
+    max: 4096,
+    env: 'AGENT_ROUTER_MAX_TOKENS',
+    readBy: ['agent'],
+    live: true,
+  },
   'agent.routerProviderSort': {
     kind: 'choice',
     group: 'agent',
