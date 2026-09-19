@@ -90,6 +90,43 @@ export interface SignInBlock {
   pendingQuestion?: string;
 }
 
+export interface DepositAccounts {
+  programId: string;
+  address: string;
+  tokenMint: string;
+  tokenDecimals?: number | null;
+  sharesMint?: string | null;
+  sharesDecimals?: number | null;
+  tokenProgram?: string | null;
+  lendingMarket?: string | null;
+}
+
+export interface DepositBlock {
+  kind: 'deposit';
+  poolId: string;
+  pool: string;
+  protocol: string;
+  network: string;
+  token: string;
+  amount: string;
+  apy: string;
+  risk: string;
+  url: string;
+  accounts: DepositAccounts;
+}
+
+export interface DepositRequest {
+  poolId: string;
+  pool: string;
+  protocol: string;
+  network: string;
+  token: string;
+  amount: string;
+  accounts: DepositAccounts;
+}
+
+export type DepositOutcome = { ok: true; signature?: string } | { ok: false; reason: string };
+
 export type ConfirmAddress = {
   address: string;
   chain: 'EVM' | 'SOLANA' | 'TRON' | 'BITCOIN';
@@ -125,6 +162,7 @@ export type AgentBlock =
   | LinksBlock
   | SignInBlock
   | ConfirmBlock
+  | DepositBlock
   | UnknownBlock;
 
 export interface ChatWire {
@@ -216,6 +254,7 @@ export interface MountOptions {
    * a fresh chat has not been spoken to yet: there is nothing to link to.
    */
   onConversationId?: (id: string | null) => void;
+  onDeposit?: (request: DepositRequest) => Promise<DepositOutcome | void> | void;
   /**
    * A box the component fills in with its two actions, so the handle mount()
    * already returned can reach them. Not part of the public shape — mount

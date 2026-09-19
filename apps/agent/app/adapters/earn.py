@@ -5,6 +5,7 @@ that names the vendor, and a wire that stops here. No caller token — a catalog
 of pools is public.
 """
 
+from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Protocol
@@ -12,7 +13,7 @@ from typing import Protocol
 import httpx
 from pydantic import BaseModel, ConfigDict
 
-from ..domain.earn import CatalogSnapshot, YieldPool
+from ..domain.earn import CatalogSnapshot, DepositTerms, YieldPool
 
 
 class YieldCatalog(Protocol):
@@ -20,6 +21,8 @@ class YieldCatalog(Protocol):
 
     async def best_pools(self, token: str | None, limit: int) -> CatalogSnapshot:
         """The best-paying pools for a token, or across every token."""
+
+    async def pool(self, pool_id: str) -> YieldPool | None: ...
 
 
 class EarnApiSource:
@@ -36,6 +39,13 @@ class EarnApiSource:
         response = await self._client.get(f"{self._base}/v1/lend/pools", params=params)
         response.raise_for_status()
         return _CatalogAnswer.model_validate(response.json()).domain()
+
+    async def pool(self, pool_id: str) -> YieldPool | None:
+        response = await self._client.get(f"{self._base}/v1/lend/pools/{pool_id}")
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return _PoolAnswer.model_validate(response.json()).domain()
 
 
 def _number(raw: str | None) -> Decimal:
@@ -54,6 +64,8 @@ class _WirePart(BaseModel):
 
 class _WireToken(_WirePart):
     symbol: str
+    mint: str = ""
+    decimals: int | None = None
 
 
 class _WireApy(_WirePart):
@@ -68,6 +80,7 @@ class _WirePool(_WirePart):
     name: str
     protocol: str
     kind: str
+    network: str = ""
     token: _WireToken
     apy: _WireApy
     tvl_usd: str
@@ -79,6 +92,7 @@ class _WirePool(_WirePart):
             name=self.name,
             protocol=self.protocol,
             kind=self.kind,
+            network=self.network,
             token=self.token.symbol,
             apy_net=_number(self.apy.net),
             apy_base=_number(self.apy.base),
@@ -87,6 +101,44 @@ class _WirePool(_WirePart):
             tvl_usd=_number(self.tvl_usd),
             url=self.url,
         )
+
+
+class _WireDeposit(_WirePart):
+    program_id: str
+    address: str
+    min_amount: str | None = None
+    shares_mint: str | None = None
+    shares_decimals: int | None = None
+    token_program: str | None = None
+    lending_market: str | None = None
+
+
+class _WirePoolDetail(_WirePool):
+    deposit: _WireDeposit
+
+    def domain(self) -> YieldPool:
+        pool = super().domain()
+        return replace(
+            pool,
+            terms=DepositTerms(
+                program_id=self.deposit.program_id,
+                address=self.deposit.address,
+                token_mint=self.token.mint,
+                token_decimals=self.token.decimals,
+                min_amount=_number(self.deposit.min_amount) or None,
+                shares_mint=self.deposit.shares_mint,
+                shares_decimals=self.deposit.shares_decimals,
+                token_program=self.deposit.token_program,
+                lending_market=self.deposit.lending_market,
+            ),
+        )
+
+
+class _PoolAnswer(_WirePart):
+    data: _WirePoolDetail
+
+    def domain(self) -> YieldPool:
+        return self.data.domain()
 
 
 class _WireMeta(_WirePart):

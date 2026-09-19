@@ -19,8 +19,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from ..application.turns import Admitted, Question
+from ..application.turns import Admitted, Answered, Question
 from ..container import Container
+from ..domain.earn import Deposit
 from ..domain.identity import ANON_HEADER, Caller
 from ..observability import metrics
 from ..panel import NOTHING_DECIDED
@@ -31,6 +32,8 @@ from .schemas import (
     ChatResponse,
     ChatSummary,
     ChatTurn,
+    DepositAccounts,
+    DepositBlock,
     SignInBlock,
     TextBlock,
 )
@@ -93,8 +96,40 @@ def _asked(body: ChatRequest) -> Question:
     return Question(message=body.message, session_id=body.session_id, portfolio=body.portfolio)
 
 
-def _answered(session_id: str, answer: str) -> ChatResponse:
-    return ChatResponse(blocks=[TextBlock(text=answer)], reply=answer, session_id=session_id)
+def _answered(session_id: str, answered: Answered) -> ChatResponse:
+    return ChatResponse(blocks=_blocks(answered), reply=answered.text, session_id=session_id)
+
+
+def _blocks(answered: Answered) -> list[TextBlock | SignInBlock | DepositBlock]:
+    drawn: list[TextBlock | SignInBlock | DepositBlock] = [TextBlock(text=answered.text)]
+    if answered.deposit is not None:
+        drawn.append(_deposit_card(answered.deposit))
+    return drawn
+
+
+def _deposit_card(deposit: Deposit) -> DepositBlock:
+    pool, terms = deposit.pool, deposit.terms
+    return DepositBlock(
+        pool_id=pool.id,
+        pool=pool.name,
+        protocol=pool.protocol,
+        network=pool.network,
+        token=pool.token,
+        amount=f"{deposit.amount:f}",
+        apy=f"{pool.apy_net * 100:.2f}%",
+        risk=pool.risk,
+        url=pool.url,
+        accounts=DepositAccounts(
+            program_id=terms.program_id,
+            address=terms.address,
+            token_mint=terms.token_mint,
+            token_decimals=terms.token_decimals,
+            shares_mint=terms.shares_mint,
+            shares_decimals=terms.shares_decimals,
+            token_program=terms.token_program,
+            lending_market=terms.lending_market,
+        ),
+    )
 
 
 def _sign_in_card(question: str) -> SignInBlock:
@@ -136,9 +171,12 @@ async def chat(
     admitted = await deps.turns.admit(Caller(authorization, anon_id), _asked(body))
     if admitted.walled:
         return await _remember_card(deps, admitted, _sign_in_card(admitted.question))
-    answer = await deps.turns.answer(admitted)
-    await deps.turns.remember(admitted, answer, [TextBlock(text=answer).model_dump()])
-    return _answered(admitted.session_id, answer)
+    answered = await deps.turns.answer(admitted)
+    drawn = _blocks(answered)
+    await deps.turns.remember(
+        admitted, answered.text, [block.model_dump(by_alias=True) for block in drawn]
+    )
+    return ChatResponse(blocks=drawn, reply=answered.text, session_id=admitted.session_id)
 
 
 def _event(name: str, data: dict) -> str:
@@ -174,9 +212,12 @@ async def chat_stream(
             if name != "done":
                 yield _event(name, data)
                 continue
-            answer = data["text"]
-            await deps.turns.remember(admitted, answer, [TextBlock(text=answer).model_dump()])
-            yield _event("done", _answered(admitted.session_id, answer).model_dump(by_alias=True))
+            answered = Answered(text=data["text"], deposit=data.get("deposit"))
+            drawn = _blocks(answered)
+            await deps.turns.remember(
+                admitted, answered.text, [block.model_dump(by_alias=True) for block in drawn]
+            )
+            yield _event("done", _answered(admitted.session_id, answered).model_dump(by_alias=True))
 
     return StreamingResponse(
         events(),

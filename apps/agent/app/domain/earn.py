@@ -19,6 +19,19 @@ MOSTLY_PROGRAMMES = Decimal("0.5")
 
 
 @dataclass(frozen=True, slots=True)
+class DepositTerms:
+    program_id: str
+    address: str
+    token_mint: str
+    token_decimals: int | None = None
+    min_amount: Decimal | None = None
+    shares_mint: str | None = None
+    shares_decimals: int | None = None
+    token_program: str | None = None
+    lending_market: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class YieldPool:
     """One place to deposit one token and be paid for it."""
 
@@ -27,6 +40,7 @@ class YieldPool:
     protocol: str
     #: `vault` — a curator spreads the deposit; `reserve` — one market, direct.
     kind: str
+    network: str
     token: str
     apy_net: Decimal
     #: What borrowers pay, and keep paying.
@@ -37,6 +51,7 @@ class YieldPool:
     apy_incentives: Decimal
     tvl_usd: Decimal
     url: str
+    terms: DepositTerms | None = None
 
     @property
     def programme_share(self) -> Decimal:
@@ -77,6 +92,18 @@ class YieldPool:
         if self.pays_mostly_programmes:
             reasons.append("most of the rate is a reward programme, which ends")
         return tuple(reasons)
+
+
+@dataclass(frozen=True, slots=True)
+class Deposit:
+    pool: YieldPool
+    amount: Decimal
+    terms: DepositTerms
+
+    @property
+    def below_minimum(self) -> bool:
+        minimum = self.terms.min_amount
+        return minimum is not None and self.amount < minimum
 
 
 @dataclass(frozen=True, slots=True)

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from .domain.conversation import Chat, Turn
+from .domain.earn import Deposit
 from .panel import PanelValues
 
 
@@ -133,6 +134,7 @@ class Reply:
     pending_clear: bool = False
     #: The slug the turn created, for the conversation to remember it by.
     portfolio_created: str | None = None
+    deposit: Deposit | None = None
 
 
 @dataclass(frozen=True)

@@ -54,6 +54,31 @@ class SignInBlock(BaseModel):
     pending_question: str | None = Field(default=None, serialization_alias="pendingQuestion")
 
 
+class DepositAccounts(BaseModel):
+    program_id: str = Field(serialization_alias="programId")
+    address: str
+    token_mint: str = Field(serialization_alias="tokenMint")
+    token_decimals: int | None = Field(default=None, serialization_alias="tokenDecimals")
+    shares_mint: str | None = Field(default=None, serialization_alias="sharesMint")
+    shares_decimals: int | None = Field(default=None, serialization_alias="sharesDecimals")
+    token_program: str | None = Field(default=None, serialization_alias="tokenProgram")
+    lending_market: str | None = Field(default=None, serialization_alias="lendingMarket")
+
+
+class DepositBlock(BaseModel):
+    kind: Literal["deposit"] = "deposit"
+    pool_id: str = Field(serialization_alias="poolId")
+    pool: str
+    protocol: str
+    network: str
+    token: str
+    amount: str
+    apy: str
+    risk: str
+    url: str
+    accounts: DepositAccounts
+
+
 class ChatSummary(BaseModel):
     """A conversation as a row in a list — what a rail needs to draw one."""
 
@@ -102,7 +127,7 @@ class ChatResponse(BaseModel):
     # A union, which is what "the vocabulary grows additively" means in
     # practice: a widget that does not know a kind skips it, and one that does
     # renders it, without either end changing endpoint.
-    blocks: list[TextBlock | SignInBlock]
+    blocks: list[TextBlock | SignInBlock | DepositBlock]
     # Transitional, expand-then-contract: the gateway-era web tab reads
     # `reply`, the widget will read `blocks` — the field is deleted with the
     # gateway, and no consumer ever sees a wire it cannot parse.

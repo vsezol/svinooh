@@ -3,6 +3,9 @@ import type {
   BarsBlock,
   ChartBlock,
   ConfirmBlock,
+  DepositBlock,
+  DepositOutcome,
+  DepositRequest,
   LinksBlock,
   NoteBlock,
   SignInBlock,
@@ -14,6 +17,7 @@ import type {
 import BarsBlockView from './BarsBlock';
 import ChartBlockView from './ChartBlock';
 import ConfirmBlockView, { type ConfirmAction } from './ConfirmBlock';
+import DepositBlockView from './DepositBlock';
 import LinksBlockView from './LinksBlock';
 import NoteBlockView from './NoteBlock';
 import SignInBlockView, { type SignInProvider } from './SignInBlock';
@@ -38,9 +42,18 @@ export interface BlockViewProps {
   onToggleTrace?: () => void;
   /** Follows one of the places an answer leads. */
   onFollow?: (href: string) => void;
+  onDeposit?: (request: DepositRequest) => Promise<DepositOutcome | void> | void;
 }
 
-export default function BlockView({ block, onSignIn, onAction, busy, onToggleTrace, onFollow }: BlockViewProps) {
+export default function BlockView({
+  block,
+  onSignIn,
+  onAction,
+  busy,
+  onToggleTrace,
+  onFollow,
+  onDeposit,
+}: BlockViewProps) {
   // UnknownBlock widens `kind` to string, so the switch cannot narrow the
   // union on its own — each case asserts the member it matched.
   switch (block.kind) {
@@ -62,6 +75,8 @@ export default function BlockView({ block, onSignIn, onAction, busy, onToggleTra
       return <LinksBlockView block={block as LinksBlock} onFollow={onFollow} />;
     case 'signin':
       return <SignInBlockView block={block as SignInBlock} onSignIn={onSignIn} />;
+    case 'deposit':
+      return <DepositBlockView block={block as DepositBlock} onDeposit={onDeposit} />;
     case 'confirm':
       return <ConfirmBlockView block={block as ConfirmBlock} onAction={onAction} busy={busy} />;
     default:

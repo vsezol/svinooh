@@ -193,6 +193,16 @@ The routing ladder (D7/D8) — each step builds on the previous:
   is in the user's language; the choice of which words stays in code because
   a closing left to the model is a closing it forgets. *Lesson: decide in
   code, word it in the prompt.*
+- **E3 — a deposit, proposed.** The third block kind, and the first that asks
+  for a signature. A tool the model may call only on the turn it was told to
+  act builds nothing: it reads the pool in full, checks the amount against the
+  pool's own minimum, and leaves a proposal on the reply. The API draws it as
+  a card — which pool, how much, which accounts a deposit would touch — and
+  the widget hands that to the host, which owns the wallet. The service never
+  builds a transaction, never holds a key and never sends anything; without a
+  host to sign, the card says so instead of pretending. *Lesson: the wire
+  grows a kind, not an endpoint; the thing that can lose money stays on the
+  far side of a signature.*
 
 Then the independence milestones, unchanged in substance:
 
