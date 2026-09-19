@@ -39,7 +39,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci --no-audit --fund=false
+      # The install is the slow half of this job, and it only changes when the
+      # lockfile does.
+      - uses: actions/cache@v6
+        id: installed
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            libs/*/node_modules
+          key: npm-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+      - if: steps.installed.outputs.cache-hit != 'true'
+        run: npm ci --no-audit --fund=false --prefer-offline
       # Both targets build the libraries they depend on first, so the Prisma
       # client and the shared dist are there before anything imports them.
       - run: npm test
