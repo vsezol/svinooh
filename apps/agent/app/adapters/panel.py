@@ -1,11 +1,3 @@
-"""The admin panel, fetched from the host: one adapter behind ports.Panel.
-
-GET /api/agent/config, unauthenticated by design (nothing in it is a secret),
-polled in the background so a turn never waits on it, and kept on failure so
-a settings outage never becomes a chat outage. Parsing is lenient one field
-at a time: a bad value costs that value, never the conversation.
-"""
-
 import asyncio
 import logging
 from contextlib import suppress
@@ -17,21 +9,15 @@ from ..panel import NOTHING_DECIDED, PanelValues, ProductFact
 
 logger = logging.getLogger("svinooh-ai")
 
-#: How often the host is asked again. Short enough that an experiment in the
-#: panel lands within a coffee sip, long enough to be one small request a
-#: minute.
 REFRESH_EVERY_S = 60.0
 
 
 def _word(raw: dict[str, Any], key: str) -> str | None:
-    """A non-empty string, or None: a field left empty is no opinion."""
     value = raw.get(key)
     return value if isinstance(value, str) and value else None
 
 
 def _thinking(raw: dict[str, Any], key: str) -> str | None:
-    # A select cannot offer "nothing", so the panel writes "default" for it,
-    # and that IS a decision: send no thinking instruction.
     value = _word(raw, key)
     return "" if value == "default" else value
 
@@ -55,7 +41,6 @@ def _facts(raw: dict[str, Any]) -> tuple[ProductFact, ...]:
 
 
 def parse(raw: object) -> PanelValues:
-    """The wire's object as typed values; anything unusable reads as no opinion."""
     if not isinstance(raw, dict):
         return NOTHING_DECIDED
     return PanelValues(
@@ -74,13 +59,10 @@ def parse(raw: object) -> PanelValues:
 
 
 def _knobs(values: PanelValues) -> dict[str, object]:
-    """The dials, without the page of facts: what somebody turned."""
     return {k: v for k, v in vars(values).items() if k != "product" and v is not None}
 
 
 class RemotePanel:
-    """ports.Panel over the host's config endpoint."""
-
     def __init__(
         self,
         base_url: str,
@@ -88,8 +70,6 @@ class RemotePanel:
         every_s: float = REFRESH_EVERY_S,
     ) -> None:
         self._url = f"{base_url.rstrip('/')}/api/agent/config"
-        # The same pool the portfolio is read through: this is one small
-        # request a minute to the same host.
         self._client = client
         self._every_s = every_s
         self._values = NOTHING_DECIDED
@@ -99,7 +79,6 @@ class RemotePanel:
         return self._values
 
     async def fetch(self) -> None:
-        """Ask once. A failure keeps what was in hand, and says so."""
         try:
             response = await self._client.get(self._url)
             response.raise_for_status()
@@ -108,19 +87,15 @@ class RemotePanel:
             logger.warning("agent config not fetched (%r) — keeping the current values", error)
             return
         if incoming != self._values:
-            # The facts are a page of prose and never a surprise; the knobs are
-            # what somebody just turned and wants to see land.
             logger.info("agent config changed: %s", _knobs(incoming))
         self._values = incoming
 
     async def keep_fresh(self) -> None:
-        """Ask again every interval, until cancelled."""
         while True:
             await asyncio.sleep(self._every_s)
             await self.fetch()
 
     async def start(self) -> None:
-        """Hear the panel once before the first turn, then in the background."""
         await self.fetch()
         self._refreshing = asyncio.create_task(self.keep_fresh())
 

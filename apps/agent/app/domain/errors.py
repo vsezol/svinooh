@@ -1,13 +1,3 @@
-"""What can go wrong with a turn, said without naming a status code.
-
-Raised by the layers that decide — the caller has no message, the host will
-not vouch for their token, they have asked too often, that conversation is
-not theirs. Turning each into an HTTP answer is the wire's business
-(app/api/errors.py), which is what lets the same rules serve a different
-door later without a FastAPI import following them there.
-"""
-
-
 class AgentError(Exception):
     """Anything this service refuses to do, and knows why."""
 
@@ -25,8 +15,6 @@ class UnknownTokenError(AgentError):
 
 
 class MessageTooLongError(AgentError):
-    """A question longer than we will pay a model to read."""
-
     def __init__(self, limit: int) -> None:
         super().__init__(f"message too long — at most {limit} characters")
         self.limit = limit
@@ -41,8 +29,6 @@ class TurnTimedOutError(AgentError):
 
 
 class RateLimitedError(AgentError):
-    """The caller's budget for this window is spent."""
-
     def __init__(self, retry_after: int) -> None:
         super().__init__(f"rate limited — try again in {retry_after}s")
         self.retry_after = retry_after

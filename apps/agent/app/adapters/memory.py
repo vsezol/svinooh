@@ -1,15 +1,3 @@
-"""The dev adapters: no Redis to run, and the same behaviour without it.
-
-The same shape apps/api/src/cache/cache.service.ts uses, for the same reason:
-local development should not require a Redis, and the fallback being
-in-process is honest about what it is — one instance, gone on restart, which
-is precisely what production stopped being.
-
-Expiry is checked on read rather than by a timer: with no background task
-there is nothing extra to crash, and a store nobody reads grows by at most
-what its callers sent.
-"""
-
 import time
 
 from limits.aio.storage import MemoryStorage
@@ -19,18 +7,8 @@ from ..panel import NOTHING_DECIDED, PanelValues
 
 
 class MemoryConversationStore:
-    """ports.ConversationStore in a pair of dicts.
-
-    Faithful to the Redis adapter where it counts, including the things that
-    are easy to get subtly different — the whole owner index gets a fresh
-    deadline on a write (it is one key in Redis, so it has to behave like one),
-    and equal scores order the way ZREVRANGE orders them.
-    """
-
     def __init__(self) -> None:
-        # chat id -> (expires at, chat)
         self._chats: dict[str, tuple[float, Chat]] = {}
-        # owner key -> (expires at, {chat id: updated ms})
         self._index: dict[str, tuple[float, dict[str, int]]] = {}
 
     def _live_chat(self, chat_id: str) -> Chat | None:
@@ -65,11 +43,6 @@ class MemoryConversationStore:
         entries = self._live_index(owner)
         if not entries:
             return []
-        # (score, id) rather than score alone, because that is what ZREVRANGE
-        # does with a tie: equal scores come back in reverse lexicographic
-        # order. Two chats written in the same millisecond are rare, and a dev
-        # adapter that orders them differently from production is the kind of
-        # difference only ever found the hard way.
         newest = sorted(entries, key=lambda cid: (entries[cid], cid), reverse=True)[:limit]
         chats: list[Chat] = []
         missing: list[str] = []
@@ -109,13 +82,10 @@ class MemoryConversationStore:
 
 
 def rate_limit_storage() -> MemoryStorage:
-    """Counters for one process — right for one process, and only that."""
     return MemoryStorage()
 
 
 class StaticPanel:
-    """ports.Panel with nothing behind it: the values it was given, for good."""
-
     def __init__(self, values: PanelValues = NOTHING_DECIDED) -> None:
         self._values = values
 

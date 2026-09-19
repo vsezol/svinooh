@@ -1,16 +1,3 @@
-"""Where the ports meet their adapters: the composition root.
-
-`build` is the only function in the service that names a vendor. Everything
-above it talks to app/ports.py; everything it builds implements one of those
-ports. Replacing Redis with a database, or the host with another API, is a
-new adapter plus one line here — never a change in app/application or the graph.
-
-Built once per process by create_app, never at import: a module that wires
-the service when imported cannot be imported by a test, and a test wants to
-hand the service a container of its own (tests/support.py builds one over
-fakes in the same shape).
-"""
-
 import logging
 from dataclasses import dataclass
 
@@ -41,8 +28,6 @@ logger = logging.getLogger("svinooh-ai")
 
 @dataclass(frozen=True)
 class Container:
-    """Everything a request handler may ask for, built once and handed down."""
-
     settings: Settings
     panel: Panel
     config: Config
@@ -54,22 +39,15 @@ class Container:
     limiter: RateLimiter
     allowance: Allowance
     agent: Agent
-    #: The use cases the HTTP surface is a thin skin over.
     turns: Turns
     chats: Chats
-    #: The one Redis pool, shared by the store and the counters; None without
-    #: a REDIS_URL, when both live in this process.
     redis: ConnectionPool | None = None
-    #: The one HTTP client, and therefore the one connection pool, every call
-    #: to the host goes through. None in a test that never reaches one.
     http: httpx.AsyncClient | None = None
 
     async def start(self) -> None:
-        """What must run before the first request: the panel is heard once."""
         await self.panel.start()
 
     async def stop(self) -> None:
-        """What must run after the last: the refresh stops, the pools let go."""
         await self.panel.stop()
         if self.http is not None:
             await self.http.aclose()
@@ -77,12 +55,6 @@ class Container:
             await self.redis.disconnect()
 
     async def store_state(self) -> str:
-        """Where conversations are being kept, right now.
-
-        "in-process" is the honest name for the fallback, and "unreachable"
-        is the one worth waking up for: a Redis that is configured and not
-        answering means conversations are being lost silently.
-        """
         if self.redis is None:
             return "in-process"
         try:
@@ -94,7 +66,6 @@ class Container:
 
 
 def build(settings: Settings) -> Container:
-    """The production wiring: Redis when there is a REDIS_URL, in-process when not."""
     redis = _redis(settings.redis_url)
     if redis is None:
         store: ConversationStore = memory.MemoryConversationStore()
@@ -156,12 +127,6 @@ def build(settings: Settings) -> Container:
 
 
 def _http(settings: Settings) -> httpx.AsyncClient:
-    """The one client every call to the host shares.
-
-    Connecting is not reading: a host that is down should be found out in
-    seconds, while a slow answer gets the whole context budget. The pool caps
-    are what keeps a burst of turns from opening a socket each.
-    """
     return httpx.AsyncClient(
         timeout=httpx.Timeout(settings.context_timeout_s, connect=settings.http_connect_timeout_s),
         limits=httpx.Limits(
@@ -173,11 +138,6 @@ def _http(settings: Settings) -> httpx.AsyncClient:
 
 def _redis(url: str) -> ConnectionPool | None:
     if not url:
-        # A warning, not info: the store is the durable one, and without a URL
-        # it is one process's memory — conversations die on restart, a second
-        # replica has never heard of them, and the cost lock counts per
-        # replica. Everything still answers, which is what makes it worth
-        # saying loudly.
         logger.warning(
             "REDIS_URL not set — conversations and rate-limit counters are kept in this "
             "process only"
