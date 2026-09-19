@@ -36,8 +36,14 @@ RECENT_TURNS = 2
 
 
 class IntentLabel(BaseModel):
+    reason: str = Field(
+        description=(
+            "One short sentence, written BEFORE you choose: what the user is "
+            "after, and what the line before it was about. Work it out here, "
+            "then label."
+        )
+    )
     intent: Literal["portfolio", "earn", "general"]
-    reason: str = Field(description="One short sentence: why this label.")
     asked_to_place: bool = Field(
         default=False,
         description=(
