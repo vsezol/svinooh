@@ -3,8 +3,8 @@
 # svinooh — Railway project as code.
 #
 # WHY THIS EXISTS
-#   The scanner-evm outage happened because a migration (PR #3) made `wallet`
-#   depend on a `scanner-evm` service that a human had to remember to create —
+#   The scanner-evm outage happened because a migration (PR #3) made the scan
+#   pipeline depend on a `scanner-evm` service that a human had to remember to create —
 #   and its variables to wire — by hand. Nothing in the repo said the service
 #   had to exist. This script IS that missing source of truth: every service,
 #   its source, and its variable wiring, in one reviewable place. Run it against
@@ -81,7 +81,6 @@ LOKI_URL='http://${{loki.RAILWAY_PRIVATE_DOMAIN}}:3100'
 # anyone meets.
 NODE_MEMORY=("MALLOC_ARENA_MAX=2" "NODE_OPTIONS=--max-old-space-size=256")
 AUTH_URL='http://${{auth.RAILWAY_PRIVATE_DOMAIN}}:3000'
-WALLET_URL='http://${{wallet.RAILWAY_PRIVATE_DOMAIN}}:3000'
 API_PUBLIC='https://${{api.RAILWAY_PUBLIC_DOMAIN}}'
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -115,7 +114,7 @@ echo "== observability =="
 # Loki is kept but asleep (Serverless, see MANUAL STEPS). Nothing ships logs to
 # it — LOKI_URL is empty on the services below — and Prometheus does not scrape
 # it: it was holding ~190MB to ingest about five lines a minute. To bring it
-# back, set LOKI_URL=${LOKI_URL} on api, auth and wallet and restore the loki job
+# back, set LOKI_URL=${LOKI_URL} on api and auth and restore the loki job
 # in ops/prometheus/prometheus.yml; the first push wakes it.
 add_image loki "grafana/loki:3.1.1"              # config from image; volume /loki
 setvars loki   "RAILWAY_RUN_UID=0" "GOMAXPROCS=2" "GOMEMLIMIT=150MiB"
@@ -145,12 +144,29 @@ echo "== application services (all from ${REPO}@${BRANCH}) =="
 #
 # Who is an admin is a column on User, set in the database and nowhere else.
 # Nothing in the product grants it, so there is no flow to get wrong.
+#
+# The scan pipeline is in here too (apps/api/src/wallet), for the same reason:
+# it was a service with the same database, the same broker and one HTTP route
+# the api called to say "scan this now". It decides what is due, drains
+# scan.sol/tron/btc in this process, and is the single writer of scan.result —
+# so this service must NOT be scaled past one replica. Two of it would mean two
+# producers and two writers of the same readings.
+#
+# It needs ≥ 512MB on top of what the gateway itself uses; the scanners are
+# HTTP-bound, not CPU-bound (the browser one is scanner-evm, still separate).
+#
+# Deciding who to alert is in here too (apps/api/src/alerts). It was
+# monitor-alerts, a service whose whole input was a queue this one published
+# to and nothing else read. It still publishes alerts.telegram,
+# notices.telegram and billing.telegram — the bot is a real service on the
+# other side of those — and it still sweeps every 15 minutes for portfolios
+# that have gone quiet and subscriptions about to lapse.
 add_repo api
 setvars api \
   "NODE_ENV=production" "PORT=3000" \
   "DATABASE_URL=${PG_URL}" "REDIS_URL=${REDIS_URL}" \
   "JWT_SECRET=${JWT_SECRET}" \
-  "AUTH_SERVICE_URL=${AUTH_URL}" "WALLET_SERVICE_URL=${WALLET_URL}" \
+  "AUTH_SERVICE_URL=${AUTH_URL}" \
   "WEB_ORIGIN=${PUBLIC_WEB_ORIGIN}" \
   "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" "TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}" \
   "SYNC_INTERVAL_MIN=5" \
@@ -169,17 +185,6 @@ setvars auth \
   "LOKI_URL=" "${NODE_MEMORY[@]}" \
   "SERVICE_NAME=svinooh-auth"
 
-# wallet — scan orchestration + SOL/TRON/BTC scanners + result writer.
-# Needs ≥ 512MB (no browser of its own any more). config apps/wallet/railway.json
-add_repo wallet
-setvars wallet \
-  "PORT=3000" \
-  "DATABASE_URL=${PG_URL}" \
-  "RABBITMQ_URL=${RABBIT_URL}" \
-  "CHROME_NO_SANDBOX=1" \
-  "LOKI_URL=" "${NODE_MEMORY[@]}" \
-  "SERVICE_NAME=svinooh-wallet"
-
 # scanner-evm — the EVM browser scanner. THE service whose absence caused the
 # outage: it declares and drains scan.evm and publishes scan.result.
 # Give it ≥ 1GB if SCANNER_ENGINE=chrome; ~512MB is enough for lightpanda.
@@ -197,18 +202,6 @@ setvars scanner-evm \
   "CHROME_NO_SANDBOX=1" \
   "LOKI_URL=" \
   "SERVICE_NAME=svinooh-scanner-evm"
-
-# monitor-alerts — reads wallet.state, decides what each owner should be told,
-# publishes alerts.telegram. THE second service whose absence is felt silently:
-# wallet publishes wallet.state to a durable queue whether or not anything
-# drains it, so without this the queue grows and nobody is ever told anything.
-# config apps/monitor-alerts/railway.json
-add_repo monitor-alerts
-setvars monitor-alerts \
-  "NODE_ENV=production" "PORT=3000" \
-  "DATABASE_URL=${PG_URL}" \
-  "RABBITMQ_URL=${RABBIT_URL}" \
-  "${NODE_MEMORY[@]}"
 
 # bot-telegram — the Telegram bot: long-polls for /start, and drains
 # alerts.telegram. It must run as EXACTLY ONE replica — Telegram allows a single
@@ -243,9 +236,7 @@ The Railway CLI does not set these reliably; do them once in the dashboard
    Dockerfile/healthcheck/volume come from the repo, not guesswork:
      api          → apps/api/railway.json          (or set Dockerfile path apps/api/Dockerfile)
      auth         → apps/auth/railway.json
-     wallet       → apps/wallet/railway.json
      scanner-evm  → apps/scanner-evm/railway.json
-     monitor-alerts → apps/monitor-alerts/railway.json
      bot-telegram → apps/bot-telegram/railway.json
      web          → apps/web/railway.json          (or Dockerfile path apps/web/Dockerfile)
      prometheus   → ops/prometheus/railway.json

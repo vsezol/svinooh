@@ -23,10 +23,10 @@ scrape_configs:
     static_configs:
       - targets: ['auth.railway.internal:3000']
 
-  - job_name: svinooh-wallet
-    metrics_path: /metrics
-    static_configs:
-      - targets: ['wallet.railway.internal:3000']
+  # No wallet job: the scan pipeline runs inside the api, so its gauges
+  # (svinooh_wallets, the queue depths, the scan counters) come from
+  # svinooh-api now. The metric names did not change — the dashboards query
+  # them by name and never carried the job label.
 
   # The agent counts the same HTTP series as the others, plus its own: turns,
   # the models they call, and the tools those call.

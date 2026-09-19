@@ -302,7 +302,7 @@ they return were left out on purpose:
   signature on it is the user's wallet, and broadcasting it is that wallet's
   node. A service that could sign would need a key of the user's, and there is
   no version of this product where it has one.
-- **Positions.** What a given wallet holds is `apps/wallet`'s job. This service
+- **Positions.** What a given wallet holds is the api's scan pipeline's job. This service
   knows about pools, not about people: the only address it ever sees is the one
   a deposit is being built for, and it needs no auth — `apps/api` is where a
   caller is one.

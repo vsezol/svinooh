@@ -20,9 +20,9 @@ process.env.DATABASE_URL ??= 'postgresql://svinooh:svinooh@localhost:5432/svinoo
 
 /**
  * The gateway's config. Sign-in lives in the auth service and scanning in the
- * wallet service, so nothing about Telegram, RabbitMQ or the scanners belongs
- * here — the api only needs to know how to reach those two services, its cache
- * and its database.
+ * scanners it drives itself, so nothing about Telegram belongs here — the api
+ * needs to know how to reach the auth service, the broker, its cache and its
+ * database.
  */
 export const config = {
   port: int(process.env.PORT, 3000),
@@ -31,13 +31,24 @@ export const config = {
   // Internal URL of the auth service — the gateway forwards /auth/* to it.
   authServiceUrl: (process.env.AUTH_SERVICE_URL || 'http://localhost:3001').replace(/\/+$/, ''),
   earnApiUrl: (process.env.EARN_API_URL || 'http://localhost:8080').replace(/\/+$/, ''),
-  // Internal URL of the wallet service — scan-on-add is delegated to it.
-  walletServiceUrl: (process.env.WALLET_SERVICE_URL || 'http://localhost:3002').replace(/\/+$/, ''),
-  // How often the wallet service rescans a wallet that's in use. Used for the
-  // "stale" flag (3× this) and reported to the frontend, so it MUST match the
-  // wallet service's SYNC_INTERVAL_MIN — set it lower and every wallet reads as
-  // stale the moment it is scanned on time.
+  // How often a wallet that's in use is rescanned. Used for the "stale" flag
+  // (3× this) and reported to the frontend. It used to have to match a second
+  // copy of this variable in the wallet service, and reading as stale the
+  // moment it was scanned on time is what happened when it did not; the
+  // pipeline is in this process now, so there is one value.
   syncIntervalMin: int(process.env.SYNC_INTERVAL_MIN, 5),
+  // How many cycles in a row must confirm a sharp move before the writer
+  // believes it. See the judging in wallet/sync/scan-result-consumer.
+  dropConfirmCycles: int(process.env.SYNC_DROP_CONFIRM_CYCLES, 3),
+  // How often a TRON wallet's energy/bandwidth/delegations are re-read. Far
+  // slower than the balance sync on purpose: one read is four or more
+  // SEQUENTIAL rate-limited TronGrid calls, and resources move on the scale of
+  // a delegation lock (days), not of a price. In between, the stored snapshot
+  // is carried forward untouched.
+  tronResourceIntervalMin: int(process.env.TRON_RESOURCE_INTERVAL_MIN, 60),
+  // Optional TronGrid API key. Keyless works — the monolith ran that way — but
+  // a key is what keeps us off the shared free-tier bucket as Tron wallets grow.
+  tronApiKey: process.env.TRON_PRO_API_KEY || null,
   // The broker, for telling the bot a payment landed. Empty — the thank-you
   // message is simply never sent; the payment itself works without it.
   rabbitUrl: process.env.RABBITMQ_URL ?? '',

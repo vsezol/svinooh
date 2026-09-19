@@ -46,7 +46,6 @@ One shape for every name, so nothing has to be looked up twice.
 ```
 apps/api           @svinooh/api           railway: api
 apps/auth          @svinooh/auth          railway: auth
-apps/wallet        @svinooh/wallet        railway: wallet
 apps/web           @svinooh/web           railway: web
 apps/scanner-evm   @svinooh/scanner-evm   railway: scanner-evm
 libs/common        @svinooh/common

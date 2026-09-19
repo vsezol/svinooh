@@ -1,0 +1,291 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import type { Wallet } from '@prisma/client';
+import type { Chain, TronResources } from '@svinooh/shared';
+import { leaseUntil, retryAt, schedule, ScanHold, setting } from '@svinooh/common';
+import { MetricsService, RabbitService, type ScanJob } from '@svinooh/common';
+import { PrismaService } from '@svinooh/db';
+import { AlertsCollector } from '../../alerts/collector.service';
+import { alertableStates } from './wallet-state';
+import { scanAddress } from '../scanners';
+import type { ScanPosition, ScanResult } from '@svinooh/shared';
+
+/**
+ * What the wallet could collect right now, and what it owes.
+ *
+ * Both are read off the legs of each position rather than off the position's
+ * own total: a lending position's value is already net of its debt, so the debt
+ * is only visible one level down. Borrow legs arrive negative and are counted
+ * as what they are — an amount owed, which is a positive number.
+ *
+ * The same two sums are derived in the browser for the cards on the portfolio
+ * page (`web/src/lib/blocks.ts`). They are computed here as well because a
+ * chart needs them at the moment of the reading, and there is no reading to go
+ * back to afterwards.
+ */
+function accrued(positions: ScanPosition[]): { claimableUsd: number; debtUsd: number } {
+  let claimableUsd = 0;
+  let debtUsd = 0;
+  for (const position of positions) {
+    for (const token of position.tokens ?? []) {
+      if (token.role === 'reward') claimableUsd += token.valueUsd;
+      else if (token.role === 'borrow') debtUsd += Math.abs(token.valueUsd);
+    }
+  }
+  return { claimableUsd, debtUsd };
+}
+
+@Injectable()
+export class SyncService {
+  private readonly logger = new Logger(SyncService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly metrics: MetricsService,
+    private readonly rabbit: RabbitService,
+    private readonly alerts: AlertsCollector,
+  ) {}
+
+
+  /**
+   * What is due, oldest first.
+   *
+   * One indexed column and no arithmetic: whoever last knew something about
+   * this address's timing already wrote the answer down. It used to load every
+   * wallet in the database with its portfolios attached and work out the same
+   * thing in JavaScript on every tick.
+   */
+  async dueForScan(limit: number): Promise<ScanJob[]> {
+    const due = await this.prisma.wallet.findMany({
+      where: { nextScanAt: { lte: new Date() } },
+      orderBy: { nextScanAt: 'asc' },
+      take: limit,
+      select: {
+        id: true,
+        chain: true,
+        address: true,
+        lastTotalUsd: true,
+        lastSyncedAt: true,
+        tronResourcesAt: true,
+      },
+    });
+
+    return due.map((w) => ({
+      chain: w.chain as Chain,
+      address: w.address,
+      // previousTotal travels with the job so the scanner can re-read a
+      // suspicious drop while it still has the page open
+      previousTotal: w.lastTotalUsd,
+      tronResourcesAt: w.tronResourcesAt?.toISOString() ?? null,
+      // Somebody pasted this address and is watching a spinner
+      priority: w.lastSyncedAt === null ? 'urgent' : 'normal',
+      firstScan: w.lastSyncedAt === null,
+    }));
+  }
+
+  /**
+   * Which lane this address is being checked on, read the same way schedule()
+   * decides it: never synced — `first`; a holding portfolio opened within the
+   * active window — `active`, the fast tier; otherwise `stale`. Asked at
+   * result time for the metric, so "how often does the fast lane fire" is a
+   * number on a dashboard rather than a guess from wallet counts.
+   */
+  async tierOf(wallet: Wallet): Promise<'first' | 'active' | 'stale'> {
+    if (wallet.lastSyncedAt === null) return 'first';
+    const activeSince = new Date(Date.now() - setting('sync.staleAfterMin') * 60_000);
+    const holder = await this.prisma.portfolioWallet.findFirst({
+      where: { walletId: wallet.id, portfolio: { lastViewedAt: { gte: activeSince } } },
+      select: { walletId: true },
+    });
+    return holder ? 'active' : 'stale';
+  }
+
+  /**
+   * Hold these addresses for the length of a scan, so the next top-up does not
+   * dispatch them again while they are still in the queue.
+   *
+   * Taken before publishing rather than after: the api forces a scan the moment
+   * somebody adds a wallet, and that lands at exactly the same time as a tick.
+   * Postgres serialises the two UPDATEs, and `count` says how many rows this
+   * caller actually took.
+   */
+  async lease(addresses: Array<{ chain: string; address: string }>): Promise<void> {
+    if (!addresses.length) return;
+    const until = leaseUntil(new Date());
+    await this.prisma.wallet.updateMany({
+      where: { OR: addresses.map(({ chain, address }) => ({ chain, address })) },
+      data: { nextScanAt: until },
+    });
+  }
+
+  /** One address, taken only if nobody else holds it — the api's forced scan */
+  async takeIfFree(chain: string, address: string): Promise<boolean> {
+    const { count } = await this.prisma.wallet.updateMany({
+      where: { chain, address, nextScanAt: { lte: new Date() } },
+      data: { nextScanAt: leaseUntil(new Date()) },
+    });
+    return count > 0;
+  }
+
+  /**
+   * When this address is next worth scanning, from who has been looking at it.
+   * The one place that decides — see schedule().
+   */
+  private async nextScanFor(walletId: string, lastSyncedAt: Date | null): Promise<Date> {
+    const holders = await this.prisma.portfolioWallet.findMany({
+      where: { walletId },
+      select: { portfolio: { select: { lastViewedAt: true } } },
+    });
+    return schedule(holders.map((h) => h.portfolio), lastSyncedAt, new Date()).nextScanAt;
+  }
+
+  async applyResult(wallet: Wallet, result: ScanResult): Promise<void> {
+    const now = new Date();
+    // Decided from who has been looking, before the write, so the interval and
+    // the reading land in the same transaction
+    const nextScanAt = await this.nextScanFor(wallet.id, now);
+    await this.prisma.$transaction([
+      this.prisma.position.deleteMany({ where: { walletId: wallet.id } }),
+      this.prisma.position.createMany({
+        data: result.positions.map((p) => ({
+          walletId: wallet.id,
+          symbol: p.symbol.slice(0, 120),
+          name: p.name?.slice(0, 200) ?? null,
+          note: p.note?.slice(0, 300) ?? null,
+          network: p.network?.slice(0, 40) ?? null,
+          amount: p.amount ?? null,
+          priceUsd: p.priceUsd ?? null,
+          valueUsd: p.valueUsd,
+          platform: p.platform ?? null,
+          category: p.category,
+          apy: p.apy ?? null,
+          healthRate: p.healthRate ?? null,
+          borrowApy: p.borrowApy ?? null,
+          range: p.range ?? null,
+          // Prisma types JSON structurally; the band is handed over opaque
+          band: p.band ? (p.band as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+          // Prisma types JSON columns structurally; our leg array has to be
+          // handed over as an opaque JSON value
+          tokens: p.tokens?.length ? (p.tokens as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+        })),
+      }),
+      this.prisma.wallet.update({
+        where: { id: wallet.id },
+        data: {
+          status: 'ok',
+          lastTotalUsd: result.totalUsd,
+          lastSyncedAt: now,
+          nextScanAt,
+          lastError: null,
+          unbelievedReadings: 0,
+          breakdown: result.breakdown ?? {},
+          unpriced: result.unpriced ?? [],
+          // Only when this scan actually read them. A scan that skipped the
+          // read (not due) or whose read failed leaves the stored snapshot
+          // alone — replacing it with a gap would blank the page and, worse,
+          // re-baseline the reclaim/delegate flags into silence.
+          ...(result.tron
+            ? {
+                tronResources: result.tron as unknown as Prisma.InputJsonValue,
+                tronResourcesAt: now,
+              }
+            : {}),
+        },
+      }),
+      this.prisma.addressSnapshot.create({
+        data: {
+          chain: wallet.chain,
+          address: wallet.address,
+          totalUsd: result.totalUsd,
+          ...accrued(result.positions),
+          breakdown: result.breakdown ?? undefined,
+        },
+      }),
+    ]);
+    // The one line that says what was actually stored. The night a scan bug
+    // wiped a wallet's positions while keeping its total, nothing in any log
+    // carried a position count — the wipe was reconstructed from the absence
+    // of evidence. Cheap enough to say every time.
+    this.logger.log(
+      `${wallet.chain}:${wallet.address} applied: ${result.positions.length} positions, $${result.totalUsd.toFixed(2)}`,
+    );
+    await this.announce(wallet, result);
+  }
+
+  /**
+   * Says what the address looks like now, to whoever decides who should hear
+   * about it.
+   *
+   * Told after the positions are written, not before: the collector goes and
+   * reads, and would otherwise find the previous scan's rows and answer about
+   * the wrong state. It carries no owner and no settings — who watches this
+   * address and what they asked for is the collector's business, and a scan
+   * should not have to know. One call per address, however many portfolios
+   * hold it; the collector is what fans it out to their separate thresholds.
+   *
+   * This used to be a publish to `wallet.state`, a queue with this one
+   * producer and one consumer in a service of its own. The call is in-process
+   * now and the failure rule is unchanged: logged and swallowed. The scan
+   * succeeded and its result is stored; losing the announcement costs one
+   * cycle of alerts, and failing the scan over it would cost the balance too —
+   * which is also why the collector is awaited HERE, after the transaction,
+   * and never inside it.
+   */
+  private async announce(wallet: Wallet, result: ScanResult): Promise<void> {
+    const positions = alertableStates(result.positions);
+    // Resources this scan read, or the ones already stored — the collector is
+    // judging the wallet as it stands, and a scan that did not re-read them has
+    // not made them untrue. Whichever we have; null if there has never been one.
+    const tron = result.tron ?? ((wallet.tronResources as TronResources | null) || null);
+    // An address with neither a watchable position nor resources has nothing
+    // anybody could have asked to hear about
+    if (!positions.length && !tron) return;
+    try {
+      await this.alerts.handle({
+        walletId: wallet.id,
+        address: wallet.address,
+        chain: wallet.chain as Chain,
+        positions,
+        tron,
+        // The scanners drop what they could not reach before this point, so
+        // nothing here can name it yet. Carrying it is what will let the
+        // collector hold a position's previous state instead of calling it gone.
+        unreachable: [],
+        at: new Date().toISOString(),
+      });
+    } catch (error) {
+      this.logger.warn(`could not announce ${wallet.address}: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * A reading we chose not to believe: count it and change nothing else.
+   *
+   * The address keeps its value, its status and the lease it is under, which is
+   * the backoff this case wanted anyway — a source arguing with itself is not
+   * worth re-asking immediately.
+   */
+  async noteUnbelievedReading(walletId: string, unbelievedReadings: number): Promise<void> {
+    await this.prisma.wallet.update({ where: { id: walletId }, data: { unbelievedReadings } });
+  }
+
+  /**
+   * We deliberately leave the last successful cached value untouched — it is
+   * served with a stale flag.
+   *
+   * The address backs off rather than coming due immediately: a source that is
+   * down would otherwise be asked about the same address on every top-up, which
+   * is how somebody else's outage becomes our own rate limit.
+   */
+  async markFailed(wallet: Wallet, message: string): Promise<void> {
+    await this.prisma.wallet.update({
+      where: { id: wallet.id },
+      data: {
+        status: 'failed',
+        lastError: message.slice(0, 500),
+        nextScanAt: retryAt(new Date()),
+      },
+    });
+  }
+
+}

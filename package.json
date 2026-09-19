@@ -12,7 +12,7 @@
     "typecheck": "nx run-many -t typecheck --parallel=8",
     "db:up": "docker compose up -d db",
     "db:migrate": "npm run -w apps/api migrate:dev",
-    "verify:scanners": "npm run -w apps/wallet verify:scanners"
+    "verify:scanners": "npm run -w apps/api verify:scanners"
   },
   "devDependencies": {
     "nx": "^21.4.0",

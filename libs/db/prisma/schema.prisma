@@ -229,7 +229,7 @@ model Portfolio {
   wallets      PortfolioWallet[]
   owner        PortfolioOwner?
   createdAt    DateTime            @default(now())
-  // When someone last opened this portfolio. The wallet service uses it to
+  // When someone last opened this portfolio. The scan pipeline uses it to
   // decide how often to rescan: what nobody looks at does not need to be fresh.
   lastViewedAt DateTime?
 }
@@ -317,10 +317,10 @@ model Wallet {
   /// side of this very counter.
   ///
   /// The COLUMN is still called lowReadings, and that is deliberate. Migrations
-  /// run in the api container at boot while the wallet service is already up on
-  /// the previous image, so renaming it would take that service down for the
-  /// length of a rollout — every query it makes names this column. The field is
-  /// what the code reads, so the field is what was corrected.
+  /// run in the api container at boot while the previous image is still up and
+  /// serving, so renaming it would break every query that image makes for the
+  /// length of a rollout. The field is what the code reads, so the field is
+  /// what was corrected.
   ///
   /// Here rather than in the writer's memory, where it used to live. In memory
   /// it pinned that consumer to one process forever, and every redeploy silently

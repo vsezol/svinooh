@@ -15,11 +15,13 @@ without rework — for future analytics work.
 ```
 apps/
   api/    — gateway (NestJS): portfolios, history, JWT verification,
-            /auth/* proxied to the auth service
+            /auth/* proxied to the auth service. It also carries two fenced-off
+            modules that were services of their own: src/admin (the tunables)
+            and src/wallet (the scan pipeline — what is due, one RabbitMQ queue
+            per chain, the SOL/TRON/BTC scanners, snapshots), and src/alerts
+            (who should be told what, the trial meter, the renewal sweeps)
   auth/   — sign-in (NestJS): Telegram bot and login widget, X, wallet
             signatures; issues JWTs, owns User
-  wallet/ — scanning (NestJS): decides what is due, one RabbitMQ queue per
-            chain, the SOL/TRON/BTC scanners, snapshots
   scanner-evm/ — the EVM scanner (NestJS): a headless browser (lightpanda or
             Chrome via SCANNER_ENGINE), and nothing else. No database, no
             queue: an address in, what it holds out
@@ -46,18 +48,19 @@ ops/
 ```
 web ──HTTPS+JWT──▶ api ──HTTP /auth/*───▶ auth ──▶ Telegram Bot API
                     │
-                    ├──HTTP /internal/scan──▶ wallet ──▶ RabbitMQ (scan.evm, scan.sol, …)
-                    │                            └──HTTP /internal/scan──▶ scanner-evm ──▶ browser (lightpanda)
-                    └──▶ Postgres ◀── auth, wallet
+                    ├──▶ RabbitMQ (scan.evm, scan.sol, …) ──▶ scanner-evm ──▶ browser (lightpanda)
+                    │      ▲ the api's own scan pipeline drains scan.sol/tron/btc
+                    │      └─ and scan.result, where every reading is judged and stored
+                    └──▶ Postgres ◀── auth
 ```
 
 Postgres is shared, with ownership by table: **auth** writes `User` and the
 first `Portfolio` an account is given — with, for a wallet sign-in, the one
-`Wallet` it is created holding; **wallet** writes `Wallet` / `Position` /
-`WalletSnapshot`, **api** writes `Portfolio` and the billing tables
-(`Subscription` / `Payment` / `FeatureUsage`) and reads everything; **monitor-alerts** owns the alert-trial meter on `FeatureUsage` and
-the reminder stamps on `Subscription`. Only the api is exposed publicly; the other two are reachable
-over Railway's private network. JWTs are signed by auth and verified by api,
+`Wallet` it is created holding; **api** writes `Portfolio`, the billing tables
+(`Subscription` / `Payment` / `FeatureUsage`) and — since the scan pipeline
+moved into it — `Wallet` / `Position` / `AddressSnapshot`, plus the alert-trial
+meter on `FeatureUsage` and the reminder stamps on `Subscription`. Only the api
+is exposed publicly; the others are reachable over Railway's private network. JWTs are signed by auth and verified by api,
 which means both need the same `JWT_SECRET`.
 
 ## Quick start locally
@@ -67,7 +70,6 @@ npm install
 docker compose up -d db                       # PostgreSQL 16 on localhost:5432
 cp apps/api/.env.example apps/api/.env        # defaults work as-is, AUTH_DEV_MODE=true
 cp apps/auth/.env.example apps/auth/.env
-cp apps/wallet/.env.example apps/wallet/.env
 npm run -w @svinooh/db migrate:dev            # migrations
 npm run dev                                   # all services + web :5173 (nx run-many)
 ```
@@ -80,15 +82,14 @@ and the rest takes care of itself.
 services genuinely need. Redis, Loki and Tempo stay optional: without them the
 agent keeps its conversations in the process and logs/traces go to stdout only.
 
-The broker is not optional any more. It used to be, and the wallet service
-carried a second, broker-less copy of the whole scan pipeline to cope — one that
-skipped EVM, paced itself differently, and was the copy nobody ran in
-production.
+The broker is not optional any more. It used to be, and the scan pipeline
+carried a second, broker-less copy of itself to cope — one that skipped EVM,
+paced itself differently, and was the copy nobody ran in production.
 
 Checking the scanners against the control wallets (networks, totals, positions):
 
 ```bash
-npm run -w apps/wallet verify:scanners        # all networks; add -- btc|sol|tron|evm
+npm run -w apps/api verify:scanners           # add -- btc|sol|tron (EVM: apps/scanner-evm)
 ```
 
 ## Signing in with Telegram
@@ -183,7 +184,7 @@ sign-up from a sign-in, and its request would keep putting back what the owner
 took out. Being one write also means it cannot half-happen: portfolio,
 ownership, membership and the address row land together or not at all.
 
-Nothing has to be asked of the wallet service to get it scanned: `Wallet` rows
+Nothing has to be asked of the pipeline to get it scanned: `Wallet` rows
 are created due (`nextScanAt` defaults to now), and the producer's next pass —
 seconds later — takes it.
 
@@ -364,8 +365,7 @@ advertise a number the checkout would contradict.
 
 Crypto has no dependable auto-debit — nothing can pull money out of a wallet —
 so a subscription is **prepaid time**: `Subscription.paidUntil`, moved forward
-by each finished payment, asked about by the renewal sweep in monitor-alerts
-(3 days before the end, and once when it ends, over Telegram — the same road
+by each finished payment, asked about by the renewal sweep (3 days before the end, and once when it ends, over Telegram — the same road
 alerts travel). That is the pattern the crypto-native products themselves ship
 (Nansen, DexTools, LunarCrush: invoice per period, reminders, manual renewal).
 
@@ -398,8 +398,8 @@ per-coin minimums against both prices.
 `billing.enforce` ships **off**: every gate stands open while the meters run,
 so the counters are honest the day the web has a paywall to show and the knob
 is flipped. Table ownership: the api writes `Subscription` / `Payment` /
-`FeatureUsage`; monitor-alerts increments the alert meter and stamps the
-reminder fields.
+`FeatureUsage`, and the alerts module inside it increments the alert meter and
+stamps the reminder fields.
 
 ### Portfolios nobody owns
 
@@ -553,7 +553,7 @@ Reliability rules (a silently wrong number is worse than a failed request):
 
 ## The scan queue and history
 
-The wallet service keeps a RabbitMQ queue of addresses. A producer tops it up
+The api keeps a RabbitMQ queue of addresses (`src/wallet`). A producer tops it up
 with the addresses that are **due**, a consumer takes them one at a time
 (`SCAN_PREFETCH`) with a pause after each (`SCAN_JOB_DELAY_MS`). Identical
 addresses in different portfolios are scanned once.
@@ -655,14 +655,13 @@ arrows on the project canvas.
 Key variables:
 
 ```
-api     DATABASE_URL, JWT_SECRET, AUTH_SERVICE_URL, WALLET_SERVICE_URL,
+api     DATABASE_URL, JWT_SECRET, AUTH_SERVICE_URL, RABBITMQ_URL,
         WEB_ORIGIN, LOKI_URL, OTEL_EXPORTER_OTLP_ENDPOINT, SERVICE_NAME
 auth    DATABASE_URL, JWT_SECRET (same as api), TELEGRAM_BOT_TOKEN,
         TELEGRAM_BOT_USERNAME, WEB_URL, AUTH_DEV_MODE=false, LOKI_URL, OTEL_…
-wallet  DATABASE_URL, RABBITMQ_URL, EVM_SCANNER_URL, INTERNAL_TOKEN, LOKI_URL, OTEL_…
 scanner-evm  SCANNER_ENGINE=lightpanda (default; =chrome to fall back),
              CHROME_NO_SANDBOX=1 (only used by the chrome engine),
-             INTERNAL_TOKEN (same string as wallet's), LOKI_URL, OTEL_…
+             LOKI_URL, OTEL_…
 web     NEXT_PUBLIC_API_URL = https://<api domain>  (inlined into the browser
                                                bundle at build time — rebuild
                                                after changing it; the server

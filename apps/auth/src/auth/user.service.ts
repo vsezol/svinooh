@@ -176,7 +176,7 @@ export class UserService {
    *
    * The address row is created due (`Wallet.nextScanAt` defaults to now), so
    * the producer's next pass takes it — a few seconds, and no call into the
-   * wallet service from here to arrange it.
+   * api from here to arrange it.
    */
   private startsHolding(user: User): Prisma.PortfolioCreateInput['wallets'] {
     const address = user.walletAddress;

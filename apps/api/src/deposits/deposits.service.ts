@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '@svinooh/db';
 import type { DepositBuiltDto, DepositLandingDto, DepositLandingStatus } from '@svinooh/shared';
 import { config } from '../config';
+import { ScanRequests } from '../wallet/scan-requests.service';
 
 interface WireDeposit {
   transaction: string;
@@ -31,7 +32,10 @@ const CHAINS: Record<string, string> = { sol: 'SOL' };
 export class DepositsService {
   private readonly log = new Logger(DepositsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly scans: ScanRequests,
+  ) {}
 
   async build(poolId: string, amount: string, owner: string): Promise<DepositBuiltDto> {
     const data = await this.earn<WireDeposit>(
@@ -73,7 +77,7 @@ export class DepositsService {
       return { status: 'landed', slot: seen.slot, error: null, tracked: false, portfolio: null };
     }
 
-    this.requestScan(tracked.walletId);
+    this.scans.now(tracked.walletId);
     this.log.log(`${signature.slice(0, 8)}… landed, rescanning ${owner.slice(0, 6)}…`);
     return {
       status: 'landed',
@@ -109,12 +113,4 @@ export class DepositsService {
     return body.data;
   }
 
-  private requestScan(walletId: string): void {
-    void fetch(`${config.walletServiceUrl}/internal/scan`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ walletId }),
-      signal: AbortSignal.timeout(5000),
-    }).catch(() => {});
-  }
 }
