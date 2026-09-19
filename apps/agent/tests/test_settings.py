@@ -1,10 +1,3 @@
-"""The environment as one checked object, and what a wrong value does.
-
-Before this, every variable was read with int(os.getenv(...)) at import: a
-typo in one of them was a traceback from the middle of a module, and a
-negative number was accepted and found out later.
-"""
-
 import pytest
 from pydantic import ValidationError
 
@@ -19,8 +12,6 @@ class TestReadingTheEnvironment:
         assert settings.tool_hops == 3 and settings.rate_limit_requests == 20
 
     def test_every_variable_keeps_its_name(self, monkeypatch):
-        # The names deployments already set — including the three that predate
-        # the AGENT_ prefix or never had it.
         monkeypatch.setenv("AGENT_MODEL", "openai:from-env")
         monkeypatch.setenv("AGENT_ROUTER_MAX_TOKENS", "300")
         monkeypatch.setenv("AGENT_SYSTEM", "be terse")
@@ -58,8 +49,6 @@ class TestReadingTheEnvironment:
 
 
 class TestFailingFast:
-    """A wrong value stops the service at boot, naming what was wrong."""
-
     @pytest.mark.parametrize(
         ("name", "value", "named"),
         [

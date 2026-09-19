@@ -1,10 +1,3 @@
-"""What every test starts from: an environment with none of ours in it.
-
-The service reads AGENT_*, REDIS_URL and PORTFOLIO_API_URL. A developer's
-shell may carry any of them, and a test that silently picks one up passes on
-one machine and fails on another. AGENT_TEST_* is the suite's own and stays.
-"""
-
 import os
 
 import pytest

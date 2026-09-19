@@ -1,12 +1,3 @@
-"""The conversation store: one representation, an owner, and an expiry.
-
-These run against the in-memory backend, which is the one local development
-uses — so they are the same code path a developer without a Redis exercises.
-The Redis backend has its own file (tests/test_store_redis.py), because the
-half of this that can actually go wrong in production — an index outliving what
-it points at — is a property of Redis keys rather than of a dict.
-"""
-
 import asyncio
 import logging
 import time
@@ -23,7 +14,6 @@ from app.settings import Settings
 
 @pytest.fixture
 def store():
-    # 6 messages of context (three turns), 5 turns kept in the transcript.
     return SessionStore(MemoryConversationStore(), max_messages=6, max_turns=5)
 
 
@@ -38,16 +28,11 @@ class TestOneRepresentation:
         await store.append("c1", "user:1", "second", "a2", [{"kind": "text", "text": "a2"}])
         chat = await store.chat("c1", "user:1")
         assert [(t.q, t.a) for t in chat.turns] == [("first", "a1"), ("second", "a2")]
-        # The blocks are stored, not rebuilt from the text: reopening shows
-        # what was on screen rather than a reconstruction of it.
         assert chat.turns[0].blocks == [{"kind": "text", "text": "a1"}]
 
     async def test_the_model_sees_less_than_the_reader_does(self, store):
         for n in range(5):
             await store.append("c1", "user:1", f"q{n}", f"a{n}", [])
-        # Three turns of context, out of five kept. The cap is counted in
-        # messages, which is two per turn, so an odd one rounds down to whole
-        # exchanges — half of one is not a useful thing to send.
         assert [t.q for t in await store.history("c1")] == ["q2", "q3", "q4"]
         assert len((await store.chat("c1", "user:1")).turns) == 5
 
@@ -77,9 +62,6 @@ class TestTheListing:
     async def test_a_conversation_spoken_to_again_moves_to_the_top(self, store):
         for chat_id in ("a", "b", "c"):
             await store.append(chat_id, "user:1", "q", "a", [])
-        # The scores are epoch milliseconds and a turn here costs microseconds,
-        # so without this the "later" turn lands in the same millisecond as the
-        # others and there is nothing for the ordering to be about.
         await asyncio.sleep(0.002)
         await store.append("a", "user:1", "again", "a", [])
         assert next(c.id for c in await store.list("user:1")) == "a"
@@ -126,15 +108,6 @@ class TestThePendingProposal:
 
 
 class TestThePortfolioAConversationMade:
-    """For a visitor, the conversation is the only record that they have one.
-
-    Read through `chat`, as the rest of this file does. These were written
-    against `resume`, on a branch that started before the one which split that
-    method into `open_turn` and `chat` — two changes that never touched the
-    same file, merged cleanly, and left three tests calling something that no
-    longer exists.
-    """
-
     async def test_it_survives_between_turns(self, store):
         await store.set_portfolio("c1", "anon:deadbeef", "pf-1")
         assert (await store.chat("c1", "anon:deadbeef")).portfolio == "pf-1"
@@ -178,12 +151,6 @@ class TestSigningIn:
 
 
 class TestExpiry:
-    """A chat disappearing when its key expires is the intended behaviour.
-
-    What is not intended is the index outliving it, which is what these are
-    actually about — see the module docstring in app/application/sessions.py.
-    """
-
     async def test_a_conversation_is_kept_for_thirty_days(self):
         assert CHAT_TTL_S == 30 * 24 * 60 * 60
 
@@ -191,8 +158,6 @@ class TestExpiry:
         await store.append("c1", "user:1", "q", "a", [])
         _expire_chat(store, "c1")
         assert await store.chat("c1", "user:1") is None
-        # And its context with it — a model replayed from a chat that no longer
-        # exists would be answering out of a conversation nobody can see.
         assert await store.history("c1") == ()
 
     async def test_the_index_does_not_show_what_has_expired(self, store):
@@ -206,8 +171,6 @@ class TestExpiry:
         await store.append("kept", "user:1", "q", "a", [])
         _expire_chat(store, "gone")
         await store.list("user:1")
-        # The read that filtered it also removed it: the index is not still
-        # carrying a row that resolves to nothing on every later listing.
         assert set(_index(store, "user:1")) == {"kept"}
 
     async def test_a_write_pushes_the_deadline_out_again(self, store):
@@ -218,7 +181,6 @@ class TestExpiry:
         assert _deadline(store, "c1") > first
 
     async def test_the_index_deadline_moves_with_it(self, store):
-        """An index that expired first would strand every conversation in it."""
         await store.append("c1", "user:1", "q", "a", [])
         first = _index_deadline(store, "user:1")
         await asyncio.sleep(0.01)
@@ -233,11 +195,6 @@ class TestTheFallback:
         assert wired.redis is None
 
     def test_and_it_says_so_loudly_enough_to_be_heard(self, caplog):
-        """The fallback is silent by nature — everything still answers — so the
-        only thing standing between a production deploy with no REDIS_URL and
-        nobody noticing is this line. WARNING and not INFO, which is the whole
-        test: it is the notice that the durable store is not durable.
-        """
         with caplog.at_level(logging.WARNING, logger="svinooh-ai"):
             build(Settings())
         said = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
@@ -245,15 +202,11 @@ class TestTheFallback:
         assert any("counters" in m for m in said), "it names both halves"
 
 
-# ── reaching into the dev backend, so expiry can be tested without waiting ──
-
-
 def _backend(store: SessionStore) -> MemoryConversationStore:
     return store._store
 
 
 def _expire_chat(store: SessionStore, chat_id: str) -> None:
-    """Age one chat out while leaving its id in the index — the skew, exactly."""
     backend = _backend(store)
     _, chat = backend._chats[chat_id]
     backend._chats[chat_id] = (time.time() - 1, chat)
@@ -272,26 +225,17 @@ def _index_deadline(store: SessionStore, owner: str) -> float:
 
 
 class TestTheIdIsAnAddress:
-    """Six characters, because the id's whole job is to be a URL somebody
-    sees, copies and occasionally reads out. Safe to shorten because it is not
-    a secret: reading a conversation checks who is asking, so a guessed id
-    answers exactly like an invented one."""
-
     def test_it_is_short_enough_to_be_a_name(self):
         assert len(new_chat_id()) == 6
 
     def test_it_leaves_out_the_characters_people_confuse(self):
-        """Six characters is short enough that somebody will read one aloud."""
         seen = {c for _ in range(2000) for c in new_chat_id()}
         assert not (seen & set("0O1lI")), "a confusable character got in"
 
     def test_it_is_not_a_counter(self):
-        """Predictable ids would make one conversation's address say something
-        about the next one's."""
         assert len({new_chat_id() for _ in range(1000)}) == 1000
 
     async def test_a_taken_id_is_not_handed_out_again(self, store, monkeypatch):
-        """The arithmetic only has to make this rare; the store still asks."""
         await store.append("TAKEN", "user:1", "q", "a", [])
         handed = iter(["TAKEN", "TAKEN", "FRESH1"])
         monkeypatch.setattr("app.application.sessions.new_chat_id", lambda: next(handed))

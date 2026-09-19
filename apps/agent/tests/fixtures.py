@@ -1,22 +1,3 @@
-"""Portfolios shaped like our own API, built by hand.
-
-Every test reads from here rather than from a recorded response, because a
-recording is a snapshot of somebody else's chain: token prices move, a wallet
-gains a position, a protocol renames itself, and a test that fails for those
-reasons teaches nothing. These fixtures change only when OUR DTO changes —
-which is exactly when the tools that read it should be re-examined.
-
-The shapes mirror PortfolioDto / WalletDto / PositionDto in libs/shared: the
-fields the agent reads are all present, including the ones a plain token
-holding leaves null.
-
-They are the WIRE, and stay so: tests/test_contract.py reads their keys to
-check the live API still sends them. What everything above the adapter works
-in is the domain, and the `as_*` helpers at the bottom get there by running
-these through the real mapper — so every test that reads a portfolio also
-proves the translation still works.
-"""
-
 from app.adapters import wire
 from app.domain.portfolio import History, Portfolio, Position
 
@@ -38,7 +19,6 @@ def position(
     band: dict | None = None,
     tokens: list[dict] | None = None,
 ) -> dict:
-    """One position with every field the API sends, defaulted like a token."""
     return {
         "id": f"pos-{symbol}-{value}",
         "symbol": symbol,
@@ -91,7 +71,6 @@ def portfolio(wallets: list[dict], *, slug: str = "test-pf", name: str | None = 
 EVM_ADDRESS = "0x7bfee91193d9df2ac0bfe90191d40f23c773c060"
 SOL_ADDRESS = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin"
 
-#: A lending position: supplied and borrowed legs, a health factor and a rate.
 AAVE = position(
     "AAVE-V3",
     12_600.00,
@@ -118,7 +97,6 @@ AAVE = position(
     ],
 )
 
-#: A concentrated liquidity position: a pair, a fee tier, a range verdict.
 UNISWAP = position(
     "UNI-V3",
     3_600.00,
@@ -153,7 +131,6 @@ UNISWAP = position(
     ],
 )
 
-#: A plain holding, priced normally.
 KAMINO = position(
     "Kamino",
     11_746.29,
@@ -203,21 +180,17 @@ FLUID = position(
 
 ETH = position("ETH", 16_683.65, network="eth", amount=6.7122, price=2_485.59)
 
-#: A meme token priced below a millionth — the case that printed as "$0".
 DUST = position("MICRO", 15_946.57, network="bsc", amount=252_414_000_000.0, price=6.3e-08)
 
-#: Positions on other networks, so the by-network line has something to say.
 BASE_TOKEN = position("TRUE", 14_981.09, network="base", amount=1_066_680.0, price=0.014)
 SOL_TOKEN = position("SOL", 4_200.00, network="sol", amount=25.0, price=168.0)
 
 
 def small(index: int) -> dict:
-    """One of the many positions the context block leaves out."""
     return position(f"SMALL{index}", 100.0 - index, network="eth", amount=index + 1.0, price=1.0)
 
 
 def rich_portfolio(tail: int = 0) -> dict:
-    """A portfolio with one of everything, plus an optional tail of dust."""
     positions = [ETH, UNISWAP, AAVE, DUST, BASE_TOKEN] + [small(i) for i in range(tail)]
     return portfolio([wallet(EVM_ADDRESS, positions)], name="Main portfolio")
 
@@ -230,12 +203,6 @@ def two_wallet_portfolio() -> dict:
 
 
 def history(points: list[tuple[str, float]], range_: str = "7d") -> dict:
-    """A HistoryDto: ISO timestamps and totals, oldest first.
-
-    The names are the API's own — claimableUsd and debtUsd, not claimable and
-    debt. The contract test caught that the moment it first ran, which is the
-    entire reason it exists.
-    """
     return {
         "range": range_,
         "points": [
@@ -245,11 +212,7 @@ def history(points: list[tuple[str, float]], range_: str = "7d") -> dict:
     }
 
 
-# ── the same fixtures, as everything above the adapter sees them ────────────
-
-
 def as_portfolio(data: dict | None = None, **kwargs) -> Portfolio:
-    """A parsed portfolio: `rich_portfolio` by default, or the payload given."""
     return wire.portfolio(rich_portfolio(**kwargs) if data is None else data)
 
 

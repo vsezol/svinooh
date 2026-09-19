@@ -1,10 +1,3 @@
-"""The methods the model actually calls.
-
-A tool is the one place where a wrong number becomes a confident sentence, so
-every branch of every tool is pinned here — including the ones that are only
-reached when something is missing or refused.
-"""
-
 from app.adapters import wire
 from app.agent.tools import (
     MAX_MATCHES,
@@ -18,12 +11,10 @@ from app.agent.tools import (
 from app.domain.portfolio import WINDOW_MS
 from tests import fixtures as fx
 
-# A week of readings, oldest first, with the series reaching back further than
-# the window — which is exactly how the API answers.
 WEEK = [
-    ("2026-07-28T12:00:00Z", 60_000.00),  # six weeks back: inside the series, outside the week
+    ("2026-07-28T12:00:00Z", 60_000.00),
     ("2026-08-20T12:00:00Z", 70_000.00),
-    ("2026-08-31T20:00:00Z", 84_657.50),  # the week opens here
+    ("2026-08-31T20:00:00Z", 84_657.50),
     ("2026-09-03T12:00:00Z", 82_247.82),
     ("2026-09-07T18:00:00Z", 83_560.55),
 ]
@@ -51,8 +42,6 @@ class TestHistory:
         assert "$60,000.00" in out, "'all' means all of it"
 
     def test_a_window_with_one_reading_falls_back_to_the_series(self):
-        # Nothing inside the hour: better a true statement about a longer span
-        # than a made-up one about this one.
         out = summarize_history(fx.as_history(WEEK), "1h")
         assert "5 readings" in out
 
@@ -61,8 +50,6 @@ class TestHistory:
         assert "Not enough history" in out
 
     def test_unreadable_and_missing_values_are_skipped(self):
-        # A reading with no total is dropped by the mapper; one whose
-        # timestamp cannot be placed in time is outside every window.
         series = wire.history(
             {
                 "points": [
@@ -113,8 +100,6 @@ class TestSearch:
         assert "1 position(s)" in out and "SOL" in out
 
     def test_a_headline_the_model_could_quote_is_the_right_number(self):
-        # The tool's first line is a total, and a total that counted the
-        # wrong positions is the one thing this file exists to prevent.
         held = fx.as_portfolio(
             fx.portfolio(
                 [
@@ -147,8 +132,6 @@ class TestSearch:
 
 
 class FakeSource:
-    """The portfolio API, as the tools use it."""
-
     def __init__(self, series=None, fail=False):
         self.calls = []
         self.series = series or fx.as_history(WEEK)
@@ -168,8 +151,6 @@ class TestToolWiring:
         assert set(schema["properties"]) == {"period"}, "identity is not the model's to pass"
 
     def test_and_only_the_periods_the_product_has(self):
-        # The tool's schema is the domain's Period alias, so the five the
-        # charts use are the five the model may ask for.
         tools = portfolio_tools(FakeSource(), "my-pf", "Bearer T", fx.as_portfolio())
         schema = tools[0].args_schema.model_json_schema()
         assert set(schema["properties"]["period"]["enum"]) == set(WINDOW_MS)
@@ -216,8 +197,6 @@ class TestToolWiring:
 
 
 class TestHowACallReadsToWhoeverAsked:
-    """The trace is read by the person who asked the question, not by us."""
-
     def test_a_period_is_said_the_way_somebody_would_say_it(self):
         said = tool_phrase("history_summary", {"period": "7d"})
         assert said == "Reading the total over the last 7 days"
@@ -227,9 +206,6 @@ class TestHowACallReadsToWhoeverAsked:
         assert tool_phrase("position_details", {"query": "aave"}) == "Reading positions · aave"
 
     def test_no_two_periods_read_the_same(self):
-        # The whole point of the trace is that it can be checked against what
-        # ran, so two different calls must not produce one sentence — that
-        # would be worse than the function name it replaced.
         said = [
             tool_phrase("history_summary", {"period": p}) for p in ("1h", "24h", "7d", "30d", "all")
         ]
@@ -237,9 +213,6 @@ class TestHowACallReadsToWhoeverAsked:
         assert all(s is not None for s in said)
 
     def test_a_tool_with_no_phrase_says_nothing_rather_than_something_wrong(self):
-        # None sends run_tools back to the tool's own name and argument. A new
-        # tool reports honestly on its first day instead of borrowing a
-        # sentence written for a different one.
         assert tool_phrase("some_new_tool", {"x": 1}) is None
 
     def test_an_argument_outside_the_known_set_falls_back_too(self):

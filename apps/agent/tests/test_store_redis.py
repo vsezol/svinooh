@@ -1,29 +1,3 @@
-"""The Redis backend, against a real Redis.
-
-The in-memory tests (tests/test_store.py) cover what a conversation *means*.
-This file covers what only Redis can get wrong, and specifically the one trap
-this store was written around: an owner's index outliving the chats in it, so a
-list shows rows that resolve to nothing.
-
-Both halves of that fix are asserted here, because either alone is a bug that
-shows up weeks later:
-
-1. the index carries the same TTL as the chats and is pushed out on every
-   write, so it never expires *before* them;
-2. a read filters ids whose chat has gone and prunes them, so an index that
-   somehow outlives one recovers instead of showing a dead row forever.
-
-Skipped when there is no Redis to talk to, which is the same condition under
-which the service itself falls back to the in-memory backend. To run them:
-
-    redis-server --port 6399 --daemonize yes
-    AGENT_TEST_REDIS_URL=redis://localhost:6399/0 pytest tests/test_store_redis.py
-
-Every test works in its own randomly named keys and removes them afterwards, so
-pointing this at a Redis that holds other things is safe — nothing here flushes
-anything.
-"""
-
 import os
 import uuid
 
@@ -76,7 +50,6 @@ async def redis_store():
 
 
 def _ids() -> tuple[str, str]:
-    """A fresh owner and chat id, so two runs never share a key."""
     return f"user:test-{uuid.uuid4().hex[:12]}", uuid.uuid4().hex
 
 
@@ -109,8 +82,6 @@ class TestItRoundTrips:
 
 
 class TestTheTtl:
-    """Half one of the skew fix: the index never expires before its chats."""
-
     async def test_a_chat_carries_the_thirty_day_ttl(self, redis_store):
         store, backend, track = redis_store
         owner, chat_id = track(*_ids())
@@ -119,8 +90,6 @@ class TestTheTtl:
         assert 0 < ttl <= CHAT_TTL_S
 
     async def test_the_index_carries_it_too(self, redis_store):
-        """The whole trap in one assertion: an index with no TTL leaks forever,
-        and an index with a shorter one strands every chat it names."""
         store, backend, track = redis_store
         owner, chat_id = track(*_ids())
         await store.append(chat_id, owner, "q", "a", [])
@@ -132,18 +101,13 @@ class TestTheTtl:
         owner, chat_id = track(*_ids())
         await store.append(chat_id, owner, "q", "a", [])
         raw = backend._redis
-        # Age the index as if the last turn had been a fortnight ago.
         await raw.expire(f"agent:owner:{owner}", 60)
         assert await raw.ttl(f"agent:owner:{owner}") <= 60
         await store.append(chat_id, owner, "q2", "a2", [])
-        # An index that expires 30 days after the LAST activity is the correct
-        # one: somebody silent for 30 days has no chats.
         assert await raw.ttl(f"agent:owner:{owner}") > 60
 
 
 class TestTheSkew:
-    """Half two: a listing recovers from an index that outlived a chat."""
-
     async def test_an_expired_chat_is_not_listed(self, redis_store):
         store, backend, track = redis_store
         owner, kept = track(*_ids())
@@ -151,8 +115,6 @@ class TestTheSkew:
         track(owner, gone)
         await store.append(gone, owner, "q", "a", [])
         await store.append(kept, owner, "q", "a", [])
-        # Exactly what expiry looks like to a reader: the chat key is gone and
-        # the id is still sitting in the index.
         await backend._redis.delete(f"agent:chat:{gone}")
         assert [c.id for c in await store.list(owner)] == [kept]
 
@@ -166,9 +128,6 @@ class TestTheSkew:
         raw = backend._redis
         await raw.delete(f"agent:chat:{gone}")
         await store.list(owner)
-        # Filtering alone would re-read the dead id on every listing forever.
-        # Keyspace notifications are at-most-once, so this is the half that
-        # cannot be delegated to Redis telling us.
         assert await raw.zscore(f"agent:owner:{owner}", gone) is None
         assert await raw.zscore(f"agent:owner:{owner}", kept) is not None
 
@@ -195,7 +154,6 @@ class TestSigningIn:
         assert await store.chat(chat_id, target) is not None
 
     async def test_the_new_owners_index_is_given_a_ttl_as_well(self, redis_store):
-        """A reassign that wrote the index without one would leak a key forever."""
         store, backend, track = redis_store
         anon = f"anon:test-{uuid.uuid4().hex[:12]}"
         target = f"user:test-{uuid.uuid4().hex[:12]}"
@@ -217,6 +175,4 @@ class TestSigningIn:
         await store.append(chat_id, anon, "q", "a", [])
         assert await store.owns_any(anon) is True
         await store.reassign(anon, target)
-        # What makes the lazy re-key check on every authenticated turn cheap:
-        # after the move there is nothing left to find.
         assert await store.owns_any(anon) is False

@@ -1,10 +1,3 @@
-"""The earn catalog (apps/earn), read over HTTP.
-
-The same seam as the portfolio API: a protocol in the agent's words, an adapter
-that names the vendor, and a wire that stops here. No caller token — a catalog
-of pools is public.
-"""
-
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -17,8 +10,6 @@ from ..domain.earn import CatalogSnapshot, DepositTerms, YieldPool
 
 
 class YieldCatalog(Protocol):
-    """What the agent needs of a yield catalog."""
-
     async def best_pools(self, token: str | None, limit: int) -> CatalogSnapshot:
         """The best-paying pools for a token, or across every token."""
 
@@ -26,8 +17,6 @@ class YieldCatalog(Protocol):
 
 
 class EarnApiSource:
-    """The svinooh earn service."""
-
     def __init__(self, base_url: str, client: httpx.AsyncClient) -> None:
         self._base = base_url.rstrip("/")
         self._client = client
@@ -49,7 +38,6 @@ class EarnApiSource:
 
 
 def _number(raw: str | None) -> Decimal:
-    """A decimal string from the wire; an unreadable one is zero, not a crash."""
     try:
         return Decimal(raw) if raw else Decimal(0)
     except InvalidOperation:
@@ -57,8 +45,6 @@ def _number(raw: str | None) -> Decimal:
 
 
 class _WirePart(BaseModel):
-    """Read what we use, ignore what we do not — a new field upstream is not an error."""
-
     model_config = ConfigDict(extra="ignore")
 
 

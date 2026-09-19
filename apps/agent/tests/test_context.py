@@ -1,9 +1,3 @@
-"""What the model is told about a portfolio.
-
-These assertions are the anti-hallucination contract: every one of them exists
-because a missing or wrong line here became a wrong answer in a chat.
-"""
-
 from app.agent.context import (
     earning_lines,
     portfolio_context,
@@ -27,10 +21,8 @@ def test_falls_back_to_the_slug_when_a_portfolio_is_unnamed():
 
 
 def test_breakdowns_cover_every_position_not_just_the_printed_ones():
-    # 40 dust positions past the cap: their networks must still be counted.
     block = portfolio_context(fx.as_portfolio(tail=40), 12)
     by_network = next(row for row in block.splitlines() if row.startswith("By network"))
-    # eth: ETH + UNI + AAVE + all 40 dust ones; base and bsc from the fixtures.
     assert "eth" in by_network and "base" in by_network and "bsc" in by_network
     assert "By type" in block and "token" in block and "defi" in block
     assert "In protocols" in block and "uniswap3" in block and "aave3" in block
@@ -48,14 +40,11 @@ def test_protocol_line_excludes_plain_wallet_holdings():
 def test_the_hidden_tail_carries_its_value():
     portfolio = fx.as_portfolio(tail=30)
     block = portfolio_context(portfolio, 12)
-    hidden = portfolio.wallets[0].largest_first[12:]  # 12 is the cap handed in
+    hidden = portfolio.wallets[0].largest_first[12:]
     assert f"…and {len(hidden)} smaller positions worth {usd(total_of(hidden))}" in block
 
 
 def test_positions_are_printed_largest_first():
-    # Asserted on the symbols, whose order the fixtures fix, rather than by
-    # parsing dollars back out of a sentence: a test that re-implements the
-    # formatter to check the formatter passes when both are wrong together.
     block = portfolio_context(fx.as_portfolio(tail=5), 12)
     printed = [line for line in block.splitlines() if line.startswith("  - ")]
     symbols = [line.removeprefix("  - ").split(":")[0].split(" ")[0] for line in printed]

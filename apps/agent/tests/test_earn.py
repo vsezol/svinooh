@@ -1,10 +1,3 @@
-"""Where money can be put to work: the band, the mapping and the wording.
-
-The risk band is the only opinion this service has about somebody else's
-product, so it is pinned line by line — including what it says WHY, because a
-band with no reason behind it is a number pretending to be advice.
-"""
-
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -70,9 +63,6 @@ class TestTheBand:
         assert "ends" in farmed.risk_reasons[0]
 
     def test_incentives_count_as_a_programme_too(self):
-        # The pool that made this obvious: 7.07% from borrowers, 4.41% from
-        # incentives, rewards at zero. Reading only `rewards` called that a
-        # borrower-paid rate, which is the one reading that flatters it.
         mostly = pool(
             apy_base=Decimal("0.01"),
             apy_rewards=Decimal("0"),
@@ -186,7 +176,6 @@ class TestWhatTheModelReads:
 
 
 def _source(payload: dict, seen: dict | None = None) -> EarnApiSource:
-    """The adapter over a transport that answers with this payload."""
 
     def handler(request: httpx.Request) -> httpx.Response:
         if seen is not None:

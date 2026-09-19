@@ -1,12 +1,3 @@
-"""The service, wired for a test: real objects around fakes, in one place.
-
-The same shape as app/container.py's build(), with the outside world
-replaced — an in-memory store, a panel that decided nothing, a model that
-answers what it is told to, a host that knows nobody. A test names only what
-it is about; everything else is the working default. Nothing here patches a
-module: what a test wants, it hands in.
-"""
-
 import itertools
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -36,29 +27,17 @@ from app.domain.earn import CatalogSnapshot, DepositTerms, YieldPool
 from app.panel import NOTHING_DECIDED, PanelValues
 from app.settings import Settings
 
-# ── the fakes ───────────────────────────────────────────────────────────────
-
 
 class FakeChatModel(GenericFakeChatModel):
-    """langchain's stand-in, plus the one thing the graph does to a real model.
-
-    The onboarding branch binds a tool before it asks, and GenericFakeChatModel
-    raises on bind_tools. Without this a turn that lands on onboarding fails
-    for a reason that exists only in the fake.
-    """
-
     def bind_tools(self, _tools, **_kwargs):
         return self
 
 
 def fake_model(text: str) -> FakeChatModel:
-    """A model that answers `text`, as many times as it is asked."""
     return FakeChatModel(messages=itertools.repeat(AIMessage(content=text)))
 
 
 class Intents:
-    """A classifier that labels every question the same way."""
-
     def __init__(self, label: str = "general", asked_to_place: bool = False):
         self.label = label
         self.asked_to_place = asked_to_place
@@ -68,8 +47,6 @@ class Intents:
 
 
 class Confirmations:
-    """A classifier that reads every reply the same way, or objects to being asked."""
-
     def __init__(self, decision: str | None = None):
         self.decision = decision
 
@@ -80,15 +57,11 @@ class Confirmations:
 
 
 class NoCatalog:
-    """The earn catalog in a test that must never reach it."""
-
     async def best_pools(self, token, limit):
         raise AssertionError(f"the catalog was asked about {token or 'everything'}")
 
 
 class Catalog:
-    """A catalog with one option in it, enough for a branch to answer from."""
-
     def __init__(self, *pools: YieldPool) -> None:
         self.pools = pools or (
             YieldPool(
@@ -131,8 +104,6 @@ class Catalog:
 
 
 class NoHost:
-    """The portfolio API in a test that must never reach it."""
-
     async def me(self, token):
         raise AssertionError("the host was asked who is asking")
 
@@ -153,8 +124,6 @@ class NoHost:
 
 
 class Door:
-    """The host's answer to "whose token is this": nobody, until a test says who."""
-
     def __init__(self) -> None:
         self.user_id: str | None = None
 
@@ -163,8 +132,6 @@ class Door:
 
 
 class Meter:
-    """A cost lock that lets everybody through and remembers who it charged."""
-
     def __init__(self) -> None:
         self.charged: list[str] = []
         self.wait: int | None = None
@@ -175,8 +142,6 @@ class Meter:
 
 
 class Purse:
-    """The free allowance as a number a test can set. None is unlimited."""
-
     def __init__(self, questions: int | None = None) -> None:
         self.questions = questions
         self.spent: dict[str, int] = {}
@@ -190,11 +155,7 @@ class Purse:
         return True
 
 
-# ── the builders ────────────────────────────────────────────────────────────
-
-
 def models_of(model, settings: Settings | None = None) -> Models:
-    """Models whose every client is this one object, whatever the role."""
     return Models(settings or Settings(), factory=lambda _name, **_kwargs: model)
 
 
@@ -210,7 +171,6 @@ def agent(
     settings: Settings | None = None,
     panel: PanelValues = NOTHING_DECIDED,
 ) -> LangGraphAgent:
-    """The real graph over fakes."""
     settings = settings or Settings()
     config = Config(settings, StaticPanel(panel))
     return LangGraphAgent(
@@ -237,7 +197,6 @@ def container(
     settings: Settings | None = None,
     asked_to_place: bool = False,
 ) -> Container:
-    """The whole service over fakes, in the shape build() makes it."""
     settings = settings or Settings()
     panel = StaticPanel()
     config = Config(settings, panel)
@@ -247,7 +206,6 @@ def container(
     models = models_of(model if model is not None else fake_model("answered"), settings)
     who = Identity(door if door is not None else Door())
     sessions = SessionStore(kept, settings.history_max_messages, settings.chat_max_turns)
-    # Generous by default: most tests ask far more than five questions.
     meter = limiter if limiter is not None else WindowRateLimiter(1000, 60, counters)
     purse = allowance if allowance is not None else WindowAllowance(1000, 60, counters)
     shelf = catalog if catalog is not None else NoCatalog()
@@ -280,7 +238,6 @@ def container(
 
 @asynccontextmanager
 async def client_for(wired: Container) -> AsyncIterator[httpx.AsyncClient]:
-    """An HTTP client on the app, over a real ASGI transport."""
     app = create_app(wired)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://agent"

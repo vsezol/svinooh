@@ -1,11 +1,3 @@
-"""What the admin panel decided, as the service hears it.
-
-The values come over HTTP from another service, so two things are pinned:
-that a bad field costs that field and never the conversation, and that a
-turn always runs on what is already in hand — the last good answer, or
-nothing at all — rather than waiting for the host.
-"""
-
 import asyncio
 import logging
 
@@ -44,13 +36,10 @@ class TestReadingTheWire:
         )
 
     def test_an_empty_field_is_no_opinion(self):
-        # Clearing a field in the panel means "no opinion", not "set it to nothing".
         values = parse({"model": "", "routerModel": ""})
         assert values.model is None and values.router_model is None
 
     def test_default_is_the_panels_word_for_no_thinking_instruction(self):
-        # A select cannot offer "nothing", so the panel says "default" — and
-        # that is a decision, kept apart from a field nobody touched.
         assert parse({"routerReasoningEffort": "default"}).router_reasoning_effort == ""
         assert parse({}).router_reasoning_effort is None
 
@@ -79,8 +68,6 @@ class TestReadingTheWire:
 
 
 class Host:
-    """The config endpoint, answering the payloads it was given in turn."""
-
     def __init__(self, *payloads: object):
         self.payloads = list(payloads)
         self.calls: list[str] = []
@@ -100,8 +87,6 @@ class Host:
 
 
 def panel(host: Host, every_s: float = 60.0) -> RemotePanel:
-    # The client is the service's own, shared with the portfolio reads; here
-    # it is one over a transport that answers from the payloads above.
     client = httpx.AsyncClient(transport=host.transport(), timeout=1)
     return RemotePanel("http://host", client, every_s=every_s)
 

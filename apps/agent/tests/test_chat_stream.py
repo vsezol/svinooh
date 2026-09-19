@@ -1,12 +1,3 @@
-"""The streaming endpoint, over a real ASGI transport.
-
-The layer below (tests/test_streaming.py) proves the graph can be watched.
-This proves the wire: that the events are shaped the way an EventSource parser
-expects, that a refusal is a status code rather than a stream that opens and
-apologises, and that a turn watched leaves the session exactly as a turn
-awaited does.
-"""
-
 import json
 
 import pytest
@@ -18,8 +9,6 @@ ANSWER = "A health factor is a safety margin."
 
 
 class Model:
-    """A model that asks for a deposit to be prepared, then says one sentence."""
-
     def __init__(self):
         self._called = False
 
@@ -51,8 +40,6 @@ class Model:
 
 
 class Failing:
-    """A model that refuses, however it is called."""
-
     async def ainvoke(self, _messages, **_kwargs):
         raise RuntimeError("upstream is on fire")
 
@@ -78,7 +65,6 @@ async def client(wired):
 
 
 def parse(body: str) -> list[tuple[str, dict]]:
-    """The events an EventSource would have seen."""
     events = []
     for block in body.strip().split("\n\n"):
         lines = dict(line.split(": ", 1) for line in block.splitlines() if ": " in line)
@@ -92,8 +78,6 @@ class TestTheStream:
         async with client.stream("POST", "/chat/stream", json={"message": "q"}) as response:
             assert response.status_code == 200
             assert response.headers["content-type"].startswith("text/event-stream")
-            # Without this a proxy may hold the whole stream and hand it over
-            # at the end, which is the thing being fixed.
             assert response.headers["x-accel-buffering"] == "no"
             await response.aread()
 
@@ -109,8 +93,6 @@ class TestTheStream:
         assert name == "done" and done["reply"] == ANSWER
 
     async def test_the_end_is_the_body_the_other_endpoint_returns(self, client):
-        # One wire, two deliveries. A second shape here would be a second
-        # contract to keep in step with the first.
         streamed = parse((await client.post("/chat/stream", json={"message": "q"})).text)[-1][1]
         whole = (await client.post("/chat", json={"message": "q"})).json()
         assert streamed["schema"] == whole["schema"]
@@ -152,7 +134,6 @@ class TestRefusals:
     async def test_a_turn_that_fails_says_so_in_the_stream(self):
         async with client_for(container(model=Failing())) as client:
             events = parse((await client.post("/chat/stream", json={"message": "q"})).text)
-        # It opened, so the failure cannot be a status code any more.
         assert events[0][0] == "start" and events[-1][0] == "error"
 
     async def test_a_failed_turn_leaves_the_session_as_it_was(self):
@@ -173,8 +154,6 @@ class TestTheOldWayStillWorks:
 
 
 class TestADepositOnTheWire:
-    """The third block kind: a card to sign, never a transaction we send."""
-
     @pytest.fixture
     def wired(self, meter):
         return container(
