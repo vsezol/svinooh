@@ -58,11 +58,14 @@ def fake_model(text: str) -> FakeChatModel:
 class Intents:
     """A classifier that labels every question the same way."""
 
-    def __init__(self, label: str = "general"):
+    def __init__(self, label: str = "general", asked_to_place: bool = False):
         self.label = label
+        self.asked_to_place = asked_to_place
 
     async def classify(self, _question: str) -> IntentLabel:
-        return IntentLabel(intent=self.label, reason="stubbed")
+        return IntentLabel(
+            intent=self.label, reason="stubbed", asked_to_place=self.asked_to_place
+        )
 
 
 class Confirmations:

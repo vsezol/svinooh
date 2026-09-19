@@ -94,3 +94,12 @@ class TestWhenOneModelDoesBothJobs:
         with pytest.raises(RuntimeError, match="429"):
             await classifier(answering=only).classify("q")
         assert only.calls == 1
+
+
+class TestAskingApartFromTelling:
+    def test_a_label_that_says_nothing_about_acting_means_a_question(self):
+        assert IntentLabel(intent="earn", reason="r").asked_to_place is False
+
+    def test_the_model_is_told_what_the_flag_means(self):
+        told = IntentLabel.model_json_schema()["properties"]["asked_to_place"]["description"]
+        assert "put the money" in told and "In doubt, false" in told

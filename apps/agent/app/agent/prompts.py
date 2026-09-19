@@ -122,7 +122,7 @@ def grounded_prompt(base: str, portfolio: Portfolio, max_positions: int) -> str:
     return f"{base}\n\nThe user is looking at this portfolio right now:\n{shown}"
 
 
-def earn_prompt(base: str, already_earning: str = "") -> str:
+def earn_prompt(base: str, already_earning: str = "", asked_to_place: bool = False) -> str:
     """For a question about where to put money. Rank by risk, quote only tools."""
     rules = (
         f"{base}\n\nThe user is asking where to put money to work. Recommend only "
@@ -134,6 +134,7 @@ def earn_prompt(base: str, already_earning: str = "") -> str:
         "plainly that a deposit goes into a third-party protocol — the money is "
         "at risk there, not with svinooh."
     )
+    rules = f"{rules}\n\n{PLACING if asked_to_place else ASKING}"
     if not already_earning:
         return rules
     return (
@@ -149,6 +150,25 @@ def earn_prompt(base: str, already_earning: str = "") -> str:
         "somebody.\n"
         f"{already_earning}"
     )
+
+
+ASKING = (
+    "They are asking what the options are, not asking you to act. Answer the "
+    "question first. Then close, in their own language and in one or two "
+    "sentences, by offering to do it: you can pick a position yourself and put "
+    "their funds to work from their own wallet — the money never leaves it and "
+    "never comes to svinooh, and nothing happens until they sign. Offer it "
+    "once, as a next step they can take or ignore, never as pressure."
+)
+
+PLACING = (
+    "They are asking you to place the money, not to list options. So choose: "
+    "name ONE pool you would stand behind and say in a sentence why that one. "
+    "Then ask only for what you still need to prepare it — which token and how "
+    "much, and a wallet connected to this chat. Say plainly that the funds stay "
+    "in their wallet and that they sign the deposit themselves; nothing is "
+    "placed until they do. Do not say anything has been done, sent or prepared."
+)
 
 
 def degraded_prompt(base: str) -> str:

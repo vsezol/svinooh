@@ -87,6 +87,7 @@ class AgentState(TypedDict, total=False):
     pending_addresses: list[str] | None
     # Written by classify_intent; the first conditional edge routes on it.
     intent: str
+    asked_to_place: bool
     # Written by identity: where the portfolio branch goes, and in which
     # portfolio to ground when it goes to `grounded`.
     route: str
@@ -197,9 +198,15 @@ class LangGraphAgent:
         try:
             async with step("route", "Reading the question"):
                 label = await self._intents.classify(state["question"])
-            logger.info("intent: %s (%s) q=%.80s", label.intent, label.reason, state["question"])
+            logger.info(
+                "intent: %s%s (%s) q=%.80s",
+                label.intent,
+                " place" if label.asked_to_place else "",
+                label.reason,
+                state["question"],
+            )
             metrics.counted(metrics.intents, intent=label.intent)
-            return {"intent": label.intent}
+            return {"intent": label.intent, "asked_to_place": label.asked_to_place}
         except Exception as error:  # noqa: BLE001 — the fail-safe IS the handling
             logger.warning("intent classifier failed (%r) — routing to portfolio", error)
             # Counted apart from the label it falls back to: a router that
@@ -250,7 +257,11 @@ class LangGraphAgent:
 
     async def _earn(self, state: AgentState) -> AgentState:
         """Where to put money: the catalog, plus what the user already earns."""
-        system = earn_prompt(system_prompt(self._config), await self._already_earning(state))
+        system = earn_prompt(
+            system_prompt(self._config),
+            await self._already_earning(state),
+            asked_to_place=bool(state.get("asked_to_place")),
+        )
         return await self._answer_with_tools(system, state, earn_tools(self._catalog))
 
     async def _already_earning(self, state: AgentState) -> str:

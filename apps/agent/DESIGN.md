@@ -184,6 +184,15 @@ The routing ladder (D7/D8) — each step builds on the previous:
   shown what they ALREADY earn, so the recommendation can be a move rather
   than only a new deposit. *Lesson: a second neighbour costs a port, an
   adapter and a node; opinions live where they can be argued with.*
+- **E2 — asked, or told.** "Where can I put USDC" and "put my USDC to work"
+  are the same branch and not the same turn. The classifier already runs once
+  per turn, so it carries the difference as a second field rather than a
+  second call, and the node picks the closing from it: a question is answered
+  and then closed with the offer to do it, a request names one pool and asks
+  for what is still missing. The words stay in the prompt because the answer
+  is in the user's language; the choice of which words stays in code because
+  a closing left to the model is a closing it forgets. *Lesson: decide in
+  code, word it in the prompt.*
 
 Then the independence milestones, unchanged in substance:
 
