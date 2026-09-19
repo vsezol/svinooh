@@ -14,6 +14,7 @@
  * sitting at the machine now, which is exactly what the privacy rule forbids.
  * The key is deleted on first load so it stops taking up quota.
  */
+import { asReceipt } from './trace';
 import { agentHeaders } from './wire';
 import type { AgentBlock, ChatItem, Conversation } from './types';
 
@@ -111,7 +112,8 @@ export async function remove(input: ChatsInput, id: string): Promise<void> {
  * for the same reason the chart was the chart in the first place.
  */
 function itemsOf(turn: ChatTurnWire, index: number): ChatItem[] {
-  const blocks = turn.blocks?.length ? turn.blocks : [{ kind: 'text', text: turn.a } as AgentBlock];
+  const stored = turn.blocks?.length ? turn.blocks : [{ kind: 'text', text: turn.a } as AgentBlock];
+  const blocks = stored.map(asReceipt);
   return [
     { id: `${index}-q`, role: 'user', text: turn.q },
     { id: `${index}-a`, role: 'agent', blocks },

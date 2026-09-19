@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { describe, test } from 'node:test';
-import { secs, traceOf } from '../src/app/trace';
+import { asReceipt, secs, traceOf } from '../src/app/trace';
+import type { AgentBlock, TraceBlock } from '../src/app/types';
 import type { StepEvent } from '../src/app/wire';
 
 const done = (id: string, ms: number, label = id): StepEvent => ({ id, label, state: 'done', ms });
@@ -102,5 +103,39 @@ describe('WhatTheTraceSaysAboutFailure', () => {
       { id: 'a', label: 'Reading lending rates · USDC', state: 'done', ms: 60, detail: '8 pools' },
     ];
     assert.equal(traceOf(steps, false, 0).steps[0].detail, '8 pools');
+  });
+});
+
+describe('AReceiptTheServiceSent', () => {
+  test('becomes the block the renderer takes', () => {
+    const stored = {
+      kind: 'trace',
+      steps: [
+        { id: 'route', label: 'Reading the question', state: 'done', ms: 900 },
+        { id: 'answer', label: 'Writing the answer', state: 'done', ms: 4_100, detail: '2 pools' },
+      ],
+    } as unknown as AgentBlock;
+    const block = asReceipt(stored) as TraceBlock;
+    assert.equal(block.kind, 'trace');
+    assert.equal(block.summary, '2 steps · 5.0s');
+    assert.equal(block.collapsed, true);
+    assert.deepEqual(
+      block.steps.map((s) => [s.label, s.time, s.detail]),
+      [
+        ['Reading the question', '0.90s', undefined],
+        ['Writing the answer', '4.1s', '2 pools'],
+      ],
+    );
+  });
+
+  test('leaves every other block exactly as it was', () => {
+    const text = { kind: 'text', text: 'A health factor is a safety margin.' } as AgentBlock;
+    assert.equal(asReceipt(text), text);
+  });
+
+  test('a receipt with no steps in it draws an empty one rather than throwing', () => {
+    const block = asReceipt({ kind: 'trace' } as unknown as AgentBlock) as TraceBlock;
+    assert.deepEqual(block.steps, []);
+    assert.equal(block.summary, '0 steps · 0.00s');
   });
 });

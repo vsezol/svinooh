@@ -14,6 +14,19 @@ class TextBlock(BaseModel):
     text: str
 
 
+class TraceStep(BaseModel):
+    id: str
+    label: str
+    state: str
+    detail: str | None = None
+    ms: int | None = None
+
+
+class TraceBlock(BaseModel):
+    kind: Literal["trace"] = "trace"
+    steps: list[TraceStep]
+
+
 class SignInBlock(BaseModel):
     kind: Literal["signin"] = "signin"
     title: str
@@ -63,6 +76,6 @@ class ChatList(BaseModel):
 
 class ChatResponse(BaseModel):
     schema_version: int = Field(default=1, serialization_alias="schema")
-    blocks: list[TextBlock | SignInBlock | DepositBlock]
+    blocks: list[TraceBlock | TextBlock | SignInBlock | DepositBlock]
     reply: str
     session_id: str

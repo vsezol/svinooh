@@ -22,6 +22,8 @@ from .schemas import (
     DepositBlock,
     SignInBlock,
     TextBlock,
+    TraceBlock,
+    TraceStep,
 )
 
 logger = logging.getLogger("svinooh-ai")
@@ -65,15 +67,46 @@ def _asked(body: ChatRequest) -> Question:
     return Question(message=body.message, session_id=body.session_id, portfolio=body.portfolio)
 
 
-def _answered(session_id: str, answered: Answered) -> ChatResponse:
-    return ChatResponse(blocks=_blocks(answered), reply=answered.text, session_id=session_id)
+Drawn = TraceBlock | TextBlock | SignInBlock | DepositBlock
 
 
-def _blocks(answered: Answered) -> list[TextBlock | SignInBlock | DepositBlock]:
-    drawn: list[TextBlock | SignInBlock | DepositBlock] = [TextBlock(text=answered.text)]
+def _answered(
+    session_id: str, answered: Answered, receipt: TraceBlock | None = None
+) -> ChatResponse:
+    return ChatResponse(
+        blocks=_blocks(answered, receipt), reply=answered.text, session_id=session_id
+    )
+
+
+def _blocks(answered: Answered, receipt: TraceBlock | None = None) -> list[Drawn]:
+    drawn: list[Drawn] = [receipt] if receipt is not None else []
+    drawn.append(TextBlock(text=answered.text))
     if answered.deposit is not None:
         drawn.append(_deposit_card(answered.deposit))
     return drawn
+
+
+def _taken(seen: dict[str, dict], event: dict) -> None:
+    key = str(event.get("id") or "")
+    if key:
+        seen[key] = {**seen.get(key, {}), **event}
+
+
+def _receipt(seen: dict[str, dict]) -> TraceBlock | None:
+    if not seen:
+        return None
+    return TraceBlock(
+        steps=[
+            TraceStep(
+                id=key,
+                label=str(step.get("label") or key),
+                state=str(step.get("state") or "running"),
+                detail=step.get("detail"),
+                ms=step.get("ms"),
+            )
+            for key, step in seen.items()
+        ]
+    )
 
 
 def _deposit_card(deposit: Deposit) -> DepositBlock:
@@ -141,16 +174,21 @@ async def chat_stream(
             walled = await _remember_card(deps, admitted, card)
             yield _event("done", walled.model_dump(by_alias=True))
             return
+        seen: dict[str, dict] = {}
         async for name, data in deps.turns.watch(admitted):
             if name != "done":
+                if name == "step":
+                    _taken(seen, data)
                 yield _event(name, data)
                 continue
             answered = Answered(text=data["text"], deposit=data.get("deposit"))
-            drawn = _blocks(answered)
+            body = _answered(admitted.session_id, answered, _receipt(seen))
             await deps.turns.remember(
-                admitted, answered.text, [block.model_dump(by_alias=True) for block in drawn]
+                admitted,
+                answered.text,
+                [block.model_dump(by_alias=True) for block in body.blocks],
             )
-            yield _event("done", _answered(admitted.session_id, answered).model_dump(by_alias=True))
+            yield _event("done", body.model_dump(by_alias=True))
 
     return StreamingResponse(
         events(),
