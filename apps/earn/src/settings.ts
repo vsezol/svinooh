@@ -28,6 +28,7 @@ const csv = (name: string, fallback: string, lower = false): string[] =>
 
 export interface Settings {
   kaminoApi: string;
+  solanaRpcUrl: string;
   httpTimeoutMs: number;
   httpConcurrency: number;
   refreshIntervalMs: number;
@@ -46,6 +47,7 @@ export interface Settings {
 export function settingsFromEnv(): Settings {
   return {
     kaminoApi: str('EARN_KAMINO_API', 'https://api.kamino.finance'),
+    solanaRpcUrl: str('SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com'),
     httpTimeoutMs: float('EARN_HTTP_TIMEOUT_S', 20, 0.001) * 1000,
     httpConcurrency: int('EARN_HTTP_CONCURRENCY', 8, 1, 64),
     refreshIntervalMs: int('EARN_REFRESH_INTERVAL_S', 300, 10) * 1000,

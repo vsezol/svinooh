@@ -1,17 +1,19 @@
-import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query } from '@nestjs/common';
+import { LendDeposits } from '../application/deposits';
 import { LendQueries } from '../application/queries';
 import { ageMs, isStale } from '../domain/catalog';
 import type { Clock } from '../application/refresher';
 import type { Settings } from '../settings';
 import { CLOCK, SETTINGS } from '../tokens';
 import { encode, decode } from './cursors';
-import { pageSize, poolFilter, poolSelection } from './params';
-import { detail, meta, summary, tokenYield } from './presenters';
+import { depositBody, pageSize, poolFilter, poolSelection } from './params';
+import { builtDeposit, detail, meta, summary, tokenYield } from './presenters';
 
 @Controller('v1/lend')
 export class LendController {
   constructor(
     @Inject(LendQueries) private readonly queries: LendQueries,
+    @Inject(LendDeposits) private readonly deposits: LendDeposits,
     @Inject(SETTINGS) private readonly settings: Settings,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -37,6 +39,17 @@ export class LendController {
     const answer = this.queries.getPool(poolId);
     return {
       data: detail(answer.pool),
+      meta: meta(answer.catalog, this.clock(), this.settings.staleAfterMs),
+    };
+  }
+
+  @Post('pools/:poolId/deposit')
+  @HttpCode(200)
+  async buildDeposit(@Param('poolId') poolId: string, @Body() body: unknown) {
+    const { amount, owner } = depositBody(body);
+    const answer = await this.deposits.build(poolId, amount, owner);
+    return {
+      data: builtDeposit(answer.built),
       meta: meta(answer.catalog, this.clock(), this.settings.staleAfterMs),
     };
   }

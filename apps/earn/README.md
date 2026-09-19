@@ -1,17 +1,19 @@
 # earn — where a token can be put to work
 
-A read-only catalog of single-token yield: **you deposit one asset, you are paid
-a rate**. Solana and Kamino today; the shape is built for the second network and
-the second protocol, not retrofitted for them.
+A catalog of single-token yield: **you deposit one asset, you are paid a rate**.
+Solana and Kamino today; the shape is built for the second network and the
+second protocol, not retrofitted for them.
 
 The caller is the agent (`apps/agent`), which needs to answer "where can I earn
-on my USDC" in one request and "what exactly is this pool" in the next.
+on my USDC" in one request and "what exactly is this pool" in the next — and,
+once the user says yes, the transaction that puts the money there.
 
 ```
-GET /v1/lend/pools            the list, narrowed by query parameters
-GET /v1/lend/pools/{pool_id}  one pool, everything about it
-GET /v1/lend/tokens           what is earnable, best rate per token
-GET /health                   is there a catalog to serve from
+GET  /v1/lend/pools                      the list, narrowed by query parameters
+GET  /v1/lend/pools/{pool_id}            one pool, everything about it
+GET  /v1/lend/tokens                     what is earnable, best rate per token
+POST /v1/lend/pools/{pool_id}/deposit    the transaction that puts money in
+GET  /health                             is there a catalog to serve from
 ```
 
 ## The shape of the code
@@ -26,8 +28,8 @@ Four layers, and the dependency arrow only ever points inwards:
 | package | what lives there | what it may import |
 | :-- | :-- | :-- |
 | `src/domain` | `Pool`, `Catalog`, `ListingPolicy`, `PoolSelection` | itself, `decimal.js` |
-| `src/application` | the ports (`YieldSource`, `Clock`), the refresh loop, the three use cases | domain |
-| `src/infrastructure` | Kamino's API and mapping, the HTTP client | domain, application |
+| `src/application` | the ports (`YieldSource`, `Clock`, `BuildDeposit`), the refresh loop, the use cases | domain |
+| `src/infrastructure` | Kamino's API, mapping and deposit builder, the transaction, the HTTP client | domain, application |
 | `src/api` | controllers, presenters, cursors, problem documents, parameter parsing | everything |
 
 Two of those rules are worth spelling out, because they are what the
@@ -140,7 +142,8 @@ on it is not a fact.
 **Errors are RFC 9457 problem documents**, `application/problem+json`. A person
 reads `title` and `detail`; a program branches on `type`, which is a stable URI:
 `not-ready`, `not-found`, `invalid-cursor`, `cursor-expired`,
-`cursor-query-mismatch`, `invalid-parameter`. The whole translation table is
+`cursor-query-mismatch`, `invalid-parameter`, `deposit-not-supported`,
+`amount-below-minimum`. The whole translation table is
 `src/api/problems.ts`, and anything not in it surfaces as the 500 it is rather
 than being flattened into a polite 400.
 
@@ -201,6 +204,45 @@ still nonsense, because nobody can put money in at that rate.
 pool, listed or not: somebody may hold shares in one, and 404 would be a lie
 about the chain.
 
+## Putting money in
+
+Reading is most of this service. The one thing it does beyond reading is build
+the transaction that puts money into a pool it lists.
+
+```
+POST /v1/lend/pools/sol:kamino:vault:A2wsxh…/deposit
+{ "amount": "250", "owner": "EiN7zK…" }
+
+{ "data": { "transaction": "AQAB…", "fee_payer": "EiN7zK…", "instructions": 9,
+            "blockhash": "8Ld…", "last_valid_block_height": "367421008" },
+  "meta": { "as_of": …, "catalog": 1, … } }
+```
+
+**Nothing here is signed and nothing is sent.** The answer is an unsigned v0
+transaction, base64 in the wire format a wallet expects. The user's wallet signs
+it and the wallet's own node broadcasts it; this service holds no key of theirs
+and learns nothing about them beyond the address in the request.
+
+**The node key stays on the server.** Building needs the chain — seven account
+reads for a vault, nine for a reserve — and doing that from the browser would
+put `SOLANA_RPC_URL` into the page source, a paid key with it. So the browser
+asks `apps/api`, `apps/api` asks this service, and this service is the only one
+that talks to the node. `SOLANA_RPC_URL` is the single setting here without the
+`EARN_` prefix: it is the same name in every service that reads a chain.
+
+**A protocol is a line in a record, not a hierarchy.**
+`src/infrastructure/builders.ts` maps `sol:kamino` to the function that builds
+it; the use case finds one or refuses by name. Meteora's vault SDK takes an
+owner and a `BN`, its DLMM takes two token amounts, a position keypair and a
+strategy — one interface over those would be invented rather than discovered, so
+the routing is shared and the building is not.
+
+**What the catalog knows is not asked for again.** The request carries the
+amount and the owner. The program id, the vault or reserve address, the share
+mint, the token program, the lending market and the minimum deposit come from
+the pool as it stands in the catalog, and `meta.catalog` says which version that
+was. Below the minimum, nothing is built at all: the refusal names the minimum.
+
 ## Running it
 
 ```bash
@@ -210,9 +252,15 @@ npm run -w apps/earn dev      # watch mode on PORT (3000 by default)
 Two gates, both of which must be green:
 
 ```bash
-npm run -w apps/earn test         # 48 tests, no network
+npm run -w apps/earn test         # 62 tests, no network
 npx tsc --noEmit -p apps/earn     # strict
 ```
+
+The deposit builder is the one thing a unit test cannot prove, because what
+makes it right is a program on mainnet accepting it. `npm run -w apps/earn
+simulate:deposit` asks a running earn for a vault deposit and a reserve deposit,
+checks the amount reaches the program in base units, and simulates both against
+the chain.
 
 The tests reach no socket. `test/fixtures/kamino.ts` holds recorded Kamino
 payloads — kept verbatim in shape, thirty-digit decimals and scientific notation
@@ -233,20 +281,21 @@ they return were left out on purpose:
 - **No repository abstraction.** A repository hides *storage*. There is no
   storage: the catalog is a tuple in memory, and `CatalogStore` is a small
   bounded ring, named for what it is.
-- **No domain events, no CQRS buses, no unit of work.** Nothing here writes, so
-  there is no transaction to bound and no state change to publish. Adding an
-  event bus to a read-only service is ceremony that makes the call stack harder
-  to follow and buys nothing back.
+- **No domain events, no CQRS buses, no unit of work.** Nothing here writes —
+  not even the deposit endpoint, which hands back a transaction and forgets it.
+  There is no state change to publish, and an event bus over that is ceremony
+  that makes the call stack harder to follow and buys nothing back.
 - **No value object around addresses.** `Rate` earns its wrapper because 5.08
   and 0.0508 look identical in a `Decimal`, and that confusion is the bug this
   service exists to not make. A base58 address has no such invariant — wrapping
   it would touch every field and catch nothing.
-- **Transaction building.** `deposit` on the detail response carries what
-  signing needs — program id, vault or reserve address, share mint, token
-  program, minimum deposit — but building and signing is a `POST`, not a widened
-  `GET`, and Kamino's SDK is TypeScript only, so that step is a decision rather
-  than a detail.
+- **Signing, and sending.** Building the transaction is here; putting a
+  signature on it is the user's wallet, and broadcasting it is that wallet's
+  node. A service that could sign would need a key of the user's, and there is
+  no version of this product where it has one.
 - **Positions.** What a given wallet holds is `apps/wallet`'s job. This service
-  knows about pools, not about people: it takes no address and needs no auth.
+  knows about pools, not about people: the only address it ever sees is the one
+  a deposit is being built for, and it needs no auth — `apps/api` is where a
+  caller is one.
 - **History.** Kamino serves `/kvaults/{vault}/metrics/history`; there is no
   reason to keep our own copy until something needs to query across protocols.

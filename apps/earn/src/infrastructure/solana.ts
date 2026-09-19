@@ -1,4 +1,4 @@
-import type { BuiltDeposit } from './types';
+import type { BuiltDeposit } from '../application/deposits';
 
 export async function assemble(
   instructions: unknown[],

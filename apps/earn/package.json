@@ -8,12 +8,15 @@
     "start": "node dist/main.js",
     "test": "tsx --test test/*.test.ts",
     "diff:python": "tsx scripts/diff-against-python.ts",
+    "simulate:deposit": "tsx scripts/simulate-deposit.ts",
     "typecheck": "tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
+    "@kamino-finance/klend-sdk": "^12.0.0",
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",
     "@nestjs/platform-express": "^11.1.0",
+    "@solana/kit": "^2.3.0",
     "decimal.js": "^10.6.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
