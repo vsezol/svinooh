@@ -6,6 +6,7 @@ from app.adapters.memory import StaticPanel
 from app.agent.intent import IntentClassifier, IntentLabel
 from app.agent.llm import Models
 from app.config import Config
+from app.domain.conversation import Turn
 from app.settings import Settings
 
 CHEAP = "openai:cheap-labeller"
@@ -82,3 +83,38 @@ class TestAskingApartFromTelling:
     def test_the_model_is_told_what_the_flag_means(self):
         told = IntentLabel.model_json_schema()["properties"]["asked_to_place"]["description"]
         assert "put the money" in told and "In doubt, false" in told
+
+
+class Listening(Stub):
+    def __init__(self, label: str = "earn"):
+        super().__init__(label=label)
+        self.seen: list = []
+
+    async def ainvoke(self, messages):
+        self.seen = list(messages)
+        return await super().ainvoke(messages)
+
+
+class TestWhatTheLabellerIsShown:
+    async def test_a_reply_is_labelled_with_the_question_it_answers(self):
+        cheap = Listening()
+        history = (Turn(q="put it to the highest rate for usdc", a="how much?", at=0),)
+        await classifier(answering=Stub(), labelling=cheap).classify("all my usdc", history)
+        said = [str(message.content) for message in cheap.seen]
+        assert "put it to the highest rate for usdc" in said
+        assert "how much?" in said
+        assert said[-1] == "all my usdc"
+
+    async def test_an_older_conversation_is_not_dragged_along(self):
+        cheap = Listening()
+        history = tuple(Turn(q=f"q{n}", a=f"a{n}", at=n) for n in range(6))
+        await classifier(answering=Stub(), labelling=cheap).classify("now what", history)
+        said = " ".join(str(message.content) for message in cheap.seen)
+        assert "q5" in said and "q4" in said
+        assert "q3" not in said, "two turns of context, not the whole conversation"
+
+    async def test_a_first_question_has_no_history_and_is_still_labelled(self):
+        cheap = Listening(label="portfolio")
+        label = await classifier(answering=Stub(), labelling=cheap).classify("how much do I have?")
+        assert label.intent == "portfolio"
+        assert len(cheap.seen) == 2, "the rules and the question, nothing else"

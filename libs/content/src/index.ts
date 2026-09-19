@@ -31,7 +31,11 @@ export const PRODUCT_FAQ: readonly FaqEntry[] = [
   },
   {
     q: 'Do I need to connect a wallet?',
-    a: 'No. svinooh is watch-only: you paste addresses and it reads public on-chain data. No keys, no signatures, no wallet connection — which also means you can track addresses that are not yours to sign for, like a cold wallet or a treasury.',
+    a: 'Not for tracking. You paste addresses and svinooh reads public on-chain data — no keys, no connection — which also means you can track addresses that are not yours to sign for, like a cold wallet or a treasury. A wallet is connected only when you ask the assistant to place a deposit: it prepares the transaction, your wallet signs and sends it, and the money goes straight from you to the protocol. svinooh never holds a key and never moves money by itself.',
+  },
+  {
+    q: 'Can svinooh invest for me?',
+    a: 'It can prepare the deposit; you place it. Ask the assistant where to put a token and it reads current rates across the pools it covers, picks one it can stand behind, and puts the deposit in front of you as a card with a button. Pressing it opens your own wallet to sign — the funds leave your wallet for the protocol and never touch svinooh, and nothing happens until you sign. Solana and Kamino today.',
   },
   {
     q: 'How do I add a wallet?',

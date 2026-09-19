@@ -119,7 +119,7 @@ class LangGraphAgent:
     async def _classify_intent(self, state: AgentState) -> AgentState:
         try:
             async with step("route", "Reading the question"):
-                label = await self._intents.classify(state["question"])
+                label = await self._intents.classify(state["question"], state.get("history", ()))
             logger.info(
                 "intent: %s%s (%s) q=%.80s",
                 label.intent,
@@ -171,9 +171,7 @@ class LangGraphAgent:
             asked_to_place=asked_to_place,
         )
         prepared: list[Deposit] = []
-        tools = earn_tools(self._catalog)
-        if asked_to_place:
-            tools = tools + deposit_tools(self._catalog, prepared)
+        tools = earn_tools(self._catalog) + deposit_tools(self._catalog, prepared)
         answered = await self._answer_with_tools(system, state, tools)
         return {**answered, "deposit": prepared[-1] if prepared else None}
 

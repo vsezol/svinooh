@@ -87,13 +87,15 @@ def wire(
 ):
     api = api or Api()
     model = model or Model()
+    intents = Intents(intent, asked_to_place=asked_to_place)
     bot = agent(
         model=model,
         portfolio=api,
-        intents=Intents(intent, asked_to_place=asked_to_place),
+        intents=intents,
         confirmation=confirmation,
         catalog=catalog,
     )
+    bot.intents = intents
     return bot, api, model
 
 
@@ -102,6 +104,12 @@ async def run(bot, **state):
 
 
 class TestRouting:
+    async def test_the_question_is_labelled_with_the_conversation_it_is_in(self):
+        bot, _, _ = wire(intent="earn")
+        spoken = (Turn(q="put it to the highest rate", a="how much?", at=0),)
+        await run(bot, history=spoken)
+        assert bot.intents.heard == spoken, "a reply out of context is a different question"
+
     async def test_a_general_question_never_touches_the_portfolio(self):
         bot, api, _ = wire(intent="general")
         out = await run(bot, portfolio="p", authorization="Bearer T")
@@ -155,7 +163,7 @@ class TestRouting:
 
     async def test_a_broken_classifier_routes_where_money_is_handled(self):
         class Broken:
-            async def classify(self, _question):
+            async def classify(self, _question, _history=()):
                 raise RuntimeError("classifier down")
 
         bot = agent(model=Model(), portfolio=Api(), intents=Broken())
@@ -213,13 +221,15 @@ class TestWhereToPutMoney:
         asked = model.prompts[0]
         assert "asking you to place the money" in asked
         assert "name ONE pool" in asked
-        assert "Do not say anything has been done" in asked
+        assert "do not say anything has been done or sent" in asked
+        assert "wallet address is not yours to ask for" in asked
         assert "asking what the options are" not in asked
 
-    async def test_a_question_is_never_given_the_tool_that_prepares_a_deposit(self):
+    async def test_the_tool_that_prepares_a_deposit_is_there_either_way(self):
         bot, _, model = wire(intent="earn", catalog=Catalog(), model=Model(tool_calls=[EARN_CALL]))
         await run(bot)
-        assert model.tools_bound == ["earn_options"]
+        assert model.tools_bound == ["earn_options", "propose_deposit"]
+        assert "prepare nothing until they answer it" in model.prompts[0]
 
     async def test_being_told_to_place_it_puts_the_deposit_on_the_reply(self):
         deposit_call = {
