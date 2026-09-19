@@ -8,6 +8,8 @@ import { ChartSync } from '@svinooh/ui/chartSync';
 import { AppHeader, Button, Card, Checkbox, Eyebrow, Input, Segmented, Spinner, TagButton } from '../ui';
 import { AccountMenu } from '../components/AccountMenu';
 import type { AgentControl, ConversationRef } from '../components/agent/AgentEmbed';
+import { DepositDialog } from '../components/agent/DepositDialog';
+import { useDeposits } from '../components/agent/useDeposits';
 import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AlertSettings } from '../components/AlertSettings';
 import { AreaChart } from '../components/AreaChart';
@@ -236,6 +238,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
    */
   const [conversations, setConversations] = useState<ConversationRef[]>([]);
   const agent = useRef<AgentControl | null>(null);
+  const { onDeposit, asked: askedToDeposit } = useDeposits();
   const [scope, setScope] = useState<string>('all');
   const [period, setPeriod] = useState<HistoryRange>('24h');
   /** Whether pointing at a moment on one chart reads it on the others — see ChartSettings */
@@ -802,6 +805,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
                     token={tokenStore.get() ?? undefined}
                     portfolios={me?.portfolios}
                     onConversations={setConversations}
+                    onDeposit={onDeposit}
                     control={agent}
                   />
                 ) : null}
@@ -1031,6 +1035,9 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
             pendingClaim.clear();
           }}
         />
+      ) : null}
+      {askedToDeposit ? (
+        <DepositDialog request={askedToDeposit.request} settle={askedToDeposit.settle} />
       ) : null}
     </div>
   );
