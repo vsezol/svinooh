@@ -113,6 +113,7 @@ def _deposit_card(deposit: Deposit) -> DepositBlock:
         pool_id=pool.id,
         pool=pool.name,
         protocol=pool.protocol,
+        pool_kind=pool.kind,
         network=pool.network,
         token=pool.token,
         amount=f"{deposit.amount:f}",

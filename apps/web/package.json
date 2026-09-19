@@ -6,15 +6,21 @@
     "dev": "next dev -p 5173",
     "build": "next build",
     "start": "next start -p ${PORT:-4173}",
-    "test": "tsx --test test/*.test.ts"
+    "test": "tsx --test test/*.test.ts",
+    "simulate:deposit": "tsx scripts/simulate-deposit.ts"
   },
   "dependencies": {
+    "@kamino-finance/klend-sdk": "^12.0.0",
     "@module-federation/runtime": "^2.9.0",
+    "@solana-program/compute-budget": "^0.8.0",
+    "@solana-program/memo": "^0.7.0",
+    "@solana/kit": "^2.3.0",
     "@svinooh/content": "*",
     "@svinooh/shared": "*",
     "@svinooh/ui": "*",
     "@wallet-standard/app": "^1.1.1",
     "@web3icons/react": "^4.1.21",
+    "decimal.js": "^10.6.0",
     "lightweight-charts": "^5.2.1",
     "next": "^16.3.3",
     "posthog-js": "^1.427.0",
