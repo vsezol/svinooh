@@ -13,6 +13,7 @@ GET  /v1/lend/pools                      the list, narrowed by query parameters
 GET  /v1/lend/pools/{pool_id}            one pool, everything about it
 GET  /v1/lend/tokens                     what is earnable, best rate per token
 POST /v1/lend/pools/{pool_id}/deposit    the transaction that puts money in
+GET  /v1/lend/deposits/{signature}       whether a signed deposit is on the chain
 GET  /health                             is there a catalog to serve from
 ```
 
@@ -237,6 +238,14 @@ owner and a `BN`, its DLMM takes two token amounts, a position keypair and a
 strategy — one interface over those would be invented rather than discovered, so
 the routing is shared and the building is not.
 
+**A signature is a question, not an answer.** A wallet comes back as soon as it
+has sent the transaction, which is not the same as the transaction being on the
+chain — and a deposit that runs out of funds fails *after* it was signed.
+`GET /v1/lend/deposits/{signature}?network=sol` asks the node and answers
+`pending`, `landed` or `failed`, with the slot it landed in and the chain's own
+error when there is one. `meta.catalog` is null there: nothing in that answer
+came from a catalog, so it answers while the first one is still loading.
+
 **What the catalog knows is not asked for again.** The request carries the
 amount and the owner. The program id, the vault or reserve address, the share
 mint, the token program, the lending market and the minimum deposit come from
@@ -252,7 +261,7 @@ npm run -w apps/earn dev      # watch mode on PORT (3000 by default)
 Two gates, both of which must be green:
 
 ```bash
-npm run -w apps/earn test         # 62 tests, no network
+npm run -w apps/earn test         # 67 tests, no network
 npx tsc --noEmit -p apps/earn     # strict
 ```
 

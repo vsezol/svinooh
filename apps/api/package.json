@@ -9,7 +9,8 @@
     "start:prod": "node dist/main.js",
     "check": "tsx scripts/billing.check.ts",
     "check:flow": "tsx scripts/billing.flow.check.ts",
-    "check:sandbox": "tsx scripts/billing.sandbox.check.ts"
+    "check:sandbox": "tsx scripts/billing.sandbox.check.ts",
+    "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",

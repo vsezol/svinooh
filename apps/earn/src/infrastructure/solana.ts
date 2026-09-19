@@ -1,4 +1,4 @@
-import type { BuiltDeposit } from '../application/deposits';
+import type { BuiltDeposit, LookUpLanding } from '../application/deposits';
 
 export async function assemble(
   instructions: unknown[],
@@ -23,3 +23,21 @@ export async function assemble(
     lastValidBlockHeight: String(blockhash.lastValidBlockHeight),
   };
 }
+
+export const landingsVia =
+  (rpcUrl: string): LookUpLanding =>
+  async (signature) => {
+    const kit = await import('@solana/kit');
+    const rpc = kit.createSolanaRpc(rpcUrl);
+    const { value } = await rpc
+      .getSignatureStatuses([kit.signature(signature)], { searchTransactionHistory: true })
+      .send();
+    const seen = value[0];
+    if (!seen) return { signature, status: 'pending', slot: null, error: null };
+    const slot = Number(seen.slot);
+    if (seen.err) {
+      return { signature, status: 'failed', slot, error: JSON.stringify(seen.err) };
+    }
+    const settled = seen.confirmationStatus === 'confirmed' || seen.confirmationStatus === 'finalized';
+    return { signature, status: settled ? 'landed' : 'pending', slot, error: null };
+  };

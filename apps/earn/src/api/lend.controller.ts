@@ -6,8 +6,8 @@ import type { Clock } from '../application/refresher';
 import type { Settings } from '../settings';
 import { CLOCK, SETTINGS } from '../tokens';
 import { encode, decode } from './cursors';
-import { depositBody, pageSize, poolFilter, poolSelection } from './params';
-import { builtDeposit, detail, meta, summary, tokenYield } from './presenters';
+import { depositBody, networkOf, pageSize, poolFilter, poolSelection, signatureOf } from './params';
+import { builtDeposit, chainMeta, detail, landing, meta, summary, tokenYield } from './presenters';
 
 @Controller('v1/lend')
 export class LendController {
@@ -52,6 +52,15 @@ export class LendController {
       data: builtDeposit(answer.built),
       meta: meta(answer.catalog, this.clock(), this.settings.staleAfterMs),
     };
+  }
+
+  @Get('deposits/:signature')
+  async depositLanding(
+    @Param('signature') signature: string,
+    @Query() query: Record<string, string>,
+  ) {
+    const seen = await this.deposits.landing(networkOf(query), signatureOf(signature));
+    return { data: landing(seen), meta: chainMeta(this.clock()) };
   }
 
   @Get('tokens')

@@ -395,6 +395,17 @@
   color: var(--down);
 }
 
+.sv-a-b-deposit-tx {
+  font-size: 10.5px;
+  color: var(--mut);
+  text-decoration: none;
+}
+
+.sv-a-b-deposit-tx:hover {
+  color: var(--fg);
+  text-decoration: underline;
+}
+
 .sv-a-b-deposit-done {
   font-size: 12px;
   color: var(--up);

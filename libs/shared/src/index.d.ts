@@ -108,6 +108,22 @@ export interface DepositBuiltDto {
   lastValidBlockHeight: string;
 }
 
+export type DepositLandingStatus = 'pending' | 'landed' | 'failed';
+
+export interface DepositLandedDto {
+  signature: string;
+  owner: string;
+  network: string;
+}
+
+export interface DepositLandingDto {
+  status: DepositLandingStatus;
+  slot: number | null;
+  error: string | null;
+  tracked: boolean;
+  portfolio: string | null;
+}
+
 export interface WalletDto {
   id: string;
   address: string;

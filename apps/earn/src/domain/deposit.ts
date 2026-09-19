@@ -19,3 +19,12 @@ export function baseUnits(deposit: Deposit): string {
   const decimals = deposit.pool.token.decimals ?? 0;
   return deposit.amount.mul(new Decimal(10).pow(decimals)).toFixed(0, Decimal.ROUND_DOWN);
 }
+
+export type LandingStatus = 'pending' | 'landed' | 'failed';
+
+export interface Landing {
+  signature: string;
+  status: LandingStatus;
+  slot: number | null;
+  error: string | null;
+}

@@ -1,6 +1,6 @@
 import type { Decimal } from 'decimal.js';
 import type { Catalog } from '../domain/catalog';
-import { belowMinimum, hasAccounts, type Deposit } from '../domain/deposit';
+import { belowMinimum, hasAccounts, type Deposit, type Landing } from '../domain/deposit';
 import type { Pool } from '../domain/pool';
 import { AmountBelowMinimum, DepositNotSupported } from './errors';
 import type { LendQueries } from './queries';
@@ -15,6 +15,8 @@ export interface BuiltDeposit {
 
 export type BuildDeposit = (deposit: Deposit) => Promise<BuiltDeposit>;
 
+export type LookUpLanding = (signature: string) => Promise<Landing>;
+
 export interface DepositAnswer {
   built: BuiltDeposit;
   catalog: Catalog;
@@ -26,7 +28,16 @@ export class LendDeposits {
   constructor(
     private readonly queries: LendQueries,
     private readonly builders: Record<string, BuildDeposit>,
+    private readonly landings: Record<string, LookUpLanding> = {},
   ) {}
+
+  landing(network: string, signature: string): Promise<Landing> {
+    const lookUp = this.landings[network];
+    if (!lookUp) {
+      throw new DepositNotSupported(`${network} deposits are not followed here yet`);
+    }
+    return lookUp(signature);
+  }
 
   async build(poolId: string, amount: Decimal, owner: string): Promise<DepositAnswer> {
     const { pool, catalog } = this.queries.getPool(poolId);

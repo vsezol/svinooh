@@ -1,5 +1,6 @@
 import { Decimal } from 'decimal.js';
 import type { BuiltDeposit } from '../application/deposits';
+import type { Landing } from '../domain/deposit';
 import type { Catalog } from '../domain/catalog';
 import { isStale } from '../domain/catalog';
 import { net, type Pool } from '../domain/pool';
@@ -24,7 +25,7 @@ export const asOf = (moment: Date): string => moment.toISOString().replace('Z', 
 export interface Meta {
   as_of: string;
   stale: boolean;
-  catalog: number;
+  catalog: number | null;
   degraded: string[];
   count: number | null;
   total: number | null;
@@ -48,6 +49,16 @@ export function meta(
     ...extra,
   };
 }
+
+export const chainMeta = (now: Date): Meta => ({
+  as_of: asOf(now),
+  stale: false,
+  catalog: null,
+  degraded: [],
+  count: null,
+  total: null,
+  next_cursor: null,
+});
 
 export function summary(pool: Pool) {
   return {
@@ -134,5 +145,14 @@ export function builtDeposit(built: BuiltDeposit) {
     instructions: built.instructions,
     blockhash: built.blockhash,
     last_valid_block_height: built.lastValidBlockHeight,
+  };
+}
+
+export function landing(seen: Landing) {
+  return {
+    signature: seen.signature,
+    status: seen.status,
+    slot: seen.slot,
+    error: seen.error,
   };
 }
