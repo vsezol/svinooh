@@ -87,3 +87,27 @@ export function pageSize(query: Query, defaultSize: number, maxSize: number): nu
   }
   return Math.min(parsed, maxSize);
 }
+
+const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+export interface DepositBody {
+  amount: Decimal;
+  owner: string;
+}
+
+export function depositBody(body: unknown): DepositBody {
+  const given = (body ?? {}) as Record<string, unknown>;
+  const amount = given.amount;
+  if (typeof amount !== 'string' || !/^\d+(\.\d+)?$/.test(amount)) {
+    throw new InvalidParameter('amount: Input should be a number of tokens');
+  }
+  const parsed = new Decimal(amount);
+  if (!parsed.isFinite() || parsed.lessThanOrEqualTo(0)) {
+    throw new InvalidParameter('amount: Input should be greater than 0');
+  }
+  const owner = given.owner;
+  if (typeof owner !== 'string' || !BASE58.test(owner)) {
+    throw new InvalidParameter('owner: Input should be a base58 account address');
+  }
+  return { amount: parsed, owner };
+}

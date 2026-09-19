@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startReplay } from './replay-kamino';
 
-const PYTHON_FROM = process.env.EARN_PYTHON_FROM ?? 'origin/main~1';
+const PYTHON_FROM = process.env.EARN_PYTHON_FROM ?? 'cc7f802';
 
 function pythonEarnFrom(rev: string): { directory: string; drop: () => void } {
   const directory = mkdtempSync(join(tmpdir(), 'earn-python-'));

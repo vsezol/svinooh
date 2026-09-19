@@ -2,7 +2,6 @@ import { BadRequestException, Body, Controller, Post, UseGuards } from '@nestjs/
 import { RequiredAuthGuard } from '@svinooh/common';
 import type { DepositBuildDto, DepositBuiltDto } from '@svinooh/shared';
 import { DepositsService } from './deposits.service';
-import { DepositNotSupportedError } from './types';
 
 @Controller('deposits')
 export class DepositsController {
@@ -15,16 +14,6 @@ export class DepositsController {
     if (!poolId || !amount || !owner) {
       throw new BadRequestException('poolId, amount and owner are all required');
     }
-    if (!/^\d+(\.\d+)?$/.test(amount) || Number(amount) <= 0) {
-      throw new BadRequestException('amount must be a positive number of tokens');
-    }
-    try {
-      return await this.deposits.build(poolId, amount, owner);
-    } catch (error) {
-      if (error instanceof DepositNotSupportedError) {
-        throw new BadRequestException(error.message);
-      }
-      throw error;
-    }
+    return this.deposits.build(poolId, amount, owner);
   }
 }

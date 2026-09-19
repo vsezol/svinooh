@@ -7,8 +7,10 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
+  AmountBelowMinimum,
   CatalogNotReady,
   CatalogVersionGone,
+  DepositNotSupported,
   EarnError,
   MalformedCursor,
   PoolNotFound,
@@ -65,6 +67,11 @@ const TRANSLATIONS: Array<[new (...args: never[]) => Error, Translation]> = [
     },
   ],
   [InvalidParameter, { status: 422, slug: 'invalid-parameter', title: 'Invalid parameter' }],
+  [
+    DepositNotSupported,
+    { status: 422, slug: 'deposit-not-supported', title: 'Deposit not supported' },
+  ],
+  [AmountBelowMinimum, { status: 422, slug: 'amount-below-minimum', title: 'Amount below minimum' }],
 ];
 
 @Catch()

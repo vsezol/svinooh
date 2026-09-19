@@ -13,3 +13,7 @@ export class CatalogVersionGone extends EarnError {}
 export class SelectionMismatch extends EarnError {}
 
 export class MalformedCursor extends EarnError {}
+
+export class DepositNotSupported extends EarnError {}
+
+export class AmountBelowMinimum extends EarnError {}

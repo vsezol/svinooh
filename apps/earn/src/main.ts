@@ -9,7 +9,7 @@ async function bootstrap(): Promise<void> {
   app.useGlobalFilters(new ProblemFilter());
   app.enableShutdownHooks();
   if (settings.corsOrigins.length > 0) {
-    app.enableCors({ origin: settings.corsOrigins, methods: ['GET'] });
+    app.enableCors({ origin: settings.corsOrigins, methods: ['GET', 'POST'] });
   }
   await app.listen(settings.port, '::');
 }

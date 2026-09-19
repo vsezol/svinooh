@@ -1,4 +1,5 @@
 import { Decimal } from 'decimal.js';
+import type { BuiltDeposit } from '../application/deposits';
 import type { Catalog } from '../domain/catalog';
 import { isStale } from '../domain/catalog';
 import { net, type Pool } from '../domain/pool';
@@ -123,5 +124,15 @@ export function tokenYield(row: TokenYield) {
     best_apy: required(rate(net(row.best.apy))),
     best_pool_id: idOf(row.best.id),
     tvl_usd: required(usd(row.totalTvl)),
+  };
+}
+
+export function builtDeposit(built: BuiltDeposit) {
+  return {
+    transaction: built.transaction,
+    fee_payer: built.feePayer,
+    instructions: built.instructions,
+    blockhash: built.blockhash,
+    last_valid_block_height: built.lastValidBlockHeight,
   };
 }
