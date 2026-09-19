@@ -12,7 +12,7 @@ from app.domain.conversation import Turn
 from app.domain.portfolio import Me, PortfolioRef
 from app.ports import Ask, Failed, Finished, Progress
 from tests import fixtures as fx
-from tests.support import Catalog, agent
+from tests.support import Catalog, Intents, agent
 
 
 class Api:
@@ -88,14 +88,22 @@ class Model:
         return Reply()
 
 
-def wire(*, intent="portfolio", confirmation=None, api=None, model=None, catalog=None):
+def wire(
+    *,
+    intent="portfolio",
+    confirmation=None,
+    api=None,
+    model=None,
+    catalog=None,
+    asked_to_place=False,
+):
     """The real graph over doubles; hands back all three so a test can look."""
     api = api or Api()
     model = model or Model()
     bot = agent(
         model=model,
         portfolio=api,
-        intent=intent,
+        intents=Intents(intent, asked_to_place=asked_to_place),
         confirmation=confirmation,
         catalog=catalog,
     )
@@ -208,6 +216,27 @@ class TestWhereToPutMoney:
         assert "SOL $4,490.13 at 4.52%" in asked
         assert "collateral for that loan, not idle money" in asked
         assert "advice to liquidate somebody" in asked
+
+    async def test_a_question_closes_with_an_offer_to_do_it(self):
+        bot, _, model = wire(intent="earn", catalog=Catalog(), model=Model(tool_calls=[EARN_CALL]))
+        await run(bot)
+        asked = model.prompts[0]
+        assert "asking what the options are, not asking you to act" in asked
+        assert "never leaves it" in asked and "until they sign" in asked
+
+    async def test_being_told_to_do_it_asks_for_what_is_missing_instead(self):
+        bot, _, model = wire(
+            intent="earn",
+            catalog=Catalog(),
+            model=Model(tool_calls=[EARN_CALL]),
+            asked_to_place=True,
+        )
+        await run(bot)
+        asked = model.prompts[0]
+        assert "asking you to place the money" in asked
+        assert "name ONE pool" in asked
+        assert "Do not say anything has been done" in asked
+        assert "asking what the options are" not in asked
 
     async def test_a_portfolio_that_will_not_answer_still_gets_advice(self):
         bot, _, model = wire(
