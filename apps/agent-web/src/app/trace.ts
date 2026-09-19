@@ -7,7 +7,7 @@
  * reading, and what a step that has not finished says — is the part that goes
  * quietly wrong, and this way it can be tested without a browser.
  */
-import type { TraceBlock } from './types';
+import type { AgentBlock, TraceBlock } from './types';
 import type { StepEvent } from './wire';
 
 /**
@@ -49,4 +49,10 @@ export function traceOf(steps: StepEvent[], collapsed: boolean, now: number): Tr
       time: step.ms === undefined ? running(step) : secs(step.ms),
     })),
   };
+}
+
+export function asReceipt(block: AgentBlock): AgentBlock {
+  if (block.kind !== 'trace') return block;
+  const wire = block as unknown as { steps?: StepEvent[] };
+  return traceOf(wire.steps ?? [], true, 0);
 }

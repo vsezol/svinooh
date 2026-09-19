@@ -3,7 +3,7 @@ import json
 import pytest
 
 from app.domain.identity import ANON_HEADER
-from tests.support import Catalog, Meter, client_for, container, fake_model
+from tests.support import Catalog, Meter, Purse, client_for, container, fake_model
 
 ANSWER = "A health factor is a safety margin."
 
@@ -96,7 +96,8 @@ class TestTheStream:
         streamed = parse((await client.post("/chat/stream", json={"message": "q"})).text)[-1][1]
         whole = (await client.post("/chat", json={"message": "q"})).json()
         assert streamed["schema"] == whole["schema"]
-        assert streamed["blocks"] == whole["blocks"]
+        drawn = [block for block in streamed["blocks"] if block["kind"] != "trace"]
+        assert drawn == whole["blocks"], "only the receipt is the watched turn's own"
         assert set(streamed) == set(whole)
 
     async def test_a_session_is_named_at_both_ends(self, client):
@@ -176,7 +177,7 @@ class TestADepositOnTheWire:
     async def test_the_stream_ends_with_the_same_card(self, client):
         response = await client.post("/chat/stream", json={"message": "put 250 USDC to work"})
         done = [data for name, data in parse(response.text) if name == "done"]
-        assert [b["kind"] for b in done[0]["blocks"]] == ["text", "deposit"]
+        assert [b["kind"] for b in done[0]["blocks"]] == ["trace", "text", "deposit"]
 
     async def test_reopening_the_conversation_still_shows_it(self, client):
         who = {ANON_HEADER: "anon-deposit"}
@@ -184,3 +185,41 @@ class TestADepositOnTheWire:
         session = answered.json()["session_id"]
         reopened = await client.get(f"/chats/{session}", headers=who)
         assert [b["kind"] for b in reopened.json()["turns"][0]["blocks"]] == ["text", "deposit"]
+
+
+class TestTheReceipt:
+    async def test_every_answered_turn_carries_one(self, client):
+        events = parse((await client.post("/chat/stream", json={"message": "q"})).text)
+        blocks = events[-1][1]["blocks"]
+        assert blocks[0]["kind"] == "trace"
+        assert [b["kind"] for b in blocks[1:]] == ["text"]
+
+    async def test_it_holds_the_steps_that_were_streamed(self, client):
+        events = parse((await client.post("/chat/stream", json={"message": "q"})).text)
+        streamed = {data["id"] for name, data in events if name == "step"}
+        receipt = events[-1][1]["blocks"][0]["steps"]
+        assert streamed and {step["id"] for step in receipt} == streamed
+        assert all(step["state"] == "done" for step in receipt)
+        assert all(isinstance(step["ms"], int) for step in receipt)
+
+    async def test_a_line_is_one_line_however_often_it_was_reported(self, client):
+        events = parse((await client.post("/chat/stream", json={"message": "q"})).text)
+        reported = [data["id"] for name, data in events if name == "step"]
+        receipt = [step["id"] for step in events[-1][1]["blocks"][0]["steps"]]
+        assert len(reported) > len(receipt) == len(set(receipt))
+
+    async def test_reopening_the_conversation_still_shows_it(self, client):
+        who = {ANON_HEADER: "anon-receipt"}
+        events = parse((await client.post("/chat/stream", json={"message": "q"}, headers=who)).text)
+        session = events[-1][1]["session_id"]
+        reopened = await client.get(f"/chats/{session}", headers=who)
+        blocks = reopened.json()["turns"][0]["blocks"]
+        assert blocks[0]["kind"] == "trace" and blocks[0]["steps"]
+
+    async def test_a_turn_where_nothing_ran_has_none(self, meter):
+        purse = Purse(questions=0)
+        async with client_for(
+            container(model=fake_model(ANSWER), limiter=meter, allowance=purse)
+        ) as walled:
+            events = parse((await walled.post("/chat/stream", json={"message": "q"})).text)
+        assert [b["kind"] for b in events[-1][1]["blocks"]] == ["signin"]
