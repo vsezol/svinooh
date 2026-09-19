@@ -87,9 +87,9 @@ export const REGISTRY = {
     min: 1,
     max: 240,
     env: 'SYNC_ACTIVE_INTERVAL_MIN',
-    readBy: ['wallet', 'api', 'auth'],
+    readBy: ['api', 'auth'],
     live: true,
-    note: 'Read by three services. The api marks a wallet stale against this and reports it to the browser, so this being one value in one place is the point.',
+    note: 'Read by the api (both to pace the scans and to mark a wallet stale for the browser) and by auth, which creates a wallet already due. One value in one place is the point.',
   },
   'sync.staleIntervalMin': {
     kind: 'number',
@@ -102,7 +102,7 @@ export const REGISTRY = {
     min: 1,
     max: 1440,
     env: 'SYNC_STALE_INTERVAL_MIN',
-    readBy: ['wallet'],
+    readBy: ['api'],
     live: true,
   },
   'sync.staleAfterMin': {
@@ -116,7 +116,7 @@ export const REGISTRY = {
     min: 1,
     max: 10080,
     env: 'SYNC_STALE_AFTER_MIN',
-    readBy: ['wallet'],
+    readBy: ['api'],
     live: true,
   },
 
@@ -131,7 +131,7 @@ export const REGISTRY = {
     min: 5,
     max: 600,
     env: 'SCAN_RELOAD_SEC',
-    readBy: ['wallet'],
+    readBy: ['api'],
     live: true,
   },
   'scan.prefetch': {
@@ -144,7 +144,7 @@ export const REGISTRY = {
     min: 1,
     max: 16,
     env: 'SCAN_PREFETCH',
-    readBy: ['wallet'],
+    readBy: ['api'],
     live: true,
   },
   'scan.jobDelayMs': {
@@ -157,7 +157,7 @@ export const REGISTRY = {
     min: 0,
     max: 60000,
     env: 'SCAN_JOB_DELAY_MS',
-    readBy: ['scanner-evm', 'wallet'],
+    readBy: ['scanner-evm', 'api'],
     live: false,
     note: "The scanner service has no database and cannot pick this up live; it applies there on the next deploy. The api's own in-process loop reads it live.",
   },
@@ -170,7 +170,7 @@ export const REGISTRY = {
     min: 1,
     max: 32,
     env: 'SCAN_HTTP_CONCURRENCY',
-    readBy: ['wallet'],
+    readBy: ['api'],
     live: true,
   },
   'alerts.prefetch': {
@@ -198,7 +198,7 @@ export const REGISTRY = {
     min: 1,
     max: 120,
     env: 'SCAN_LEASE_MIN',
-    readBy: ['wallet'],
+    readBy: ['api'],
     live: true,
   },
   'scan.retryMin': {
@@ -211,7 +211,7 @@ export const REGISTRY = {
     min: 1,
     max: 120,
     env: 'SCAN_RETRY_MIN',
-    readBy: ['wallet'],
+    readBy: ['api'],
     live: true,
   },
   'scan.httpTimeoutMs': {
@@ -224,7 +224,7 @@ export const REGISTRY = {
     min: 1000,
     max: 120000,
     env: 'HTTP_TIMEOUT_MS',
-    readBy: ['wallet'],
+    readBy: ['api'],
     live: true,
   },
   'scan.evmTimeoutMs': {
