@@ -44,16 +44,16 @@ class IntentLabel(BaseModel):
         )
     )
     intent: Literal["portfolio", "earn", "general"]
-    asked_to_place: bool = Field(
-        default=False,
+    stance: Literal["asking", "placing"] = Field(
         description=(
-            "For `earn` only. True when the user is asking US to put the money "
-            "somewhere — 'put my USDC to work', 'invest 500 for me', 'do it', "
-            "'move it to the best one'. False when they are asking what the "
-            "options are, what pays what, or where one could invest. In doubt, "
-            "false: telling somebody what their choices are is never the wrong "
-            "answer to a request to act, and acting on a question is."
-        ),
+            "What they want done with money, for `earn`. `placing` when they "
+            "tell you to put it somewhere — 'put my USDC to work', 'invest 500 "
+            "for me', 'закинь', 'do it', 'all of it' — and also when they only "
+            "name an amount or a pool after you asked which. `asking` when they "
+            "want to know what the options are or what a rate is. For "
+            "`portfolio` and `general` say `asking`. Say one of the two words "
+            "every time; there is no default."
+        )
     )
 
 

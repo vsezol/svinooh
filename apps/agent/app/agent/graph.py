@@ -13,7 +13,7 @@ from ..domain.conversation import Turn
 from ..domain.earn import Deposit
 from ..observability import metrics
 from ..ports import Ask, Failed, Finished, Progress, Reply, Update
-from .context import earning_lines, positions_read
+from .context import earning_lines, idle_lines, positions_read
 from .intent import IntentClassifier
 from .llm import Models, extract_text
 from .onboarding import (
@@ -123,12 +123,12 @@ class LangGraphAgent:
             logger.info(
                 "intent: %s%s (%s) q=%.80s",
                 label.intent,
-                " place" if label.asked_to_place else "",
+                f" {label.stance}",
                 label.reason,
                 state["question"],
             )
             metrics.counted(metrics.intents, intent=label.intent)
-            return {"intent": label.intent, "asked_to_place": label.asked_to_place}
+            return {"intent": label.intent, "asked_to_place": label.stance == "placing"}
         except Exception as error:  # noqa: BLE001 — the fail-safe IS the handling
             logger.warning("intent classifier failed (%r) — routing to portfolio", error)
             metrics.counted(metrics.intents, intent="unreadable")
@@ -165,9 +165,11 @@ class LangGraphAgent:
 
     async def _earn(self, state: AgentState) -> AgentState:
         asked_to_place = bool(state.get("asked_to_place"))
+        idle, earning = await self._what_they_hold(state)
         system = earn_prompt(
             system_prompt(self._config),
-            await self._already_earning(state),
+            idle,
+            earning,
             asked_to_place=asked_to_place,
         )
         prepared: list[Deposit] = []
@@ -175,24 +177,24 @@ class LangGraphAgent:
         answered = await self._answer_with_tools(system, state, tools)
         return {**answered, "deposit": prepared[-1] if prepared else None}
 
-    async def _already_earning(self, state: AgentState) -> str:
+    async def _what_they_hold(self, state: AgentState) -> tuple[str, str]:
         target = state.get("portfolio")
         token = state.get("authorization")
         try:
             if not target:
                 if not token:
-                    return ""
+                    return "", ""
                 owned = (await self._portfolio.me(token)).portfolios
                 if not owned:
-                    return ""
+                    return "", ""
                 target = owned[0].slug
             async with step("portfolio", f"Reading portfolio · {target}"):
                 portfolio = await self._portfolio.portfolio(target, token)
                 said(positions_read(portfolio))
-                return earning_lines(portfolio)
+                return idle_lines(portfolio), earning_lines(portfolio)
         except Exception as error:  # noqa: BLE001 — advice without it beats no advice
             logger.warning("earn: holdings unavailable (%r)", error)
-            return ""
+            return "", ""
 
     async def _grounded(self, state: AgentState) -> AgentState:
         system = system_prompt(self._config)

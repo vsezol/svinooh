@@ -1,6 +1,7 @@
 import logging
 
 import pytest
+from pydantic import ValidationError
 
 from app.adapters.memory import StaticPanel
 from app.agent.intent import IntentClassifier, IntentLabel
@@ -26,7 +27,7 @@ class Stub:
         self.calls += 1
         if self.refusing:
             raise RuntimeError(self.refusing)
-        return IntentLabel(intent=self.label, reason="stubbed")
+        return IntentLabel(intent=self.label, reason="stubbed", stance="asking")
 
 
 def classifier(*, answering: Stub, labelling: Stub | None = None) -> IntentClassifier:
@@ -77,12 +78,22 @@ class TestWhenOneModelDoesBothJobs:
 
 
 class TestAskingApartFromTelling:
-    def test_a_label_that_says_nothing_about_acting_means_a_question(self):
-        assert IntentLabel(intent="earn", reason="r").asked_to_place is False
+    def test_the_word_has_to_be_said(self):
+        with pytest.raises(ValidationError):
+            IntentLabel(intent="earn", reason="r")
 
-    def test_the_model_is_told_what_the_flag_means(self):
-        told = IntentLabel.model_json_schema()["properties"]["asked_to_place"]["description"]
-        assert "put the money" in told and "In doubt, false" in told
+    def test_and_it_is_one_of_two_words(self):
+        schema = IntentLabel.model_json_schema()
+        assert set(schema["required"]) == {"reason", "intent", "stance"}
+        stance = schema["$defs"]["Stance"]["enum"] if "$defs" in schema else None
+        told = schema["properties"]["stance"]
+        assert stance == ["asking", "placing"] or told.get("enum") == ["asking", "placing"]
+
+    def test_the_model_is_told_which_is_which(self):
+        told = IntentLabel.model_json_schema()["properties"]["stance"]["description"]
+        assert "tell you to put it somewhere" in told
+        assert "only name an amount" in told, "a reply to 'how much?' is still placing"
+        assert "no default" in told
 
 
 class Listening(Stub):

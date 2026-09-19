@@ -48,7 +48,7 @@ class TestWhatTheLabellerWritesFirst:
             "a model writes the schema in order, so a reason after the label "
             "is a justification of a choice already made"
         )
-        assert fields.index("intent") < fields.index("asked_to_place")
+        assert fields.index("intent") < fields.index("stance")
 
     def test_the_same_holds_for_reading_a_yes(self):
         fields = list(ConfirmationDecision.model_json_schema()["properties"])

@@ -45,7 +45,8 @@ class Intents:
 
     async def classify(self, _question: str, history: tuple = ()) -> IntentLabel:
         self.heard = history
-        return IntentLabel(intent=self.label, reason="stubbed", asked_to_place=self.asked_to_place)
+        stance = "placing" if self.asked_to_place else "asking"
+        return IntentLabel(intent=self.label, reason="stubbed", stance=stance)
 
 
 class Confirmations:

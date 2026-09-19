@@ -68,6 +68,16 @@ def portfolio(wallets: list[dict], *, slug: str = "test-pf", name: str | None = 
     }
 
 
+USDC_SOL = position(
+    "USDC",
+    12.0,
+    network="sol",
+    platform="wallet",
+    category="token",
+    amount=12.0014,
+    price=1.0,
+)
+
 EVM_ADDRESS = "0x7bfee91193d9df2ac0bfe90191d40f23c773c060"
 SOL_ADDRESS = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin"
 
