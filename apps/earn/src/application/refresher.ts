@@ -87,9 +87,13 @@ export class CatalogRefresher {
 
   async waitForFirstPass(graceMs: number): Promise<void> {
     if (graceMs <= 0) return;
+    let grace: NodeJS.Timeout | null = null;
     await Promise.race([
       this.firstPass,
-      new Promise<void>((resolve) => setTimeout(resolve, graceMs)),
+      new Promise<void>((resolve) => {
+        grace = setTimeout(resolve, graceMs);
+      }),
     ]);
+    if (grace) clearTimeout(grace);
   }
 }

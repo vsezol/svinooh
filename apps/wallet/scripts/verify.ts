@@ -5,15 +5,12 @@
  *   BTC  ~$1.4k
  *   SOL  ~$13.8k (defi ~$12.2k + gmtrade ~$1.5k)
  *   TRON ~$3.7k  — if ~$3, the stake is lost (pitfall #2)
- *   EVM  ~$27k   — if $0, headless Chrome race condition (pitfall #3)
  *
- * Run: npm run verify:scanners [-- btc|sol|tron|evm]
- * EVM tries HTTP (debank reverse signature), and on failure — Chrome; which path
- * was taken is visible in the EvmScanner log lines.
+ * Run: npm run verify:scanners [-- btc|sol|tron]
+ * EVM is not here: it is scanned by apps/scanner-evm, off its own queue.
  */
 import type { Chain } from '@svinooh/shared';
 import { scanAddress } from '../src/scanners';
-import { closeBrowser } from '../src/scanners/browser';
 
 const CONTROL: Array<{ chain: Chain; address: string; hint: string }> = [
   { chain: 'BTC', address: 'bc1qlggpznpwv0e5nuc5lmgdcugd64lrjkspcgkyam', hint: '~$1.4k' },
@@ -26,11 +23,6 @@ const CONTROL: Array<{ chain: Chain; address: string; hint: string }> = [
     chain: 'TRON',
     address: 'TEF8gN62a3v8cH956eGe2NNfPoZQsrZfi3',
     hint: '~$3.7k (if ~$3 — the TRX stake is lost, pitfall #2)',
-  },
-  {
-    chain: 'EVM',
-    address: '0xe2dd4d99f7fc9d0acbc73f52c4dc86a2dafdb53e',
-    hint: '~$27k (if $0 — headless Chrome race condition, pitfall #3)',
   },
 ];
 
@@ -77,7 +69,6 @@ async function main() {
   }
 
   console.log(`Total: $${total.toFixed(2)}`);
-  await closeBrowser();
 }
 
 void main();
