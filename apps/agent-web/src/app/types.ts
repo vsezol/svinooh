@@ -106,6 +106,7 @@ export interface DepositBlock {
   poolId: string;
   pool: string;
   protocol: string;
+  poolKind: 'vault' | 'reserve';
   network: string;
   token: string;
   amount: string;
@@ -119,6 +120,7 @@ export interface DepositRequest {
   poolId: string;
   pool: string;
   protocol: string;
+  poolKind: 'vault' | 'reserve';
   network: string;
   token: string;
   amount: string;

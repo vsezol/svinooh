@@ -18,6 +18,7 @@ export const requestOf = (block: DepositBlock): DepositRequest => ({
   poolId: block.poolId,
   pool: block.pool,
   protocol: block.protocol,
+  poolKind: block.poolKind,
   network: block.network,
   token: block.token,
   amount: block.amount,

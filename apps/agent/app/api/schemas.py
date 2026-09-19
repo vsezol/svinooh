@@ -70,6 +70,7 @@ class DepositBlock(BaseModel):
     pool_id: str = Field(serialization_alias="poolId")
     pool: str
     protocol: str
+    pool_kind: str = Field(serialization_alias="poolKind")
     network: str
     token: str
     amount: str

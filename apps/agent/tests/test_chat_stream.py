@@ -191,6 +191,7 @@ class TestADepositOnTheWire:
         assert [b["kind"] for b in blocks] == ["text", "deposit"]
         card = blocks[1]
         assert (card["amount"], card["token"], card["network"]) == ("250", "USDC", "sol")
+        assert (card["kind"], card["poolKind"]) == ("deposit", "vault")
         assert card["accounts"]["programId"] and card["accounts"]["tokenMint"]
         assert card["poolId"] == "sol:kamino:vault:AAA"
 
