@@ -93,6 +93,28 @@ def positions_read(portfolio: Portfolio, name_at_most: int = 3) -> str:
     return f"{held} · {named}{f' +{left}' if left > 0 else ''}"
 
 
+def idle_lines(portfolio: Portfolio, limit: int = 10) -> str:
+    idle = sorted(
+        (p for p in portfolio.positions if _is_idle(p)),
+        key=lambda p: p.value_usd,
+        reverse=True,
+    )
+    if not idle:
+        return "nothing idle — everything is already placed or is collateral."
+    return "\n".join(_idle_line(p) for p in idle[:limit])
+
+
+def _is_idle(position: Position) -> bool:
+    return position.category == "token" and not _pays_something(position)
+
+
+def _idle_line(position: Position) -> str:
+    held = _amount(position.amount, position.price_usd)
+    figure = f"{held} = {usd(position.value_usd)}" if held else usd(position.value_usd)
+    where = f" on {position.network}" if position.network else ""
+    return f"- {named(position.symbol, 'unnamed token')} {figure}{where}"
+
+
 def earning_lines(portfolio: Portfolio, limit: int = 10) -> str:
     earning = sorted(
         (p for p in portfolio.positions if _pays_something(p)),
