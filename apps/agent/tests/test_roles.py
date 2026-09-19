@@ -3,6 +3,7 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from app.adapters.memory import StaticPanel
+from app.agent.prompts import system_prompt
 from app.config import Config
 from app.panel import NOTHING_DECIDED, PanelValues
 from app.settings import Settings
@@ -100,3 +101,10 @@ class TestWhereTheDialsComeFrom:
 
         assert HOUSE_STYLE in system_prompt(configured(system_prompt="be terse"))
         assert HOUSE_STYLE in system_prompt(configured())
+
+
+class TestTheLanguageOfTheAnswer:
+    def test_a_neighbouring_language_is_not_the_language_they_typed(self):
+        said = system_prompt(configured())
+        assert "Russian is not Ukrainian" in said
+        assert "Answer in the one they typed" in said
