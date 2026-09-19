@@ -112,7 +112,7 @@ class TestATurnHasADeadline:
         wired = container()
         turns = turns_of(wired, wired.agent, deadline_s=30)
         admitted = await turns.admit(Caller(), Question(message="hello"))
-        assert await turns.answer(admitted) == "answered"
+        assert (await turns.answer(admitted)).text == "answered"
 
 
 class Counting:

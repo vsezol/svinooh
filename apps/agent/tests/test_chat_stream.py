@@ -11,9 +11,43 @@ import json
 
 import pytest
 
-from tests.support import Meter, client_for, container, fake_model
+from app.domain.identity import ANON_HEADER
+from tests.support import Catalog, Meter, client_for, container, fake_model
 
 ANSWER = "A health factor is a safety margin."
+
+
+class Model:
+    """A model that asks for a deposit to be prepared, then says one sentence."""
+
+    def __init__(self):
+        self._called = False
+
+    def bind_tools(self, _tools):
+        return self
+
+    async def ainvoke(self, _messages, **_kwargs):
+        called, self._called = self._called, True
+
+        class Reply:
+            content = "Sign it in your wallet when you are ready."
+            tool_calls = (
+                []
+                if called
+                else [
+                    {
+                        "name": "propose_deposit",
+                        "args": {"pool_id": "sol:kamino:vault:AAA", "amount": "250"},
+                        "id": "d1",
+                    }
+                ]
+            )
+
+        return Reply()
+
+    async def astream(self, messages, **kwargs):
+        reply = await self.ainvoke(messages, **kwargs)
+        yield reply
 
 
 class Failing:
@@ -136,3 +170,38 @@ class TestTheOldWayStillWorks:
         response = await client.post("/chat", json={"message": "q"})
         assert response.status_code == 200
         assert response.json()["reply"] == ANSWER
+
+
+class TestADepositOnTheWire:
+    """The third block kind: a card to sign, never a transaction we send."""
+
+    @pytest.fixture
+    def wired(self, meter):
+        return container(
+            model=Model(),
+            limiter=meter,
+            intent="earn",
+            asked_to_place=True,
+            catalog=Catalog(),
+        )
+
+    async def test_it_rides_beside_the_answer(self, client):
+        answered = await client.post("/chat", json={"message": "put 250 USDC to work"})
+        blocks = answered.json()["blocks"]
+        assert [b["kind"] for b in blocks] == ["text", "deposit"]
+        card = blocks[1]
+        assert (card["amount"], card["token"], card["network"]) == ("250", "USDC", "sol")
+        assert card["accounts"]["programId"] and card["accounts"]["tokenMint"]
+        assert card["poolId"] == "sol:kamino:vault:AAA"
+
+    async def test_the_stream_ends_with_the_same_card(self, client):
+        response = await client.post("/chat/stream", json={"message": "put 250 USDC to work"})
+        done = [data for name, data in parse(response.text) if name == "done"]
+        assert [b["kind"] for b in done[0]["blocks"]] == ["text", "deposit"]
+
+    async def test_reopening_the_conversation_still_shows_it(self, client):
+        who = {ANON_HEADER: "anon-deposit"}
+        answered = await client.post("/chat", json={"message": "put 250 USDC to work"}, headers=who)
+        session = answered.json()["session_id"]
+        reopened = await client.get(f"/chats/{session}", headers=who)
+        assert [b["kind"] for b in reopened.json()["turns"][0]["blocks"]] == ["text", "deposit"]

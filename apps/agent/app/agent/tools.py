@@ -20,14 +20,14 @@ Two rules hold everywhere here:
 """
 
 import logging
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
 
 from ..adapters.earn import YieldCatalog
 from ..adapters.portfolio import DataSource
-from ..domain.earn import CatalogSnapshot, YieldPool
+from ..domain.earn import CatalogSnapshot, Deposit, YieldPool
 from ..domain.portfolio import History, Period, Portfolio, total_of
 from ..observability import metrics
 from .context import position_line, short_address, usd
@@ -111,6 +111,58 @@ def earn_tools(catalog: YieldCatalog) -> list:
         return describe_pools(await catalog.best_pools(ticker or None, MAX_OPTIONS), ticker)
 
     return [earn_options]
+
+
+def deposit_tools(catalog: YieldCatalog, prepared: list[Deposit]) -> list:
+    @tool
+    async def propose_deposit(pool_id: str, amount: str) -> str:
+        """Put a deposit in front of the user to sign, once you know both facts.
+
+        Call it only when the user has asked you to place money AND you know
+        which pool and how much. `pool_id` is the id printed beside the pool in
+        the rates you were given. `amount` is a plain number of tokens — no
+        symbol, no currency. It moves nothing: the user signs it in their own
+        wallet, and until they do, nothing has happened. Say what it is and
+        leave it with them.
+        """
+        size = _amount(amount)
+        if size is None:
+            return "That amount is not a number of tokens. Ask the user how much, and call again."
+        pool = await catalog.pool(pool_id.strip())
+        if pool is None:
+            return (
+                f"No pool has the id {pool_id}. Use an id exactly as it was printed beside a "
+                "pool in the rates, or read the rates again."
+            )
+        if pool.terms is None:
+            return (
+                f"{pool.name} cannot be deposited into from here — the catalog has no accounts "
+                "for it. Say so and offer one of the others."
+            )
+        deposit = Deposit(pool=pool, amount=size, terms=pool.terms)
+        if deposit.below_minimum:
+            return (
+                f"{pool.name} takes at least {pool.terms.min_amount} {pool.token}. "
+                "Tell the user the minimum and ask whether to go ahead with it."
+            )
+        prepared.append(deposit)
+        return (
+            f"Ready for the user to sign: {size} {pool.token} into {pool.name} "
+            f"({pool.protocol} {pool.kind}) at {as_percent(pool.apy_net)}. They see it as a card "
+            "with a button. Tell them what it is in one or two sentences, that the money leaves "
+            "their own wallet straight into the protocol, and that nothing happens until they "
+            "sign. Do not say it is done."
+        )
+
+    return [propose_deposit]
+
+
+def _amount(raw: str) -> Decimal | None:
+    try:
+        size = Decimal(str(raw).strip().replace(",", "").replace("_", ""))
+    except InvalidOperation:
+        return None
+    return size if size > 0 else None
 
 
 def describe_pools(snapshot: CatalogSnapshot, asked_for: str) -> str:
@@ -236,6 +288,9 @@ def tool_phrase(name: str, args: dict) -> str | None:
     if name == "earn_options":
         token = str(args.get("token", "")).strip().upper()
         return f"Reading lending rates · {token}" if token else "Reading lending rates"
+    if name == "propose_deposit":
+        pool = str(args.get("pool_id", "")).strip()
+        return f"Preparing a deposit · {pool}" if pool else "Preparing a deposit"
     return None
 
 

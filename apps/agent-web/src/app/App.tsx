@@ -118,6 +118,7 @@ export function App(props: AppProps) {
     demoHistoryList,
     onConversations,
     onConversationId,
+    onDeposit,
     control,
     onToggleTheme,
   } = props;
@@ -543,6 +544,7 @@ export function App(props: AppProps) {
                 }
                 onSignIn={onSignIn}
                 onAction={onAction}
+                onDeposit={onDeposit}
                 onToggleTrace={() => toggleTrace(item.id)}
                 busy={busy}
               />

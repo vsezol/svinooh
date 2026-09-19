@@ -13,6 +13,7 @@ import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
+from ..domain.earn import Deposit
 from ..domain.errors import (
     EmptyMessageError,
     MessageTooLongError,
@@ -26,6 +27,12 @@ from .identity import Identity
 from .sessions import SessionStore
 
 logger = logging.getLogger("svinooh-ai")
+
+
+@dataclass(frozen=True)
+class Answered:
+    text: str
+    deposit: Deposit | None = None
 
 
 @dataclass(frozen=True)
@@ -122,7 +129,7 @@ class Turns:
             ),
         )
 
-    async def answer(self, admitted: Admitted) -> str:
+    async def answer(self, admitted: Admitted) -> Answered:
         """Run the turn, apply what it decided, and hand back the answer.
 
         Under a deadline, because a turn is several model calls and a tool
@@ -143,7 +150,7 @@ class Turns:
         answered = await self._applied(reply, admitted)
         metrics.counted(metrics.turns, outcome="answered")
         metrics.timed(metrics.turn_duration, time.perf_counter() - started)
-        return answered
+        return Answered(text=answered, deposit=reply.deposit)
 
     async def watch(self, admitted: Admitted) -> AsyncIterator[tuple[str, dict]]:
         """The same turn, reported while it happens.
@@ -159,7 +166,13 @@ class Turns:
                         case Progress(kind, payload):
                             yield kind, payload
                         case Finished(reply):
-                            yield "done", {"text": await self._applied(reply, admitted)}
+                            yield (
+                                "done",
+                                {
+                                    "text": await self._applied(reply, admitted),
+                                    "deposit": reply.deposit,
+                                },
+                            )
                             metrics.counted(metrics.turns, outcome="answered")
                             metrics.timed(metrics.turn_duration, time.perf_counter() - started)
                         case _:

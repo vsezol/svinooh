@@ -5,6 +5,8 @@ these tests pin the routes rather than the wording of any answer. Every test
 builds its own Agent over an Api and a Model it can inspect afterwards.
 """
 
+from decimal import Decimal
+
 import pytest
 
 from app.agent.onboarding import create_portfolio_with_wallets
@@ -71,9 +73,11 @@ class Model:
         self.bound = 0
         self._tool_calls = tool_calls
         self.text = text
+        self.tools_bound: list[str] = []
 
     def bind_tools(self, tools):
         self.bound += 1
+        self.tools_bound = [getattr(t, "name", getattr(t, "__name__", str(t))) for t in tools]
         return self
 
     async def ainvoke(self, messages):
@@ -237,6 +241,38 @@ class TestWhereToPutMoney:
         assert "name ONE pool" in asked
         assert "Do not say anything has been done" in asked
         assert "asking what the options are" not in asked
+
+    async def test_a_question_is_never_given_the_tool_that_prepares_a_deposit(self):
+        bot, _, model = wire(intent="earn", catalog=Catalog(), model=Model(tool_calls=[EARN_CALL]))
+        await run(bot)
+        assert model.tools_bound == ["earn_options"]
+
+    async def test_being_told_to_place_it_puts_the_deposit_on_the_reply(self):
+        deposit_call = {
+            "name": "propose_deposit",
+            "args": {"pool_id": "sol:kamino:vault:AAA", "amount": "250"},
+            "id": "d1",
+        }
+        bot, _, model = wire(
+            intent="earn",
+            catalog=Catalog(),
+            model=Model(tool_calls=[deposit_call]),
+            asked_to_place=True,
+        )
+        out = await run(bot)
+        assert "propose_deposit" in model.tools_bound
+        assert out["deposit"] is not None
+        assert out["deposit"].amount == Decimal("250")
+        assert out["deposit"].pool.id == "sol:kamino:vault:AAA"
+
+    async def test_nothing_is_on_the_reply_when_the_model_only_talked(self):
+        bot, _, _ = wire(
+            intent="earn",
+            catalog=Catalog(),
+            model=Model(tool_calls=[EARN_CALL]),
+            asked_to_place=True,
+        )
+        assert (await run(bot))["deposit"] is None
 
     async def test_a_portfolio_that_will_not_answer_still_gets_advice(self):
         bot, _, model = wire(

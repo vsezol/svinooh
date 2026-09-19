@@ -10,6 +10,7 @@ module: what a test wants, it hands in.
 import itertools
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -31,7 +32,7 @@ from app.application.sessions import SessionStore
 from app.application.turns import Turns
 from app.config import Config
 from app.container import Container
-from app.domain.earn import CatalogSnapshot, YieldPool
+from app.domain.earn import CatalogSnapshot, DepositTerms, YieldPool
 from app.panel import NOTHING_DECIDED, PanelValues
 from app.settings import Settings
 
@@ -63,9 +64,7 @@ class Intents:
         self.asked_to_place = asked_to_place
 
     async def classify(self, _question: str) -> IntentLabel:
-        return IntentLabel(
-            intent=self.label, reason="stubbed", asked_to_place=self.asked_to_place
-        )
+        return IntentLabel(intent=self.label, reason="stubbed", asked_to_place=self.asked_to_place)
 
 
 class Confirmations:
@@ -97,6 +96,7 @@ class Catalog:
                 name="Steakhouse USDC",
                 protocol="kamino",
                 kind="vault",
+                network="sol",
                 token="USDC",
                 apy_net=Decimal("0.0512"),
                 apy_base=Decimal("0.0480"),
@@ -107,10 +107,27 @@ class Catalog:
             ),
         )
         self.asked: list[tuple[str | None, int]] = []
+        self.looked_up: list[str] = []
+        self.terms = DepositTerms(
+            program_id="KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
+            address="AAAvaultAAA",
+            token_mint="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            token_decimals=6,
+            min_amount=Decimal("1"),
+            shares_mint="SHARESmintAAA",
+            shares_decimals=6,
+            token_program="TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+            lending_market="7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF",
+        )
 
     async def best_pools(self, token, limit) -> CatalogSnapshot:
         self.asked.append((token, limit))
         return CatalogSnapshot(pools=self.pools, as_of=datetime(2026, 9, 18, 12, 0, tzinfo=UTC))
+
+    async def pool(self, pool_id: str) -> YieldPool | None:
+        self.looked_up.append(pool_id)
+        found = next((p for p in self.pools if p.id == pool_id), None)
+        return replace(found, terms=self.terms) if found and self.terms else found
 
 
 class NoHost:
@@ -218,6 +235,7 @@ def container(
     allowance=None,
     store=None,
     settings: Settings | None = None,
+    asked_to_place: bool = False,
 ) -> Container:
     """The whole service over fakes, in the shape build() makes it."""
     settings = settings or Settings()
@@ -233,7 +251,14 @@ def container(
     meter = limiter if limiter is not None else WindowRateLimiter(1000, 60, counters)
     purse = allowance if allowance is not None else WindowAllowance(1000, 60, counters)
     shelf = catalog if catalog is not None else NoCatalog()
-    bot = LangGraphAgent(config, host, shelf, models, Intents(intent), Confirmations(confirmation))
+    bot = LangGraphAgent(
+        config,
+        host,
+        shelf,
+        models,
+        Intents(intent, asked_to_place=asked_to_place),
+        Confirmations(confirmation),
+    )
     return Container(
         settings=settings,
         panel=panel,

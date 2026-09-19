@@ -43,6 +43,7 @@ from ..adapters.earn import YieldCatalog
 from ..adapters.portfolio import PortfolioApiSource
 from ..config import Config
 from ..domain.conversation import Turn
+from ..domain.earn import Deposit
 from ..observability import metrics
 from ..ports import Ask, Failed, Finished, Progress, Reply, Update
 from .context import earning_lines, positions_read
@@ -68,7 +69,7 @@ from .prompts import (
 )
 from .steps import said, step
 from .streaming import turn_events
-from .tools import earn_tools, portfolio_tools, run_tools
+from .tools import deposit_tools, earn_tools, portfolio_tools, run_tools
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -88,6 +89,7 @@ class AgentState(TypedDict, total=False):
     # Written by classify_intent; the first conditional edge routes on it.
     intent: str
     asked_to_place: bool
+    deposit: Deposit | None
     # Written by identity: where the portfolio branch goes, and in which
     # portfolio to ground when it goes to `grounded`.
     route: str
@@ -257,12 +259,18 @@ class LangGraphAgent:
 
     async def _earn(self, state: AgentState) -> AgentState:
         """Where to put money: the catalog, plus what the user already earns."""
+        asked_to_place = bool(state.get("asked_to_place"))
         system = earn_prompt(
             system_prompt(self._config),
             await self._already_earning(state),
-            asked_to_place=bool(state.get("asked_to_place")),
+            asked_to_place=asked_to_place,
         )
-        return await self._answer_with_tools(system, state, earn_tools(self._catalog))
+        prepared: list[Deposit] = []
+        tools = earn_tools(self._catalog)
+        if asked_to_place:
+            tools = tools + deposit_tools(self._catalog, prepared)
+        answered = await self._answer_with_tools(system, state, tools)
+        return {**answered, "deposit": prepared[-1] if prepared else None}
 
     async def _already_earning(self, state: AgentState) -> str:
         """The user's earning positions, or nothing — a visitor still gets advice."""
@@ -533,4 +541,5 @@ def _reply(state: dict[str, Any]) -> Reply:
         pending_set=tuple(pending) if pending else None,
         pending_clear=bool(state.get("pending_clear")),
         portfolio_created=str(created) if created else None,
+        deposit=state.get("deposit"),
     )
