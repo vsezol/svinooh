@@ -1,5 +1,5 @@
-import { buildDeposit } from '../src/lib/deposit/kamino';
-import type { DepositRequest } from '../src/lib/deposit/types';
+import { buildDeposit } from '../src/lib/deposit';
+import type { DepositRequest } from '../src/lib/deposit';
 
 const RPC = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const OWNER = process.env.DEPOSIT_OWNER || 'EiN7zKfhj7TAwibNDRDhWqELSv9bgMcRsmG6Kz8DcYNL';

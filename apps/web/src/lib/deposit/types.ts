@@ -13,7 +13,7 @@ export interface DepositRequest {
   poolId: string;
   pool: string;
   protocol: string;
-  poolKind: 'vault' | 'reserve';
+  poolKind: string;
   network: string;
   token: string;
   amount: string;
@@ -26,4 +26,13 @@ export interface BuiltDeposit {
   instructions: number;
   blockhash: string;
   lastValidBlockHeight: string;
+}
+
+export class DepositNotSupportedError extends Error {}
+
+export interface SolanaDeposits {
+  readonly network: 'sol';
+  readonly protocol: string;
+  supports(request: DepositRequest): boolean;
+  instructions(request: DepositRequest, owner: string, rpcUrl: string): Promise<unknown[]>;
 }
