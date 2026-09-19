@@ -1,7 +1,7 @@
 import type { PositionTokenRole } from '@svinooh/shared';
 import { fetchJson } from './http';
 import { rangeFromLegs } from '@svinooh/common';
-import { enrich, needsLendingFacts, NO_FACTS } from '@svinooh/common';
+import { enrich, needsLendingFacts, rateFromAggregator, NO_FACTS } from '@svinooh/common';
 import { solanaLendingFacts, solanaPoolFacts } from './defi';
 import { meteoraPositions, type MeteoraPoolPosition } from './defi/meteora';
 import type { ScanPosition, ScanPositionToken, ScanResult } from '@svinooh/shared';
@@ -82,6 +82,9 @@ interface JupElement {
 
 const borrowedCount = (element: JupElement): number =>
   (element.data?.borrowedAssets || []).length;
+
+const suppliedCount = (element: JupElement): number =>
+  (element.data?.assets || []).length + (element.data?.suppliedAssets || []).length;
 
 /** Which leg of a position each Jupiter asset bucket is */
 const ASSET_BUCKETS: Array<{ key: 'assets' | 'suppliedAssets' | 'rewardAssets' | 'borrowedAssets'; role: PositionTokenRole }> = [
@@ -358,11 +361,12 @@ export async function scanSol(address: string): Promise<ScanResult> {
         valueUsd: value,
         platform,
         category: STAKED_LABELS.test(element.label || '') ? 'staked' : 'defi',
-        apy: borrowedCount(element)
-          ? null
-          : typeof element.netApy === 'number' && element.netApy !== 0
-            ? element.netApy
-            : null,
+        apy: rateFromAggregator({
+          label: element.label ?? null,
+          netApy: typeof element.netApy === 'number' ? element.netApy : null,
+          borrowed: borrowedCount(element),
+          supplied: suppliedCount(element),
+        }),
         healthRate: toHealthFactor(element.data?.healthRatio),
         borrowApy: borrowApyOf(element),
         range: RANGED_POOLS.test(element.name || '') ? rangeFromLegs(tokens) : null,

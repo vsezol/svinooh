@@ -24,8 +24,30 @@ export function pairKey(a: string | null | undefined, b: string | null | undefin
  * so the facts are fetched whenever there is a loan to verify at all.
  */
 export function needsLendingFacts(positions: ScanPosition[]): boolean {
-  return positions.some((p) => (p.tokens ?? []).some((t) => t.role === 'borrow'));
+  return positions.some((position) => {
+    const legs = position.tokens ?? [];
+    if (legs.some((t) => t.role === 'borrow')) return true;
+    if (!LENDING_LABEL.test(position.name ?? '')) return false;
+    return ASKABLE.test(`${position.platform ?? ''} ${position.symbol ?? ''}`) &&
+      legs.some((t) => t.role === 'supply');
+  });
 }
+
+export function rateFromAggregator(element: {
+  label: string | null;
+  netApy: number | null;
+  borrowed: number;
+  supplied: number;
+}): number | null {
+  if (typeof element.netApy !== 'number' || element.netApy === 0) return null;
+  if (element.borrowed > 0) return null;
+  if (!LENDING_LABEL.test(element.label ?? '')) return element.netApy;
+  return element.supplied === 1 ? element.netApy : null;
+}
+
+const LENDING_LABEL = /lend|borrow|leverage/i;
+
+const ASKABLE = /kamino|aave/i;
 
 /** The pair a position is made of, or null when it isn't a pair at all */
 function pairOf(position: ScanPosition): string | null {
@@ -99,6 +121,13 @@ function ofProtocol<T extends { platform: string }>(facts: T[], position: ScanPo
   return facts.filter((fact) => said.includes(fact.platform));
 }
 
+function inMarketOf<T extends { market: string }>(facts: T[], position: ScanPosition): T[] {
+  const named = (position.note ?? '').trim().toLowerCase();
+  if (!named) return facts;
+  const sameMarket = facts.filter((fact) => fact.market.trim().toLowerCase() === named);
+  return sameMarket.length ? sameMarket : facts;
+}
+
 /** The one fact that can only be about this position, or nothing */
 function only<T>(candidates: T[]): T | null {
   return candidates.length === 1 ? candidates[0] : null;
@@ -132,7 +161,7 @@ function only<T>(candidates: T[]): T | null {
  * wrong range on somebody's money is worse than an approximate one.
  */
 export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPosition[] {
-  if (!facts.pools.length && !facts.lending.length) return positions;
+  if (!facts.pools.length && !facts.lending.length && !facts.supply?.length) return positions;
 
   return positions.map((position) => {
     const patch: Partial<ScanPosition> = {};
@@ -197,6 +226,24 @@ export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPositio
           });
         }
         if (tokens !== before) patch.tokens = tokens;
+      }
+    }
+
+    const supplied = (position.tokens ?? []).filter((t) => t.role === 'supply');
+    if (!borrowed.length && supplied.length) {
+      const supplying = only(inMarketOf(ofProtocol(facts.supply ?? [], position), position));
+      if (supplying) {
+        const before = position.tokens ?? [];
+        let changed = false;
+        const tokens = before.map((leg) => {
+          const rate = supplying.rates[leg.symbol.trim().toUpperCase()];
+          if (leg.role !== 'supply' || typeof rate !== 'number') return leg;
+          changed = true;
+          return { ...leg, apy: rate / 100 };
+        });
+        if (changed) patch.tokens = tokens;
+        const alone = supplied.length === 1 ? supplying.rates[supplied[0].symbol.trim().toUpperCase()] : undefined;
+        if (typeof alone === 'number') patch.apy = alone / 100;
       }
     }
 

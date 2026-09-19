@@ -838,6 +838,13 @@ export interface LendingFact {
   supplyRates?: Record<string, number> | null;
 }
 
+export interface SupplyFact {
+  id: string;
+  platform: 'kamino' | 'aave';
+  market: string;
+  rates: Record<string, number>;
+}
+
 /**
  * Everything the protocols could see this cycle, and which of them could not.
  *
@@ -849,6 +856,7 @@ export interface LendingFact {
 export interface DefiFacts {
   pools: PoolFact[];
   lending: LendingFact[];
+  supply?: SupplyFact[];
   /** Sources that could not be reached, by platform */
   failed: string[];
 }
