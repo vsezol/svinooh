@@ -1,10 +1,3 @@
-"""Which branch a turn takes, and what it is allowed to do there.
-
-The graph decides what the model sees and whether anything is written, so
-these tests pin the routes rather than the wording of any answer. Every test
-builds its own Agent over an Api and a Model it can inspect afterwards.
-"""
-
 from decimal import Decimal
 
 import pytest
@@ -18,22 +11,15 @@ from tests.support import Catalog, Intents, agent
 
 
 class Api:
-    """The portfolio API, recording what it was asked and by whom."""
-
     def __init__(self, *, owned=None, portfolio=None, refuse=False, me_fails=False):
         self.calls = []
-        #: The slugs this caller owns, as /auth/me would list them.
         self.owned = owned if owned is not None else []
         self.portfolio_data = portfolio or fx.as_portfolio()
         self.refuse = refuse
         self.me_fails = me_fails
         self.created = 0
         self.wallets = []
-        # The ownerless door, kept apart from `created` so a test can say which
-        # one a turn went through rather than only that something was made.
         self.created_anonymous = []
-        # Who each wallet was added as. None is the interesting value: it is
-        # what proves the visitor's path never borrowed a token.
         self.wallet_tokens = []
 
     async def me(self, token):
@@ -65,8 +51,6 @@ class Api:
 
 
 class Model:
-    """The answering model: records the prompt, replies with whatever it is given."""
-
     def __init__(self, tool_calls=None, text="answered"):
         self.prompts = []
         self.seen = []
@@ -101,7 +85,6 @@ def wire(
     catalog=None,
     asked_to_place=False,
 ):
-    """The real graph over doubles; hands back all three so a test can look."""
     api = api or Api()
     model = model or Model()
     bot = agent(
@@ -115,12 +98,6 @@ def wire(
 
 
 async def run(bot, **state):
-    """The graph itself, so a test can see which branch a turn took.
-
-    `LangGraphAgent.run` answers in the port's words — an answer and its
-    orders — and deliberately says nothing about the route. These tests are
-    about the route, and this file is the implementation's own.
-    """
     return await bot.graph.ainvoke({"question": "q", "history": (), **state})
 
 
@@ -186,13 +163,10 @@ class TestRouting:
         assert out["intent"] == "portfolio" and out["route"] == "grounded"
 
 
-#: What the model asking "where can USDC earn" looks like on the wire.
 EARN_CALL = {"name": "earn_options", "args": {"token": "USDC"}, "id": "e1"}
 
 
 class TestWhereToPutMoney:
-    """The earn branch: the catalog is the inventory, the portfolio is the baseline."""
-
     async def test_the_catalog_is_asked(self):
         shelf = Catalog()
         bot, _, _ = wire(intent="earn", catalog=shelf, model=Model(tool_calls=[EARN_CALL]))
@@ -318,12 +292,7 @@ class TestTools:
 
 
 class TestAVisitorWithNoAccount:
-    """The front door's premise: an answer, and a portfolio, without signing up."""
-
     async def test_a_visitor_is_proposed_to_rather_than_turned_away(self):
-        # This branch used to answer and stop, so a visitor's addresses went
-        # nowhere. Now the tool is bound for them too, and the turn ends with a
-        # proposal waiting on their confirmation.
         model = Model(
             tool_calls=[{"name": "ProposePortfolio", "args": {"addresses": ["0xAAA"]}, "id": "c"}]
         )
@@ -335,9 +304,6 @@ class TestAVisitorWithNoAccount:
         assert api.created == 0 and api.created_anonymous == [], "still only a proposal"
 
     async def test_the_visitor_is_told_the_portfolio_will_be_public(self):
-        # The disclosure has to reach the turn BEFORE the write, because after
-        # it the portfolio is already public. The confirmation prompt is that
-        # turn, so the fact belongs in it rather than in the created message.
         model = Model(
             tool_calls=[
                 {"name": "ProposePortfolio", "args": {"addresses": ["0xAAA", "sol1"]}, "id": "c"}
@@ -352,8 +318,6 @@ class TestAVisitorWithNoAccount:
         assert "held together" in confirmation, "two wallets are linked in the open"
 
     async def test_an_account_is_not_told_its_portfolio_is_public(self):
-        # The owned door makes a private portfolio, so the same caveat there
-        # would be a false warning.
         model = Model(
             tool_calls=[{"name": "ProposePortfolio", "args": {"addresses": ["0xAAA"]}, "id": "c"}]
         )
@@ -363,15 +327,6 @@ class TestAVisitorWithNoAccount:
 
 
 class TestAYesWithNothingBehindIt:
-    """The worst answer this branch can give, and it gave it in production.
-
-    Shown an address, the model asked "want me to?" instead of proposing.
-    The next turn's "yes, create it" therefore found no proposal, fell back
-    into onboarding, and was answered with "Done — the portfolio is live".
-    Nothing had been created, and for a portfolio nobody owns there is no
-    account to go looking under.
-    """
-
     async def test_a_yes_is_not_answered_by_improvising(self):
         api = Api(owned=[])
         model = Model(text="Done — the portfolio is live.")
@@ -409,11 +364,7 @@ class TestAYesWithNothingBehindIt:
 
 
 class TestTheExecutionItself:
-    """`create_portfolio_with_wallets` directly — the two doors, up close."""
-
     async def test_the_result_says_which_door_it_went_through(self):
-        # The caller relays this: a portfolio nobody owns needs saying so, and
-        # the answer can only say it if the result carries it.
         api = Api()
         owned = await create_portfolio_with_wallets(api, ["0xAAA"], "Bearer T")
         visitor = await create_portfolio_with_wallets(api, ["0xBBB"], None)
@@ -421,18 +372,12 @@ class TestTheExecutionItself:
         assert visitor.anonymous is True and visitor.slug == "anon-pf"
 
     async def test_the_address_that_opened_it_counts_as_added(self):
-        # The ownerless POST both creates and holds the first wallet. Reporting
-        # only the ones that went through add_wallet would tell a visitor their
-        # first address was dropped.
         api = Api()
         result = await create_portfolio_with_wallets(api, ["0xAAA", "sol1"], None)
         assert result.added == ("0xAAA", "sol1")
         assert api.wallets == [("anon-pf", "sol1")], "only the rest are POSTed"
 
     async def test_an_empty_proposal_makes_nothing_rather_than_guessing(self):
-        # The owned door can make an empty portfolio; the ownerless one is
-        # opened BY an address, so there is nothing to open. Failing is the
-        # honest outcome — the alternative is an IndexError read as a mystery.
         api = Api()
         with pytest.raises(ValueError, match="at least one address"):
             await create_portfolio_with_wallets(api, [], None)
@@ -486,32 +431,20 @@ class TestWrites:
         assert not out.get("pending_clear") and not out.get("pending_set")
 
     async def test_a_yes_without_a_token_writes_through_the_ownerless_door(self):
-        # The rule this replaces was "a yes without a token cannot write", and
-        # it was the sign-in wall the front door exists to remove. A visitor
-        # confirms and gets a portfolio; what their missing token changes is
-        # WHICH door, never whether the confirmed action happens.
         bot, api, _ = wire(confirmation="confirm")
         out = await run(bot, pending_addresses=["0xAAA", "sol1"])
         assert api.created == 0, "the owned door needs a token and was not used"
         assert api.created_anonymous == ["0xAAA"], "opened by its first address"
         assert out["pending_clear"] is True
-        # Named for the route layer to remember on the conversation. Without it
-        # the next question re-onboards a visitor who already has a portfolio,
-        # because nobody can ask the host what a nameless caller owns.
         assert out["portfolio_created"] == "anon-pf"
 
     async def test_the_visitors_remaining_wallets_are_added_without_a_token(self):
-        # The create spends the first address; the rest go through the host's
-        # optional-auth add-wallet, and as nobody — borrowing a token here
-        # would file a visitor's wallets under somebody else's account.
         bot, api, _ = wire(confirmation="confirm")
         await run(bot, pending_addresses=["0xAAA", "sol1", "btc1"])
         assert api.wallets == [("anon-pf", "sol1"), ("anon-pf", "btc1")]
         assert api.wallet_tokens == [None, None]
 
     async def test_a_signed_in_yes_still_takes_the_owned_door(self):
-        # The other half of the same rule: a token means the portfolio lands
-        # owned, and the ownerless door is not touched.
         bot, api, _ = wire(confirmation="confirm")
         await run(bot, authorization="Bearer T", pending_addresses=["0xAAA"])
         assert api.created == 1 and api.created_anonymous == []
@@ -528,13 +461,6 @@ class TestWrites:
 
 
 class TestTheContractWithTheLayerAbove:
-    """What a use case sees: an answer and its orders, never a graph state.
-
-    The tests above read the state the nodes wrote, because they are about
-    the routing and this file is the implementation's own. These are about
-    the seam — the only thing app/application is allowed to know.
-    """
-
     async def test_a_turn_answers_in_the_ports_own_words(self):
         bot, _, _ = wire(intent="general")
         reply = await bot.run(Ask(question="what is a health factor?"))
@@ -552,18 +478,12 @@ class TestTheContractWithTheLayerAbove:
         assert api.created == 0 and api.created_anonymous == []
 
     async def test_the_link_is_in_the_answer_whatever_the_model_wrote(self):
-        # Twice in production the model was handed the link and did not give
-        # it: once as "svinooh.com/p/…", once not at all. For a portfolio
-        # nobody owns it is the only way back, so it is appended rather than
-        # asked for.
         bot, _, _ = wire(confirmation="confirm", model=Model(text="Done."))
         reply = await bot.run(Ask(question="yes", pending_addresses=("0xAAA",)))
         assert reply.answer.endswith("/p/anon-pf")
         assert reply.answer.startswith("Done.")
 
     async def test_and_only_once_when_the_model_wrote_it_too(self):
-        # Told not to write the link itself, the model sometimes does. A reply
-        # ending in the same link twice reads like a bug because it is one.
         bot, _, _ = wire(confirmation="confirm", model=Model(text="Done. /p/anon-pf"))
         reply = await bot.run(Ask(question="yes", pending_addresses=("0xAAA",)))
         assert reply.answer.count("/p/anon-pf") == 1
@@ -584,8 +504,6 @@ class TestTheContractWithTheLayerAbove:
         assert reply.portfolio_created == "anon-pf" and reply.pending_clear is True
 
     async def test_the_conversation_is_replayed_as_the_exchange_it_was(self):
-        # The store keeps turns; what a model call looks like is the agent's
-        # business, and this is where the two meet.
         model = Model()
         bot, _, _ = wire(intent="general", model=model)
         await bot.run(Ask(question="and now?", history=(Turn(q="hello", a="hi", at=0),)))

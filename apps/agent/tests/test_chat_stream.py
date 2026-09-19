@@ -1,25 +1,14 @@
-"""The streaming endpoint, over a real ASGI transport.
-
-The layer below (tests/test_streaming.py) proves the graph can be watched.
-This proves the wire: that the events are shaped the way an EventSource parser
-expects, that a refusal is a status code rather than a stream that opens and
-apologises, and that a turn watched leaves the session exactly as a turn
-awaited does.
-"""
-
 import json
 
 import pytest
 
 from app.domain.identity import ANON_HEADER
-from tests.support import Catalog, Meter, client_for, container, fake_model
+from tests.support import Catalog, Meter, Purse, client_for, container, fake_model
 
 ANSWER = "A health factor is a safety margin."
 
 
 class Model:
-    """A model that asks for a deposit to be prepared, then says one sentence."""
-
     def __init__(self):
         self._called = False
 
@@ -51,8 +40,6 @@ class Model:
 
 
 class Failing:
-    """A model that refuses, however it is called."""
-
     async def ainvoke(self, _messages, **_kwargs):
         raise RuntimeError("upstream is on fire")
 
@@ -78,7 +65,6 @@ async def client(wired):
 
 
 def parse(body: str) -> list[tuple[str, dict]]:
-    """The events an EventSource would have seen."""
     events = []
     for block in body.strip().split("\n\n"):
         lines = dict(line.split(": ", 1) for line in block.splitlines() if ": " in line)
@@ -92,8 +78,6 @@ class TestTheStream:
         async with client.stream("POST", "/chat/stream", json={"message": "q"}) as response:
             assert response.status_code == 200
             assert response.headers["content-type"].startswith("text/event-stream")
-            # Without this a proxy may hold the whole stream and hand it over
-            # at the end, which is the thing being fixed.
             assert response.headers["x-accel-buffering"] == "no"
             await response.aread()
 
@@ -109,12 +93,11 @@ class TestTheStream:
         assert name == "done" and done["reply"] == ANSWER
 
     async def test_the_end_is_the_body_the_other_endpoint_returns(self, client):
-        # One wire, two deliveries. A second shape here would be a second
-        # contract to keep in step with the first.
         streamed = parse((await client.post("/chat/stream", json={"message": "q"})).text)[-1][1]
         whole = (await client.post("/chat", json={"message": "q"})).json()
         assert streamed["schema"] == whole["schema"]
-        assert streamed["blocks"] == whole["blocks"]
+        drawn = [block for block in streamed["blocks"] if block["kind"] != "trace"]
+        assert drawn == whole["blocks"], "only the receipt is the watched turn's own"
         assert set(streamed) == set(whole)
 
     async def test_a_session_is_named_at_both_ends(self, client):
@@ -152,7 +135,6 @@ class TestRefusals:
     async def test_a_turn_that_fails_says_so_in_the_stream(self):
         async with client_for(container(model=Failing())) as client:
             events = parse((await client.post("/chat/stream", json={"message": "q"})).text)
-        # It opened, so the failure cannot be a status code any more.
         assert events[0][0] == "start" and events[-1][0] == "error"
 
     async def test_a_failed_turn_leaves_the_session_as_it_was(self):
@@ -173,8 +155,6 @@ class TestTheOldWayStillWorks:
 
 
 class TestADepositOnTheWire:
-    """The third block kind: a card to sign, never a transaction we send."""
-
     @pytest.fixture
     def wired(self, meter):
         return container(
@@ -197,7 +177,7 @@ class TestADepositOnTheWire:
     async def test_the_stream_ends_with_the_same_card(self, client):
         response = await client.post("/chat/stream", json={"message": "put 250 USDC to work"})
         done = [data for name, data in parse(response.text) if name == "done"]
-        assert [b["kind"] for b in done[0]["blocks"]] == ["text", "deposit"]
+        assert [b["kind"] for b in done[0]["blocks"]] == ["trace", "text", "deposit"]
 
     async def test_reopening_the_conversation_still_shows_it(self, client):
         who = {ANON_HEADER: "anon-deposit"}
@@ -205,3 +185,41 @@ class TestADepositOnTheWire:
         session = answered.json()["session_id"]
         reopened = await client.get(f"/chats/{session}", headers=who)
         assert [b["kind"] for b in reopened.json()["turns"][0]["blocks"]] == ["text", "deposit"]
+
+
+class TestTheReceipt:
+    async def test_every_answered_turn_carries_one(self, client):
+        events = parse((await client.post("/chat/stream", json={"message": "q"})).text)
+        blocks = events[-1][1]["blocks"]
+        assert blocks[0]["kind"] == "trace"
+        assert [b["kind"] for b in blocks[1:]] == ["text"]
+
+    async def test_it_holds_the_steps_that_were_streamed(self, client):
+        events = parse((await client.post("/chat/stream", json={"message": "q"})).text)
+        streamed = {data["id"] for name, data in events if name == "step"}
+        receipt = events[-1][1]["blocks"][0]["steps"]
+        assert streamed and {step["id"] for step in receipt} == streamed
+        assert all(step["state"] == "done" for step in receipt)
+        assert all(isinstance(step["ms"], int) for step in receipt)
+
+    async def test_a_line_is_one_line_however_often_it_was_reported(self, client):
+        events = parse((await client.post("/chat/stream", json={"message": "q"})).text)
+        reported = [data["id"] for name, data in events if name == "step"]
+        receipt = [step["id"] for step in events[-1][1]["blocks"][0]["steps"]]
+        assert len(reported) > len(receipt) == len(set(receipt))
+
+    async def test_reopening_the_conversation_still_shows_it(self, client):
+        who = {ANON_HEADER: "anon-receipt"}
+        events = parse((await client.post("/chat/stream", json={"message": "q"}, headers=who)).text)
+        session = events[-1][1]["session_id"]
+        reopened = await client.get(f"/chats/{session}", headers=who)
+        blocks = reopened.json()["turns"][0]["blocks"]
+        assert blocks[0]["kind"] == "trace" and blocks[0]["steps"]
+
+    async def test_a_turn_where_nothing_ran_has_none(self, meter):
+        purse = Purse(questions=0)
+        async with client_for(
+            container(model=fake_model(ANSWER), limiter=meter, allowance=purse)
+        ) as walled:
+            events = parse((await walled.post("/chat/stream", json={"message": "q"})).text)
+        assert [b["kind"] for b in events[-1][1]["blocks"]] == ["signin"]

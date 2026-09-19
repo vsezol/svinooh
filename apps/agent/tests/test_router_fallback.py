@@ -1,15 +1,3 @@
-"""What happens to routing when the labelling model cannot be reached.
-
-Twice in production the classifier failed on every single request and nothing
-looked wrong. The fallback for "no label" was a label — route to the portfolio
-branch — so every general question was answered as if it had been about the
-user's money: slower, and framed wrongly enough to invent a product feature.
-
-A wrong turn taken confidently on every question is worse than a slow one. So
-the answering model, which is demonstrably reachable, does the labelling
-instead, and the failure is loud rather than silent.
-"""
-
 import logging
 
 import pytest
@@ -25,8 +13,6 @@ GOOD = "openai:the-one-that-answers"
 
 
 class Stub:
-    """A client that either labels or refuses, and counts."""
-
     def __init__(self, label: str | None = "general", refusing: str | None = None):
         self.label = label
         self.refusing = refusing
@@ -43,11 +29,6 @@ class Stub:
 
 
 def classifier(*, answering: Stub, labelling: Stub | None = None) -> IntentClassifier:
-    """The shape this is about: a cheap labeller and a separate answering model.
-
-    Without a labelling stub, the answering model does both jobs — the
-    shipped default.
-    """
     clients = {GOOD: answering, CHEAP: labelling}
     settings = Settings(model=GOOD, router_model=CHEAP if labelling else "")
     models = Models(settings, factory=lambda name, **_kwargs: clients[name])
@@ -88,8 +69,6 @@ class TestWhenTheCheapModelCannotBeReached:
 
 class TestWhenOneModelDoesBothJobs:
     async def test_there_is_nothing_to_fall_back_to(self):
-        # The shipped default: no labelling model of its own. Trying the same
-        # model a second time would only pay twice for the same failure.
         only = Stub(refusing="429 rate limited")
         with pytest.raises(RuntimeError, match="429"):
             await classifier(answering=only).classify("q")

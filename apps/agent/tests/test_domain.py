@@ -1,10 +1,3 @@
-"""The arithmetic a portfolio answers about itself.
-
-These are the numbers an answer is built from, so they are tested as numbers
-— on the types, with no renderer, no model and no HTTP in the way. What the
-strings around them look like is tests/test_context.py and tests/test_tools.py.
-"""
-
 from app.domain.portfolio import (
     WINDOW_MS,
     History,
@@ -28,8 +21,6 @@ def portfolio_of(*positions: Position) -> Portfolio:
 
 class TestWhatAPositionIs:
     def test_a_holding_in_the_wallet_is_in_no_protocol(self):
-        # "wallet" is not a protocol, and counting it as one made the "where
-        # is my money" line answer with the wallet it is already grouped by.
         assert position("ETH", 1.0, platform="wallet").protocol is None
         assert position("ETH", 1.0, platform="aave3").protocol == "aave3"
         assert position("ETH", 1.0).protocol is None
@@ -41,18 +32,12 @@ class TestWhatAPositionIs:
         assert not pool.matches("aave")
 
     def test_a_word_has_to_start_with_it_rather_than_merely_contain_it(self):
-        # Found in production: asked for Thena, a plain substring match also
-        # returned Ethena, and told the model six positions were worth
-        # $345,137 when the four Thena ones were worth $288,518.
         assert not position("Ethena", 1.0, platform="ethena").matches("thena")
         assert position("Thena", 1.0, platform="bsc_thena").matches("thena")
-        # The other half of the same mistake, from the token side.
         assert not position("WETH", 1.0).matches("eth")
         assert position("ETH", 1.0).matches("eth")
 
     def test_and_a_protocol_is_still_found_through_its_prefix(self):
-        # Protocols are written `bsc_venus`, and `_` is a word character, so
-        # the rule is only that a letter or a digit may not come first.
         assert position("Venus", 1.0, platform="bsc_venus").matches("venus")
         assert position("LP", 1.0, platform="arb_pancakeswap").matches("pancakeswap")
         assert position("USDC", 1.0, name="cbBTC/USDC pool").matches("usdc")
@@ -71,8 +56,6 @@ class TestWhereTheMoneyIs:
         ]
 
     def test_a_position_the_grouping_cannot_name_is_left_out(self):
-        # Rather than bucketed under a made-up label, which would put money in
-        # a chain that does not exist.
         held = portfolio_of(position("A", 10.0, network="eth"), position("B", 30.0))
         assert [t.label for t in held.totals_by(lambda p: p.network)] == ["eth"]
 
@@ -94,8 +77,6 @@ class TestWhereTheMoneyIs:
         assert portfolio_of(position("A", 1.0)).matching("   ") == ()
 
     def test_positions_are_ordered_here_not_trusted_from_the_wire(self):
-        # The cap the context block applies can then only drop the tail, which
-        # is dust by construction.
         wallet = Wallet(
             address="0xabc",
             chain="EVM",
@@ -117,8 +98,8 @@ class TestWhatAPeriodDid:
     def test_the_window_is_counted_back_from_the_last_reading(self):
         series = fx.as_history(
             [
-                ("2026-07-28T12:00:00Z", 60_000.0),  # six weeks back
-                ("2026-08-31T20:00:00Z", 84_657.5),  # the week opens here
+                ("2026-07-28T12:00:00Z", 60_000.0),
+                ("2026-08-31T20:00:00Z", 84_657.5),
                 ("2026-09-07T18:00:00Z", 83_560.55),
             ]
         )
@@ -129,8 +110,6 @@ class TestWhatAPeriodDid:
         assert series.window("all").readings == series.readings
 
     def test_a_window_with_one_reading_falls_back_to_the_series(self):
-        # Better a true statement about a longer span than a made-up one about
-        # this one.
         series = fx.as_history([("2026-07-28T12:00:00Z", 1.0), ("2026-09-07T18:00:00Z", 2.0)])
         assert series.window("1h").readings == series.readings
 
@@ -170,6 +149,4 @@ class TestWhatAPeriodDid:
         assert change is not None and change.percent == 0.0
 
     def test_every_period_the_product_has_is_a_window(self):
-        # The tool's schema is this alias; a period with no width would widen
-        # silently to the whole series.
         assert set(WINDOW_MS) == {"1h", "24h", "7d", "30d", "all"}

@@ -12,15 +12,18 @@ import { describe, test } from 'node:test';
 import type { Wallet } from '@prisma/client';
 import { MetricsService, type RabbitService } from '@svinooh/common';
 import type { PrismaService } from '@svinooh/db';
+import type { ScanResult } from '@svinooh/shared';
 import { ScanRequests } from '../src/wallet/scan-requests.service';
 import { ScanResultConsumerService } from '../src/wallet/sync/scan-result-consumer.service';
 import type { SyncService } from '../src/wallet/sync/sync.service';
 
 const ADDRESS = 'EiN7zKfhj7TAwibNDRDhWqELSv9bgMcRsmG6Kz8DcYNL';
 
-const reading = (totalUsd: number) => ({
+const reading = (totalUsd: number): ScanResult => ({
+  chain: 'SOL',
+  address: ADDRESS,
   totalUsd,
-  positions: [{ symbol: 'SOL', valueUsd: totalUsd, category: 'wallet' as const }],
+  positions: [{ symbol: 'SOL', valueUsd: totalUsd, category: 'token' }],
 });
 
 const walletRow = (over: Partial<Wallet> = {}): Wallet =>

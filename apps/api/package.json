@@ -14,7 +14,8 @@
     "check:boundary": "tsx scripts/boundaries.check.ts",
     "verify:scanners": "tsx scripts/verify-scanners.ts",
     "check:alerts": "tsx scripts/alerts.check.ts",
-    "check:trial": "tsx scripts/alerts.trial.check.ts"
+    "check:trial": "tsx scripts/alerts.trial.check.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",

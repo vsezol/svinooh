@@ -1,10 +1,3 @@
-"""What every request leaves behind: an id on its log lines, and a measurement.
-
-Plain ASGI rather than Starlette's BaseHTTPMiddleware, because one of these
-routes is a stream: BaseHTTPMiddleware runs the response through a queue,
-which is exactly the buffering /chat/stream exists to avoid.
-"""
-
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -19,8 +12,6 @@ Send = Callable[[dict], Awaitable[None]]
 
 
 class Observed:
-    """Times each request, names it, and tags whatever it logs."""
-
     def __init__(self, app: Callable[[Scope, Receive, Send], Awaitable[None]]) -> None:
         self._app = app
 
@@ -42,14 +33,9 @@ class Observed:
         try:
             await self._app(scope, receive, watched)
         finally:
-            # After the last byte, which for a stream is the whole turn — the
-            # number worth having, and the one a timer around the handler
-            # alone would miss.
             elapsed = time.perf_counter() - started
             labels = {
                 "method": str(scope.get("method", "")),
-                # The route TEMPLATE, never the path: /chats/{chat_id} is one
-                # series and /chats/3kFm9x is one series per conversation.
                 "route": getattr(scope.get("route"), "path", "unmatched"),
                 "status": str(status),
             }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatItem, Conversation, MountOptions, PortfolioRef, SignInBlock, TraceBlock } from './types';
 import { useDesktop } from './useDesktop';
 import { WireError, streamChat, type StepEvent } from './wire';
-import { traceOf } from './trace';
+import { asReceipt, traceOf } from './trace';
 import * as history from './history';
 import { AgentHeader } from '../components/AgentHeader';
 import { AgentMessage } from '../components/AgentMessage';
@@ -266,16 +266,13 @@ export function App(props: AppProps) {
           (block): block is SignInBlock => block.kind === 'signin',
         );
         if (card?.pendingQuestion) walledQuestion.current = card.pendingQuestion;
-        const receipt = stepsRef.current;
-        push([
-          {
-            id: uid(),
-            role: 'agent',
-            // Every step in a finished receipt has its own time, so there is
-            // nothing left for a clock to count.
-            blocks: receipt.length > 0 ? [traceOf(receipt, true, 0), ...res.blocks] : res.blocks,
-          },
-        ]);
+        const drawn = res.blocks.map(asReceipt);
+        const watched = stepsRef.current;
+        const receipted =
+          drawn.some((block) => block.kind === 'trace') || watched.length === 0
+            ? drawn
+            : [traceOf(watched, true, 0), ...drawn];
+        push([{ id: uid(), role: 'agent', blocks: receipted }]);
         // The rail learns about the conversation from the service rather than
         // from a copy kept here — including its name, which the service
         // derives from the first question the same way this used to.

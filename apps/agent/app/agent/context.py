@@ -1,20 +1,15 @@
-"""What the model is told about the portfolio on screen.
-
-Rebuilt from the public API on every turn and injected into the system prompt
-rather than stored in the session: balances move between turns, and a
-remembered number is a wrong number. Kept compact and capped — the model needs
-the shape of the portfolio (totals, the positions that matter, the risk
-figures), not every dust position; every character here is billed on every
-turn of the conversation.
-
-It renders, and computes nothing: the totals and the groupings are the
-portfolio's own (app/domain/portfolio.py). What is said AROUND this block —
-the instructions, the branch variants — is app/agent/prompts.py.
-"""
-
 from ..domain.portfolio import Portfolio, Position, Total, Wallet, total_of
 
 MAX_CHARS = 6000
+ROOM_FOR_THE_CUT = 80
+UNNAMED_POSITION = "unnamed position"
+UNNAMED_TOKEN = "unnamed token"
+NO_NAME = ("", "?")
+
+
+def named(symbol: str | None, unnamed: str) -> str:
+    clean = (symbol or "").strip()
+    return unnamed if clean in NO_NAME else clean
 
 
 def usd(value: float | None) -> str:
@@ -26,15 +21,11 @@ def short_address(address: str) -> str:
 
 
 def _amount(amount: float | None, price: float | None) -> str | None:
-    """How much of it there is — the answer to "how much ETH do I have"."""
     if amount is None or amount <= 0:
         return None
     figure = f"{amount:,.4f}".rstrip("0").rstrip(".") if amount < 1000 else f"{amount:,.0f}"
     if price is None or price <= 0:
         return figure
-    # Sub-cent prices are the rule in this asset class, not the exception, and
-    # a token priced at 6e-08 must not print as "$0" — a zero price next to a
-    # five-figure value is a contradiction the model is left to resolve alone.
     if price >= 0.01:
         shown = f"{price:,.2f}"
     elif price >= 1e-6:
@@ -52,10 +43,6 @@ def rate(fraction: float) -> str:
 
 
 def _rates(position: Position) -> list[str]:
-    """The figures a position carries when its kind has them.
-
-    The two rates arrive as fractions (0.42 is 42%); range is a plain word.
-    """
     facts = []
     if position.apy is not None:
         facts.append(f"APY {position.apy * 100:.1f}%")
@@ -69,22 +56,10 @@ def _rates(position: Position) -> list[str]:
 
 
 def _where(position: Position) -> list[str]:
-    """Which network, and which protocol if it is not simply held in the wallet.
-
-    Both were missing from this block until a portfolio with a thousand
-    positions made their absence obvious: without them, a question about Base
-    or about Uniswap pools has nothing in the context to answer it, and an
-    answer with nothing behind it is the kind that gets invented.
-    """
     return [fact for fact in (position.network, position.protocol) if fact]
 
 
 def _pair(position: Position) -> str | None:
-    """The pool a liquidity position is in, and what trading there costs.
-
-    Dropped on the floor until a chat answered "what about my Uniswap pools"
-    with "the pairs are not in the data" — while the pairs were in the data.
-    """
     band = position.band
     if band is None:
         return None
@@ -92,10 +67,9 @@ def _pair(position: Position) -> str | None:
 
 
 def _composition(position: Position) -> str | None:
-    """What a position is actually made of — supplied and borrowed legs."""
     parts = []
     for leg in position.legs[:6]:
-        piece = f"{leg.symbol} {usd(abs(leg.value_usd))}"
+        piece = f"{named(leg.symbol, UNNAMED_TOKEN)} {usd(abs(leg.value_usd))}"
         amount = _amount(leg.amount, leg.price_usd)
         if amount:
             piece += f" ({amount})"
@@ -135,28 +109,36 @@ def _pays_something(position: Position) -> bool:
 
 
 def _earning_line(position: Position) -> str:
-    name = f"{position.symbol}{f' ({position.name})' if position.name else ''}"
+    symbol = named(position.symbol, UNNAMED_POSITION)
+    name = f"{symbol}{f' ({position.name})' if position.name else ''}"
     head = f"- {name} on {position.protocol or 'wallet'}: {usd(position.value_usd)}"
     supplied = _supplied_at(position)
-    body = f"— {supplied}" if supplied else f"at {rate(position.apy or 0)}"
+    body = f"— {supplied}" if supplied else _rate_of(position)
     return f"{head} {body}{_owed_against(position)}"
+
+
+def _rate_of(position: Position) -> str:
+    return f"at {rate(position.apy)}" if position.apy is not None else "no rate given"
 
 
 def _supplied_at(position: Position, limit: int = 4) -> str:
     legs = sorted(position.earning_legs, key=lambda leg: leg.value_usd, reverse=True)
     if not legs:
         return ""
-    named = ", ".join(
-        f"{leg.symbol} {usd(leg.value_usd)} at {rate(leg.apy or 0)}" for leg in legs[:limit]
+    quoted = ", ".join(
+        f"{named(leg.symbol, UNNAMED_TOKEN)} {usd(leg.value_usd)} at {rate(leg.apy or 0)}"
+        for leg in legs[:limit]
     )
-    return f"supplied {named}"
+    return f"supplied {quoted}"
 
 
 def _owed_against(position: Position) -> str:
     if not position.has_debt:
         return ""
     owed = [leg for leg in position.legs if leg.role == "borrow"]
-    borrowed = ", ".join(f"{leg.symbol} {usd(abs(leg.value_usd))}" for leg in owed[:3])
+    borrowed = ", ".join(
+        f"{named(leg.symbol, UNNAMED_TOKEN)} {usd(abs(leg.value_usd))}" for leg in owed[:3]
+    )
     cost = f" at {rate(position.borrow_apy)}" if position.borrow_apy else ""
     health = f", health {position.health_rate:.2f}" if position.health_rate else ""
     debt = f"borrowed {borrowed}{cost}{health}" if borrowed else f"a loan{cost}{health}"
@@ -167,7 +149,7 @@ def _owed_against(position: Position) -> str:
 
 
 def position_line(position: Position, detail: bool = False) -> str:
-    head = position.symbol or "?"
+    head = named(position.symbol, UNNAMED_POSITION)
     if position.name and position.name != head:
         head = f"{head} ({position.name})"
     pair = _pair(position)
@@ -180,14 +162,11 @@ def position_line(position: Position, detail: bool = False) -> str:
     facts.extend(_where(position))
     facts.extend(_rates(position))
     line = f"{head}: {', '.join(facts)}"
-    # Composition is long enough to crowd the standing block, so it belongs to
-    # the drill-down that asked for detail.
     composition = _composition(position) if detail else None
     return f"{line} — {composition}" if composition else line
 
 
 def _breakdown(label: str, totals: tuple[Total, ...], whole: float, limit: int = 8) -> str | None:
-    """One line of "where the money is", with shares that add up."""
     if not totals:
         return None
     parts = []
@@ -211,9 +190,6 @@ def _wallet_lines(wallet: Wallet, cap: int) -> list[str]:
     lines = [header] + [f"  - {position_line(p)}" for p in positions[:cap]]
     rest = positions[cap:]
     if rest:
-        # The tail's value, not just its count: a model told only that 1004
-        # positions exist will either ignore them or guess at them, and both
-        # come out as a wrong total.
         lines.append(
             f"  - …and {len(rest)} smaller positions worth {usd(total_of(rest))} in total "
             "(ask for details on any of them with the position search tool)"
@@ -228,9 +204,6 @@ def portfolio_context(portfolio: Portfolio, max_positions: int) -> str:
         f"total {usd(whole)}, {len(portfolio.wallets)} wallet(s), "
         f"{len(portfolio.positions)} position(s)."
     ]
-    # The shape of the money, computed over EVERY position rather than the few
-    # the cap prints. These three lines are what make "where is my money by
-    # chain" answerable without guessing, however long the tail is.
     for line in (
         _breakdown("By network", portfolio.totals_by(lambda p: p.network), whole),
         _breakdown("By type", portfolio.totals_by(lambda p: p.category), whole),
@@ -240,4 +213,19 @@ def portfolio_context(portfolio: Portfolio, max_positions: int) -> str:
             lines.append(line)
     for wallet in portfolio.wallets:
         lines.extend(_wallet_lines(wallet, max_positions))
-    return "\n".join(lines)[:MAX_CHARS]
+    return _capped(lines)
+
+
+def _capped(lines: list[str]) -> str:
+    whole = "\n".join(lines)
+    if len(whole) <= MAX_CHARS:
+        return whole
+    kept: list[str] = []
+    used = 0
+    for line in lines:
+        if used + len(line) + 1 > MAX_CHARS - ROOM_FOR_THE_CUT:
+            break
+        kept.append(line)
+        used += len(line) + 1
+    kept.append(f"…and {len(lines) - len(kept)} more lines, left out for length")
+    return "\n".join(kept)

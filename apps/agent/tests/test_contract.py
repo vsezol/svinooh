@@ -1,27 +1,3 @@
-"""Does the real API still send what our fixtures claim it sends?
-
-This is the answer to "then let's test against the database instead": we do
-both, and each answers a different question.
-
-Every other test runs on hand-built fixtures, because a test that reads live
-positions fails when a price moves, when a wallet gains a token, when a
-protocol renames itself — noise that says nothing about our code, on a suite
-that has to be trusted at three in the morning. Those tests answer "does the
-code do the right thing with data of this shape".
-
-This one answers the other half: "is that still the shape". It calls the live
-API and checks that every field the agent reads is present and typed as the
-fixtures declare — so a change to the DTO fails here, loudly, once, instead of
-turning into a quietly wrong answer in a chat.
-
-It needs the network, so it is opt-in:
-
-    AGENT_CONTRACT_API=https://api-production-…/api python -m pytest -m contract
-
-Point it at a public portfolio (AGENT_CONTRACT_PORTFOLIO) or let it create an
-anonymous one from a public address.
-"""
-
 import os
 
 import httpx
@@ -42,7 +18,6 @@ if not API:
 
 @pytest.fixture(scope="module")
 def live_portfolio() -> dict:
-    """A real portfolio from the real API — created if none was named."""
     with httpx.Client(base_url=API, timeout=60) as client:
         slug = PORTFOLIO
         if not slug:
@@ -55,7 +30,6 @@ def live_portfolio() -> dict:
 
 
 def types_of(sample: dict) -> dict[str, type | None]:
-    """Field name to type, with None where the sample carries no value."""
     return {key: (type(value) if value is not None else None) for key, value in sample.items()}
 
 
@@ -87,8 +61,6 @@ class TestPortfolioShape:
         ],
     )
     def test_the_fields_we_group_by_keep_their_types(self, live_portfolio, field, expected):
-        # Grouping on a field that turned into a dict would produce a
-        # breakdown of nonsense rather than an error.
         values = [
             p[field]
             for w in live_portfolio["wallets"]
@@ -99,9 +71,6 @@ class TestPortfolioShape:
         assert all(isinstance(v, expected) for v in values)
 
     def test_the_agent_can_read_it_at_all(self, live_portfolio):
-        # The whole point, end to end: real data through the real mapper and
-        # the real renderer. A field that changed type fails in the parse,
-        # which is the boundary that exists to catch it.
         from app.adapters import wire
         from app.agent.context import portfolio_context
 
@@ -125,8 +94,6 @@ class TestHistoryShape:
             assert set(fx.history([("t", 1.0)])["points"][0]) <= set(points[0])
 
     def test_the_window_slice_reads_the_timestamps_it_is_given(self, live_portfolio):
-        # The mapper parses `t` once; a format change would silently widen
-        # every period back to the whole series.
         from app.adapters import wire
 
         with httpx.Client(base_url=API, timeout=60) as client:

@@ -1,16 +1,3 @@
-"""The host's JSON, and the one place it becomes the domain's types.
-
-The anti-corruption layer: pydantic models mirroring what the portfolio API
-actually sends (camelCase, optional halves, the occasional null where the
-docs say a number), and a mapper turning each into the frozen dataclasses of
-app/domain/portfolio.py. Above this module nothing knows the wire exists.
-
-Parse, don't validate: a payload is read once, here, and what comes out is
-typed all the way up. A payload that is not the shape we know raises, and the
-caller degrades honestly — the grounded branch answers without the numbers
-and says so, which is a better failure than a prompt full of "n/a".
-"""
-
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -30,13 +17,6 @@ from ..domain.portfolio import (
 
 
 class Wire(BaseModel):
-    """Read camelCase, ignore what we do not use, tolerate what may be absent.
-
-    `extra="ignore"` is the important half: the API sends plenty this service
-    never reads (ids, timestamps, TRON resources), and a new field there must
-    never be a failed turn here.
-    """
-
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="ignore")
 
     @field_validator(
@@ -44,17 +24,11 @@ class Wire(BaseModel):
     )
     @classmethod
     def _none_is_empty(cls, value: object) -> object:
-        """A list the wire sends as `null` when there are none of them.
-
-        `tokens: null` on every plain token holding, `positions: null` on a
-        wallet that has not been scanned. Both mean the same as `[]` and are
-        read as it, once, here.
-        """
         return [] if value is None else value
 
 
 class LegWire(Wire):
-    symbol: str = "?"
+    symbol: str = ""
     role: str = "supply"
     value_usd: float = 0.0
     amount: float | None = None
@@ -68,7 +42,7 @@ class BandWire(Wire):
 
 
 class PositionWire(Wire):
-    symbol: str = "?"
+    symbol: str = ""
     value_usd: float = 0.0
     name: str | None = None
     network: str | None = None
@@ -79,8 +53,6 @@ class PositionWire(Wire):
     apy: float | None = None
     borrow_apy: float | None = None
     health_rate: float | None = None
-    #: `range` on the wire; the alias generator would leave it alone anyway,
-    #: and saying it here is what keeps that true if the generator changes.
     range: str | None = Field(default=None, alias="range")
     band: BandWire | None = None
     tokens: list[LegWire] = Field(default_factory=list)
@@ -104,8 +76,6 @@ class PortfolioWire(Wire):
 
 class ReadingWire(Wire):
     t: str | float | None = None
-    #: Non-null in the DTO, but a reading with no total is not a reading, and
-    #: one that arrives without one is dropped rather than rendered as "n/a".
     usd: float | None = None
 
 
@@ -125,19 +95,14 @@ class MeWire(Wire):
 
 
 class SlugWire(Wire):
-    """What a create answers with — the only part of it the agent uses."""
-
     slug: str = ""
 
 
 def epoch_ms(stamp: str | float | None) -> float | None:
-    """A wire timestamp as milliseconds, or None when it cannot be read."""
     if isinstance(stamp, (int, float)):
         return float(stamp)
     if isinstance(stamp, str):
         try:
-            # The API sends ISO-8601, and a trailing Z is not something
-            # fromisoformat took before 3.11.
             return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp() * 1000
         except ValueError:
             return None
@@ -191,7 +156,6 @@ def _wallet(wire: WalletWire) -> Wallet:
 
 
 def portfolio(payload: object) -> Portfolio:
-    """The host's portfolio payload as the domain's Portfolio."""
     wire = PortfolioWire.model_validate(payload)
     return Portfolio(
         slug=wire.slug,
@@ -202,12 +166,10 @@ def portfolio(payload: object) -> Portfolio:
 
 
 def position(payload: object) -> Position:
-    """One position on its own, where a whole portfolio around it would be noise."""
     return _position(PositionWire.model_validate(payload))
 
 
 def history(payload: object) -> History:
-    """The host's history payload, with unreadable readings left out."""
     wire = HistoryWire.model_validate(payload)
     return History(
         range=wire.range,
@@ -220,7 +182,6 @@ def history(payload: object) -> History:
 
 
 def me(payload: object) -> Me:
-    """Who the caller is, and which portfolios they own."""
     wire = MeWire.model_validate(payload)
     return Me(
         user_id=wire.id,
@@ -229,5 +190,4 @@ def me(payload: object) -> Me:
 
 
 def slug(payload: object) -> str:
-    """The slug a create answered with."""
     return SlugWire.model_validate(payload).slug

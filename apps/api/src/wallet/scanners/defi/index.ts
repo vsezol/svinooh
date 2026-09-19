@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { kaminoLending } from './kamino';
 import { meteoraPools } from './meteora';
 import { orcaPools } from './orca';
-import type { DefiFacts, LendingFact, PoolFact } from '@svinooh/shared';
+import type { DefiFacts, LendingFact, PoolFact, SupplyFact } from '@svinooh/shared';
 
 const logger = new Logger('DefiFacts');
 
@@ -61,11 +61,21 @@ export async function solanaPoolFacts(address: string): Promise<DefiFacts> {
  */
 export async function solanaLendingFacts(address: string): Promise<DefiFacts> {
   const lending: LendingFact[] = [];
+  const supply: SupplyFact[] = [];
   const failed: string[] = [];
   await gather(
     address,
-    [{ name: 'kamino', run: async () => void lending.push(...(await kaminoLending(address))) }],
+    [
+      {
+        name: 'kamino',
+        run: async () => {
+          const read = await kaminoLending(address);
+          lending.push(...read.lending);
+          supply.push(...read.supply);
+        },
+      },
+    ],
     failed,
   );
-  return { pools: [], lending, failed };
+  return { pools: [], lending, supply, failed };
 }

@@ -8,12 +8,24 @@
 import { decide, type Remembered, type Settings } from '../src/alerts/decide';
 import type { WalletPositionState } from '@svinooh/shared';
 
-const ON: Settings = { rangeAlerts: true, healthFactorBelow: 1.1, borrowApyAbove: 12 };
+const ON: Settings = {
+  rangeAlerts: true,
+  healthFactorBelow: 1.1,
+  borrowApyAbove: 12,
+  tronReclaimAlerts: true,
+  tronDelegateAlerts: true,
+};
 const pos = (p: Partial<WalletPositionState>): WalletPositionState => ({
-  key: 'k', label: 'cbBTC/USDC', inRange: null, healthFactor: null, borrowApyPct: null, ...p,
+  key: 'k', platform: 'AAVE', label: 'cbBTC/USDC', inRange: null, healthFactor: null,
+  borrowApyPct: null, band: null, loan: null, ...p,
 });
 const mem = (m: Partial<Remembered>): Map<string, Remembered> =>
-  new Map([['k', { inRange: null, healthBreached: false, borrowBreached: false, ...m }]]);
+  new Map([
+    ['k', {
+      inRange: null, healthBreached: false, borrowBreached: false,
+      reclaimArmed: false, delegateArmed: false, ...m,
+    }],
+  ]);
 
 let failures = 0;
 const check = (name: string, got: unknown, want: unknown) => {
@@ -52,7 +64,7 @@ check('ставка выше порога впервые — говорим',
 
 check('порог не задан — ничего не сравниваем',
   kinds(decide([pos({ healthFactor: 0.2, borrowApyPct: 99 })],
-    { rangeAlerts: true, healthFactorBelow: null, borrowApyAbove: null }, new Map()).items), []);
+    { ...ON, healthFactorBelow: null, borrowApyAbove: null }, new Map()).items), []);
 
 check('range выключен — событий нет',
   kinds(decide([pos({ inRange: false })], { ...ON, rangeAlerts: false }, mem({ inRange: true })).items), []);

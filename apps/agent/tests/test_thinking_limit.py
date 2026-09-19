@@ -1,16 +1,3 @@
-"""How much a model may think, and what happens when the endpoint says no.
-
-Both halves were written after production caught them, and they are the same
-mistake seen from two sides: a thinking setting is a demand, and an endpoint
-that cannot meet it fails the whole turn.
-
-The router asked for no reasoning and the endpoint mandated it — 400 on every
-classification. Then the router became a model that cannot reason at all, kept
-a positive setting, and asking for it filtered every provider away — 404 on
-every classification. Both were invisible, because the classifier's fail-safe
-swallows a failure and routes everything to the portfolio branch.
-"""
-
 import pytest
 
 from app.adapters.memory import StaticPanel
@@ -39,8 +26,6 @@ def role(model: str = "openai:m", effort: str = "low", sort: str = "throughput")
 
 
 class Labeler:
-    """A client that refuses the setting the first time, then labels."""
-
     def __init__(self, refusals=1, saying=MANDATORY, label="general"):
         self.refusals = refusals
         self.saying = saying
@@ -59,13 +44,11 @@ class Labeler:
 
 
 def models(client=None, **env) -> Models:
-    """Models on an aggregator by default, whose every client is `client`."""
     settings = Settings(**{"model_base_url": AGGREGATOR, **env})
     return Models(settings, factory=lambda _name, **_kwargs: client)
 
 
 def body_for(effort: str = "low", model: str = "openai:m", sort: str = "throughput") -> dict:
-    """What actually goes on the wire for a role shaped like this."""
     return models().wire_options(role(model=model, effort=effort, sort=sort)).get("extra_body", {})
 
 
@@ -74,8 +57,6 @@ class TestThinkingSetting:
         assert body_for(model="m")["reasoning"] == {"effort": "low"}
 
     def test_an_empty_setting_asks_for_nothing_at_all(self):
-        # The only setting every model can honour: one that must think is not
-        # told to stop, one that cannot think is not asked to start.
         assert "reasoning" not in body_for(effort="", model="m")
 
     def test_a_refused_model_is_never_asked_again(self):
@@ -90,8 +71,6 @@ class TestThinkingSetting:
         assert ours.stop_asking_it_to_think(role()) is False, "the second failure is the caller's"
 
     def test_a_role_that_sends_no_setting_has_nothing_to_give_up(self):
-        # Otherwise a 404 about some other parameter would be "cured" by
-        # dropping a setting that was never in the request.
         ours = models()
         assert ours.stop_asking_it_to_think(role(effort="")) is False
         assert "m" not in ours.no_longer_asked_to_think
@@ -116,7 +95,6 @@ class TestThinkingSetting:
 
 
 def classifier(client, **env) -> IntentClassifier:
-    """The classifier over one client, with a labelling role that asks for thought."""
     ours = models(client, router_model="openai:router", router_reasoning_effort="low", **env)
     return IntentClassifier(ours, Config(ours._settings, StaticPanel()))
 
@@ -136,8 +114,6 @@ class TestClassifierRecovery:
         assert "openai:router" in ours.no_longer_asked_to_think
 
     async def test_a_second_refusal_is_raised_rather_than_retried_forever(self):
-        # No understudy: the answering model IS the labelling model, so a
-        # refusal has nowhere left to go (see test_router_fallback).
         labeler = Labeler(refusals=99)
         with pytest.raises(Exception, match="Reasoning is mandatory"):
             await classifier(labeler, model="openai:router", reasoning_effort="low").classify("q")
@@ -159,8 +135,6 @@ class TestClassifierRecovery:
         assert Broken.attempts == 1, "only a refused setting is worth a second try"
 
     async def test_a_role_that_asks_for_nothing_does_not_retry(self):
-        # The shipped labelling role. A 404 here is about something we are not
-        # willing to give up, so it goes to the caller on the first failure.
         labeler = Labeler(refusals=99, saying=NO_ENDPOINTS)
         quiet = models(labeler, model="openai:instruct", reasoning_effort="")
         with pytest.raises(Exception, match="No endpoints"):
@@ -169,11 +143,7 @@ class TestClassifierRecovery:
 
 
 class TestProviderPolicy:
-    """Which of an aggregator's providers may serve our prompts."""
-
     def test_nothing_is_sent_to_a_provider_we_talk_to_directly(self):
-        # extra_body is an OpenAI-client field; on the Anthropic client it is
-        # not a parameter at all.
         direct = models(model_base_url="")
         assert direct.wire_options(role(model="anthropic:claude-haiku-4-5")) == {}
 
@@ -184,11 +154,6 @@ class TestProviderPolicy:
         assert body["reasoning"] == {"effort": "low"}
 
     def test_we_do_not_demand_a_provider_advertise_every_parameter(self):
-        # It reads like "make sure they can really run tools" and is not that:
-        # it covers every parameter in the request, and forcing a single tool
-        # call makes the client add parallel_tool_calls, which none of the
-        # answering model's fifteen providers advertises. On, this policy could
-        # not be served by anybody, for any model, on any classification.
         assert "require_parameters" not in body_for()["provider"]
 
     def test_dropping_a_thinking_setting_leaves_the_rest_of_the_policy_standing(self):
@@ -200,8 +165,5 @@ class TestProviderPolicy:
         assert "reasoning" not in body and body["provider"]["data_collection"] == "deny"
 
     def test_each_role_asks_for_the_provider_its_own_job_wants(self):
-        # A label is ten tokens and an answer is paragraphs, so "the best
-        # provider" is a different provider for each. One shared sort made one
-        # of them wrong by construction.
         assert body_for(sort="latency")["provider"]["sort"] == "latency"
         assert body_for(sort="throughput")["provider"]["sort"] == "throughput"

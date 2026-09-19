@@ -1,5 +1,5 @@
 import { fetchJson, HttpError } from '../http';
-import type { LendingFact } from '@svinooh/shared';
+import type { LendingFact, SupplyFact } from '@svinooh/shared';
 
 const KAMINO_API = 'https://api.kamino.finance';
 const NULL_PUBKEY = '11111111111111111111111111111111';
@@ -67,13 +67,6 @@ async function orEmpty<T>(url: string): Promise<T[]> {
   }
 }
 
-/**
- * A loan's health and what it costs, per borrowed asset.
- *
- * Health is the ratio of the liquidation threshold to where the loan actually
- * sits: at 1 the position is being liquidated. An obligation with nothing
- * borrowed is skipped — it cannot be liquidated and has no rate to climb.
- */
 function supplyRates(obligation: Obligation, byReserve: Map<string, Reserve>): Record<string, number> {
   const rates: Record<string, number> = {};
   for (const deposit of obligation.state?.deposits ?? []) {
@@ -86,6 +79,19 @@ function supplyRates(obligation: Obligation, byReserve: Map<string, Reserve>): R
   return rates;
 }
 
+function supplied(obligation: Obligation, market: string, byReserve: Map<string, Reserve>): SupplyFact | null {
+  const rates = supplyRates(obligation, byReserve);
+  if (!Object.keys(rates).length) return null;
+  return { id: `kamino:${market}:supply`, platform: 'kamino', market, rates };
+}
+
+/**
+ * A loan's health and what it costs, per borrowed asset.
+ *
+ * Health is the ratio of the liquidation threshold to where the loan actually
+ * sits: at 1 the position is being liquidated. An obligation with nothing
+ * borrowed is skipped — it cannot be liquidated and has no rate to climb.
+ */
 function parse(obligation: Obligation, market: string, byReserve: Map<string, Reserve>): LendingFact[] {
   const stats = obligation.refreshedStats;
   if (!stats || Number(stats.userTotalBorrow) <= 0) return [];
@@ -123,7 +129,9 @@ function parse(obligation: Obligation, market: string, byReserve: Map<string, Re
  * other eleven. The source as a whole only fails if the market list itself
  * cannot be had, which is the case where we genuinely know nothing.
  */
-export async function kaminoLending(address: string): Promise<LendingFact[]> {
+export async function kaminoLending(
+  address: string,
+): Promise<{ lending: LendingFact[]; supply: SupplyFact[] }> {
   const all = await marketList();
   const remembered = seenIn.get(address);
   const narrowed =
@@ -141,7 +149,7 @@ export async function kaminoLending(address: string): Promise<LendingFact[]> {
         const obligations = await orEmpty<Obligation>(
           `${KAMINO_API}/kamino-market/${market.lendingMarket}/users/${address}/obligations`,
         );
-        if (!obligations.length) return [];
+        if (!obligations.length) return { lending: [], supply: [] };
         answered.push(market.lendingMarket);
         const metrics = await orEmpty<ReserveMetric>(
           `${KAMINO_API}/kamino-market/${market.lendingMarket}/reserves/metrics`,
@@ -157,9 +165,14 @@ export async function kaminoLending(address: string): Promise<LendingFact[]> {
           ]),
         );
         const name = market.name ?? market.lendingMarket.slice(0, 8);
-        return obligations.flatMap((o) => parse(o, name, byReserve));
+        return {
+          lending: obligations.flatMap((o) => parse(o, name, byReserve)),
+          supply: obligations
+            .map((o) => supplied(o, name, byReserve))
+            .filter((fact): fact is SupplyFact => fact !== null),
+        };
       } catch {
-        return [];
+        return { lending: [], supply: [] };
       }
     }),
   );
@@ -170,5 +183,8 @@ export async function kaminoLending(address: string): Promise<LendingFact[]> {
   if (narrowed.length === all.length) seenIn.set(address, { at: Date.now(), markets: answered });
   else if (!answered.length) seenIn.delete(address);
 
-  return perMarket.flat();
+  return {
+    lending: perMarket.flatMap((market) => market.lending),
+    supply: perMarket.flatMap((market) => market.supply),
+  };
 }

@@ -1,16 +1,3 @@
-"""Intent classification — the router's eyes, live on the request path.
-
-Structured output is the whole trick: the model is handed a schema and must
-fill it, so what comes back is a validated object and never a string to
-regex. It is asked for as a tool call the model must make (llm.structured),
-the same mechanism the agent's own tools use.
-
-`classify` raises only when there is no way left to get a label. The graph
-owns that failure policy — route to the portfolio branch — but it is a poor
-thing to fall back on: not "no answer" but a confident wrong turn on every
-question. So this exhausts its options first.
-"""
-
 import logging
 from typing import Any, Literal
 
@@ -57,15 +44,6 @@ class IntentLabel(BaseModel):
 
 
 class IntentClassifier:
-    """Labels a question, on the cheap model when it can be reached.
-
-    The labelling model is chosen for being cheap, and a cheap model is the
-    kind that turns out not to be servable: fewer providers, likelier to fail
-    a policy we hold. Twice that produced a router failing on every request
-    while the product looked fine. So an unreachable labelling model costs
-    one wasted call, and the answering model does the labelling instead.
-    """
-
     def __init__(self, models: Models, config: Config) -> None:
         self._models = models
         self._config = config

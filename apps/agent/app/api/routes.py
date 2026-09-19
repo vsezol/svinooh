@@ -1,16 +1,3 @@
-"""The HTTP surface: /health for the platform, /chat and /chats for everyone else.
-
-Thin by construction. A handler reads the request, hands it to a use case,
-and shapes what comes back. What a turn IS lives in app/application/turns.py,
-who may read a conversation in app/application/chats.py, and what a refusal
-means on the wire in app/api/errors.py — so a new branch of the conversation
-lands in the graph, and a new rule lands in a use case, without this file
-changing again.
-
-The block vocabulary is the one thing that IS this layer's: the service draws
-an answer as blocks (DESIGN.md), and hands them down to be stored beside it.
-"""
-
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -35,6 +22,8 @@ from .schemas import (
     DepositBlock,
     SignInBlock,
     TextBlock,
+    TraceBlock,
+    TraceStep,
 )
 
 logger = logging.getLogger("svinooh-ai")
@@ -53,34 +42,17 @@ AnonId = Annotated[str | None, Header(alias=ANON_HEADER)]
 
 @router.get("/health")
 def health() -> dict:
-    """The process is up. This is what the platform restarts on."""
     return {"ok": True}
 
 
 @router.get("/metrics")
 def scrape() -> Response:
-    """What this instance has counted, for Prometheus.
-
-    Unauthenticated, like the api's and the wallet's: it is scraped over the
-    private network, and what it holds is request counts and latencies. Every
-    label is bounded and none of them names a caller or a conversation.
-    """
     body, content_type = metrics.render()
     return Response(content=body, media_type=content_type)
 
 
 @router.get("/ready")
 async def ready(deps: Deps) -> JSONResponse:
-    """What this instance can actually reach.
-
-    /health answers from the process alone, which is right for a restart
-    trigger and useless for the failure that matters: a Redis that is
-    configured and not answering means conversations are being lost quietly,
-    and everything still looks fine. That one is a 503 here.
-
-    The panel not having been heard is reported and is not a 503 — the
-    service answers on its environment until it has, by design.
-    """
     store = await deps.store_state()
     body = {
         "ok": store != "unreachable",
@@ -95,15 +67,46 @@ def _asked(body: ChatRequest) -> Question:
     return Question(message=body.message, session_id=body.session_id, portfolio=body.portfolio)
 
 
-def _answered(session_id: str, answered: Answered) -> ChatResponse:
-    return ChatResponse(blocks=_blocks(answered), reply=answered.text, session_id=session_id)
+Drawn = TraceBlock | TextBlock | SignInBlock | DepositBlock
 
 
-def _blocks(answered: Answered) -> list[TextBlock | SignInBlock | DepositBlock]:
-    drawn: list[TextBlock | SignInBlock | DepositBlock] = [TextBlock(text=answered.text)]
+def _answered(
+    session_id: str, answered: Answered, receipt: TraceBlock | None = None
+) -> ChatResponse:
+    return ChatResponse(
+        blocks=_blocks(answered, receipt), reply=answered.text, session_id=session_id
+    )
+
+
+def _blocks(answered: Answered, receipt: TraceBlock | None = None) -> list[Drawn]:
+    drawn: list[Drawn] = [receipt] if receipt is not None else []
+    drawn.append(TextBlock(text=answered.text))
     if answered.deposit is not None:
         drawn.append(_deposit_card(answered.deposit))
     return drawn
+
+
+def _taken(seen: dict[str, dict], event: dict) -> None:
+    key = str(event.get("id") or "")
+    if key:
+        seen[key] = {**seen.get(key, {}), **event}
+
+
+def _receipt(seen: dict[str, dict]) -> TraceBlock | None:
+    if not seen:
+        return None
+    return TraceBlock(
+        steps=[
+            TraceStep(
+                id=key,
+                label=str(step.get("label") or key),
+                state=str(step.get("state") or "running"),
+                detail=step.get("detail"),
+                ms=step.get("ms"),
+            )
+            for key, step in seen.items()
+        ]
+    )
 
 
 def _deposit_card(deposit: Deposit) -> DepositBlock:
@@ -123,13 +126,6 @@ def _deposit_card(deposit: Deposit) -> DepositBlock:
 
 
 def _sign_in_card(question: str) -> SignInBlock:
-    """What replaces an answer once the free questions are spent.
-
-    Not a refusal: a 200 carrying a different block, because the person did
-    nothing wrong and there is something for them to do. It rides the same
-    wire as an answer for the reason every widget does — a new block kind
-    rather than a new status code or a new endpoint.
-    """
     return SignInBlock(
         title="Sign in to keep asking",
         sub=(
@@ -137,19 +133,11 @@ def _sign_in_card(question: str) -> SignInBlock:
             "conversation — and claims a portfolio made here, which until then "
             "belongs to nobody."
         ),
-        # The question travels with the card so the widget can ask it again
-        # itself once the auth flow returns. They typed it and got a door.
         pending_question=question,
     )
 
 
 async def _remember_card(deps: Container, admitted: Admitted, card: SignInBlock) -> ChatResponse:
-    """Record the turn where the answer was a door.
-
-    It happened, so a conversation reopened later shows what was on screen.
-    And the client takes this turn's id for the conversation's address: a turn
-    that stored nothing would leave /ai/c/<id> pointing at a 404.
-    """
     await deps.turns.remember(admitted, card.sub, [card.model_dump(by_alias=True)])
     return ChatResponse(blocks=[card], reply=card.sub, session_id=admitted.session_id)
 
@@ -170,7 +158,6 @@ async def chat(
 
 
 def _event(name: str, data: dict) -> str:
-    """One server-sent event; JSON keeps a newline inside an answer from ending it."""
     return f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
@@ -178,50 +165,39 @@ def _event(name: str, data: dict) -> str:
 async def chat_stream(
     body: ChatRequest, deps: Deps, authorization: Authorization = None, anon_id: AnonId = None
 ) -> StreamingResponse:
-    """The same turn, reported while it happens.
-
-    `start` goes out before any model is called and carries the conversation's
-    id, so the chat has an address from its first turn. `step` is the work
-    reporting itself (app/agent/steps.py). `done` carries the finished answer
-    — the very body /chat would have returned — and is what a client renders:
-    the tokens before it are a preview. One wire, two deliveries.
-    """
-    # Admission happens before the response opens, so a refusal is still a
-    # status code rather than a stream that opens and immediately apologises.
     admitted = await deps.turns.admit(Caller(authorization, anon_id), _asked(body))
     card = _sign_in_card(admitted.question) if admitted.walled else None
 
     async def events() -> AsyncIterator[str]:
         yield _event("start", {"session_id": admitted.session_id})
         if card is not None:
-            # No steps and no tokens: nothing ran. The card is the whole turn.
             walled = await _remember_card(deps, admitted, card)
             yield _event("done", walled.model_dump(by_alias=True))
             return
+        seen: dict[str, dict] = {}
         async for name, data in deps.turns.watch(admitted):
             if name != "done":
+                if name == "step":
+                    _taken(seen, data)
                 yield _event(name, data)
                 continue
             answered = Answered(text=data["text"], deposit=data.get("deposit"))
-            drawn = _blocks(answered)
+            body = _answered(admitted.session_id, answered, _receipt(seen))
             await deps.turns.remember(
-                admitted, answered.text, [block.model_dump(by_alias=True) for block in drawn]
+                admitted,
+                answered.text,
+                [block.model_dump(by_alias=True) for block in body.blocks],
             )
-            yield _event("done", _answered(admitted.session_id, answered).model_dump(by_alias=True))
+            yield _event("done", body.model_dump(by_alias=True))
 
     return StreamingResponse(
         events(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            # Without this a reverse proxy is free to hold the whole stream and
-            # hand it over at the end, which is the thing we are fixing.
             "X-Accel-Buffering": "no",
         },
     )
-
-
-# ── the conversations, read rather than continued ───────────────────────────
 
 
 @router.get("/chats", response_model=ChatList)

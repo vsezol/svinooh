@@ -1,0 +1,57 @@
+# The gates for everything TypeScript: the same two commands a developer runs
+# locally, over every workspace at once. apps/agent has its own workflow and is
+# excluded here, so a change to the Python service does not run these.
+name: node
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/**
+      - '!apps/agent/**'
+      - libs/**
+      - package.json
+      - package-lock.json
+      - nx.json
+      - tsconfig.base.json
+      - .github/workflows/node.yml
+  pull_request:
+    paths:
+      - apps/**
+      - '!apps/agent/**'
+      - libs/**
+      - package.json
+      - package-lock.json
+      - nx.json
+      - tsconfig.base.json
+      - .github/workflows/node.yml
+
+concurrency:
+  group: node-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      # The install is the slow half of this job, and it only changes when the
+      # lockfile does.
+      - uses: actions/cache@v6
+        id: installed
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            libs/*/node_modules
+          key: npm-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+      - if: steps.installed.outputs.cache-hit != 'true'
+        run: npm ci --no-audit --fund=false --prefer-offline
+      # Both targets build the libraries they depend on first, so the Prisma
+      # client and the shared dist are there before anything imports them.
+      - run: npm test
+      - run: npm run typecheck

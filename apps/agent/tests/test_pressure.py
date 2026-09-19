@@ -1,12 +1,3 @@
-"""What happens when more than one person is asking.
-
-The rest of the suite is about one turn being right. These are about the
-things that only go wrong with several: an unbounded question, a turn that
-never ends, a burst of model calls, a cache that only grows, a socket per
-request. Each of them is fine at one request a minute, which is exactly why
-they need a test rather than a look.
-"""
-
 import asyncio
 from dataclasses import replace
 
@@ -29,7 +20,6 @@ from tests.support import client_for, container, models_of
 
 
 def turns_of(wired, agent, *, deadline_s: float = 30.0, message_max_chars: int = 4000) -> Turns:
-    """The use case over one container's collaborators and this agent."""
     return Turns(
         wired.sessions,
         wired.identity,
@@ -42,8 +32,6 @@ def turns_of(wired, agent, *, deadline_s: float = 30.0, message_max_chars: int =
 
 
 class Slow:
-    """An agent whose turn never finishes in time."""
-
     async def run(self, ask: Ask) -> Reply:
         await asyncio.sleep(30)
         raise AssertionError("the deadline should have fired")
@@ -99,8 +87,6 @@ class TestATurnHasADeadline:
         assert response.json() == {"detail": "the answer took too long"}
 
     async def test_a_watched_turn_ends_in_an_event_rather_than_a_status(self):
-        # The stream is already open by then, so the reader is owed an ending
-        # in the only channel there is left.
         wired = container()
         turns = turns_of(wired, Slow(), deadline_s=0.01)
         admitted = await turns.admit(Caller(), Question(message="hello"))
@@ -116,8 +102,6 @@ class TestATurnHasADeadline:
 
 
 class Counting:
-    """A model that says how many calls were inside it at once."""
-
     def __init__(self, hold: float = 0.02) -> None:
         self.hold = hold
         self.now = 0
@@ -136,8 +120,6 @@ class Counting:
 
 class TestModelCallsQueue:
     async def test_only_so_many_are_in_the_air_at_once(self):
-        # The provider rate-limits us anyway; the point of queueing here is
-        # that a burst waits in one place instead of arriving as 429s.
         counting = Counting()
         settings = Settings(model_max_in_flight=2)
         models = models_of(counting, settings)
@@ -155,8 +137,6 @@ class TestModelCallsQueue:
 
 
 class OneUser:
-    """The host, answering for any token and counting how often it was asked."""
-
     def __init__(self) -> None:
         self.asked = 0
 
@@ -167,8 +147,6 @@ class OneUser:
 
 class TestTheTokenCacheIsBounded:
     async def test_the_oldest_validation_falls_out(self):
-        # A TTL is not a bound: a flood of distinct tokens fills the map
-        # faster than sixty seconds empties it.
         host = OneUser()
         auth = Authenticator(host, ttl_s=60, max_entries=2)
         for token in ("a", "b", "c"):
@@ -200,8 +178,6 @@ class TestTheSocketsAreShared:
         assert len(seen) == 2
         await client.aclose()
         with pytest.raises(RuntimeError):
-            # Proof it holds the client rather than making one per call: a
-            # closed client is the end of the source's reach.
             await source.portfolio("p", None)
 
     async def test_the_container_lets_go_of_it_on_the_way_out(self):
@@ -222,8 +198,6 @@ class TestWhatThisInstanceCanReach:
         assert body["panel"] == "not heard yet", "a StaticPanel decided nothing"
 
     async def test_a_store_that_is_configured_and_silent_is_a_503(self):
-        # The failure nobody notices: everything answers, and every
-        # conversation is being lost.
         dead = ConnectionPool.from_url("redis://localhost:6399/0")
         async with client_for(replace(container(), redis=dead)) as client:
             response = await client.get("/ready")

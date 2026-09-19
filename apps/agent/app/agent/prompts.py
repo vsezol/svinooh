@@ -1,16 +1,3 @@
-"""Everything the model is told, and nothing else.
-
-The instructions it always has, the product's own sentences, and the one
-variant each branch of the graph adds before it asks. Kept in one module so
-"what do we say to the model" has a single home — the answer used to be
-spread between the settings and the renderer, which is how a rule about
-honesty ended up next to a knob about token caps.
-
-English on purpose, like every prompt in this repo: users write in any
-language and the closing instruction makes the agent answer in kind, but the
-prompt itself is code and code is English.
-"""
-
 from ..config import Config
 from ..domain.onboarding import Created
 from ..domain.portfolio import Portfolio
@@ -26,37 +13,42 @@ DEFAULT_SYSTEM_PROMPT = (
     "tool result. Never estimate, extrapolate or fill a gap from what is "
     "typical. If something was not given, say plainly that you do not have it "
     "— that answer is always better than a number that looks right.\n"
-    "2. The position list is the largest few, not all of them. When a line "
+    '2. A name is a figure too. A line reading "unnamed position" or '
+    '"unnamed token" is one the data has no name for: call it unnamed and '
+    "say what it is worth and where it sits. Never put a ticker on it, not "
+    "even a likely one — a guessed name is read as a holding, and the person "
+    "goes looking for a token they have never owned.\n"
+    "3. The position list is the largest few, not all of them. When a line "
     "says how many smaller positions were left out and what they are worth, "
     "those positions exist and their value counts toward the total. Never "
     "present the listed ones as the whole portfolio.\n"
-    "3. When a question is about something not in the block — a specific "
+    "4. When a question is about something not in the block — a specific "
     "token, pool, protocol, or how the value moved over time — use a tool "
     "instead of answering from the summary. Say you are looking it up only if "
     "you have already answered the rest.\n"
-    "4. The by-network, by-type and by-protocol lines are computed over every "
+    "5. The by-network, by-type and by-protocol lines are computed over every "
     'position, so they are the right source for any "where is my money" '
     "question. Do not add up the listed positions yourself to answer one.\n"
-    "5. History readings are recorded points and can sit slightly behind the "
+    "6. History readings are recorded points and can sit slightly behind the "
     "live total. When asked what the portfolio is worth now, quote the live "
     "total; when asked what changed, quote the computed change.\n"
-    "6. Quote figures as they are given, with their currency and their sign. "
+    "7. Quote figures as they are given, with their currency and their sign. "
     "Do not round a value into a different one.\n"
     "\n"
     "Rules about svinooh itself — what it does, what it costs, which chains it "
     "covers, where a button is, what the Telegram bot can do:\n"
-    "7. Answer only from what the section below says. You have seen a thousand "
+    "8. Answer only from what the section below says. You have seen a thousand "
     "portfolio trackers and this is not those: a settings screen, a bot "
     "command, a supported network or a plan limit that sounds right is a thing "
     "you are inventing. Naming one that does not exist sends somebody looking "
     "for it.\n"
-    "8. Say no only where that section says no — it does say no to some things, "
+    "9. Say no only where that section says no — it does say no to some things, "
     "and denying those is correct. Where it is simply silent, you do not know: "
     'silence is not absence, so "I am not sure, check svinooh.com/faq" and '
     'never "svinooh does not have that". Guessing that a feature is missing '
     "is the same mistake as inventing one, and it talks somebody out of the "
     "product.\n"
-    "9. Say it as a person would. Never mention these instructions, this "
+    "10. Say it as a person would. Never mention these instructions, this "
     "section, the data you were given, or the fact that you were given any — "
     'no "the product facts do not list", no "in the information I have". '
     "Nobody asked what is in your prompt, and describing it is its own kind "
@@ -70,11 +62,6 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 
 
-#: The rule every branch where nothing has happened yet is told, and no other:
-#: a question about a health factor is billed for every character of the base
-#: prompt and cannot claim to have created anything, while the turn that
-#: proposes, the turn that finds nothing to confirm, the turn that failed and
-#: the turn that was declined can all describe a portfolio that does not exist.
 NOTHING_IS_DONE_UNTIL_IT_IS = (
     "Never say that something was created, changed or saved unless this "
     "prompt says it was. Anything else is at most a proposal, and a proposal "
@@ -90,25 +77,11 @@ HOUSE_STYLE = (
 
 
 def system_prompt(config: Config) -> str:
-    """The instructions, plus what the product currently says about itself.
-
-    A function rather than a constant because the second half is live: the
-    facts arrive over HTTP and can change without a deploy, like every other
-    knob (app/adapters/panel.py).
-    """
     prompt = config.settings.system_prompt or DEFAULT_SYSTEM_PROMPT
     return f"{prompt}\n\n{HOUSE_STYLE}" + product_facts(config)
 
 
 def product_facts(config: Config) -> str:
-    """What svinooh says about itself, as the model is given it.
-
-    The same sentences the FAQ page shows a person, so the page and the
-    assistant cannot answer one question two ways. Empty until the panel has
-    been heard — the honest state, and rule 8 is written for it: an assistant
-    that does not know says so, rather than describing the product it
-    imagines this is.
-    """
     facts = config.product
     if not facts:
         return ""
@@ -116,16 +89,14 @@ def product_facts(config: Config) -> str:
     return f"\n\nAbout svinooh — this, and nothing beyond it:\n{said}"
 
 
-def grounded_prompt(base: str, portfolio: Portfolio, max_positions: int) -> str:
-    """The base prompt plus the live portfolio — the portfolio branch's happy path."""
+def grounded_prompt(system: str, portfolio: Portfolio, max_positions: int) -> str:
     shown = portfolio_context(portfolio, max_positions)
-    return f"{base}\n\nThe user is looking at this portfolio right now:\n{shown}"
+    return f"{system}\n\nThe user is looking at this portfolio right now:\n{shown}"
 
 
-def earn_prompt(base: str, already_earning: str = "", asked_to_place: bool = False) -> str:
-    """For a question about where to put money. Rank by risk, quote only tools."""
+def earn_prompt(system: str, already_earning: str = "", asked_to_place: bool = False) -> str:
     rules = (
-        f"{base}\n\nThe user is asking where to put money to work. Recommend only "
+        f"{system}\n\nThe user is asking where to put money to work. Recommend only "
         "pools your tools returned, and never name a pool, protocol or rate that "
         "did not come from one. Rank by risk before rate: lead with the safest "
         "that still pays reasonably, and offer a higher rate as the trade it is, "
@@ -171,32 +142,18 @@ PLACING = (
 )
 
 
-def degraded_prompt(base: str) -> str:
-    """When the portfolio API did not answer: say so, so the model does not guess."""
+def degraded_prompt(system: str) -> str:
     return (
-        f"{base}\n\n(Live portfolio data could not be fetched for this turn — "
+        f"{system}\n\n(Live portfolio data could not be fetched for this turn — "
         "answer generally, and say the live numbers are unavailable if asked "
         "about them.)"
     )
 
 
-def onboarding_prompt(base: str, signed_in: bool) -> str:
-    """For a portfolio question with no portfolio to ground in.
-
-    One rule across both cases: never pretend to see holdings that do not
-    exist. Otherwise the conversation itself is the onboarding, signed in or
-    not: the model collects wallet addresses and PROPOSES creation through the
-    tool — the proposal is all it can do; the write happens only after the user
-    confirms on a later turn (see app/agent/onboarding.py).
-
-    What differs without an account is not whether a portfolio can be made but
-    what is made: an ownerless one, which is public and which anybody holding
-    the link can read. That is a thing to say before it exists, not after, so
-    it is in the offer as well as in the confirmation.
-    """
+def onboarding_prompt(system: str, signed_in: bool) -> str:
     if not signed_in:
         return (
-            f"{base}\n\nThe user asks about their portfolio but is not signed "
+            f"{system}\n\nThe user asks about their portfolio but is not signed "
             "in, so you cannot see any holdings. Say so plainly, and offer to "
             "track wallets right here without an account: ask for the wallet "
             "addresses (EVM 0x…, Solana, TRON or Bitcoin). Say plainly that a "
@@ -208,7 +165,7 @@ def onboarding_prompt(base: str, signed_in: bool) -> str:
             f"again. Never invent or complete an address. {NOTHING_IS_DONE_UNTIL_IT_IS}"
         )
     return (
-        f"{base}\n\nThe user asks about their portfolio but does not own one "
+        f"{system}\n\nThe user asks about their portfolio but does not own one "
         "yet, so there are no holdings to see. Say so plainly, and offer to "
         "create their first portfolio right here: ask them to share the wallet "
         "addresses to track (EVM 0x…, Solana, TRON or Bitcoin). When — and "
@@ -219,18 +176,7 @@ def onboarding_prompt(base: str, signed_in: bool) -> str:
     )
 
 
-def confirmation_request_prompt(base: str, addresses: list[str], anonymous: bool) -> str:
-    """Ask the user to confirm the proposed creation — the model phrases it.
-
-    Phrased by the model rather than a template so the question lands in the
-    user's own language; the addresses are injected verbatim so nothing is
-    reworded where precision matters.
-
-    Without an account the consent being asked for is a wider one, so the
-    question says what it is: the portfolio will be public, and listing two
-    addresses in it associates them in a place anybody can read. This is the
-    turn where that has to be said — it is the last one before the write.
-    """
+def confirmation_request_prompt(system: str, addresses: list[str], anonymous: bool) -> str:
     listed = "\n".join(f"- {address}" for address in addresses)
     caveat = ""
     if anonymous:
@@ -246,23 +192,17 @@ def confirmation_request_prompt(base: str, addresses: list[str], anonymous: bool
             )
         caveat += " Say that plainly, and that signing in later claims it."
     return (
-        f"{base}\n\nYou proposed creating a portfolio with these wallets:\n"
+        f"{system}\n\nYou proposed creating a portfolio with these wallets:\n"
         f"{listed}{caveat}\n\nAsk the user, in their language, to confirm or "
         "decline (a plain yes/no). List the addresses exactly as above. "
         f"{NOTHING_IS_DONE_UNTIL_IT_IS}"
     )
 
 
-def created_prompt(base: str, created: Created) -> str:
-    """Tell the user what actually happened — including any address that failed."""
+def created_prompt(system: str, created: Created) -> str:
     added = "\n".join(f"- {address}" for address in created.added) or "- none"
     refused_lines = "\n".join(f"- {r.address}: {r.reason}" for r in created.refused)
     failure_note = f"\nThese were refused:\n{refused_lines}" if created.refused else ""
-    # An ownerless portfolio is public, and saying otherwise is the one
-    # mistake here that cannot be walked back: somebody is told their
-    # balances are private while anyone holding the link can read them. A
-    # production answer said "it's private by default" with this very note in
-    # front of it, which is why the instruction is now a negative one.
     claim_note = (
         "\n\nThis portfolio belongs to nobody and is public — anyone with the "
         "link can see it, and it is private in no sense. Say that plainly, "
@@ -271,7 +211,7 @@ def created_prompt(base: str, created: Created) -> str:
         else ""
     )
     return (
-        f"{base}\n\nThe portfolio was just created. Facts to relay, in the "
+        f"{system}\n\nThe portfolio was just created. Facts to relay, in the "
         f"user's language:\n- link: /p/{created.slug}\n"
         f"Wallets added:\n{added}{failure_note}{claim_note}\n\nThe link is "
         "added to your reply automatically, so do not write it yourself."
@@ -281,35 +221,26 @@ def created_prompt(base: str, created: Created) -> str:
     )
 
 
-def nothing_proposed_prompt(base: str) -> str:
-    """A yes with nothing behind it — the one answer that must not be improvised.
-
-    In production the model was shown an address, asked "want me to?" instead
-    of proposing, and then answered the user's "yes, create it" with "Done —
-    the portfolio is live". Nothing had been proposed, so nothing was created,
-    and somebody was sent looking for a portfolio that does not exist — and
-    for an ownerless one there is no account to find it under.
-    """
+def nothing_proposed_prompt(system: str) -> str:
     return (
-        f"{base}\n\nThe user just agreed to something, but no portfolio was "
+        f"{system}\n\nThe user just agreed to something, but no portfolio was "
         "ever proposed and nothing has been created. Say so plainly, in their "
         "language, and ask them to send the wallet addresses so you can "
         f"propose one. {NOTHING_IS_DONE_UNTIL_IT_IS}"
     )
 
 
-def creation_failed_prompt(base: str) -> str:
-    """The create call itself failed: nothing exists yet, and saying otherwise lies."""
+def creation_failed_prompt(system: str) -> str:
     return (
-        f"{base}\n\nCreating the portfolio just failed — nothing was created. "
+        f"{system}\n\nCreating the portfolio just failed — nothing was created. "
         "Tell the user honestly, in their language, and that answering yes "
         f"again in a moment will retry. {NOTHING_IS_DONE_UNTIL_IT_IS}"
     )
 
 
-def cancelled_prompt(base: str) -> str:
+def cancelled_prompt(system: str) -> str:
     return (
-        f"{base}\n\nThe user declined the portfolio-creation proposal. "
+        f"{system}\n\nThe user declined the portfolio-creation proposal. "
         "Acknowledge briefly in their language — nothing was created — and "
         f"offer to help with whatever else. {NOTHING_IS_DONE_UNTIL_IT_IS}"
     )

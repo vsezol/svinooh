@@ -12,6 +12,16 @@
       "outputs": ["{projectRoot}/dist"],
       "cache": true
     },
+    "test": {
+      "dependsOn": ["^build"],
+      "inputs": ["default", "^production"],
+      "cache": true
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "inputs": ["default", "^production"],
+      "cache": true
+    },
     "dev": { "cache": false },
     "start": { "cache": false }
   }
