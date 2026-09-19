@@ -1,0 +1,15 @@
+export class EarnError extends Error {}
+
+export class CatalogNotReady extends EarnError {}
+
+export class PoolNotFound extends EarnError {
+  constructor(readonly poolId: string) {
+    super(`no pool with id ${poolId}`);
+  }
+}
+
+export class CatalogVersionGone extends EarnError {}
+
+export class SelectionMismatch extends EarnError {}
+
+export class MalformedCursor extends EarnError {}
