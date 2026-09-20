@@ -1,5 +1,7 @@
+import { Logger } from '@nestjs/common';
 import { Decimal } from 'decimal.js';
 import type { BuiltDeposit, LookUpLanding, ReadHoldings } from '../application/deposits';
+import type { Pool } from '../domain/pool';
 import { DepositNotSupported } from '../application/errors';
 
 const PACKET_BYTES = 1232;
@@ -68,19 +70,31 @@ export const landingsVia =
 export const holdingsVia =
   (rpcUrl: string): ReadHoldings =>
   async (owner, pool) => {
-    const kit = await import('@solana/kit');
-    const rpc = kit.createSolanaRpc(rpcUrl);
-    const held = kit.address(owner);
-    if (pool.token.mint === NATIVE) {
-      const { value } = await rpc.getBalance(held).send();
-      const sol = new Decimal(String(value)).div(new Decimal(10).pow(9));
-      return Decimal.max(sol.minus(KEPT_BACK), 0);
+    try {
+      return await holdings(rpcUrl, owner, pool);
+    } catch (unreachable) {
+      new Logger('Holdings').warn(
+        `could not read ${owner.slice(0, 6)}… on ${pool.id.network}: ${String(unreachable)}`,
+      );
+      return null;
     }
-    const { value } = await rpc
-      .getTokenAccountsByOwner(held, { mint: kit.address(pool.token.mint) }, { encoding: 'jsonParsed' })
-      .send();
-    return value.reduce(
-      (all, one) => all.plus(new Decimal(one.account.data.parsed.info.tokenAmount.amount)),
-      new Decimal(0),
-    ).div(new Decimal(10).pow(pool.token.decimals ?? 0));
   };
+
+async function holdings(rpcUrl: string, owner: string, pool: Pool): Promise<Decimal> {
+  const kit = await import('@solana/kit');
+  const rpc = kit.createSolanaRpc(rpcUrl);
+  const held = kit.address(owner);
+  if (pool.token.mint === NATIVE) {
+    const { value } = await rpc.getBalance(held).send();
+    const sol = new Decimal(String(value)).div(new Decimal(10).pow(9));
+    return Decimal.max(sol.minus(KEPT_BACK), 0);
+  }
+  const { value } = await rpc
+    .getTokenAccountsByOwner(held, { mint: kit.address(pool.token.mint) }, { encoding: 'jsonParsed' })
+    .send();
+  const base = value.reduce(
+    (all, one) => all.plus(new Decimal(one.account.data.parsed.info.tokenAmount.amount)),
+    new Decimal(0),
+  );
+  return base.div(new Decimal(10).pow(pool.token.decimals ?? 0));
+}
