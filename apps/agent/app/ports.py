@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
+from .domain.asking import Choice
 from .domain.conversation import Chat, Turn
 from .domain.earn import Deposit
 from .panel import PanelValues
@@ -63,6 +64,7 @@ class Reply:
     pending_clear: bool = False
     portfolio_created: str | None = None
     deposit: Deposit | None = None
+    choices: tuple[Choice, ...] = ()
 
 
 @dataclass(frozen=True)

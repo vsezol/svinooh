@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from ..application.turns import Admitted, Answered, Question
 from ..container import Container
+from ..domain.asking import Choice
 from ..domain.earn import Deposit
 from ..domain.identity import ANON_HEADER, Caller
 from ..observability import metrics
@@ -19,6 +20,7 @@ from .schemas import (
     ChatResponse,
     ChatSummary,
     ChatTurn,
+    ChoiceBlock,
     DepositBlock,
     SignInBlock,
     TextBlock,
@@ -67,7 +69,7 @@ def _asked(body: ChatRequest) -> Question:
     return Question(message=body.message, session_id=body.session_id, portfolio=body.portfolio)
 
 
-Drawn = TraceBlock | TextBlock | SignInBlock | DepositBlock
+Drawn = TraceBlock | TextBlock | SignInBlock | DepositBlock | ChoiceBlock
 
 
 def _answered(
@@ -83,6 +85,7 @@ def _blocks(answered: Answered, receipt: TraceBlock | None = None) -> list[Drawn
     drawn.append(TextBlock(text=answered.text))
     if answered.deposit is not None:
         drawn.append(_deposit_card(answered.deposit))
+    drawn.extend(_choice_card(choice) for choice in answered.choices)
     return drawn
 
 
@@ -106,6 +109,14 @@ def _receipt(seen: dict[str, dict]) -> TraceBlock | None:
             )
             for key, step in seen.items()
         ]
+    )
+
+
+def _choice_card(choice: Choice) -> ChoiceBlock:
+    return ChoiceBlock(
+        header=choice.header,
+        question=choice.question,
+        options=list(choice.options),
     )
 
 

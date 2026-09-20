@@ -6,6 +6,7 @@ from langchain_core.tools import tool
 
 from ..adapters.earn import YieldCatalog
 from ..adapters.portfolio import DataSource
+from ..domain.asking import MAX_ANSWERS, MIN_ANSWERS, Choice
 from ..domain.earn import CatalogSnapshot, Deposit, YieldPool
 from ..domain.portfolio import History, Period, Portfolio, total_of
 from ..observability import metrics
@@ -88,6 +89,46 @@ def earn_tools(catalog: YieldCatalog) -> list:
         return describe_pools(await catalog.best_pools(ticker or None, MAX_OPTIONS), ticker)
 
     return [earn_options]
+
+
+def asking_tools(asked: list[Choice]) -> list:
+    @tool
+    def ask_the_user(header: str, question: str, options: list[str]) -> str:
+        """Put one question in front of the user as buttons they tap.
+
+        Call it instead of guessing anything you need and do not have: which
+        token of theirs to place, how much risk they want, which pool of two
+        you cannot choose between. `header` is one or two words naming what is
+        being chosen ("Token", "Risk"). `question` is the question itself, one
+        sentence, in their language. `options` are two to four answers, each a
+        short phrase they can tap — name the real thing, with the figure where
+        there is one: "USDC 12.00", not "the stablecoin".
+
+        Ask only for what you cannot read: the amounts are in front of you, and
+        a token they already named is not a question. Call it twice in a turn
+        for two things, and never for more. Then stop and wait: prepare
+        nothing, propose nothing, and say at most one line above the buttons.
+        """
+        chosen = Choice(
+            header=header.strip(),
+            question=question.strip(),
+            options=tuple(option.strip() for option in options if option.strip()),
+        )
+        if not chosen.question:
+            return "A question with no words is not a question. Call again with one."
+        if not chosen.is_answerable:
+            return (
+                f"Give between {MIN_ANSWERS} and {MAX_ANSWERS} answers to tap, each a short "
+                "phrase. Call again with those."
+            )
+        asked.append(chosen)
+        return (
+            f"{chosen.header or 'The question'} is on their screen with those buttons. Stop "
+            "here: write at most one short line above it, prepare nothing, propose nothing, "
+            "and wait for the answer."
+        )
+
+    return [ask_the_user]
 
 
 def deposit_tools(catalog: YieldCatalog, prepared: list[Deposit]) -> list:

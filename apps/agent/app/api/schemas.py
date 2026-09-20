@@ -48,6 +48,13 @@ class DepositBlock(BaseModel):
     url: str
 
 
+class ChoiceBlock(BaseModel):
+    kind: Literal["choice"] = "choice"
+    header: str
+    question: str
+    options: list[str]
+
+
 class ChatSummary(BaseModel):
     id: str
     title: str
@@ -76,6 +83,6 @@ class ChatList(BaseModel):
 
 class ChatResponse(BaseModel):
     schema_version: int = Field(default=1, serialization_alias="schema")
-    blocks: list[TraceBlock | TextBlock | SignInBlock | DepositBlock]
+    blocks: list[TraceBlock | TextBlock | SignInBlock | DepositBlock | ChoiceBlock]
     reply: str
     session_id: str

@@ -126,6 +126,13 @@ export type DepositOutcome =
     }
   | { ok: false; reason: string };
 
+export interface ChoiceBlock {
+  kind: 'choice';
+  header: string;
+  question: string;
+  options: string[];
+}
+
 export type ConfirmAddress = {
   address: string;
   chain: 'EVM' | 'SOLANA' | 'TRON' | 'BITCOIN';
@@ -162,6 +169,7 @@ export type AgentBlock =
   | SignInBlock
   | ConfirmBlock
   | DepositBlock
+  | ChoiceBlock
   | UnknownBlock;
 
 export interface ChatWire {

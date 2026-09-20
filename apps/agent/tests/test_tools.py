@@ -2,6 +2,7 @@ from app.adapters import wire
 from app.agent.tools import (
     MAX_MATCHES,
     NOTHING_CAME_BACK,
+    asking_tools,
     find_positions,
     portfolio_tools,
     run_tools,
@@ -218,3 +219,45 @@ class TestHowACallReadsToWhoeverAsked:
     def test_an_argument_outside_the_known_set_falls_back_too(self):
         assert tool_phrase("history_summary", {"period": "3y"}) is None
         assert tool_phrase("position_details", {"query": "  "}) is None
+
+
+class TestAskingInsteadOfGuessing:
+    def setup_method(self):
+        self.asked: list = []
+        self.ask = asking_tools(self.asked)[0]
+
+    def call(self, **over):
+        asked = {
+            "header": "Token",
+            "question": "Which one do we place?",
+            "options": ["USDC 12.00", "SOL 0.009"],
+        }
+        return self.ask.invoke({**asked, **over})
+
+    def test_a_question_with_answers_reaches_the_user(self):
+        said = self.call()
+        assert len(self.asked) == 1
+        chosen = self.asked[0]
+        assert chosen.header == "Token"
+        assert chosen.options == ("USDC 12.00", "SOL 0.009")
+        assert "wait for the answer" in said
+
+    def test_one_answer_is_not_a_choice(self):
+        said = self.call(options=["USDC 12.00"])
+        assert not self.asked
+        assert "between 2 and 4" in said
+
+    def test_neither_is_a_wall_of_them(self):
+        said = self.call(options=["a", "b", "c", "d", "e"])
+        assert not self.asked
+        assert "between 2 and 4" in said
+
+    def test_a_question_with_no_words_is_refused(self):
+        said = self.call(question="  ")
+        assert not self.asked
+        assert "not a question" in said
+
+    def test_the_model_is_told_to_ask_only_for_what_it_cannot_read(self):
+        told = self.ask.description
+        assert "instead of guessing" in told
+        assert "a token they already named is not a question" in told
