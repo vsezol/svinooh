@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
 from ..domain.asking import Choice
-from ..domain.earn import Deposit
+from ..domain.earn import Deposit, Settled
 from ..domain.errors import (
     EmptyMessageError,
     MessageTooLongError,
@@ -33,6 +33,7 @@ class Question:
     message: str
     session_id: str | None = None
     portfolio: str | None = None
+    settled: Settled | None = None
 
 
 @dataclass(frozen=True)
@@ -77,19 +78,20 @@ class Turns:
 
         await self._sessions.claim(owner)
 
-        session_id, chat, settled = await self._sessions.open_turn(asked.session_id, owner)
+        session_id, chat, known = await self._sessions.open_turn(asked.session_id, owner)
 
         return Admitted(
             question=question,
             session_id=session_id,
-            owner=settled,
-            walled=not await self._may_ask(settled),
+            owner=known,
+            walled=not await self._may_ask(known),
             ask=Ask(
                 question=question,
                 history=self._sessions.context(chat),
                 portfolio=asked.portfolio or (chat.portfolio if chat else None),
                 authorization=caller.authorization,
                 pending_addresses=tuple(chat.pending) if chat and chat.pending else None,
+                settled=asked.settled,
             ),
         )
 
@@ -138,9 +140,8 @@ class Turns:
             yield "error", {"message": "the answer took too long"}
 
     async def remember(self, admitted: Admitted, answer: str, blocks: list[dict]) -> None:
-        await self._sessions.append(
-            admitted.session_id, admitted.owner.key, admitted.question, answer, blocks
-        )
+        asked = "" if admitted.ask.settled else admitted.question
+        await self._sessions.append(admitted.session_id, admitted.owner.key, asked, answer, blocks)
 
     async def _applied(self, reply: Reply, admitted: Admitted) -> str:
         session, owner = admitted.session_id, admitted.owner.key

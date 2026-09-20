@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { describe, test } from 'node:test';
-import { afterDeposit, requestOf } from '../src/components/blocks/DepositBlock';
+import { afterDeposit, requestOf, settledOf } from '../src/components/blocks/DepositBlock';
+import type { DepositRequest } from '../src/app/types';
 import type { DepositBlock } from '../src/app/types';
 
 const card: DepositBlock = {
@@ -77,5 +78,50 @@ describe('WhatTheHostIsHandedAndWhatComesBack', () => {
     const settled = afterDeposit({ ok: true, signature: '5xy', landed: 'pending' });
     assert.equal(settled.state, 'signed');
     assert.match(settled.note ?? '', /has not confirmed/);
+  });
+});
+
+describe('WhatTheAgentIsToldAfterASignature', () => {
+  const request: DepositRequest = {
+    poolId: 'sol:kamino:vault:AAA',
+    pool: 'Elemental USDC Turbo',
+    protocol: 'kamino',
+    poolKind: 'vault',
+    network: 'sol',
+    token: 'USDC',
+    amount: '12.0014',
+  };
+
+  test('a landed deposit is told as landed, with what it was', () => {
+    assert.deepEqual(settledOf(request, { ok: true, signature: '5xy', landed: 'landed' }), {
+      amount: '12.0014',
+      token: 'USDC',
+      pool: 'Elemental USDC Turbo',
+      status: 'landed',
+      signature: '5xy',
+      error: null,
+    });
+  });
+
+  test('a rejection carries the reason the chain gave', () => {
+    const told = settledOf(request, {
+      ok: true,
+      signature: '5xy',
+      landed: 'failed',
+      error: 'insufficient funds',
+    });
+    assert.equal(told?.status, 'failed');
+    assert.equal(told?.error, 'insufficient funds');
+  });
+
+  test('one still in the air is not called landed', () => {
+    assert.equal(settledOf(request, { ok: true, signature: '5xy', landed: 'pending' })?.status, 'sent');
+    assert.equal(settledOf(request, { ok: true, signature: '5xy' })?.status, 'sent');
+  });
+
+  test('nothing is told when nothing was signed', () => {
+    assert.equal(settledOf(request, { ok: false, reason: 'cancelled' }), null);
+    assert.equal(settledOf(request, undefined), null);
+    assert.equal(settledOf(request, { ok: true }), null, 'a deposit with no signature is not news');
   });
 });

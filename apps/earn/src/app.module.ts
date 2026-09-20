@@ -5,12 +5,17 @@ import {
   type OnApplicationShutdown,
   type OnModuleInit,
 } from '@nestjs/common';
-import { LendDeposits, type BuildDeposit, type LookUpLanding } from './application/deposits';
+import {
+  LendDeposits,
+  type BuildDeposit,
+  type LookUpLanding,
+  type ReadHoldings,
+} from './application/deposits';
 import { LendQueries } from './application/queries';
 import { CatalogRefresher, type Clock, type YieldSource } from './application/refresher';
 import { CatalogStore } from './application/store';
 import type { ListingPolicy } from './domain/catalog';
-import { buildersWith, landingsWith } from './infrastructure/builders';
+import { buildersWith, holdingsWith, landingsWith } from './infrastructure/builders';
 import { JsonApi } from './infrastructure/http';
 import { KaminoApi } from './infrastructure/kamino/api';
 import { KaminoSource } from './infrastructure/kamino/source';
@@ -25,6 +30,7 @@ export interface Built {
   clock?: Clock;
   builders?: Record<string, BuildDeposit>;
   landings?: Record<string, LookUpLanding>;
+  holdings?: Record<string, ReadHoldings>;
 }
 
 @Module({})
@@ -73,6 +79,7 @@ function providersFor(built: Built) {
           queries,
           built.builders ?? buildersWith(settings.solanaRpcUrl),
           built.landings ?? landingsWith(settings.solanaRpcUrl),
+          built.holdings ?? holdingsWith(settings.solanaRpcUrl),
         ),
       inject: [LendQueries, SETTINGS],
     },

@@ -126,6 +126,16 @@ export type DepositOutcome =
     }
   | { ok: false; reason: string };
 
+/** What the network did with a deposit, as the agent is told it. */
+export interface Settled {
+  amount: string;
+  token: string;
+  pool: string;
+  status: 'landed' | 'failed' | 'sent';
+  signature: string;
+  error?: string | null;
+}
+
 export interface ChoiceBlock {
   kind: 'choice';
   header: string;

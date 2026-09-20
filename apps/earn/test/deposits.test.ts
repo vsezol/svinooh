@@ -10,12 +10,19 @@ import { LendDeposits, type BuildDeposit, type BuiltDeposit } from '../src/appli
 import {
   AmountBelowMinimum,
   DepositNotSupported,
+  NotEnoughHeld,
   PoolNotFound,
 } from '../src/application/errors';
 import { LendQueries } from '../src/application/queries';
 import { CatalogStore } from '../src/application/store';
 import { buildCatalog } from '../src/domain/catalog';
-import { baseUnits, belowMinimum, type Deposit, type Landing } from '../src/domain/deposit';
+import {
+  baseUnits,
+  belowMinimum,
+  fitToHoldings,
+  type Deposit,
+  type Landing,
+} from '../src/domain/deposit';
 import type { Pool } from '../src/domain/pool';
 import { idOf } from '../src/domain/values';
 import { KaminoApi } from '../src/infrastructure/kamino/api';
@@ -48,8 +55,13 @@ const queriesOver = (...pools: Pool[]): LendQueries => {
   return new LendQueries(store);
 };
 
+const DEEP_POCKETS = { sol: async () => new Decimal('1000000') };
+
 const deposits = (builders: Record<string, BuildDeposit>, ...pools: Pool[]) =>
-  new LendDeposits(queriesOver(...pools), builders);
+  new LendDeposits(queriesOver(...pools), builders, {}, DEEP_POCKETS);
+
+const holding = (held: string, builders: Record<string, BuildDeposit>, ...pools: Pool[]) =>
+  new LendDeposits(queriesOver(...pools), builders, {}, { sol: async () => new Decimal(held) });
 
 const refused = async (build: () => Promise<unknown>): Promise<Error> => {
   try {
@@ -84,6 +96,95 @@ describe('WhatADepositIsWorth', () => {
     const strict = pool({ deposit: { ...pool().deposit, minAmount: new Decimal('100') } });
     assert.equal(belowMinimum({ pool: strict, amount: new Decimal('99.99'), owner: OWNER }), true);
     assert.equal(belowMinimum({ pool: strict, amount: new Decimal('100'), owner: OWNER }), false);
+  });
+});
+
+describe('WhatTheWalletActuallyHolds', () => {
+  const built = { 'sol:kamino': async () => TRANSACTION };
+
+  const amountFor = async (asked: string, held: string): Promise<string> => {
+    let seen = new Decimal(0);
+    const one = pool();
+    await holding(
+      held,
+      {
+        'sol:kamino': async (deposit) => {
+          seen = deposit.amount;
+          return TRANSACTION;
+        },
+      },
+      one,
+    ).build(idOf(one.id), new Decimal(asked), OWNER);
+    return seen.toString();
+  };
+
+  test('the figure a screen rounded up is not a deposit the wallet cannot pay', async () => {
+    assert.equal(await amountFor('12.0014', '12.001385'), '12.001385');
+  });
+
+  test('an amount the wallet can pay is the amount deposited', async () => {
+    assert.equal(await amountFor('5', '12.001385'), '5');
+    assert.equal(await amountFor('12.001385', '12.001385'), '12.001385');
+  });
+
+  test('asking for more than is there is refused, with what is there', async () => {
+    const one = pool();
+    const failure = await refused(() =>
+      holding('12.001385', built, one).build(idOf(one.id), new Decimal('20'), OWNER),
+    );
+    assert.ok(failure instanceof NotEnoughHeld);
+    assert.match(failure.message, /12\.001385 USDC/);
+    assert.match(failure.message, /20/);
+  });
+
+  test('an empty wallet is refused rather than rounded up to nothing', async () => {
+    const one = pool();
+    const failure = await refused(() =>
+      holding('0', built, one).build(idOf(one.id), new Decimal('12'), OWNER),
+    );
+    assert.ok(failure instanceof NotEnoughHeld);
+  });
+
+  test('the minimum is judged on what will really be sent', async () => {
+    const one = pool({ deposit: { ...pool().deposit, minAmount: new Decimal('10') } });
+    const failure = await refused(() =>
+      holding('9.999', built, one).build(idOf(one.id), new Decimal('10'), OWNER),
+    );
+    assert.ok(failure instanceof AmountBelowMinimum, failure.message);
+  });
+
+  test('a chain nobody can read holdings on builds as it always did', async () => {
+    let seen = new Decimal(0);
+    const one = pool();
+    await new LendDeposits(queriesOver(one), {
+      'sol:kamino': async (deposit) => {
+        seen = deposit.amount;
+        return TRANSACTION;
+      },
+    }).build(idOf(one.id), new Decimal('7'), OWNER);
+    assert.equal(seen.toString(), '7');
+  });
+});
+
+describe('FittingADepositToAWallet', () => {
+  const fit = (asked: string, held: string) =>
+    fitToHoldings({ pool: pool(), amount: new Decimal(asked), owner: OWNER }, new Decimal(held));
+
+  test('what fits is what was asked for', () => {
+    assert.deepEqual(fit('5', '12'), { amount: new Decimal('5') });
+  });
+
+  test('a whisker over becomes everything there is', () => {
+    assert.deepEqual(fit('12.0014', '12.001385'), { amount: new Decimal('12.001385') });
+  });
+
+  test('a real shortfall is a shortfall', () => {
+    const answer = fit('20', '12');
+    assert.ok('short' in answer && answer.short.toString() === '8');
+  });
+
+  test('nothing held is never a deposit', () => {
+    assert.ok('short' in fit('0.0001', '0'));
   });
 });
 
@@ -204,6 +305,7 @@ describe('TheDepositEndpoint', () => {
         landings: {
           sol: async (signature) => ({ signature, status: 'landed', slot: 42, error: null }),
         },
+        holdings: DEEP_POCKETS,
       }),
       { logger: false },
     );

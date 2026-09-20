@@ -4,7 +4,7 @@ from typing import Literal, Protocol
 
 from .domain.asking import Choice
 from .domain.conversation import Chat, Turn
-from .domain.earn import Deposit
+from .domain.earn import Deposit, Settled
 from .panel import PanelValues
 
 
@@ -55,6 +55,7 @@ class Ask:
     portfolio: str | None = None
     authorization: str | None = None
     pending_addresses: tuple[str, ...] | None = None
+    settled: Settled | None = None
 
 
 @dataclass(frozen=True)

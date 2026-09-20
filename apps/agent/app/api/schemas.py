@@ -3,10 +3,20 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class SettledIn(BaseModel):
+    amount: str = Field(max_length=64)
+    token: str = Field(max_length=32)
+    pool: str = Field(max_length=128)
+    status: Literal["landed", "failed", "sent"]
+    signature: str = Field(max_length=128)
+    error: str | None = Field(default=None, max_length=512)
+
+
 class ChatRequest(BaseModel):
     message: str
     session_id: str | None = Field(default=None, max_length=64)
     portfolio: str | None = Field(default=None, max_length=128)
+    settled: SettledIn | None = None
 
 
 class TextBlock(BaseModel):
