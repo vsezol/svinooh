@@ -262,6 +262,8 @@ class TestWhereToPutMoney:
         await run(bot)
         asked = model.prompts[0]
         assert "asking you to place the money" in asked
+        assert "neither of these is optional" in asked
+        assert "place nothing until each has an answer" in asked
         assert "name ONE pool" in asked
         assert "do not say anything has been done or sent" in asked
         assert "wallet address is not yours to ask for" in asked
