@@ -178,7 +178,9 @@ class LangGraphAgent:
         return await self._answer(system_prompt(self._config), state)
 
     async def _settled(self, state: AgentState) -> AgentState:
-        settled = state["settled"]
+        settled = state.get("settled")
+        if settled is None:
+            return await self._general(state)
         logger.info("deposit %s: %s", settled.status, settled.signature[:8])
         return await self._answer(settled_prompt(system_prompt(self._config), settled), state)
 
