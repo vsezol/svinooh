@@ -5,7 +5,7 @@ import type { TelegramConnectPollDto, TelegramConnectStartDto, WalletDto } from 
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { blockMatches, buildBlocks } from '../lib/blocks';
-import { armedCount, parseThreshold, useAlerts, type WalletAlerts } from '../lib/alerts';
+import { armedCount, cleanThreshold, parseThreshold, useAlerts, type WalletAlerts } from '../lib/alerts';
 import { walletName } from '../lib/format';
 import { Button, Card, Chevron, Display, Eyebrow, Note, NumberField, Switch, Tag } from '../ui';
 
@@ -27,8 +27,8 @@ function Setting({ title, note, children }: { title: string; note: string; child
  *
  * All of the behaviour — held as text while it is being edited, committed on
  * blur and on Enter, discarded on Escape, and never sent twice for one Enter —
- * is NumberField's. What is left here is what makes it a threshold: the digit
- * filter, the parse, and the unit sitting inside the box.
+ * is NumberField's, and what a threshold accepts is lib/alerts.ts's. What is
+ * left here is the unit sitting inside the box.
  */
 function Threshold({
   value,
@@ -52,9 +52,7 @@ function Threshold({
         spellCheck={false}
         value={value}
         parse={parseThreshold}
-        // Digits and ONE point: "8.0.5" is not a number, and Number() turns it
-        // into NaN, which cleared the field on somebody who was only mistyping
-        clean={(raw) => raw.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1')}
+        clean={cleanThreshold}
         onCommit={onCommit}
         style={{ width: 86, paddingRight: suffix ? 26 : undefined }}
       />

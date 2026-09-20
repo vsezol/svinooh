@@ -278,8 +278,13 @@ export function WalletRow({ wallet, actions, total, hideSmall, onRemove, onRenam
                   </Tooltip>
                 ) : null}
                 {b.typeLabel ? (
+                  // The pair rides with the kind, as one note: "LP cbBTC/USDC".
+                  // It is what the position IS, and an out-of-range one no
+                  // longer says it anywhere else — the price left the range, so
+                  // the table below holds one of the two tokens and names only
+                  // that one.
                   <span className="mono" style={NOTE}>
-                    {b.typeLabel}
+                    {b.pair ? `${b.typeLabel} ${b.pair}` : b.typeLabel}
                   </span>
                 ) : null}
                 {b.meta ? (

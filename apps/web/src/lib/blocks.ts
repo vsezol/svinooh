@@ -51,6 +51,13 @@ export interface Block {
   /** The network the position sits on, drawn beside its name */
   network: string | null;
   typeLabel: string | null;
+  /**
+   * The two tokens a pool is made of, as the protocol writes them:
+   * "cbBTC/USDC". What a position IS, where `meta` is only which one it is —
+   * and the thing an out-of-range position stops showing in its own table,
+   * because the price left the range and it now holds one of the two.
+   */
+  pair: string | null;
   meta: string | null;
   value: number;
   /** Yield as a fraction (0.42 = 42% APY) */
@@ -157,7 +164,7 @@ function legSignature(block: RawBlock): string {
 function foldDuplicates(blocks: RawBlock[]): RawBlock[] {
   const folded = new Map<string, RawBlock & { weightedApy: number; weightedBorrowApy: number }>();
   for (const block of blocks) {
-    const key = `${block.proto}|${block.typeLabel}|${block.meta}|${legSignature(block)}`;
+    const key = `${block.proto}|${block.typeLabel}|${block.pair}|${block.meta}|${legSignature(block)}`;
     const existing = folded.get(key);
     if (!existing) {
       folded.set(key, {
@@ -242,6 +249,22 @@ function toSections(block: RawBlock, isWallet: boolean): BlockSection[] {
 }
 
 /**
+ * What a pool is made of, said the way the protocol says it.
+ *
+ * The band is the first answer and the one that holds when the price has left
+ * the range: a position sitting entirely in USDC is still a cbBTC/USDC
+ * position, and its own table no longer shows that. Without a band, two
+ * supplied legs are a pair and can be written as one; anything else — one leg,
+ * three legs, a position whose legs never arrived — has no pair to name, and
+ * inventing one would be worse than the silence.
+ */
+function pairOf(position: PositionDto): string | null {
+  if (position.band?.pair) return position.band.pair;
+  const supplied = (position.tokens ?? []).filter((t) => t.role === 'supply');
+  return supplied.length === 2 ? `${supplied[0].symbol}/${supplied[1].symbol}` : null;
+}
+
+/**
  * Tokens (category 'token') are collected row by row into a single "Wallet" block;
  * each DeFi/staking position becomes a separate block, whose rows are the legs it
  * is made of — what's supplied, what has accrued (LP fees, rewards), what's borrowed.
@@ -305,6 +328,7 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
       // protocol, the detail and the range, and the long form crowds out the
       // things that differ between two positions of the same protocol
       typeLabel: isPoolKind(kind) ? 'LP' : kind.toUpperCase(),
+      pair: isPoolKind(kind) ? pairOf(p) : null,
       meta: join(p.note) || null,
       value: p.valueUsd,
       apy: p.apy ?? null,
@@ -326,6 +350,7 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
       // Its tokens each name their own network; the block itself is on none
       network: null,
       typeLabel: null,
+      pair: null,
       meta: null,
       value: walletValue,
       apy: null,
