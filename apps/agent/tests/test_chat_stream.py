@@ -39,6 +39,31 @@ class Model:
         yield reply
 
 
+class Asking(Model):
+    async def ainvoke(self, _messages, **_kwargs):
+        called, self._called = self._called, True
+
+        class Reply:
+            content = "Pick one and I will prepare it."
+            tool_calls = (
+                []
+                if called
+                else [
+                    {
+                        "name": "ask_the_user",
+                        "args": {
+                            "header": "Token",
+                            "question": "Which one do we place?",
+                            "options": ["USDC 12.00", "SOL 0.009"],
+                        },
+                        "id": "q1",
+                    }
+                ]
+            )
+
+        return Reply()
+
+
 class Failing:
     async def ainvoke(self, _messages, **_kwargs):
         raise RuntimeError("upstream is on fire")
@@ -185,6 +210,38 @@ class TestADepositOnTheWire:
         session = answered.json()["session_id"]
         reopened = await client.get(f"/chats/{session}", headers=who)
         assert [b["kind"] for b in reopened.json()["turns"][0]["blocks"]] == ["text", "deposit"]
+
+
+class TestAQuestionOnTheWire:
+    @pytest.fixture
+    def wired(self, meter):
+        return container(
+            model=Asking(),
+            limiter=meter,
+            intent="earn",
+            asked_to_place=True,
+            catalog=Catalog(),
+        )
+
+    async def test_it_rides_beside_the_answer(self, client):
+        answered = await client.post("/chat", json={"message": "put my money to work"})
+        blocks = answered.json()["blocks"]
+        assert [b["kind"] for b in blocks] == ["text", "choice"]
+        card = blocks[1]
+        assert card["header"] == "Token"
+        assert card["options"] == ["USDC 12.00", "SOL 0.009"]
+
+    async def test_the_stream_carries_it_too(self, client):
+        response = await client.post("/chat/stream", json={"message": "put my money to work"})
+        done = [data for name, data in parse(response.text) if name == "done"]
+        assert [b["kind"] for b in done[0]["blocks"]] == ["trace", "text", "choice"]
+
+    async def test_reopening_the_conversation_still_shows_it(self, client):
+        who = {ANON_HEADER: "anon-choice"}
+        answered = await client.post("/chat", json={"message": "put my money to work"}, headers=who)
+        session = answered.json()["session_id"]
+        reopened = await client.get(f"/chats/{session}", headers=who)
+        assert [b["kind"] for b in reopened.json()["turns"][0]["blocks"]] == ["text", "choice"]
 
 
 class TestTheReceipt:

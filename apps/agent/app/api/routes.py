@@ -192,7 +192,11 @@ async def chat_stream(
                     _taken(seen, data)
                 yield _event(name, data)
                 continue
-            answered = Answered(text=data["text"], deposit=data.get("deposit"))
+            answered = Answered(
+                text=data["text"],
+                deposit=data.get("deposit"),
+                choices=data.get("choices") or (),
+            )
             body = _answered(admitted.session_id, answered, _receipt(seen))
             await deps.turns.remember(
                 admitted,
