@@ -71,7 +71,9 @@ async function main() {
     }
     console.log(`\n=== ${kind}: ${pool.name} (${pool.id})`);
     const built = await build(pool);
-    console.log(`   built: ${built.instructions} instructions, ${built.transaction.length} b64 chars`);
+    const bytes = Buffer.from(built.transaction, 'base64').length;
+    const fits = bytes <= 1232 ? 'fits a packet' : 'TOO BIG for one packet';
+    console.log(`   built: ${built.instructions} instructions, ${bytes} bytes — ${fits}`);
     console.log(`   amount in base units reaches the program: ${carriesBaseUnits(built.transaction, pool)}`);
     const outcome = await simulate(built.transaction);
     console.log(`   err: ${JSON.stringify(outcome.err)}`);

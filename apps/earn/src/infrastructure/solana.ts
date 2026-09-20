@@ -1,22 +1,39 @@
 import type { BuiltDeposit, LookUpLanding } from '../application/deposits';
+import { DepositNotSupported } from '../application/errors';
+
+const PACKET_BYTES = 1232;
 
 export async function assemble(
   instructions: unknown[],
   owner: string,
   rpcUrl: string,
+  lookups: string[] = [],
 ): Promise<BuiltDeposit> {
   const kit = await import('@solana/kit');
   const rpc = kit.createSolanaRpc(rpcUrl);
   const signer = kit.createNoopSigner(kit.address(owner));
   const { value: blockhash } = await rpc.getLatestBlockhash().send();
-  const message = kit.pipe(
+  const written = kit.pipe(
     kit.createTransactionMessage({ version: 0 }),
     (m) => kit.setTransactionMessageFeePayerSigner(signer, m),
     (m) => kit.setTransactionMessageLifetimeUsingBlockhash(blockhash, m),
     (m) => kit.appendTransactionMessageInstructions(instructions as never[], m),
   );
+  const message = lookups.length
+    ? kit.compressTransactionMessageUsingAddressLookupTables(
+        written,
+        await kit.fetchAddressesForLookupTables(lookups.map(kit.address), rpc),
+      )
+    : written;
+  const transaction = kit.getBase64EncodedWireTransaction(kit.compileTransaction(message));
+  const bytes = Math.ceil((transaction.length * 3) / 4);
+  if (bytes > PACKET_BYTES) {
+    throw new DepositNotSupported(
+      `this deposit is ${bytes} bytes and a transaction may be ${PACKET_BYTES}`,
+    );
+  }
   return {
-    transaction: kit.getBase64EncodedWireTransaction(kit.compileTransaction(message)),
+    transaction,
     feePayer: owner,
     instructions: instructions.length,
     blockhash: blockhash.blockhash,
