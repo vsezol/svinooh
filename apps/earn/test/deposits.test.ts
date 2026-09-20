@@ -20,6 +20,7 @@ import {
   baseUnits,
   belowMinimum,
   fitToHoldings,
+  whyItWouldFail,
   type Deposit,
   type Landing,
 } from '../src/domain/deposit';
@@ -202,6 +203,41 @@ describe('FittingADepositToAWallet', () => {
 
   test('nothing held is never a deposit', () => {
     assert.ok('short' in fit('0.0001', '0'));
+  });
+});
+
+describe('WhyADepositWouldNotGoThrough', () => {
+  test('no SOL for the account it opens is said in SOL, not in lamports', () => {
+    const said = whyItWouldFail(
+      ['Program log: Instruction: InitializeUser', 'Transfer: insufficient lamports 1480221, need 5323840'],
+      'USDC',
+    );
+    assert.match(said, /0\.00532384 SOL/);
+    assert.match(said, /0\.001480221 SOL/);
+  });
+
+  test('no token to deposit names the token', () => {
+    assert.match(
+      whyItWouldFail(['Program log: Error: insufficient funds'], 'USDC'),
+      /does not hold enough USDC/,
+    );
+  });
+
+  test('anything else is quoted rather than guessed at', () => {
+    const said = whyItWouldFail(['Program KLend failed: custom program error: 0x1771'], 'USDC');
+    assert.match(said, /custom program error: 0x1771/);
+  });
+
+  test('a refusal with no logs is still a refusal', () => {
+    assert.equal(whyItWouldFail([], 'USDC'), 'the network refused it');
+  });
+
+  test('the first reason wins, so the rent is not buried under what it broke', () => {
+    const said = whyItWouldFail(
+      ['Transfer: insufficient lamports 1, need 2', 'Program Farms failed: custom program error: 0x1'],
+      'USDC',
+    );
+    assert.match(said, /rent/);
   });
 });
 

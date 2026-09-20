@@ -1,8 +1,12 @@
 import { Logger } from '@nestjs/common';
 import { Decimal } from 'decimal.js';
 import type { BuiltDeposit, LookUpLanding, ReadHoldings } from '../application/deposits';
+import { DepositNotSupported, DepositWouldFail } from '../application/errors';
+import { whyItWouldFail, type Deposit } from '../domain/deposit';
 import type { Pool } from '../domain/pool';
-import { DepositNotSupported } from '../application/errors';
+
+type Kit = typeof import('@solana/kit');
+type Rpc = ReturnType<Kit['createSolanaRpc']>;
 
 const PACKET_BYTES = 1232;
 
@@ -12,11 +16,12 @@ const NATIVE = 'So11111111111111111111111111111111111111112';
 const KEPT_BACK = new Decimal('0.01');
 
 export async function assemble(
+  deposit: Deposit,
   instructions: unknown[],
-  owner: string,
   rpcUrl: string,
   lookups: string[] = [],
 ): Promise<BuiltDeposit> {
+  const owner = deposit.owner;
   const kit = await import('@solana/kit');
   const rpc = kit.createSolanaRpc(rpcUrl);
   const signer = kit.createNoopSigner(kit.address(owner));
@@ -40,6 +45,7 @@ export async function assemble(
       `this deposit is ${bytes} bytes and a transaction may be ${PACKET_BYTES}`,
     );
   }
+  await tried(rpc, transaction, deposit.pool.token.symbol);
   return {
     transaction,
     feePayer: owner,
@@ -47,6 +53,25 @@ export async function assemble(
     blockhash: blockhash.blockhash,
     lastValidBlockHeight: String(blockhash.lastValidBlockHeight),
   };
+}
+
+/**
+ * The wallet will simulate this before it shows anybody a signature prompt,
+ * and a wallet that cannot simulate it says so in red. Better to find out here
+ * and say why in words than to hand somebody a transaction that burns a fee to
+ * fail. A simulator we cannot reach is not evidence, so it does not refuse.
+ */
+async function tried(rpc: Rpc, transaction: string, token: string): Promise<void> {
+  const outcome = await rpc
+    .simulateTransaction(transaction as never, {
+      encoding: 'base64',
+      sigVerify: false,
+      replaceRecentBlockhash: true,
+    })
+    .send()
+    .catch(() => null);
+  if (!outcome?.value?.err) return;
+  throw new DepositWouldFail(whyItWouldFail(outcome.value.logs ?? [], token));
 }
 
 export const landingsVia =

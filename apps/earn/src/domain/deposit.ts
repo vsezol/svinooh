@@ -33,6 +33,35 @@ export function fitToHoldings(deposit: Deposit, held: Decimal): Fit {
   return { short: asked.minus(held), held };
 }
 
+const LAMPORTS = new Decimal(10).pow(9);
+
+const SHORT_OF_RENT = /insufficient lamports (\d+), need (\d+)/;
+
+/**
+ * Why a simulated deposit did not go through, in words for somebody who has
+ * never read a program log. The two the chain gives most often are the two
+ * that stop a real deposit: no token to deposit, and no SOL to open the
+ * accounts it needs.
+ */
+export function whyItWouldFail(logs: readonly string[], token: string): string {
+  for (const line of logs) {
+    const rent = SHORT_OF_RENT.exec(line);
+    if (rent) {
+      const has = new Decimal(rent[1]).div(LAMPORTS);
+      const needs = new Decimal(rent[2]).div(LAMPORTS);
+      return (
+        `this deposit opens an account on the protocol and needs ${needs} SOL for its rent, ` +
+        `and this wallet has ${has} SOL to spare`
+      );
+    }
+    if (line.includes('Error: insufficient funds')) {
+      return `this wallet does not hold enough ${token} for this deposit`;
+    }
+  }
+  const failed = logs.filter((line) => line.includes('failed:')).pop();
+  return failed ? `the network refused it: ${failed}` : 'the network refused it';
+}
+
 export type LandingStatus = 'pending' | 'landed' | 'failed';
 
 export interface Landing {

@@ -19,3 +19,5 @@ export class DepositNotSupported extends EarnError {}
 export class AmountBelowMinimum extends EarnError {}
 
 export class NotEnoughHeld extends EarnError {}
+
+export class DepositWouldFail extends EarnError {}

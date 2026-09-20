@@ -11,6 +11,7 @@ import {
   CatalogNotReady,
   CatalogVersionGone,
   DepositNotSupported,
+  DepositWouldFail,
   EarnError,
   MalformedCursor,
   NotEnoughHeld,
@@ -74,6 +75,7 @@ const TRANSLATIONS: Array<[new (...args: never[]) => Error, Translation]> = [
   ],
   [AmountBelowMinimum, { status: 422, slug: 'amount-below-minimum', title: 'Amount below minimum' }],
   [NotEnoughHeld, { status: 422, slug: 'not-enough-held', title: 'Not enough in the wallet' }],
+  [DepositWouldFail, { status: 422, slug: 'deposit-would-fail', title: 'The deposit would fail' }],
 ];
 
 @Catch()
