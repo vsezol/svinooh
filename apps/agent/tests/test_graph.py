@@ -280,10 +280,50 @@ class TestWhereToPutMoney:
             await run(bot)
         assert "tool budget spent" in caplog.text, "a silent ceiling is a defect nobody can see"
 
+    async def test_a_question_comes_back_as_buttons(self):
+        asking = {
+            "name": "ask_the_user",
+            "args": {
+                "header": "Token",
+                "question": "Which one do we place?",
+                "options": ["USDC 12.00", "SOL 0.009"],
+            },
+            "id": "q1",
+        }
+        bot, _, _ = wire(
+            intent="earn",
+            catalog=Catalog(),
+            model=Model(tool_calls=[asking]),
+            asked_to_place=True,
+        )
+        out = await run(bot)
+        assert [choice.header for choice in out["choices"]] == ["Token"]
+        assert out["choices"][0].options == ("USDC 12.00", "SOL 0.009")
+
+    async def test_a_turn_that_asks_does_not_also_place(self):
+        both = [
+            {
+                "name": "ask_the_user",
+                "args": {"header": "Risk", "question": "How much?", "options": ["Low", "High"]},
+                "id": "q1",
+            },
+            {
+                "name": "propose_deposit",
+                "args": {"pool_id": "sol:kamino:vault:AAA", "amount": "250"},
+                "id": "d1",
+            },
+        ]
+        bot, _, _ = wire(
+            intent="earn", catalog=Catalog(), model=Model(tool_calls=both), asked_to_place=True
+        )
+        out = await run(bot)
+        assert out["choices"], "the question stands"
+        assert out["deposit"] is None, "a deposit chosen on a guess is the guess we removed"
+
     async def test_the_tool_that_prepares_a_deposit_is_there_either_way(self):
         bot, _, model = wire(intent="earn", catalog=Catalog(), model=Model(tool_calls=[EARN_CALL]))
         await run(bot)
-        assert model.tools_bound == ["earn_options", "propose_deposit"]
+        assert model.tools_bound == ["earn_options", "propose_deposit", "ask_the_user"]
         assert "prepare nothing until they answer it" in model.prompts[0]
 
     async def test_being_told_to_place_it_puts_the_deposit_on_the_reply(self):

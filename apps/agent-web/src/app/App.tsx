@@ -356,6 +356,13 @@ export function App(props: AppProps) {
     [send],
   );
 
+  const onChoose = useCallback(
+    (answer: string) => {
+      send(answer);
+    },
+    [send],
+  );
+
   const onSignIn = useCallback(
     (provider: string) => {
       if (variant === 'embedded') {
@@ -541,6 +548,7 @@ export function App(props: AppProps) {
                 }
                 onSignIn={onSignIn}
                 onAction={onAction}
+                onChoose={onChoose}
                 onDeposit={onDeposit}
                 onToggleTrace={() => toggleTrace(item.id)}
                 busy={busy}
@@ -630,6 +638,7 @@ export function App(props: AppProps) {
                         block={{ kind: 'text', text: streamed }}
                         onSignIn={onSignIn}
                         onAction={onAction}
+                        onChoose={onChoose}
                         busy
                       />
                     </AgentMessage>

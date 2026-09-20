@@ -176,7 +176,15 @@ ASKING = (
 )
 
 PLACING = (
-    "They are asking you to place the money, not to list options. So choose: "
+    "They are asking you to place the money, not to list options. Three things "
+    "decide a deposit — which token of theirs, how much of it, and how much "
+    "risk they want — and not one of them is yours to guess. What you can read "
+    "is not a question: the amounts are in front of you. What you cannot read, "
+    "you ask with buttons, and you ask it once: the token, when they hold more "
+    "than one thing and named none of them; the risk, when nothing they have "
+    "said tells you whether they want the safest or the highest rate. Ask both "
+    "in the same turn if both are missing, then stop and wait.\n"
+    "With the answers in hand, choose: "
     "name ONE pool you would stand behind and say in a sentence why that one. "
     "You need two things to prepare it and nothing else — which pool, and how "
     "much. Ask for the amount only if you do not have it; a reply that names "

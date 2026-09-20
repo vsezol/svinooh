@@ -2,6 +2,7 @@ import type {
   AgentBlock,
   BarsBlock,
   ChartBlock,
+  ChoiceBlock,
   ConfirmBlock,
   DepositBlock,
   DepositOutcome,
@@ -16,6 +17,7 @@ import type {
 } from '../../app/types';
 import BarsBlockView from './BarsBlock';
 import ChartBlockView from './ChartBlock';
+import ChoiceBlockView from './ChoiceBlock';
 import ConfirmBlockView, { type ConfirmAction } from './ConfirmBlock';
 import DepositBlockView from './DepositBlock';
 import LinksBlockView from './LinksBlock';
@@ -43,6 +45,8 @@ export interface BlockViewProps {
   /** Follows one of the places an answer leads. */
   onFollow?: (href: string) => void;
   onDeposit?: (request: DepositRequest) => Promise<DepositOutcome | void> | void;
+  /** Answers a question the agent put up as buttons. */
+  onChoose?: (answer: string) => void;
 }
 
 export default function BlockView({
@@ -53,6 +57,7 @@ export default function BlockView({
   onToggleTrace,
   onFollow,
   onDeposit,
+  onChoose,
 }: BlockViewProps) {
   // UnknownBlock widens `kind` to string, so the switch cannot narrow the
   // union on its own — each case asserts the member it matched.
@@ -77,6 +82,8 @@ export default function BlockView({
       return <SignInBlockView block={block as SignInBlock} onSignIn={onSignIn} />;
     case 'deposit':
       return <DepositBlockView block={block as DepositBlock} onDeposit={onDeposit} />;
+    case 'choice':
+      return <ChoiceBlockView block={block as ChoiceBlock} onChoose={onChoose} />;
     case 'confirm':
       return <ConfirmBlockView block={block as ConfirmBlock} onAction={onAction} busy={busy} />;
     default:

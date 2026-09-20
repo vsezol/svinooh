@@ -4,6 +4,7 @@ import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
+from ..domain.asking import Choice
 from ..domain.earn import Deposit
 from ..domain.errors import (
     EmptyMessageError,
@@ -24,6 +25,7 @@ logger = logging.getLogger("svinooh-ai")
 class Answered:
     text: str
     deposit: Deposit | None = None
+    choices: tuple[Choice, ...] = ()
 
 
 @dataclass(frozen=True)

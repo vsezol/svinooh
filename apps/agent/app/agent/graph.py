@@ -9,6 +9,7 @@ from langgraph.graph.state import CompiledStateGraph
 from ..adapters.earn import YieldCatalog
 from ..adapters.portfolio import PortfolioApiSource
 from ..config import Config
+from ..domain.asking import Choice
 from ..domain.conversation import Turn
 from ..domain.earn import Deposit
 from ..observability import metrics
@@ -37,7 +38,7 @@ from .prompts import (
 )
 from .steps import said, step
 from .streaming import turn_events
-from .tools import deposit_tools, earn_tools, portfolio_tools, run_tools
+from .tools import asking_tools, deposit_tools, earn_tools, portfolio_tools, run_tools
 
 logger = logging.getLogger("svinooh-ai")
 
@@ -52,6 +53,7 @@ class AgentState(TypedDict, total=False):
     asked_to_place: bool
     language: str
     deposit: Deposit | None
+    choices: tuple[Choice, ...]
     route: str
     target_portfolio: str
     answer: str
@@ -179,9 +181,16 @@ class LangGraphAgent:
             asked_to_place=asked_to_place,
         )
         prepared: list[Deposit] = []
-        tools = earn_tools(self._catalog) + deposit_tools(self._catalog, prepared)
+        asked: list[Choice] = []
+        tools = (
+            earn_tools(self._catalog) + deposit_tools(self._catalog, prepared) + asking_tools(asked)
+        )
         answered = await self._answer_with_tools(system, state, tools)
-        return {**answered, "deposit": prepared[-1] if prepared else None}
+        return {
+            **answered,
+            "deposit": None if asked else (prepared[-1] if prepared else None),
+            "choices": tuple(asked),
+        }
 
     async def _what_they_hold(self, state: AgentState) -> tuple[str, str]:
         target = state.get("portfolio")
@@ -389,4 +398,5 @@ def _reply(state: dict[str, Any]) -> Reply:
         pending_clear=bool(state.get("pending_clear")),
         portfolio_created=str(created) if created else None,
         deposit=state.get("deposit"),
+        choices=state.get("choices") or (),
     )

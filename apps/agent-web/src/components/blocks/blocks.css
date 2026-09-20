@@ -411,6 +411,29 @@
   color: var(--up);
 }
 
+.sv-a-b-choice-question {
+  font-size: 13px;
+  line-height: 1.45;
+  margin-top: 2px;
+}
+
+.sv-a-b-choice-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sv-a-b-choice[data-answered='yes'] .sv-a-b-choice-options {
+  opacity: 0.75;
+}
+
+.sv-a-b-choice-note {
+  font-size: 10.5px;
+  color: var(--mut);
+  margin-top: 8px;
+}
+
 .sv-a-b-confirm-actions {
   display: flex;
   gap: var(--sp-4);
