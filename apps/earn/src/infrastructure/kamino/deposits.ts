@@ -33,7 +33,7 @@ export async function buildKaminoDeposit(
       : kind === 'reserve'
         ? await intoReserve(klend, kit, rpc, signer, deposit)
         : refuse(kind);
-  return assemble(built.instructions, deposit.owner, rpcUrl, built.lookups);
+  return assemble(deposit, built.instructions, rpcUrl, built.lookups);
 }
 
 function refuse(kind: never): never {
