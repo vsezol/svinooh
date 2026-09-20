@@ -9,6 +9,7 @@ from app.agent.tools import (
     summarize_history,
     tool_phrase,
 )
+from app.domain.house import plain
 from app.domain.portfolio import WINDOW_MS
 from tests import fixtures as fx
 
@@ -258,6 +259,36 @@ class TestAskingInsteadOfGuessing:
         assert "not a question" in said
 
     def test_the_model_is_told_to_ask_only_for_what_it_cannot_read(self):
-        told = self.ask.description
+        told = " ".join(self.ask.description.split())
         assert "instead of guessing" in told
         assert "a token they already named is not a question" in told
+
+
+class TestNoEmojiSurvivesTheDoor:
+    def test_a_picture_is_taken_out_of_what_the_model_wrote(self):
+        assert plain("Выбирай ниже 👇") == "Выбирай ниже "
+        assert plain("риск 🟢 низкий") == "риск  низкий"
+
+    def test_the_words_and_their_spaces_are_left_alone(self):
+        said = "Impermanent loss is a drop against holding."
+        assert plain(said) == said
+
+    def test_a_question_comes_through_without_them(self):
+        asked: list = []
+        ask = asking_tools(asked)[0]
+        ask.invoke(
+            {
+                "header": "Токен 🪙",
+                "question": "Что размещаем? 👇",
+                "options": ["USDC 12.00 💵", "SOL 0.009"],
+            }
+        )
+        chosen = asked[0]
+        assert chosen.header == "Токен"
+        assert chosen.question == "Что размещаем?"
+        assert chosen.options == ("USDC 12.00", "SOL 0.009")
+
+    def test_the_model_is_told_to_name_the_choice_in_their_language(self):
+        told = " ".join(asking_tools([])[0].description.split())
+        assert "in the user's own language" in told
+        assert '"pick one below" says nothing' in told, "no chatter above the buttons"

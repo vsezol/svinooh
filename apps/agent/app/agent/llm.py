@@ -10,6 +10,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.runnables import Runnable
 
 from ..config import Role
+from ..domain.house import plain
 from ..observability import metrics
 from ..settings import Settings
 
@@ -129,9 +130,11 @@ def structured(model: BaseChatModel, schema: Any) -> Runnable[Any, Any]:
 
 def extract_text(reply: BaseMessage) -> str:
     if isinstance(reply.content, str):
-        return reply.content
-    return "".join(
-        block.get("text", "")
-        for block in reply.content
-        if isinstance(block, dict) and block.get("type") == "text"
+        return plain(reply.content)
+    return plain(
+        "".join(
+            block.get("text", "")
+            for block in reply.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
     )
