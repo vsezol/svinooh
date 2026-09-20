@@ -13,6 +13,7 @@ import {
   DepositNotSupported,
   EarnError,
   MalformedCursor,
+  NotEnoughHeld,
   PoolNotFound,
   SelectionMismatch,
 } from '../application/errors';
@@ -72,6 +73,7 @@ const TRANSLATIONS: Array<[new (...args: never[]) => Error, Translation]> = [
     { status: 422, slug: 'deposit-not-supported', title: 'Deposit not supported' },
   ],
   [AmountBelowMinimum, { status: 422, slug: 'amount-below-minimum', title: 'Amount below minimum' }],
+  [NotEnoughHeld, { status: 422, slug: 'not-enough-held', title: 'Not enough in the wallet' }],
 ];
 
 @Catch()

@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import type { DepositBlock, DepositOutcome, DepositRequest } from '../../app/types';
+import type { DepositBlock, DepositOutcome, DepositRequest, Settled } from '../../app/types';
 
 type State = 'idle' | 'working' | 'signed' | 'landed' | 'refused';
 
-interface Settled {
+interface Shown {
   state: State;
   note: string | null;
   signature: string | null;
@@ -16,7 +16,7 @@ interface Props {
 
 const REJECTED = 'the network rejected it — nothing left your wallet';
 
-export function afterDeposit(outcome: DepositOutcome | void): Settled {
+export function afterDeposit(outcome: DepositOutcome | void): Shown {
   if (outcome && outcome.ok === false) {
     return { state: 'refused', note: outcome.reason, signature: null };
   }
@@ -40,6 +40,23 @@ export function afterDeposit(outcome: DepositOutcome | void): Settled {
   return { state: 'signed', note: signature, signature };
 }
 
+export function settledOf(
+  request: DepositRequest,
+  outcome: DepositOutcome | void,
+): Settled | null {
+  if (!outcome || outcome.ok === false || !outcome.signature) return null;
+  const status =
+    outcome.landed === 'landed' ? 'landed' : outcome.landed === 'failed' ? 'failed' : 'sent';
+  return {
+    amount: request.amount,
+    token: request.token,
+    pool: request.pool,
+    status,
+    signature: outcome.signature,
+    error: status === 'failed' ? (outcome.error ?? null) : null,
+  };
+}
+
 export const requestOf = (block: DepositBlock): DepositRequest => ({
   poolId: block.poolId,
   pool: block.pool,
@@ -51,16 +68,16 @@ export const requestOf = (block: DepositBlock): DepositRequest => ({
 });
 
 export default function DepositBlockView({ block, onDeposit }: Props) {
-  const [settled, setSettled] = useState<Settled>({ state: 'idle', note: null, signature: null });
-  const { state, note, signature } = settled;
+  const [shown, setShown] = useState<Shown>({ state: 'idle', note: null, signature: null });
+  const { state, note, signature } = shown;
 
   const sign = async () => {
     if (!onDeposit || state === 'working') return;
-    setSettled({ state: 'working', note: null, signature: null });
+    setShown({ state: 'working', note: null, signature: null });
     try {
-      setSettled(afterDeposit(await onDeposit(requestOf(block))));
+      setShown(afterDeposit(await onDeposit(requestOf(block))));
     } catch (error) {
-      setSettled({
+      setShown({
         state: 'refused',
         note: error instanceof Error ? error.message : 'the wallet did not sign it',
         signature: null,

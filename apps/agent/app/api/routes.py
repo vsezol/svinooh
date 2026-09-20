@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from ..application.turns import Admitted, Answered, Question
 from ..container import Container
 from ..domain.asking import Choice
-from ..domain.earn import Deposit
+from ..domain.earn import Deposit, Settled
 from ..domain.identity import ANON_HEADER, Caller
 from ..observability import metrics
 from ..panel import NOTHING_DECIDED
@@ -66,7 +66,12 @@ async def ready(deps: Deps) -> JSONResponse:
 
 
 def _asked(body: ChatRequest) -> Question:
-    return Question(message=body.message, session_id=body.session_id, portfolio=body.portfolio)
+    return Question(
+        message=body.message,
+        session_id=body.session_id,
+        portfolio=body.portfolio,
+        settled=Settled(**body.settled.model_dump()) if body.settled else None,
+    )
 
 
 Drawn = TraceBlock | TextBlock | SignInBlock | DepositBlock | ChoiceBlock

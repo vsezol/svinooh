@@ -17,3 +17,5 @@ export class MalformedCursor extends EarnError {}
 export class DepositNotSupported extends EarnError {}
 
 export class AmountBelowMinimum extends EarnError {}
+
+export class NotEnoughHeld extends EarnError {}

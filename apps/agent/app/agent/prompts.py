@@ -1,4 +1,5 @@
 from ..config import Config
+from ..domain.earn import Settled
 from ..domain.onboarding import Created
 from ..domain.portfolio import Portfolio
 from .context import portfolio_context
@@ -200,6 +201,37 @@ PLACING = (
     "it when they sign. Say plainly that the funds stay in their wallet until "
     "they sign, and do not say anything has been done or sent."
 )
+
+
+SETTLED = (
+    "A deposit they signed has come back from the network. Tell them what "
+    "happened, in two sentences at most, and tell them the truth: money is "
+    "working only where the network confirmed it, a rejected deposit moved "
+    "nothing and cost them only the network fee, and one that has not "
+    "confirmed yet is not done. Where it failed, give the reason in words "
+    "somebody who does not read chain errors would understand, and say what "
+    "would make it work if you can see it in the reason. Say nothing about "
+    "rates, pools or amounts beyond what is written here, and do not offer a "
+    "new deposit in the same breath as a failure."
+)
+
+
+def settled_prompt(system: str, settled: Settled) -> str:
+    lines = [
+        f"- amount: {settled.amount} {settled.token}",
+        f"- pool: {settled.pool}",
+        f"- what the network did: {_OUTCOMES[settled.status]}",
+    ]
+    if settled.error:
+        lines.append(f"- the reason it was rejected: {settled.error}")
+    return f"{system}\n\n{SETTLED}\n" + "\n".join(lines)
+
+
+_OUTCOMES = {
+    "landed": "it went through, and the money is in the pool",
+    "failed": "it was rejected, and nothing left the wallet",
+    "sent": "it was sent and has not been confirmed yet",
+}
 
 
 def degraded_prompt(system: str) -> str:

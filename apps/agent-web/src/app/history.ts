@@ -114,8 +114,8 @@ export async function remove(input: ChatsInput, id: string): Promise<void> {
 function itemsOf(turn: ChatTurnWire, index: number): ChatItem[] {
   const stored = turn.blocks?.length ? turn.blocks : [{ kind: 'text', text: turn.a } as AgentBlock];
   const blocks = stored.map(asReceipt);
-  return [
-    { id: `${index}-q`, role: 'user', text: turn.q },
-    { id: `${index}-a`, role: 'agent', blocks },
-  ];
+  const agent: ChatItem = { id: `${index}-a`, role: 'agent', blocks };
+  // A turn the reader did not type — a deposit coming back from the network —
+  // is stored without a question, and reopens as the answer alone.
+  return turn.q ? [{ id: `${index}-q`, role: 'user', text: turn.q }, agent] : [agent];
 }

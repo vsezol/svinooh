@@ -88,6 +88,19 @@ class Deposit:
         return minimum is not None and self.amount < minimum
 
 
+SettledStatus = Literal["landed", "failed", "sent"]
+
+
+@dataclass(frozen=True, slots=True)
+class Settled:
+    amount: str
+    token: str
+    pool: str
+    status: SettledStatus
+    signature: str
+    error: str | None = None
+
+
 @dataclass(frozen=True, slots=True)
 class CatalogSnapshot:
     pools: tuple[YieldPool, ...]

@@ -1,8 +1,14 @@
 import type { Decimal } from 'decimal.js';
 import type { Catalog } from '../domain/catalog';
-import { belowMinimum, hasAccounts, type Deposit, type Landing } from '../domain/deposit';
+import {
+  belowMinimum,
+  fitToHoldings,
+  hasAccounts,
+  type Deposit,
+  type Landing,
+} from '../domain/deposit';
 import type { Pool } from '../domain/pool';
-import { AmountBelowMinimum, DepositNotSupported } from './errors';
+import { AmountBelowMinimum, DepositNotSupported, NotEnoughHeld } from './errors';
 import type { LendQueries } from './queries';
 
 export interface BuiltDeposit {
@@ -17,6 +23,8 @@ export type BuildDeposit = (deposit: Deposit) => Promise<BuiltDeposit>;
 
 export type LookUpLanding = (signature: string) => Promise<Landing>;
 
+export type ReadHoldings = (owner: string, pool: Pool) => Promise<Decimal>;
+
 export interface DepositAnswer {
   built: BuiltDeposit;
   catalog: Catalog;
@@ -29,6 +37,7 @@ export class LendDeposits {
     private readonly queries: LendQueries,
     private readonly builders: Record<string, BuildDeposit>,
     private readonly landings: Record<string, LookUpLanding> = {},
+    private readonly holdings: Record<string, ReadHoldings> = {},
   ) {}
 
   landing(network: string, signature: string): Promise<Landing> {
@@ -50,12 +59,24 @@ export class LendDeposits {
     if (!hasAccounts(pool)) {
       throw new DepositNotSupported(`the catalog has no deposit accounts for ${pool.name}`);
     }
-    const deposit: Deposit = { pool, amount, owner };
+    const deposit: Deposit = { pool, amount: await this.affordable(pool, amount, owner), owner };
     if (belowMinimum(deposit)) {
       throw new AmountBelowMinimum(
         `${pool.name} takes at least ${pool.deposit.minAmount} ${pool.token.symbol}`,
       );
     }
     return { built: await build(deposit), catalog };
+  }
+
+  private async affordable(pool: Pool, amount: Decimal, owner: string): Promise<Decimal> {
+    const read = this.holdings[pool.id.network];
+    if (!read) return amount;
+    const fit = fitToHoldings({ pool, amount, owner }, await read(owner, pool));
+    if ('short' in fit) {
+      throw new NotEnoughHeld(
+        `this wallet holds ${fit.held} ${pool.token.symbol} and the deposit asks for ${amount}`,
+      );
+    }
+    return fit.amount;
   }
 }

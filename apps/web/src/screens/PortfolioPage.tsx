@@ -10,6 +10,7 @@ import { AccountMenu } from '../components/AccountMenu';
 import type { AgentControl, ConversationRef } from '../components/agent/AgentEmbed';
 import { DepositDialog } from '../components/agent/DepositDialog';
 import { useDeposits } from '../components/agent/useDeposits';
+import type { DepositRequest } from '../lib/deposit';
 import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AlertSettings } from '../components/AlertSettings';
 import { AreaChart } from '../components/AreaChart';
@@ -87,9 +88,13 @@ const changeLabel = (change: Change): string =>
  * signs in a moment later; without refetching, `isOwner` would stay false and
  * the owner's controls wouldn't appear until a manual refresh.
  */
+/** How long the page stays on the fast cadence after money moves. */
+const CHASE_MS = 40_000;
+
 function usePortfolio(slug: string, viewerId: string | null) {
   const [data, setData] = useState<PortfolioDto | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  const [chaseUntil, setChaseUntil] = useState(0);
 
   const reload = useCallback(async () => {
     try {
@@ -121,18 +126,28 @@ function usePortfolio(slug: string, viewerId: string | null) {
     setError(null);
   }, [slug]);
 
+  /**
+   * Something just changed this portfolio on the chain — a deposit that
+   * landed. The rescan it asked for takes a few seconds, so the page reads
+   * again now and stays on the fast cadence until the new money shows up.
+   */
+  const chase = useCallback(() => {
+    setChaseUntil(Date.now() + CHASE_MS);
+    void reload();
+  }, [reload]);
+
   useEffect(() => {
     const hasPending = data?.wallets.some((w) => w.status === 'pending') ?? false;
     const id = window.setInterval(
       () => {
         if (!document.hidden) void reload();
       },
-      hasPending ? 3000 : 60_000,
+      hasPending || chaseUntil > Date.now() ? 3000 : 60_000,
     );
     return () => window.clearInterval(id);
-  }, [data, reload]);
+  }, [data, reload, chaseUntil]);
 
-  return { data, error, reload, patch };
+  return { data, error, reload, patch, chase };
 }
 
 /**
@@ -202,7 +217,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   // round trip through the router that would blank everything to a spinner.
   const [slug, setSlug] = useState(routeSlug);
   useEffect(() => setSlug(routeSlug), [routeSlug]);
-  const { data, error, reload, patch } = usePortfolio(slug, me?.id ?? null);
+  const { data, error, reload, patch, chase } = usePortfolio(slug, me?.id ?? null);
 
   const [tab, setTabState] = useState<Tab>(homeTab);
 
@@ -238,7 +253,16 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
    */
   const [conversations, setConversations] = useState<ConversationRef[]>([]);
   const agent = useRef<AgentControl | null>(null);
-  const { onDeposit, asked: askedToDeposit } = useDeposits();
+  const { onDeposit: askToDeposit, asked: askedToDeposit } = useDeposits();
+  // Money that reached the protocol is money this page is now wrong about.
+  const onDeposit = useCallback(
+    async (request: DepositRequest) => {
+      const outcome = await askToDeposit(request);
+      if (outcome.ok && outcome.landed === 'landed' && outcome.tracked) chase();
+      return outcome;
+    },
+    [askToDeposit, chase],
+  );
   const [scope, setScope] = useState<string>('all');
   const [period, setPeriod] = useState<HistoryRange>('24h');
   /** Whether pointing at a moment on one chart reads it on the others — see ChartSettings */

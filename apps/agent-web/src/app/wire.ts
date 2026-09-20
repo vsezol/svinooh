@@ -1,6 +1,6 @@
 import { identityHeaders } from './identity';
 import { WIRE_SCHEMA } from './types';
-import type { AgentBlock, ChatWire } from './types';
+import type { AgentBlock, ChatWire, Settled } from './types';
 
 /**
  * Status semantics: the HTTP status for server answers, 0 when the request
@@ -26,6 +26,7 @@ export interface SendChatInput {
   portfolio?: string;
   sessionId?: string;
   message: string;
+  settled?: Settled;
 }
 
 export interface SendChatResult {
@@ -59,6 +60,7 @@ export async function sendChat(input: SendChatInput): Promise<SendChatResult> {
         message: input.message,
         session_id: input.sessionId,
         portfolio: input.portfolio,
+        settled: input.settled,
       }),
     });
   } catch {
@@ -147,6 +149,7 @@ export async function streamChat(
         message: input.message,
         session_id: input.sessionId,
         portfolio: input.portfolio,
+        settled: input.settled,
       }),
     });
   } catch {

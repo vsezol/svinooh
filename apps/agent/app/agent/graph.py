@@ -11,7 +11,7 @@ from ..adapters.portfolio import PortfolioApiSource
 from ..config import Config
 from ..domain.asking import Choice
 from ..domain.conversation import Turn
-from ..domain.earn import Deposit
+from ..domain.earn import Deposit, Settled
 from ..observability import metrics
 from ..ports import Ask, Failed, Finished, Progress, Reply, Update
 from .context import earning_lines, idle_lines, positions_read
@@ -34,6 +34,7 @@ from .prompts import (
     in_language,
     nothing_proposed_prompt,
     onboarding_prompt,
+    settled_prompt,
     system_prompt,
 )
 from .steps import said, step
@@ -49,6 +50,7 @@ class AgentState(TypedDict, total=False):
     portfolio: str | None
     authorization: str | None
     pending_addresses: list[str] | None
+    settled: Settled | None
     intent: str
     asked_to_place: bool
     language: str
@@ -65,6 +67,7 @@ class AgentState(TypedDict, total=False):
 ANSWERING_NODES = (
     "general",
     "earn",
+    "settled",
     "grounded",
     "onboard",
     "create_portfolio",
@@ -121,19 +124,22 @@ class LangGraphAgent:
         return {"route": "classify_intent"}
 
     async def _classify_intent(self, state: AgentState) -> AgentState:
+        # A deposit coming back is not something the user typed, so its wording
+        # decides neither the branch nor the language: what they last wrote does.
+        asked = _last_question(state) if state.get("settled") else state["question"]
         try:
             async with step("route", "Reading the question"):
-                label = await self._intents.classify(state["question"], state.get("history", ()))
+                label = await self._intents.classify(asked, state.get("history", ()))
             logger.info(
                 "intent: %s%s (%s) q=%.80s",
                 label.intent,
                 f" {label.stance}",
                 label.reason,
-                state["question"],
+                asked,
             )
             metrics.counted(metrics.intents, intent=label.intent)
             return {
-                "intent": label.intent,
+                "intent": "settled" if state.get("settled") else label.intent,
                 "asked_to_place": label.stance == "placing",
                 "language": label.language,
             }
@@ -141,7 +147,7 @@ class LangGraphAgent:
             logger.warning("intent classifier failed (%r) — routing to portfolio", error)
             metrics.counted(metrics.intents, intent="unreadable")
             metrics.counted(metrics.errors, type="classifier")
-            return {"intent": "portfolio"}
+            return {"intent": "settled" if state.get("settled") else "portfolio"}
 
     async def _identity(self, state: AgentState) -> AgentState:
         hint = state.get("portfolio")
@@ -170,6 +176,13 @@ class LangGraphAgent:
 
     async def _general(self, state: AgentState) -> AgentState:
         return await self._answer(system_prompt(self._config), state)
+
+    async def _settled(self, state: AgentState) -> AgentState:
+        settled = state.get("settled")
+        if settled is None:
+            return await self._general(state)
+        logger.info("deposit %s: %s", settled.status, settled.signature[:8])
+        return await self._answer(settled_prompt(system_prompt(self._config), settled), state)
 
     async def _earn(self, state: AgentState) -> AgentState:
         asked_to_place = bool(state.get("asked_to_place"))
@@ -347,6 +360,7 @@ class LangGraphAgent:
         builder.add_node("classify_intent", self._classify_intent)
         builder.add_node("identity", self._identity)
         builder.add_node("general", self._general)
+        builder.add_node("settled", self._settled)
         builder.add_node("earn", self._earn)
         builder.add_node("grounded", self._grounded)
         builder.add_node("onboard", self._onboard)
@@ -367,7 +381,12 @@ class LangGraphAgent:
         builder.add_conditional_edges(
             "classify_intent",
             lambda state: state["intent"],
-            {"portfolio": "identity", "earn": "earn", "general": "general"},
+            {
+                "portfolio": "identity",
+                "earn": "earn",
+                "general": "general",
+                "settled": "settled",
+            },
         )
         builder.add_conditional_edges(
             "identity",
@@ -379,6 +398,11 @@ class LangGraphAgent:
         return builder.compile()
 
 
+def _last_question(state: AgentState) -> str:
+    spoken = [turn.q for turn in state.get("history", ()) if turn.q]
+    return spoken[-1] if spoken else state["question"]
+
+
 def _state(ask: Ask) -> AgentState:
     return {
         "question": ask.question,
@@ -386,6 +410,7 @@ def _state(ask: Ask) -> AgentState:
         "portfolio": ask.portfolio,
         "authorization": ask.authorization,
         "pending_addresses": list(ask.pending_addresses) if ask.pending_addresses else None,
+        "settled": ask.settled,
     }
 
 

@@ -1,7 +1,13 @@
-import type { BuiltDeposit, LookUpLanding } from '../application/deposits';
+import { Decimal } from 'decimal.js';
+import type { BuiltDeposit, LookUpLanding, ReadHoldings } from '../application/deposits';
 import { DepositNotSupported } from '../application/errors';
 
 const PACKET_BYTES = 1232;
+
+const NATIVE = 'So11111111111111111111111111111111111111112';
+
+/** Rent for the accounts a deposit opens, and the fee to send it. */
+const KEPT_BACK = new Decimal('0.01');
 
 export async function assemble(
   instructions: unknown[],
@@ -57,4 +63,24 @@ export const landingsVia =
     }
     const settled = seen.confirmationStatus === 'confirmed' || seen.confirmationStatus === 'finalized';
     return { signature, status: settled ? 'landed' : 'pending', slot, error: null };
+  };
+
+export const holdingsVia =
+  (rpcUrl: string): ReadHoldings =>
+  async (owner, pool) => {
+    const kit = await import('@solana/kit');
+    const rpc = kit.createSolanaRpc(rpcUrl);
+    const held = kit.address(owner);
+    if (pool.token.mint === NATIVE) {
+      const { value } = await rpc.getBalance(held).send();
+      const sol = new Decimal(String(value)).div(new Decimal(10).pow(9));
+      return Decimal.max(sol.minus(KEPT_BACK), 0);
+    }
+    const { value } = await rpc
+      .getTokenAccountsByOwner(held, { mint: kit.address(pool.token.mint) }, { encoding: 'jsonParsed' })
+      .send();
+    return value.reduce(
+      (all, one) => all.plus(new Decimal(one.account.data.parsed.info.tokenAmount.amount)),
+      new Decimal(0),
+    ).div(new Decimal(10).pow(pool.token.decimals ?? 0));
   };

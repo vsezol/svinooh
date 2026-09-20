@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ChatItem, Conversation, MountOptions, PortfolioRef, SignInBlock, TraceBlock } from './types';
+import type {
+  ChatItem,
+  Conversation,
+  DepositOutcome,
+  DepositRequest,
+  MountOptions,
+  PortfolioRef,
+  Settled,
+  SignInBlock,
+  TraceBlock,
+} from './types';
 import { useDesktop } from './useDesktop';
 import { WireError, streamChat, type StepEvent } from './wire';
 import { asReceipt, traceOf } from './trace';
@@ -18,6 +28,7 @@ import { ProLock } from '../components/ProLock';
 import { StatusLine } from '../components/StatusLine';
 import { SystemNote } from '../components/SystemNote';
 import { ThinkingPulse } from '../components/ThinkingPulse';
+import { settledOf } from '../components/blocks/DepositBlock';
 import { UserBubble } from '../components/UserBubble';
 import BlockView from '../components/blocks';
 
@@ -35,6 +46,9 @@ const OPENERS = [
   'My riskiest position?',
   'Explain impermanent loss',
 ];
+
+/** The turn a settled deposit opens: the facts ride beside it, not in it. */
+const CAME_BACK = 'a deposit came back from the network';
 
 const SIGNIN_TITLE = 'Sign in to see your portfolio';
 const SIGNIN_SUB = 'Portfolio answers need your account. General DeFi questions work without it.';
@@ -197,7 +211,7 @@ export function App(props: AppProps) {
   }, [refresh]);
 
   const ask = useCallback(
-    async (text: string) => {
+    async (text: string, settled?: Settled) => {
       lastQuestion.current = text;
       setBusy(true);
       setStreamed(null);
@@ -218,6 +232,7 @@ export function App(props: AppProps) {
             portfolio: slug,
             sessionId: activeRef.current.sessionId,
             message: text,
+            settled,
           },
           {
             onToken: (piece) => {
@@ -361,6 +376,22 @@ export function App(props: AppProps) {
       send(answer);
     },
     [send],
+  );
+
+  /**
+   * The wallet's answer, told to the agent as a fact rather than left for the
+   * reader to report. It reaches the service as the turn's own field, so what
+   * is said about a deposit is what the network did with it — a turn nobody
+   * typed, which is why no question is pushed here.
+   */
+  const deposit = useCallback(
+    async (request: DepositRequest): Promise<DepositOutcome | void> => {
+      const outcome = await onDeposit?.(request);
+      const settled = settledOf(request, outcome);
+      if (settled) void ask(CAME_BACK, settled);
+      return outcome;
+    },
+    [onDeposit, ask],
   );
 
   const onSignIn = useCallback(
@@ -549,7 +580,7 @@ export function App(props: AppProps) {
                 onSignIn={onSignIn}
                 onAction={onAction}
                 onChoose={onChoose}
-                onDeposit={onDeposit}
+                onDeposit={onDeposit ? deposit : undefined}
                 onToggleTrace={() => toggleTrace(item.id)}
                 busy={busy}
               />
