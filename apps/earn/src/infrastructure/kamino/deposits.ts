@@ -11,6 +11,13 @@ type Signer = ReturnType<Kit['createNoopSigner']>;
 
 const SLOT_DURATION_MS = 450;
 
+const NO_TABLE = '11111111111111111111111111111111';
+
+interface Built {
+  instructions: unknown[];
+  lookups: string[];
+}
+
 export async function buildKaminoDeposit(
   deposit: Deposit,
   rpcUrl: string,
@@ -20,20 +27,20 @@ export async function buildKaminoDeposit(
   const rpc = kit.createSolanaRpc(rpcUrl) as unknown as SdkRpc;
   const signer = kit.createNoopSigner(kit.address(deposit.owner));
   const kind = deposit.pool.id.kind;
-  const instructions =
+  const built =
     kind === 'vault'
       ? await intoVault(klend, rpc, signer, deposit)
       : kind === 'reserve'
         ? await intoReserve(klend, kit, rpc, signer, deposit)
         : refuse(kind);
-  return assemble(instructions, deposit.owner, rpcUrl);
+  return assemble(built.instructions, deposit.owner, rpcUrl, built.lookups);
 }
 
 function refuse(kind: never): never {
   throw new DepositNotSupported(`kamino ${kind} pools are not wired for deposits here yet`);
 }
 
-async function intoVault(klend: Sdk, rpc: SdkRpc, signer: Signer, deposit: Deposit) {
+async function intoVault(klend: Sdk, rpc: SdkRpc, signer: Signer, deposit: Deposit): Promise<Built> {
   const terms = deposit.pool.deposit;
   const vault = new klend.KaminoVault(
     rpc,
@@ -47,10 +54,24 @@ async function intoVault(klend: Sdk, rpc: SdkRpc, signer: Signer, deposit: Depos
   const reserves = await client.loadVaultReserves(state);
   const farm = await client.loadVaultFarmState(state);
   const ixs = await client.depositIxs(signer, vault, deposit.amount, reserves, farm, null);
-  return [...ixs.depositIxs, ...ixs.stakeInFarmIfNeededIxs, ...ixs.stakeInFlcFarmIfNeededIxs];
+  const table = String(state.vaultLookupTable);
+  return {
+    instructions: [
+      ...ixs.depositIxs,
+      ...ixs.stakeInFarmIfNeededIxs,
+      ...ixs.stakeInFlcFarmIfNeededIxs,
+    ],
+    lookups: table && table !== NO_TABLE ? [table] : [],
+  };
 }
 
-async function intoReserve(klend: Sdk, kit: Kit, rpc: SdkRpc, signer: Signer, deposit: Deposit) {
+async function intoReserve(
+  klend: Sdk,
+  kit: Kit,
+  rpc: SdkRpc,
+  signer: Signer,
+  deposit: Deposit,
+): Promise<Built> {
   const market = deposit.pool.deposit.lendingMarket;
   if (!market) {
     throw new DepositNotSupported(`${deposit.pool.name} did not come with its lending market`);
@@ -67,10 +88,13 @@ async function intoReserve(klend: Sdk, kit: Kit, rpc: SdkRpc, signer: Signer, de
     scopeRefreshConfig: undefined,
     currentLedgerInstant: await klend.getCurrentLedgerInstant(rpc),
   });
-  return [
-    ...action.computeBudgetIxs,
-    ...action.setupIxs,
-    ...action.lendingIxs,
-    ...action.cleanupIxs,
-  ];
+  return {
+    instructions: [
+      ...action.computeBudgetIxs,
+      ...action.setupIxs,
+      ...action.lendingIxs,
+      ...action.cleanupIxs,
+    ],
+    lookups: [],
+  };
 }
