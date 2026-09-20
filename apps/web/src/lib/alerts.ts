@@ -100,6 +100,25 @@ export function armedCount(
 }
 
 /**
+ * What may be typed into a threshold, as it is typed.
+ *
+ * A comma IS a decimal point: it is the separator on a Russian keyboard and
+ * the one most phone keypads offer. It used to be deleted along with every
+ * other stray character, which turned "0,5" into 5 and "5,5" into 55 — so the
+ * field looked like it would only take whole numbers, and quietly saved a
+ * threshold ten times the one that was meant.
+ *
+ * Then digits and ONE point. "8.0.5" is not a number, Number() turns it into
+ * NaN, and a NaN cleared the field on somebody who was only mistyping.
+ */
+export function cleanThreshold(raw: string): string {
+  return raw
+    .replace(/,/g, '.')
+    .replace(/[^0-9.]/g, '')
+    .replace(/(\..*)\./g, '$1');
+}
+
+/**
  * What the box holds → what the contract carries. Blank means nobody is watching.
  *
  * Rounded to hundredths, because that is the precision these thresholds are
