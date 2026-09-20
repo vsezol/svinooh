@@ -108,7 +108,7 @@ class Turns:
         answered = await self._applied(reply, admitted)
         metrics.counted(metrics.turns, outcome="answered")
         metrics.timed(metrics.turn_duration, time.perf_counter() - started)
-        return Answered(text=answered, deposit=reply.deposit)
+        return Answered(text=answered, deposit=reply.deposit, choices=reply.choices)
 
     async def watch(self, admitted: Admitted) -> AsyncIterator[tuple[str, dict]]:
         started = time.perf_counter()
@@ -124,6 +124,7 @@ class Turns:
                                 {
                                     "text": await self._applied(reply, admitted),
                                     "deposit": reply.deposit,
+                                    "choices": reply.choices,
                                 },
                             )
                             metrics.counted(metrics.turns, outcome="answered")
