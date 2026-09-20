@@ -153,6 +153,23 @@ describe('WhatTheWalletActuallyHolds', () => {
     assert.ok(failure instanceof AmountBelowMinimum, failure.message);
   });
 
+  test('a chain nobody could reach builds what was asked for rather than refusing', async () => {
+    let seen = new Decimal(0);
+    const one = pool();
+    await new LendDeposits(
+      queriesOver(one),
+      {
+        'sol:kamino': async (deposit) => {
+          seen = deposit.amount;
+          return TRANSACTION;
+        },
+      },
+      {},
+      { sol: async () => null },
+    ).build(idOf(one.id), new Decimal('12.0014'), OWNER);
+    assert.equal(seen.toString(), '12.0014');
+  });
+
   test('a chain nobody can read holdings on builds as it always did', async () => {
     let seen = new Decimal(0);
     const one = pool();

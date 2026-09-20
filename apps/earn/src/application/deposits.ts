@@ -23,7 +23,8 @@ export type BuildDeposit = (deposit: Deposit) => Promise<BuiltDeposit>;
 
 export type LookUpLanding = (signature: string) => Promise<Landing>;
 
-export type ReadHoldings = (owner: string, pool: Pool) => Promise<Decimal>;
+/** What the owner holds of the pool's token, or null when nobody could look. */
+export type ReadHoldings = (owner: string, pool: Pool) => Promise<Decimal | null>;
 
 export interface DepositAnswer {
   built: BuiltDeposit;
@@ -71,7 +72,11 @@ export class LendDeposits {
   private async affordable(pool: Pool, amount: Decimal, owner: string): Promise<Decimal> {
     const read = this.holdings[pool.id.network];
     if (!read) return amount;
-    const fit = fitToHoldings({ pool, amount, owner }, await read(owner, pool));
+    // A chain nobody could reach is not evidence of an empty wallet: refuse on
+    // what a balance says, never on the silence where one should have been.
+    const held = await read(owner, pool);
+    if (held === null) return amount;
+    const fit = fitToHoldings({ pool, amount, owner }, held);
     if ('short' in fit) {
       throw new NotEnoughHeld(
         `this wallet holds ${fit.held} ${pool.token.symbol} and the deposit asks for ${amount}`,
