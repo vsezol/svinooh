@@ -8,6 +8,7 @@ from ..adapters.earn import YieldCatalog
 from ..adapters.portfolio import DataSource
 from ..domain.asking import MAX_ANSWERS, MIN_ANSWERS, Choice
 from ..domain.earn import CatalogSnapshot, Deposit, YieldPool
+from ..domain.house import plain
 from ..domain.portfolio import History, Period, Portfolio, total_of
 from ..observability import metrics
 from .context import position_line, short_address, usd
@@ -99,20 +100,23 @@ def asking_tools(asked: list[Choice]) -> list:
         Call it instead of guessing anything you need and do not have: which
         token of theirs to place, how much risk they want, which pool of two
         you cannot choose between. `header` is one or two words naming what is
-        being chosen ("Token", "Risk"). `question` is the question itself, one
-        sentence, in their language. `options` are two to four answers, each a
+        being chosen, in the user's own language — "Токен", "Риск" for somebody
+        writing Russian. `question` is the question itself, one sentence, in
+        that same language. `options` are two to four answers, each a
         short phrase they can tap — name the real thing, with the figure where
         there is one: "USDC 12.00", not "the stablecoin".
 
         Ask only for what you cannot read: the amounts are in front of you, and
         a token they already named is not a question. Call it twice in a turn
         for two things, and never for more. Then stop and wait: prepare
-        nothing, propose nothing, and say at most one line above the buttons.
+        nothing, propose nothing, and write a line above the buttons only when
+        it says something the question does not — "pick one below" says
+        nothing.
         """
         chosen = Choice(
-            header=header.strip(),
-            question=question.strip(),
-            options=tuple(option.strip() for option in options if option.strip()),
+            header=plain(header).strip(),
+            question=plain(question).strip(),
+            options=tuple(plain(option).strip() for option in options if plain(option).strip()),
         )
         if not chosen.question:
             return "A question with no words is not a question. Call again with one."
