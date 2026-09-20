@@ -1,16 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  buildDeposit,
-  followDeposit,
-  type DepositOutcome,
-  type DepositRequest,
-} from '../../lib/deposit';
+import type { DepositOutcome, DepositRequest } from '../../lib/deposit';
+import { runDeposit, type DepositStage } from '../../lib/deposit/run';
 import { useDepositWallets, type DepositWallet } from '../../lib/deposit/wallet';
 import { Button, Dialog, Note } from '../../ui';
 
-type Stage = 'choosing' | 'building' | 'signing' | 'landing';
+type Stage = 'choosing' | DepositStage;
 
 const STAGE: Record<Stage, string> = {
   choosing: '',
@@ -33,34 +29,13 @@ export function DepositDialog({
 
   const deposit = async (wallet: DepositWallet) => {
     setFailed(null);
-    let signer;
-    try {
-      signer = await wallet.connect();
-    } catch (error) {
-      setFailed(why(error, `${wallet.name} did not connect`));
+    const run = await runDeposit({ request, wallet, onStage: setStage, onSent: setSent });
+    if ('failed' in run) {
+      setStage('choosing');
+      setFailed(run.failed);
       return;
     }
-    try {
-      setStage('building');
-      const built = await buildDeposit(request, signer.address);
-      setStage('signing');
-      const signature = await signer.signAndSend(built.transaction);
-      setSent(signature);
-      setStage('landing');
-      const seen = await followDeposit(signature, signer.address, request.network).catch(
-        () => null,
-      );
-      settle({
-        ok: true,
-        signature,
-        landed: seen?.status,
-        tracked: seen?.tracked,
-        error: seen?.error ?? null,
-      });
-    } catch (error) {
-      setStage('choosing');
-      setFailed(why(error, 'the deposit was not sent'));
-    }
+    settle(run.done);
   };
 
   return (
@@ -98,9 +73,4 @@ export function DepositDialog({
       {failed ? <Note style={{ color: 'var(--down)' }}>{failed}</Note> : null}
     </Dialog>
   );
-}
-
-function why(error: unknown, fallback: string): string {
-  const said = error instanceof Error ? error.message : '';
-  return said || fallback;
 }
