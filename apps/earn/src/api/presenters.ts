@@ -1,6 +1,7 @@
 import { Decimal } from 'decimal.js';
 import type { BuiltTransaction } from '../application/deposits';
 import type { Landing } from '../domain/deposit';
+import type { Coin } from '../domain/move';
 import type { Catalog } from '../domain/catalog';
 import { isStale } from '../domain/catalog';
 import { net, type Pool } from '../domain/pool';
@@ -146,7 +147,17 @@ export function builtTransaction(built: BuiltTransaction) {
     instructions: built.instructions,
     blockhash: built.blockhash,
     last_valid_block_height: built.lastValidBlockHeight,
-    ...(built.then ? { then: { pool_id: built.then.poolId, amount: built.then.amount } } : {}),
+    ...(built.then
+      ? {
+          then: {
+            ...(built.then.poolId ? { pool_id: built.then.poolId } : {}),
+            amount: built.then.amount,
+            ...(built.then.payWith ? { pay_with: built.then.payWith } : {}),
+            ...(built.then.receiveAs ? { receive_as: built.then.receiveAs } : {}),
+            holding: built.then.holding,
+          },
+        }
+      : {}),
   };
 }
 
@@ -164,5 +175,14 @@ export function landing(seen: Landing) {
     status: seen.status,
     slot: seen.slot,
     error: seen.error,
+  };
+}
+
+export function coin(found: Coin) {
+  return {
+    symbol: found.symbol,
+    mint: found.mint,
+    decimals: found.decimals,
+    program: found.program,
   };
 }

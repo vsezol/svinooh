@@ -23,7 +23,7 @@ from app.application.sessions import SessionStore
 from app.application.turns import Turns
 from app.config import Config
 from app.container import Container
-from app.domain.earn import CatalogSnapshot, DepositTerms, Held, YieldPool
+from app.domain.earn import CatalogSnapshot, Coin, DepositTerms, Held, YieldPool
 from app.panel import NOTHING_DECIDED, PanelValues
 from app.settings import Settings
 
@@ -100,6 +100,8 @@ class Catalog:
         self.looked_up: list[str] = []
         self.held: tuple[Held, ...] = ()
         self.owners: list[str] = []
+        self.coins: dict[str, Coin] = {}
+        self.coins_asked: list[tuple[str, tuple[str, ...]]] = []
         self.terms = DepositTerms(
             program_id="KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
             address="AAAvaultAAA",
@@ -124,6 +126,10 @@ class Catalog:
     async def positions(self, owner: str) -> tuple[Held, ...]:
         self.owners.append(owner)
         return self.held
+
+    async def coin(self, query: str, owners: tuple[str, ...]) -> Coin | None:
+        self.coins_asked.append((query, owners))
+        return self.coins.get(query.upper())
 
 
 class NoHost:

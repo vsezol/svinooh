@@ -51,12 +51,14 @@ export function settledOf(
   request: DepositRequest,
   outcome: DepositOutcome | void,
 ): Settled | null {
+  const { spent, ends } = coinsOf(request);
   const what = {
     amount: request.amount,
-    token: request.token,
+    token: spent,
     pool: request.pool,
     action: request.action ?? 'deposit',
     from_pool: request.fromPool ?? null,
+    ...(ends !== spent ? { into: ends } : {}),
   };
   if (!outcome) return null;
   if (outcome.ok === false) {
@@ -72,9 +74,24 @@ export function settledOf(
     status,
     signature: outcome.signature,
     error: status === 'failed' || outcome.halfway ? (outcome.error ?? null) : null,
-    ...(outcome.halfway ? { halfway: true } : {}),
+    ...(outcome.halfway ? { halfway: true, holding: outcome.holding ?? null } : {}),
   };
 }
+
+/**
+ * What a card spends and what it ends as: the coin it pays with, or the
+ * token a move leaves, or the pool's own — and the coin a withdrawal is taken
+ * out as, or the pool's own.
+ */
+const coinsOf = (card: {
+  token: string;
+  fromToken?: string | null;
+  payWith?: { symbol: string } | null;
+  receiveAs?: { symbol: string } | null;
+}) => ({
+  spent: card.payWith?.symbol ?? card.fromToken ?? card.token,
+  ends: card.receiveAs?.symbol ?? card.token,
+});
 
 export const requestOf = (block: DepositBlock): DepositRequest => ({
   poolId: block.poolId,
@@ -87,6 +104,9 @@ export const requestOf = (block: DepositBlock): DepositRequest => ({
   action: block.action ?? 'deposit',
   ...(block.fromPoolId ? { fromPoolId: block.fromPoolId } : {}),
   ...(block.fromPool ? { fromPool: block.fromPool } : {}),
+  ...(block.fromToken ? { fromToken: block.fromToken } : {}),
+  ...(block.payWith ? { payWith: block.payWith } : {}),
+  ...(block.receiveAs ? { receiveAs: block.receiveAs } : {}),
 });
 
 const EYEBROW = {
@@ -98,24 +118,38 @@ const EYEBROW = {
 const PRESS = {
   deposit: 'Deposit from my wallet',
   withdraw: 'Withdraw to my wallet',
-  move: 'Move it, one signature',
+  move: 'Move it',
 } as const;
 
 const PROMISE = {
-  deposit: 'Your money goes straight to the protocol. Nothing moves until you sign.',
-  withdraw: 'The money comes back to your wallet. Nothing moves until you sign.',
-  move: 'Out of one pool and into the other. Nothing moves until you sign.',
+  deposit: 'Your money goes straight to the protocol.',
+  withdraw: 'The money comes back to your wallet.',
+  move: 'Out of one pool and into the other.',
 } as const;
 
 /**
+ * What the card promises under its button. A swap on the way is said, and so
+ * is what it can cost in taps: when one transaction cannot hold it all, the
+ * wallet asks for a signature per step.
+ */
+export const promiseOf = (block: DepositBlock): string => {
+  const { spent, ends } = coinsOf(block);
+  const swapped =
+    spent !== ends
+      ? ` ${spent} becomes ${ends} on the way, and your wallet may ask you to sign more than once.`
+      : '';
+  return `${PROMISE[block.action ?? 'deposit']}${swapped} Nothing moves until you sign.`;
+};
+
+/**
  * What the card shows as its amount: the figure, even when what it asks for is
- * "all", in the token it is counted in — the one a move leaves, when it swaps.
+ * "all", in the token it is counted in — what it spends — and, when it swaps,
+ * what that becomes.
  */
 export const sizeOf = (block: DepositBlock): string => {
-  const counted = block.fromToken ?? block.token;
+  const { spent, ends } = coinsOf(block);
   const figure = block.amount === 'all' ? (block.shown ?? 'All') : block.amount;
-  const swapped = block.fromToken && block.fromToken !== block.token ? ` → ${block.token}` : '';
-  return `${figure} ${counted}${swapped}`;
+  return `${figure} ${spent}${ends !== spent ? ` → ${ends}` : ''}`;
 };
 
 export default function DepositBlockView({ block, onDeposit }: Props) {
@@ -144,7 +178,7 @@ export default function DepositBlockView({ block, onDeposit }: Props) {
       ? (note ?? 'not signed')
       : done
         ? null
-        : PROMISE[action];
+        : promiseOf(block);
 
   return (
     <div className="sv-a-b-card sv-a-b-deposit" data-state={state}>

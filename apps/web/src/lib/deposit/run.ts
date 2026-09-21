@@ -1,3 +1,4 @@
+import type { DepositStepDto } from '@svinooh/shared';
 import { buildDeposit, followDeposit } from './index';
 import type { DepositOutcome, DepositRequest, DepositStopped } from './types';
 import type { DepositWallet } from './wallet';
@@ -36,36 +37,43 @@ export async function runDeposit({
     // thing to say rather than a thing to retry.
     return { failed: why(error, 'the deposit could not be prepared'), at: 'build' };
   }
-  let first;
+  let last;
   try {
-    first = await signed(built.transaction);
+    last = await signed(built.transaction);
   } catch (error) {
     return { failed: why(error, 'the deposit was not sent'), at: 'wallet' };
   }
-  if (!built.then || first.landed !== 'landed') return { done: first };
 
-  // One transaction could not hold the whole move: the money is out and
-  // swapped, and the second half is the deposit of what the swap was bound
-  // to pay. It is built only now, against a wallet that has it.
-  const after = built.then;
-  const halfway = (reason: string): DepositRun => ({
-    done: { ...first, halfway: true, error: reason },
-  });
-  let second;
-  try {
-    onStage?.('continuing');
-    second = await buildDeposit(
-      { ...request, action: 'deposit', poolId: after.poolId, amount: after.amount },
-      signer.address,
-    );
-  } catch (error) {
-    return halfway(why(error, 'the deposit could not be prepared'));
+  // One transaction could not hold it all: the money has left where it was,
+  // and each step after is built only now, against a wallet that has what
+  // the one before it left there. A step that cannot be built, signed or
+  // landed leaves the money in the wallet, and that is said rather than
+  // called a failure of the whole.
+  let asked = request;
+  for (let steps = 1; built.then && last.landed === 'landed'; steps++) {
+    const after = built.then;
+    const reached = last;
+    const halfway = (reason: string): DepositRun => ({
+      done: { ...reached, halfway: true, error: reason, holding: after.holding },
+    });
+    if (steps === MOST_STEPS) return halfway('it took more steps than one button should');
+    asked = stepAfter(asked, after);
+    try {
+      onStage?.('continuing');
+      built = await buildDeposit(asked, signer.address);
+    } catch (error) {
+      return halfway(why(error, 'the next step could not be prepared'));
+    }
+    let landed;
+    try {
+      landed = await signed(built.transaction);
+    } catch (error) {
+      return halfway(why(error, 'the next step was not sent'));
+    }
+    if (landed.landed === 'failed') return halfway(landed.error ?? 'the network rejected the next step');
+    last = landed;
   }
-  try {
-    return { done: await signed(second.transaction) };
-  } catch (error) {
-    return halfway(why(error, 'the deposit was not sent'));
-  }
+  return { done: last };
 
   async function signed(transaction: string): Promise<DepositOutcome & { ok: true }> {
     onStage?.('signing');
@@ -83,6 +91,28 @@ export async function runDeposit({
       error: seen?.error ?? null,
     };
   }
+}
+
+/** Out, swap, in: the most there is to a move, and one to spare. */
+const MOST_STEPS = 4;
+
+/**
+ * What to ask for after a step that landed: what it left in the wallet, and
+ * where that goes next — into a pool, swapped on the way when it is not the
+ * pool's own token, or swapped into the coin the whole thing ends as.
+ */
+export function stepAfter(request: DepositRequest, then: DepositStepDto): DepositRequest {
+  return {
+    ...request,
+    action: then.poolId ? 'deposit' : 'swap',
+    poolId: then.poolId ?? request.poolId,
+    amount: then.amount,
+    fromPoolId: undefined,
+    payWith: then.payWith ? { mint: then.payWith, symbol: then.holding } : undefined,
+    receiveAs: then.receiveAs
+      ? { mint: then.receiveAs, symbol: request.receiveAs?.symbol ?? then.receiveAs }
+      : undefined,
+  };
 }
 
 function why(error: unknown, fallback: string): string {

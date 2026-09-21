@@ -6,7 +6,7 @@ import pytest
 from app.agent.context import without_what_the_chain_read
 from app.agent.onboarding import create_portfolio_with_wallets
 from app.domain.conversation import Turn
-from app.domain.earn import Held, YieldPool
+from app.domain.earn import Coin, Held, YieldPool
 from app.domain.portfolio import Leg, Me, Portfolio, PortfolioRef, Position, Wallet
 from app.ports import Ask, Failed, Finished, Progress
 from tests import fixtures as fx
@@ -798,7 +798,7 @@ class TestMovingMoney:
         (card,) = out["deposits"]
         assert (card.source.token, card.pool.token) == ("USDC", "JitoSOL")
         said = str(model.seen[-1].content)
-        assert "swapped from USDC to JitoSOL" in said and "sign twice" in said
+        assert "swapped from USDC to JitoSOL" in said and "sign more than once" in said
         assert "12.001555 USDC out of USDC Prime" in said, "the amount is in the token it leaves"
 
     async def test_into_the_pool_it_is_already_in_prepares_nothing(self):
@@ -1009,8 +1009,109 @@ class TestASwapIsATrade:
         _, model = await moving(in_pools(TWELVE_IN_PRIME))
         said = model.prompts[0]
         assert (
-            "It is also a trade" in said and "rises and falls with the other token's price" in said
+            "Any swap is also a trade" in said
+            and "rises and falls with the other token's price" in said
         )
+
+
+SOL_COIN = Coin(symbol="SOL", mint="So11111111111111111111111111111111111111112", decimals=9)
+USDC_COIN = Coin(symbol="USDC", mint="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals=6)
+
+
+def with_coins(shelf: Catalog, *coins: Coin) -> Catalog:
+    shelf.coins = {coin.symbol.upper(): coin for coin in coins}
+    return shelf
+
+
+class TestPayingWithAnotherCoin:
+    async def test_a_coin_they_named_is_spent_and_swapped_into_the_pools_token(self):
+        shelf = with_coins(in_pools(), SOL_COIN)
+        out, model = await moving(
+            shelf,
+            {
+                "name": "propose_deposit",
+                "args": {"pool_id": TURBO.id, "amount": "0.5", "token": "SOL"},
+                "id": "d1",
+            },
+        )
+        (card,) = out["deposits"]
+        assert card.pay_with == SOL_COIN and card.amount == Decimal("0.5")
+        said = str(model.seen[-1].content)
+        assert "0.5 SOL into Elemental USDC Turbo" in said and "a trade" in said
+        assert shelf.coins_asked == [("SOL", (fx.SOL_ADDRESS,))], "their own wallets first"
+
+    async def test_the_pools_own_token_is_no_swap_and_nobody_is_asked(self):
+        shelf = with_coins(in_pools(), USDC_COIN)
+        out, _ = await moving(
+            shelf,
+            {
+                "name": "propose_deposit",
+                "args": {"pool_id": TURBO.id, "amount": "5", "token": "usdc"},
+                "id": "d1",
+            },
+        )
+        (card,) = out["deposits"]
+        assert card.pay_with is None
+        assert shelf.coins_asked == []
+
+    async def test_a_coin_nobody_trades_prepares_nothing_and_says_so(self):
+        out, model = await moving(
+            in_pools(),
+            {
+                "name": "propose_deposit",
+                "args": {"pool_id": TURBO.id, "amount": "5", "token": "NOPE"},
+                "id": "d1",
+            },
+        )
+        assert out["deposits"] == ()
+        assert "No coin called NOPE" in str(model.seen[-1].content)
+
+    async def test_the_minimum_is_the_pools_to_judge_after_the_swap(self):
+        shelf = with_coins(in_pools(), SOL_COIN)
+        out, _ = await moving(
+            shelf,
+            {
+                "name": "propose_deposit",
+                "args": {"pool_id": TURBO.id, "amount": "0.001", "token": "SOL"},
+                "id": "d1",
+            },
+        )
+        (card,) = out["deposits"]
+        assert card.pay_with == SOL_COIN, "a figure of SOL is not a figure of the pool's token"
+
+
+class TestTakingItOutAsAnotherCoin:
+    async def test_the_withdrawal_ends_as_the_coin_they_asked_for(self):
+        shelf = with_coins(in_pools(TWELVE_IN_PRIME), SOL_COIN)
+        out, model = await moving(
+            shelf,
+            {
+                "name": "propose_withdraw",
+                "args": {"pool_id": PRIME.id, "amount": "all", "token": "SOL"},
+                "id": "w1",
+            },
+        )
+        (card,) = out["deposits"]
+        assert card.action == "withdraw" and card.receive_as == SOL_COIN and card.everything
+        said = str(model.seen[-1].content)
+        assert "out of USDC Prime, back to their wallet, as SOL" in said and "a trade" in said
+
+    async def test_the_pools_own_token_is_a_plain_withdrawal(self):
+        shelf = with_coins(in_pools(TWELVE_IN_PRIME), USDC_COIN)
+        out, _ = await moving(
+            shelf,
+            {
+                "name": "propose_withdraw",
+                "args": {"pool_id": PRIME.id, "token": "USDC"},
+                "id": "w1",
+            },
+        )
+        (card,) = out["deposits"]
+        assert card.receive_as is None
+
+    async def test_the_prompt_says_money_can_come_back_as_another_coin(self):
+        _, model = await moving(in_pools(TWELVE_IN_PRIME))
+        assert "asked for it back as another coin" in model.prompts[0]
 
 
 class TestAMoveGoesIntoAVault:

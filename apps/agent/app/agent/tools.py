@@ -7,7 +7,7 @@ from langchain_core.tools import tool
 from ..adapters.earn import YieldCatalog
 from ..adapters.portfolio import DataSource
 from ..domain.asking import MAX_ANSWERS, MIN_ANSWERS, Choice
-from ..domain.earn import CatalogSnapshot, Deposit, Held, YieldPool
+from ..domain.earn import CatalogSnapshot, Coin, Deposit, Held, YieldPool
 from ..domain.house import plain
 from ..domain.portfolio import History, Period, Portfolio, total_of
 from ..observability import metrics
@@ -142,17 +142,54 @@ RISK_FIRST = (
 )
 
 
-def deposit_tools(catalog: YieldCatalog, prepared: list[Deposit], risk_known: bool = True) -> list:
+async def other_coin(
+    catalog: YieldCatalog, named: str, own: YieldPool, owners: tuple[str, ...]
+) -> Coin | str | None:
+    """The coin somebody named, when it is not the pool's own token.
+
+    None is the pool's own token — nothing to swap. A string is why the coin
+    cannot be used, for the model to say.
+    """
+    asked = named.strip()
+    if not asked or asked.upper() == own.token.upper():
+        return None
+    found = await catalog.coin(asked, owners)
+    if found is None:
+        return (
+            f"No coin called {asked} could be found that trades. Say so, and name what they "
+            "do hold."
+        )
+    if own.terms is not None and found.mint == own.terms.token_mint:
+        return None
+    return found
+
+
+SWAPPED = (
+    "it is swapped on the way, which is a trade: from then on the money rises and falls "
+    "with what it became — say that too — and their wallet may ask them to sign more than once"
+)
+
+
+def deposit_tools(
+    catalog: YieldCatalog,
+    prepared: list[Deposit],
+    risk_known: bool = True,
+    owners: tuple[str, ...] = (),
+) -> list:
     @tool
-    async def propose_deposit(pool_id: str, amount: str) -> str:
+    async def propose_deposit(pool_id: str, amount: str, token: str = "") -> str:
         """Put a deposit in front of the user to sign, once you know both facts.
 
         Call it only when the user has asked you to place money AND you know
         which pool and how much. `pool_id` is the id printed beside the pool in
         the rates you were given. `amount` is a plain number of tokens — no
-        symbol, no currency. It moves nothing: the user signs it in their own
-        wallet, and until they do, nothing has happened. Say what it is and
-        leave it with them.
+        symbol, no currency. `token` is the coin they pay with, when it is not
+        the one the pool takes: a coin they hold and named or picked, by its
+        ticker — it is swapped into the pool's token on the way, and `amount`
+        is then a number of that coin. Leave it empty to pay with the pool's
+        own token. It moves nothing: the user signs it in their own wallet,
+        and until they do, nothing has happened. Say what it is and leave it
+        with them.
         """
         size = _amount(amount)
         if size is None:
@@ -170,19 +207,24 @@ def deposit_tools(catalog: YieldCatalog, prepared: list[Deposit], risk_known: bo
                 f"{pool.name} cannot be deposited into from here — the catalog has no accounts "
                 "for it. Say so and offer one of the others."
             )
-        deposit = Deposit(pool=pool, amount=size, terms=pool.terms)
+        paid = await other_coin(catalog, token, pool, owners)
+        if isinstance(paid, str):
+            return paid
+        deposit = Deposit(pool=pool, amount=size, terms=pool.terms, pay_with=paid)
         if deposit.below_minimum:
             return (
                 f"{pool.name} takes at least {pool.terms.min_amount} {pool.token}. "
                 "Tell the user the minimum and ask whether to go ahead with it."
             )
         prepared.append(deposit)
+        spent = paid.symbol if paid else pool.token
+        swapped = f", paid with their {paid.symbol}: {SWAPPED}" if paid else ""
         return (
-            f"Ready for the user to sign: {size} {pool.token} into {pool.name} "
-            f"({pool.protocol} {pool.kind}) at {as_percent(pool.apy_net)}. They see it as a card "
-            "with a button. Tell them what it is in one or two sentences, that the money leaves "
-            "their own wallet straight into the protocol, and that nothing happens until they "
-            "sign. Do not say it is done."
+            f"Ready for the user to sign: {size} {spent} into {pool.name} "
+            f"({pool.protocol} {pool.kind}) at {as_percent(pool.apy_net)}{swapped}. They see it "
+            "as a card with a button. Tell them what it is in one or two sentences, that the "
+            "money leaves their own wallet straight into the protocol, and that nothing happens "
+            "until they sign. Do not say it is done."
         )
 
     return [propose_deposit]
@@ -196,6 +238,7 @@ def moving_tools(
     held: tuple[Held, ...],
     prepared: list[Deposit],
     risk_known: bool = True,
+    owners: tuple[str, ...] = (),
 ) -> list:
     def holding(pool_id: str) -> Held | None:
         return next((one for one in held if one.pool.id == pool_id.strip()), None)
@@ -225,14 +268,17 @@ def moving_tools(
         return size, False
 
     @tool
-    async def propose_withdraw(pool_id: str, amount: str = "all") -> str:
+    async def propose_withdraw(pool_id: str, amount: str = "all", token: str = "") -> str:
         """Put a withdrawal in front of the user to sign: money out of a pool, back to their wallet.
 
         `pool_id` is the id printed beside the pool on the lines of what they
         have in pools. `amount` is "all" for everything in it, or a plain number
-        of tokens. Taking all of it also closes the accounts the deposit opened,
-        and the SOL they held comes back with the money. It moves nothing: they
-        sign it in their own wallet, and until they do, nothing has happened.
+        of the pool's token. `token` is the coin they want it back as, when
+        they asked for one that is not the pool's own, by its ticker — it is
+        swapped on the way out. Leave it empty to get the pool's own token.
+        Taking all of it also closes the accounts the deposit opened, and the
+        SOL they held comes back with the money. It moves nothing: they sign it
+        in their own wallet, and until they do, nothing has happened.
         """
         source = holding(pool_id)
         if source is None:
@@ -244,16 +290,25 @@ def moving_tools(
         pool = await catalog.pool(source.pool.id)
         if pool is None or pool.terms is None:
             return f"{source.pool.name} cannot be withdrawn from here. Say so."
+        wanted = await other_coin(catalog, token, pool, owners)
+        if isinstance(wanted, str):
+            return wanted
         prepared.append(
             Deposit(
-                pool=pool, amount=size, terms=pool.terms, action="withdraw", everything=everything
+                pool=pool,
+                amount=size,
+                terms=pool.terms,
+                action="withdraw",
+                everything=everything,
+                receive_as=wanted,
             )
         )
         what = f"all of it, about {size:f}" if everything else f"{size:f}"
+        swapped = f", as {wanted.symbol}: {SWAPPED}" if wanted else ""
         return (
             f"Ready for the user to sign: {what} {pool.token} out of {pool.name}, back to their "
-            "wallet. They see it as a card with a button. Say what it is in one or two sentences "
-            "and that nothing happens until they sign. Do not say it is done."
+            f"wallet{swapped}. They see it as a card with a button. Say what it is in one or two "
+            "sentences and that nothing happens until they sign. Do not say it is done."
         )
 
     @tool
@@ -264,7 +319,7 @@ def moving_tools(
         withdraw and then deposit as two steps, and never send them to a
         protocol's site to do either. The pools may take different tokens —
         then it swaps on the way, through Kamino Swap, and their wallet may ask
-        them to sign twice. `from_pool_id` is the id printed beside the pool on
+        them to sign more than once. `from_pool_id` is the id printed beside the pool on
         the lines of what they have in pools; `to_pool_id` is the id printed
         beside a pool in the rates. `amount` is "all", or a plain number of the
         token that pool holds. It moves nothing until they sign.
@@ -307,9 +362,10 @@ def moving_tools(
         swapped = target.token != source.pool.token
         way = (
             f", swapped from {source.pool.token} to {target.token} on the way — their wallet may "
-            "ask them to sign twice, once for taking out and swapping and once for putting in"
+            "ask them to sign more than once, a signature for each step one transaction cannot "
+            "hold"
             if swapped
-            else ", in one transaction"
+            else ""
         )
         return (
             f"Ready for the user to sign: {what} {source.pool.token} out of {source.pool.name} "

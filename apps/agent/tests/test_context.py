@@ -9,6 +9,8 @@ from app.agent.context import (
 from app.domain.portfolio import total_of
 from tests import fixtures as fx
 
+SOL_MINT = "So11111111111111111111111111111111111111112"
+
 
 def test_header_counts_wallets_and_positions():
     block = portfolio_context(fx.as_portfolio(tail=20), 12)
@@ -236,6 +238,28 @@ class TestAPastTurnAsTheModelsSeeIt:
         )
         _, answered = replayed(turn)
         assert "a move of 12.0015 USDC from USDC Prime into Kamino Institutional" in answered
+
+    def test_a_card_that_swaps_is_named_with_what_it_spends_and_becomes(self):
+        from app.agent.context import replayed
+        from app.domain.conversation import Turn
+
+        turn = Turn(
+            q="Risk: low",
+            a="",
+            at=0,
+            blocks=[
+                {
+                    "kind": "deposit",
+                    "action": "deposit",
+                    "amount": "0.5",
+                    "token": "USDC",
+                    "pool": "Allez USDC",
+                    "payWith": {"mint": SOL_MINT, "symbol": "SOL"},
+                }
+            ],
+        )
+        _, answered = replayed(turn)
+        assert "a deposit of 0.5 SOL into Allez USDC, swapped to USDC" in answered
 
     def test_no_message_goes_to_a_model_empty(self):
         from app.agent.context import replayed

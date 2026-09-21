@@ -8,6 +8,8 @@ import type { ScanRequests } from '../src/wallet/scan-requests.service';
 const OWNER = '5Hb8BfQVmvEhaKsoXBV2g3EExoqTCKsVNXrGsrbadHJS';
 const PRIME = 'sol:kamino:vault:9E69U4GzWhryRaPe8DYpco6Z9vTZY6gg8w6W2QsBACEj';
 const TURBO = 'sol:kamino:vault:A3hTCWdnfV6uiQLxRmnv17EpiEtmc93v1AGQnWy44Mup';
+const SOL = 'So11111111111111111111111111111111111111112';
+const USX = '6FrrzDk5mQARGc1TDYoyVnSyRdds1t4PbtohCD6p3tgG';
 
 const BUILT = {
   transaction: 'AQAB',
@@ -63,7 +65,9 @@ describe('WhatACardAsksEarnToBuild', () => {
       ({
         ok: true,
         status: 200,
-        json: async () => ({ data: { ...BUILT, then: { pool_id: TURBO, amount: '0.1012' } } }),
+        json: async () => ({
+          data: { ...BUILT, then: { pool_id: TURBO, amount: '0.1012', holding: 'SOL' } },
+        }),
       }) as Response) as typeof fetch;
     const service = new DepositsService({} as PrismaService, {} as ScanRequests);
     const built = await new DepositsController(service).build({
@@ -73,7 +77,69 @@ describe('WhatACardAsksEarnToBuild', () => {
       owner: OWNER,
       action: 'move',
     });
-    assert.deepEqual(built.then, { poolId: TURBO, amount: '0.1012' });
+    assert.deepEqual(built.then, { poolId: TURBO, amount: '0.1012', holding: 'SOL' });
+  });
+
+  test('a step that swaps from the wallet comes back saying what it spends and ends as', async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            ...BUILT,
+            then: { amount: '0.566321', pay_with: USX, receive_as: SOL, holding: 'USX' },
+          },
+        }),
+      }) as Response) as typeof fetch;
+    const service = new DepositsService({} as PrismaService, {} as ScanRequests);
+    const built = await new DepositsController(service).build({
+      poolId: PRIME,
+      amount: 'all',
+      owner: OWNER,
+      action: 'withdraw',
+      receiveAs: SOL,
+    });
+    assert.deepEqual(built.then, { amount: '0.566321', payWith: USX, receiveAs: SOL, holding: 'USX' });
+  });
+
+  test('a withdrawal that ends as another coin is a move out of the pool into the wallet', async () => {
+    const { asked, controller } = building();
+    await controller.build({ poolId: PRIME, amount: 'all', owner: OWNER, action: 'withdraw', receiveAs: SOL });
+    assert.deepEqual(asked, [
+      { path: '/v1/lend/moves', body: { from: PRIME, to_coin: SOL, amount: 'all', owner: OWNER } },
+    ]);
+  });
+
+  test('a deposit paid with another coin is a move from the wallet into the pool', async () => {
+    const { asked, controller } = building();
+    await controller.build({ poolId: TURBO, amount: '0.5', owner: OWNER, payWith: SOL });
+    assert.deepEqual(asked, [
+      { path: '/v1/lend/moves', body: { from_coin: SOL, to: TURBO, amount: '0.5', owner: OWNER } },
+    ]);
+  });
+
+  test('a swap is one coin for another, with no pool', async () => {
+    const { asked, controller } = building();
+    await controller.build({ amount: '1', owner: OWNER, action: 'swap', payWith: USX, receiveAs: SOL });
+    assert.deepEqual(asked, [
+      { path: '/v1/lend/moves', body: { from_coin: USX, to_coin: SOL, amount: '1', owner: OWNER } },
+    ]);
+  });
+
+  test('a swap that does not say both coins is refused before earn is asked', async () => {
+    const { asked, controller } = building();
+    await assert.rejects(
+      () => controller.build({ amount: '1', owner: OWNER, action: 'swap', payWith: USX }),
+      /payWith and receiveAs/,
+    );
+    assert.deepEqual(asked, []);
+  });
+
+  test('all of a coin can be paid in: the wallet says what all is', async () => {
+    const { asked, controller } = building();
+    await controller.build({ poolId: TURBO, amount: 'all', owner: OWNER, payWith: SOL });
+    assert.equal(asked.length, 1);
   });
 
   test('a move that does not say where from is refused before earn is asked', async () => {

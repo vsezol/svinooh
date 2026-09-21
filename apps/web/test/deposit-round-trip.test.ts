@@ -19,12 +19,24 @@ const REQUEST: DepositRequest = {
   amount: '12.0014',
 };
 
+interface Step {
+  poolId?: string;
+  amount: string;
+  payWith?: string;
+  receiveAs?: string;
+  holding: string;
+}
+
 interface Server {
   buildFails?: string;
   landingFails?: boolean;
   status?: string;
+  /** What each landing after the first says, in turn; the rest say `status`. */
+  later?: string[];
   /** The first build is half a move: a deposit into this pool follows it. */
-  then?: { poolId: string; amount: string };
+  then?: Step;
+  /** What each build says comes after it, in turn: a way round in several steps. */
+  steps?: Step[];
   /** The build that comes after the first is refused, with this. */
   secondFails?: string;
 }
@@ -32,12 +44,14 @@ interface Server {
 const serving = (how: Server = {}) => {
   const asked: { path: string; body: unknown }[] = [];
   let builds = 0;
+  let landings = 0;
   globalThis.fetch = (async (url: string, init: RequestInit) => {
     const path = String(url);
     asked.push({ path, body: JSON.parse(String(init.body)) });
     if (path.includes('/deposits/build')) {
       builds += 1;
       const refusal = builds === 1 ? how.buildFails : how.secondFails;
+      const next = how.steps ? how.steps[builds - 1] : builds === 1 ? how.then : undefined;
       return refusal
         ? ({ ok: false, status: 422, json: async () => ({ message: refusal }) } as Response)
         : ({
@@ -49,20 +63,22 @@ const serving = (how: Server = {}) => {
               instructions: 3,
               blockhash: 'b',
               lastValidBlockHeight: '1',
-              ...(builds === 1 && how.then ? { then: how.then } : {}),
+              ...(next ? { then: next } : {}),
             }),
           } as Response);
     }
     if (how.landingFails) throw new Error('the network is down');
+    landings += 1;
+    const status = (landings > 1 && how.later?.[landings - 2]) || how.status || 'landed';
     return {
       ok: true,
       status: 200,
       json: async () => ({
         signature: SIGNATURE,
         owner: OWNER,
-        status: how.status ?? 'landed',
+        status,
         slot: 7,
-        error: null,
+        error: status === 'failed' ? '{"InstructionError":[3,{"Custom":1}]}' : null,
         tracked: true,
         portfolio: 'vivid-cozy-stork',
       }),
@@ -203,7 +219,7 @@ describe('WhenADepositDoesNotHappen', () => {
 
 
 describe('AMoveInTwoTransactions', () => {
-  const THEN = { poolId: 'sol:kamino:vault:ALLEZ', amount: '0.101202053' };
+  const THEN = { poolId: 'sol:kamino:vault:ALLEZ', amount: '0.101202053', holding: 'SOL' };
   const moving = (how: Server = {}, made = {}) => {
     const asked = serving({ then: THEN, ...how });
     const fake = fakeWallet(made);
@@ -231,7 +247,6 @@ describe('AMoveInTwoTransactions', () => {
       amount: THEN.amount,
       owner: OWNER,
       action: 'deposit',
-      fromPoolId: 'sol:kamino:vault:PRIME',
     });
     assert.equal(fake.handed.length, 2, 'two signatures, one button');
     assert.ok('done' in finished && finished.done.ok && finished.done.landed === 'landed');
@@ -263,6 +278,14 @@ describe('AMoveInTwoTransactions', () => {
     assert.ok('done' in finished && finished.done.ok);
     assert.equal(finished.done.ok && finished.done.halfway, true);
     assert.equal(finished.done.ok && finished.done.error, 'the pool is full');
+    assert.equal(finished.done.ok && finished.done.holding, 'SOL', 'what the money waits in');
+  });
+
+  test('a second half the network rejected is halfway, not a failure of the whole', async () => {
+    const { done } = moving({ later: ['failed'] });
+    const finished = await done;
+    assert.ok('done' in finished && finished.done.ok && finished.done.halfway);
+    assert.equal(finished.done.ok && finished.done.landed, 'landed', 'the first half did land');
   });
 
   test('a second signature refused is halfway too, not a failure of the whole', async () => {
@@ -291,5 +314,102 @@ describe('AMoveInTwoTransactions', () => {
     });
     assert.ok('done' in finished && finished.done.ok && finished.done.halfway);
     assert.equal(builds(asked).length, 2);
+  });
+});
+
+describe('ALongerWayRound', () => {
+  const USX = '6FrrzDk5mQARGc1TDYoyVnSyRdds1t4PbtohCD6p3tgG';
+  const SOL = 'So11111111111111111111111111111111111111112';
+  const USDS = 'USDSwr9ApdHk5bvJKMjzff41FfuX8bSxdKcR81vTwcA';
+  const ALLEZ = 'sol:kamino:vault:ALLEZUSDC';
+  const builds = (asked: { path: string; body: unknown }[]) =>
+    asked.filter((one) => one.path.endsWith('/deposits/build')).map((one) => one.body);
+  const run = async (request: DepositRequest, how: Server) => {
+    const asked = serving(how);
+    const fake = fakeWallet();
+    const stages: DepositStage[] = [];
+    const finished = await runDeposit({
+      request,
+      wallet: depositWallet(fake.wallet),
+      onStage: (stage) => stages.push(stage),
+      wait: async () => {},
+    });
+    return { asked, fake, stages, finished };
+  };
+
+  test('taking money out as another coin asks for the coin it ends as', async () => {
+    const { asked } = await run(
+      { ...REQUEST, action: 'withdraw', amount: 'all', receiveAs: { mint: SOL, symbol: 'SOL' } },
+      {},
+    );
+    assert.deepEqual(builds(asked)[0], {
+      poolId: REQUEST.poolId,
+      amount: 'all',
+      owner: OWNER,
+      action: 'withdraw',
+      receiveAs: SOL,
+    });
+  });
+
+  test('a deposit paid with another coin says which', async () => {
+    const { asked } = await run({ ...REQUEST, amount: '0.5', payWith: { mint: SOL, symbol: 'SOL' } }, {});
+    assert.deepEqual(builds(asked)[0], {
+      poolId: REQUEST.poolId,
+      amount: '0.5',
+      owner: OWNER,
+      action: 'deposit',
+      payWith: SOL,
+    });
+  });
+
+  test('out first and the swap after, when the two would not fit together', async () => {
+    const { asked, fake, finished } = await run(
+      { ...REQUEST, action: 'withdraw', amount: 'all', receiveAs: { mint: SOL, symbol: 'SOL' } },
+      { steps: [{ amount: '0.566321', payWith: USX, receiveAs: SOL, holding: 'USX' }] },
+    );
+    assert.deepEqual(builds(asked)[1], {
+      poolId: REQUEST.poolId,
+      amount: '0.566321',
+      owner: OWNER,
+      action: 'swap',
+      payWith: USX,
+      receiveAs: SOL,
+    });
+    assert.equal(fake.handed.length, 2);
+    assert.ok('done' in finished && finished.done.ok && !finished.done.halfway);
+  });
+
+  test('out, swap and in: three signatures from one button, each built after the last landed', async () => {
+    const { asked, fake, stages, finished } = await run(
+      { ...REQUEST, action: 'move', amount: 'all', poolId: ALLEZ, fromPoolId: 'sol:kamino:vault:KEEL' },
+      {
+        steps: [
+          { poolId: ALLEZ, amount: '5.103185', payWith: USDS, holding: 'USDS' },
+          { poolId: ALLEZ, amount: '5.09', holding: 'USDC' },
+        ],
+      },
+    );
+    assert.deepEqual(builds(asked).slice(1), [
+      { poolId: ALLEZ, amount: '5.103185', owner: OWNER, action: 'deposit', payWith: USDS },
+      { poolId: ALLEZ, amount: '5.09', owner: OWNER, action: 'deposit' },
+    ]);
+    assert.equal(fake.handed.length, 3);
+    assert.equal(stages.filter((stage) => stage === 'continuing').length, 2);
+    assert.ok('done' in finished && finished.done.ok && finished.done.landed === 'landed');
+  });
+
+  test('stopping between steps says what the money waits in by then', async () => {
+    const { finished } = await run(
+      { ...REQUEST, action: 'move', amount: 'all', poolId: ALLEZ, fromPoolId: 'sol:kamino:vault:KEEL' },
+      {
+        steps: [
+          { poolId: ALLEZ, amount: '5.103185', payWith: USDS, holding: 'USDS' },
+          { poolId: ALLEZ, amount: '5.09', holding: 'USDC' },
+        ],
+        later: ['landed', 'failed'],
+      },
+    );
+    assert.ok('done' in finished && finished.done.ok && finished.done.halfway);
+    assert.equal(finished.done.ok && finished.done.holding, 'USDC');
   });
 });

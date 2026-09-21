@@ -1,6 +1,5 @@
 import { Decimal } from 'decimal.js';
 import type { Pool } from './pool';
-import { idOf } from './values';
 
 /**
  * What an owner has in a pool: its shares, in the shares mint's own units
@@ -19,15 +18,6 @@ export type Take = Decimal | 'all';
 /** A withdrawal once it is known how many shares it burns. */
 export interface Withdrawal {
   pool: Pool;
-  owner: string;
-  shares: Decimal;
-  all: boolean;
-}
-
-/** A move once the shares leaving `from` are known; what arrives in `to` is measured. */
-export interface Move {
-  from: Pool;
-  to: Pool;
   owner: string;
   shares: Decimal;
   all: boolean;
@@ -56,16 +46,4 @@ export function burnFor(position: Position, take: Take): Burn {
   const places = position.pool.deposit.sharesDecimals ?? position.pool.token.decimals ?? 0;
   const shares = take.mul(position.shares).div(held).toDecimalPlaces(places, Decimal.ROUND_DOWN);
   return { shares, all: false };
-}
-
-/** Why a move between these two pools cannot be built, or null when it can. */
-export function whyNotMove(from: Pool, to: Pool): string | null {
-  if (idOf(from.id) === idOf(to.id)) return `the money is already in ${to.name}`;
-  if (from.id.network !== to.id.network) {
-    return `${from.name} and ${to.name} are on different networks`;
-  }
-  if (to.id.kind !== 'vault') {
-    return `${to.name} is one lending market's reserve; a move goes into a vault`;
-  }
-  return null;
 }

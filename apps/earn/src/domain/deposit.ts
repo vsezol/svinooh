@@ -25,7 +25,14 @@ const WHISKER = new Decimal('0.001');
 export type Fit = { amount: Decimal } | { short: Decimal; held: Decimal };
 
 export function fitToHoldings(deposit: Deposit, held: Decimal): Fit {
-  const asked = deposit.amount;
+  return fit(deposit.amount, held);
+}
+
+/**
+ * What can be spent of `asked` out of `held`: all of it, or — within a whisker
+ * of it, the figure somebody was shown having been rounded up — what is there.
+ */
+export function fit(asked: Decimal, held: Decimal): Fit {
   if (held.greaterThanOrEqualTo(asked)) return { amount: asked };
   if (held.greaterThan(0) && held.greaterThanOrEqualTo(asked.mul(new Decimal(1).minus(WHISKER)))) {
     return { amount: held };
@@ -36,6 +43,12 @@ export function fitToHoldings(deposit: Deposit, held: Decimal): Fit {
 const LAMPORTS = new Decimal(10).pow(9);
 
 const SHORT_OF_RENT = /insufficient lamports (\d+), need (\d+)/;
+
+/** A vault's own count of what it could pay out of what it holds idle. */
+const PAID_OUT = /Available to send to user (\d+)/;
+
+/** Shares left behind in an account a withdrawal of everything went on to close. */
+const SHARES_LEFT = 'Non-native account can only be closed if its balance is zero';
 
 /**
  * Why a simulated deposit did not go through, in words for somebody who has
@@ -48,7 +61,12 @@ const SHORT_OF_RENT = /insufficient lamports (\d+), need (\d+)/;
  * read as "the network refused it", the one person most in need of a reason
  * getting none.
  */
-export function whyItWouldFail(err: unknown, logs: readonly string[], token: string): string {
+export function whyItWouldFail(
+  err: unknown,
+  logs: readonly string[],
+  token: string,
+  decimals?: number | null,
+): string {
   if (err === 'AccountNotFound') {
     return (
       'this wallet has no SOL at all, and a deposit needs a little: for the network fee, and ' +
@@ -74,6 +92,19 @@ export function whyItWouldFail(err: unknown, logs: readonly string[], token: str
     if (line.includes('Error: insufficient funds')) {
       return `this wallet does not hold enough ${token} for this deposit`;
     }
+  }
+  if (logs.some((line) => line.includes(SHARES_LEFT))) {
+    // Taking everything out of a vault that has lent most of it: it pays what
+    // it holds idle, and the account the shares sat in cannot close on the rest.
+    const paid = logs.map((line) => PAID_OUT.exec(line)?.[1]).find(Boolean);
+    const now =
+      paid && decimals !== undefined && decimals !== null
+        ? `${new Decimal(paid).div(new Decimal(10).pow(decimals))} ${token}`
+        : 'only part of it';
+    return (
+      `the pool can pay out ${now} right now: the rest is lent out to borrowers and comes ` +
+      'back to the pool as they repay, so that much can be taken out now and the rest later'
+    );
   }
   const failed = logs.filter((line) => line.includes('failed:')).pop();
   return failed ? `the network refused it: ${failed}` : 'the network refused it';

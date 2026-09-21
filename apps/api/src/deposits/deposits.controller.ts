@@ -15,20 +15,27 @@ export class DepositsController {
   @Post('build')
   @UseGuards(RequiredAuthGuard)
   async build(@Body() body: DepositBuildDto): Promise<DepositBuiltDto> {
-    const { poolId, amount, owner, action = 'deposit', fromPoolId } = body ?? {};
-    if (!poolId || !amount || !owner) {
-      throw new BadRequestException('poolId, amount and owner are all required');
+    const { poolId, amount, owner, action = 'deposit', fromPoolId, payWith, receiveAs } = body ?? {};
+    if (!['deposit', 'withdraw', 'move', 'swap'].includes(action)) {
+      throw new BadRequestException(`${action} is not something a card can ask for`);
+    }
+    if (!amount || !owner) {
+      throw new BadRequestException('amount and owner are both required');
+    }
+    if (action === 'swap' ? !payWith || !receiveAs : !poolId) {
+      throw new BadRequestException(
+        action === 'swap'
+          ? 'a swap needs payWith and receiveAs, the coins it spends and ends as'
+          : `a ${action} needs poolId, the pool the card is about`,
+      );
     }
     if (action === 'move' && !fromPoolId) {
       throw new BadRequestException('a move needs fromPoolId, the pool the money leaves');
     }
-    if (action === 'deposit' && amount === 'all') {
+    if (action === 'deposit' && amount === 'all' && !payWith) {
       throw new BadRequestException('a deposit needs a number of tokens');
     }
-    if (!['deposit', 'withdraw', 'move'].includes(action)) {
-      throw new BadRequestException(`${action} is not something a card can ask for`);
-    }
-    return this.deposits.build({ poolId, amount, owner, action, fromPoolId });
+    return this.deposits.build({ poolId, amount, owner, action, fromPoolId, payWith, receiveAs });
   }
 
   @Post('landed')

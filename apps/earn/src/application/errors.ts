@@ -25,3 +25,5 @@ export class DepositWouldFail extends EarnError {}
 export class NothingThere extends EarnError {}
 
 export class MoveNotSupported extends EarnError {}
+
+export class CoinNotFound extends EarnError {}

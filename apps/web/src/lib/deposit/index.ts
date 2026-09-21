@@ -1,8 +1,8 @@
 import type { DepositBuiltDto, DepositLandingDto } from '@svinooh/shared';
 import { api } from '../api';
-import type { DepositOutcome, DepositRequest } from './types';
+import type { DepositCoin, DepositOutcome, DepositRequest } from './types';
 
-export type { DepositOutcome, DepositRequest };
+export type { DepositCoin, DepositOutcome, DepositRequest };
 
 const GAP_MS = 2000;
 const TRIES = 20;
@@ -19,6 +19,8 @@ export async function buildDeposit(
       owner,
       action: request.action ?? 'deposit',
       fromPoolId: request.fromPoolId,
+      payWith: request.payWith?.mint,
+      receiveAs: request.receiveAs?.mint,
     }),
   });
 }
