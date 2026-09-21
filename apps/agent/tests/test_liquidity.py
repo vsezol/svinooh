@@ -159,7 +159,8 @@ class TestPayingWithWhatIsFree:
         ].ainvoke(CARD)
         assert prepared == []
         assert "Their wallets hold 0 USDC free right now" in said
-        assert "take money out of a pool first" in said
+        assert "a withdrawal card of its own, signed before" in said
+        assert "Never promise the two as one card" in said
 
     async def test_what_they_hold_is_placed(self):
         prepared: list = []
@@ -273,3 +274,11 @@ class TestTheEarnBranchReadsPositions:
         assert "Their liquidity positions" in said
         assert "OUT OF RANGE" in said
         assert fx.SOL_ADDRESS
+
+
+class TestTheRulesForAPair:
+    def test_the_pools_are_read_before_anything_is_asked_and_a_price_comes_from_them(self):
+        from app.agent.prompts import LIQUIDITY
+
+        assert "Read the pools of the pair first" in LIQUIDITY
+        assert "never one you remember" in LIQUIDITY
