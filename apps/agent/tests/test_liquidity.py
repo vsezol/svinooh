@@ -52,9 +52,15 @@ def shelf(*pools: PairPool, placed: tuple[LiquidityPosition, ...] = ()) -> Catal
     return catalog
 
 
-def tools(catalog: Catalog, prepared: list, range_known: bool = True) -> dict:
+def tools(
+    catalog: Catalog,
+    prepared: list,
+    range_known: bool = True,
+    free: dict[str, Decimal] | None = None,
+) -> dict:
     return {
-        one.name: one for one in liquidity_tools(catalog, catalog.placed, prepared, range_known)
+        one.name: one
+        for one in liquidity_tools(catalog, catalog.placed, prepared, range_known, free)
     }
 
 
@@ -136,6 +142,38 @@ class TestPlacingLiquidity:
         assert "407 of SOL-USDC's bins" in said
 
 
+CARD = {
+    "pool_id": PAIR.id,
+    "amount": "5",
+    "token": "USDC",
+    "below_pct": "10.3",
+    "above_pct": "5.5",
+}
+
+
+class TestPayingWithWhatIsFree:
+    async def test_what_the_wallets_do_not_hold_free_is_not_placed(self):
+        prepared: list = []
+        said = await tools(shelf(), prepared, free={"USDT": Decimal("0.003")})[
+            "propose_liquidity"
+        ].ainvoke(CARD)
+        assert prepared == []
+        assert "Their wallets hold 0 USDC free right now" in said
+        assert "take money out of a pool first" in said
+
+    async def test_what_they_hold_is_placed(self):
+        prepared: list = []
+        await tools(shelf(), prepared, free={"USDC": Decimal("32.87")})[
+            "propose_liquidity"
+        ].ainvoke(CARD)
+        assert len(prepared) == 1
+
+    async def test_a_wallet_nobody_could_read_is_left_to_the_build_to_judge(self):
+        prepared: list = []
+        await tools(shelf(), prepared, free=None)["propose_liquidity"].ainvoke(CARD)
+        assert len(prepared) == 1
+
+
 class TestActingOnAPosition:
     async def test_a_position_out_of_range_is_rebalanced_keeping_its_width(self):
         prepared: list = []
@@ -166,6 +204,16 @@ class TestActingOnAPosition:
 
 
 class TestWhatTheAgentReadsAndShows:
+    def test_what_is_free_is_the_idle_solana_tokens_and_sol_less_its_gas(self):
+        from app.agent.context import free_on_solana
+
+        portfolio = fx.as_portfolio(
+            fx.portfolio([fx.wallet(fx.SOL_ADDRESS, [fx.USDC_SOL], chain="SOL")])
+        )
+        free = free_on_solana(portfolio)
+        assert set(free) <= {"USDC", "SOL"}
+        assert all(amount >= 0 for amount in free.values())
+
     def test_a_position_out_of_range_says_so_with_the_address_to_act_by(self):
         line = placed_lines((OUT,))
         assert "OUT OF RANGE, earning nothing." in line

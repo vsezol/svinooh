@@ -422,7 +422,23 @@ def liquidity_tools(
     placed: tuple[LiquidityPosition, ...],
     prepared: list[Card],
     range_known: bool = True,
+    free: dict[str, Decimal] | None = None,
 ) -> list:
+    def short_of(symbol: str, size: Decimal) -> str | None:
+        """Why the wallets cannot pay this much of a token, when their last reading says so."""
+        if free is None:
+            return None
+        held = free.get(symbol.upper(), Decimal(0))
+        if size <= held * WHISKER:
+            return None
+        return (
+            f"Their wallets hold {held:f} {symbol} free right now — what sits in a pool is not "
+            "free, and SOL keeps a little back for fees. Nothing is placed. Say so, and offer to "
+            "place what they hold, or to take money out of a pool first. A reading can lag a "
+            "top-up by a few minutes; if they say they just added some, say a fresh reading "
+            "takes a minute."
+        )
+
     async def fitting(pool: PairPool, below: Decimal, above: Decimal) -> PairPool | None:
         pools = await catalog.pair_pools(pool.x, pool.y, below, above)
         return next((one for one in pools if one.id == pool.id), None)
@@ -521,6 +537,9 @@ def liquidity_tools(
         if fit is not None and fit.why_not:
             return f"{fit.why_not}. Offer the pool of the pair that holds it, or a narrower range."
         symbol, mint = paid
+        short = short_of(symbol, size)
+        if short:
+            return short
         prepared.append(
             Placement(
                 action="provide",

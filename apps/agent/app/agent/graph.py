@@ -2,6 +2,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -19,6 +20,7 @@ from ..observability import metrics
 from ..ports import Ask, Failed, Finished, Progress, Reply, Update
 from .context import (
     earning_lines,
+    free_on_solana,
     held_lines,
     idle_lines,
     placed_lines,
@@ -88,6 +90,7 @@ class Holdings:
     held: tuple[Held, ...] = ()
     owners: tuple[str, ...] = ()
     placed: tuple[LiquidityPosition, ...] = ()
+    free: dict[str, Decimal] | None = None
 
 
 class AgentState(TypedDict, total=False):
@@ -255,7 +258,7 @@ class LangGraphAgent:
             earn_tools(self._catalog)
             + deposit_tools(self._catalog, prepared, risk_known, holdings.owners)
             + moving_tools(self._catalog, holdings.held, prepared, risk_known, holdings.owners)
-            + liquidity_tools(self._catalog, holdings.placed, prepared, range_known)
+            + liquidity_tools(self._catalog, holdings.placed, prepared, range_known, holdings.free)
             + asking_tools(asked)
         )
         answered = await self._answer_with_tools(system, state, tools, waiting=lambda: bool(asked))
@@ -286,6 +289,7 @@ class LangGraphAgent:
                 held=tuple(one for each in read.values() for one in each),
                 owners=solana_wallets(portfolio),
                 placed=placed,
+                free=free_on_solana(portfolio),
             )
         except Exception as error:  # noqa: BLE001 — advice without it beats no advice
             logger.warning("earn: holdings unavailable (%r)", error)
