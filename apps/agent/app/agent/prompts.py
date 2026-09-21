@@ -117,6 +117,7 @@ def earn_prompt(
     idle: str = "",
     already_earning: str = "",
     asked_to_place: bool = False,
+    held: str = "",
 ) -> str:
     rules = (
         f"{system}\n\nThe user is asking where to put money to work. Recommend only "
@@ -131,6 +132,8 @@ def earn_prompt(
     rules = f"{rules}\n\n{PLACING if asked_to_place else ASKING}"
     if idle:
         rules = f"{rules}\n\n{HOLDING}\n{idle}"
+    if held:
+        rules = f"{rules}\n\n{IN_POOLS}\n{held}"
     if not already_earning:
         return rules
     return (
@@ -164,6 +167,23 @@ HOLDING = (
     "has not caught up, say what the reading shows and offer to place that, "
     "and say a fresh reading takes a minute — asking them to type a number you "
     "are already looking at is the one thing not to do."
+)
+
+IN_POOLS = (
+    "What they have in pools, read from the chain just now: money that can be "
+    "taken out or moved, each line with the id to do it by. Take out of or move "
+    "from these pools and no others.\n"
+    "Asked to take money out, prepare the withdrawal of what they named — all of "
+    "it unless they said how much. Asked to move it somewhere better or safer, "
+    "it is one transaction: the money leaves and arrives together and they sign "
+    "once, so never tell them to withdraw first and deposit after. Which pool it "
+    "leaves is on these lines; ask with buttons only when they are in more than "
+    "one and named none. Where it goes is chosen the way a deposit is — ask the "
+    "risk they want when nothing they said tells you, then name one pool that "
+    "takes the same token and say what the rate becomes. A pool paying less is "
+    "not a better home: say so rather than moving it there. Between different "
+    "tokens a move is not possible yet: say so and offer the same token, or "
+    "taking it out."
 )
 
 ASKING = (
@@ -204,24 +224,25 @@ PLACING = (
 
 
 SETTLED = (
-    "A deposit they pressed the button for has come back. Tell them what "
-    "happened, in two sentences at most, and tell them the truth: money is "
-    "working only where the network confirmed it, a rejected deposit moved "
-    "nothing and cost them only the network fee, one that has not confirmed "
-    "yet is not done, and one that was never built never reached their wallet "
-    "at all — nothing was signed and nothing was spent. Where it did not go "
-    "through, give the reason in words somebody who does not read chain "
-    "errors would understand, and say what would make it work when the reason "
-    "says so: a figure in the reason is the figure to give them. Say nothing "
-    "about rates, pools or amounts beyond what is written here, and do not "
-    "offer a new deposit in the same breath as a failure."
+    "Something they pressed the button for — a deposit, a withdrawal or a move "
+    "— has come back. Tell them what happened, in two sentences at most, and "
+    "tell them the truth: money moved only where the network confirmed it; one "
+    "the network rejected moved nothing and cost them only the network fee; one "
+    "that has not confirmed yet is not done; and one that was never built never "
+    "reached their wallet at all — nothing was signed and nothing was spent. "
+    "Where it did not go through, give the reason in words somebody who does "
+    "not read chain errors would understand, and say what would make it work "
+    "when the reason says so: a figure in the reason is the figure to give them. "
+    "Say nothing about rates, pools or amounts beyond what is written here, and "
+    "do not offer something new in the same breath as a failure."
 )
 
 
 def settled_prompt(system: str, settled: Settled) -> str:
+    how_much = "all of it" if settled.amount == "all" else f"{settled.amount} {settled.token}"
     lines = [
-        f"- amount: {settled.amount} {settled.token}",
-        f"- pool: {settled.pool}",
+        f"- what they signed: {_WHAT[settled.action](settled)}",
+        f"- how much: {how_much}",
         f"- what the network did: {_OUTCOMES[settled.status]}",
     ]
     if settled.error:
@@ -229,8 +250,17 @@ def settled_prompt(system: str, settled: Settled) -> str:
     return f"{system}\n\n{SETTLED}\n" + "\n".join(lines)
 
 
+_WHAT = {
+    "deposit": lambda settled: f"a deposit into {settled.pool}",
+    "withdraw": lambda settled: f"a withdrawal out of {settled.pool}, back to their wallet",
+    "move": lambda settled: (
+        f"a move out of {settled.from_pool or 'the pool it was in'} and into {settled.pool}, "
+        "in one transaction"
+    ),
+}
+
 _OUTCOMES = {
-    "landed": "it went through, and the money is in the pool",
+    "landed": "it went through, and the money is where it was sent",
     "failed": "the network rejected it, and nothing left the wallet",
     "sent": "it was sent and has not been confirmed yet",
     "refused": "it was never built, so their wallet was never opened and nothing was signed",

@@ -6,7 +6,7 @@ from typing import Protocol
 import httpx
 from pydantic import BaseModel, ConfigDict
 
-from ..domain.earn import CatalogSnapshot, DepositTerms, YieldPool
+from ..domain.earn import CatalogSnapshot, DepositTerms, Held, YieldPool
 
 
 class YieldCatalog(Protocol):
@@ -14,6 +14,8 @@ class YieldCatalog(Protocol):
         """The best-paying pools for a token, or across every token."""
 
     async def pool(self, pool_id: str) -> YieldPool | None: ...
+
+    async def positions(self, owner: str) -> tuple[Held, ...]: ...
 
 
 class EarnApiSource:
@@ -35,6 +37,13 @@ class EarnApiSource:
             return None
         response.raise_for_status()
         return _PoolAnswer.model_validate(response.json()).domain()
+
+    async def positions(self, owner: str) -> tuple[Held, ...]:
+        response = await self._client.get(
+            f"{self._base}/v1/lend/positions", params={"network": "sol", "owner": owner}
+        )
+        response.raise_for_status()
+        return _PositionsAnswer.model_validate(response.json()).domain()
 
 
 def _number(raw: str | None) -> Decimal:
@@ -142,3 +151,18 @@ class _CatalogAnswer(_WirePart):
             as_of=self.meta.as_of,
             stale=self.meta.stale,
         )
+
+
+class _WireHeld(_WirePart):
+    pool: _WirePool
+    amount: str
+
+    def domain(self) -> Held:
+        return Held(pool=self.pool.domain(), amount=_number(self.amount))
+
+
+class _PositionsAnswer(_WirePart):
+    data: list[_WireHeld]
+
+    def domain(self) -> tuple[Held, ...]:
+        return tuple(held.domain() for held in self.data)

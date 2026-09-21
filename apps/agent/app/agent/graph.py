@@ -1,5 +1,7 @@
+import asyncio
 import logging
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Any, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -11,10 +13,11 @@ from ..adapters.portfolio import PortfolioApiSource
 from ..config import Config
 from ..domain.asking import Choice
 from ..domain.conversation import Turn
-from ..domain.earn import Deposit, Settled
+from ..domain.earn import Deposit, Held, Settled
+from ..domain.portfolio import Portfolio
 from ..observability import metrics
 from ..ports import Ask, Failed, Finished, Progress, Reply, Update
-from .context import earning_lines, idle_lines, positions_read
+from .context import earning_lines, held_lines, idle_lines, positions_read
 from .intent import IntentClassifier
 from .llm import Models, extract_text
 from .onboarding import (
@@ -39,9 +42,25 @@ from .prompts import (
 )
 from .steps import said, step
 from .streaming import turn_events
-from .tools import asking_tools, deposit_tools, earn_tools, portfolio_tools, run_tools
+from .tools import (
+    asking_tools,
+    deposit_tools,
+    earn_tools,
+    moving_tools,
+    portfolio_tools,
+    run_tools,
+)
 
 logger = logging.getLogger("svinooh-ai")
+
+
+@dataclass(frozen=True)
+class Holdings:
+    """What the earn branch reads of somebody's money before it answers."""
+
+    idle: str = ""
+    earning: str = ""
+    held: tuple[Held, ...] = ()
 
 
 class AgentState(TypedDict, total=False):
@@ -186,17 +205,21 @@ class LangGraphAgent:
 
     async def _earn(self, state: AgentState) -> AgentState:
         asked_to_place = bool(state.get("asked_to_place"))
-        idle, earning = await self._what_they_hold(state)
+        holdings = await self._what_they_hold(state)
         system = earn_prompt(
             system_prompt(self._config),
-            idle,
-            earning,
+            holdings.idle,
+            holdings.earning,
             asked_to_place=asked_to_place,
+            held=held_lines(holdings.held),
         )
         prepared: list[Deposit] = []
         asked: list[Choice] = []
         tools = (
-            earn_tools(self._catalog) + deposit_tools(self._catalog, prepared) + asking_tools(asked)
+            earn_tools(self._catalog)
+            + deposit_tools(self._catalog, prepared)
+            + moving_tools(self._catalog, holdings.held, prepared)
+            + asking_tools(asked)
         )
         answered = await self._answer_with_tools(system, state, tools)
         return {
@@ -205,24 +228,43 @@ class LangGraphAgent:
             "choices": tuple(asked),
         }
 
-    async def _what_they_hold(self, state: AgentState) -> tuple[str, str]:
+    async def _what_they_hold(self, state: AgentState) -> Holdings:
         target = state.get("portfolio")
         token = state.get("authorization")
         try:
             if not target:
                 if not token:
-                    return "", ""
+                    return Holdings()
                 owned = (await self._portfolio.me(token)).portfolios
                 if not owned:
-                    return "", ""
+                    return Holdings()
                 target = owned[0].slug
             async with step("portfolio", f"Reading portfolio · {target}"):
                 portfolio = await self._portfolio.portfolio(target, token)
                 said(positions_read(portfolio))
-                return idle_lines(portfolio), earning_lines(portfolio)
+            return Holdings(
+                idle=idle_lines(portfolio),
+                earning=earning_lines(portfolio),
+                held=await self._in_pools(portfolio),
+            )
         except Exception as error:  # noqa: BLE001 — advice without it beats no advice
             logger.warning("earn: holdings unavailable (%r)", error)
-            return "", ""
+            return Holdings()
+
+    async def _in_pools(self, portfolio: Portfolio) -> tuple[Held, ...]:
+        """What they have in pools, from the chain, for every Solana wallet in the portfolio."""
+        addresses = [wallet.address for wallet in portfolio.wallets if wallet.chain == "SOL"]
+        if not addresses:
+            return ()
+        try:
+            async with step("held", "Reading what is in pools"):
+                found = await asyncio.gather(*(self._catalog.positions(a) for a in addresses))
+                held = tuple(one for each in found for one in each)
+                said(f"{len(held)} in pools" if held else "nothing in pools")
+                return held
+        except Exception as error:  # noqa: BLE001 — a deposit is still worth offering without it
+            logger.warning("earn: positions unavailable (%r)", error)
+            return ()
 
     async def _grounded(self, state: AgentState) -> AgentState:
         system = system_prompt(self._config)

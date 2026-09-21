@@ -76,16 +76,41 @@ class YieldPool:
         return tuple(reasons)
 
 
+Action = Literal["deposit", "withdraw", "move"]
+
+
 @dataclass(frozen=True, slots=True)
 class Deposit:
+    """What a card asks the wallet to sign.
+
+    `pool` is the pool the card is about: where the money goes in a deposit
+    and a move, where it comes out of in a withdrawal. A move also says where
+    it leaves, `source`. `everything` takes out all there is, whatever the
+    shares are worth by the time it is signed; `amount` is then the figure it
+    was worth when it was read, for showing.
+    """
+
     pool: YieldPool
     amount: Decimal
     terms: DepositTerms
+    action: Action = "deposit"
+    source: YieldPool | None = None
+    everything: bool = False
 
     @property
     def below_minimum(self) -> bool:
+        if self.action == "withdraw":
+            return False
         minimum = self.terms.min_amount
         return minimum is not None and self.amount < minimum
+
+
+@dataclass(frozen=True, slots=True)
+class Held:
+    """Money somebody has in a pool, read from the chain, in the pool's token."""
+
+    pool: YieldPool
+    amount: Decimal
 
 
 SettledStatus = Literal["landed", "failed", "sent", "refused"]
@@ -99,6 +124,8 @@ class Settled:
     status: SettledStatus
     signature: str | None = None
     error: str | None = None
+    action: "Action" = "deposit"
+    from_pool: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

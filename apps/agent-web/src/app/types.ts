@@ -90,8 +90,17 @@ export interface SignInBlock {
   pendingQuestion?: string;
 }
 
+export type DepositAction = 'deposit' | 'withdraw' | 'move';
+
+/**
+ * A card asking the wallet to sign. `pool` is the pool the card is about —
+ * where the money goes in a deposit and a move, where it comes out of in a
+ * withdrawal; a move also names where it leaves. `amount` is tokens, or "all",
+ * in which case `shown` is what all of it was worth when it was read.
+ */
 export interface DepositBlock {
   kind: 'deposit';
+  action?: DepositAction;
   poolId: string;
   pool: string;
   protocol: string;
@@ -99,9 +108,13 @@ export interface DepositBlock {
   network: string;
   token: string;
   amount: string;
+  shown?: string | null;
   apy: string;
   risk: string;
   url: string;
+  fromPoolId?: string | null;
+  fromPool?: string | null;
+  fromApy?: string | null;
 }
 
 export interface DepositRequest {
@@ -112,6 +125,9 @@ export interface DepositRequest {
   network: string;
   token: string;
   amount: string;
+  action?: DepositAction;
+  fromPoolId?: string;
+  fromPool?: string;
 }
 
 export type DepositLanding = 'pending' | 'landed' | 'failed';
@@ -134,6 +150,8 @@ export interface Settled {
   status: 'landed' | 'failed' | 'sent' | 'refused';
   signature?: string | null;
   error?: string | null;
+  action?: DepositAction;
+  from_pool?: string | null;
 }
 
 export interface ChoiceBlock {

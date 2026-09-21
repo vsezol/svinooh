@@ -1,3 +1,4 @@
+from ..domain.earn import Held
 from ..domain.portfolio import Portfolio, Position, Total, Wallet, total_of
 
 MAX_CHARS = 6000
@@ -251,3 +252,12 @@ def _capped(lines: list[str]) -> str:
         used += len(line) + 1
     kept.append(f"…and {len(lines) - len(kept)} more lines, left out for length")
     return "\n".join(kept)
+
+
+def held_lines(held: tuple[Held, ...]) -> str:
+    """What they have in pools money can be taken out of, each with the id to take it by."""
+    return "\n".join(
+        f"- {one.amount:f} {one.pool.token} in {one.pool.name} ({one.pool.protocol} "
+        f"{one.pool.kind}) paying {one.pool.apy_net * 100:.2f}% net. id {one.pool.id}"
+        for one in sorted(held, key=lambda one: -one.amount)
+    )

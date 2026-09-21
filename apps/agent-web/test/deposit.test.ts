@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { describe, test } from 'node:test';
-import { afterDeposit, requestOf, settledOf } from '../src/components/blocks/DepositBlock';
+import { afterDeposit, requestOf, settledOf, sizeOf } from '../src/components/blocks/DepositBlock';
 import type { DepositRequest } from '../src/app/types';
 import type { DepositBlock } from '../src/app/types';
 
@@ -28,7 +28,27 @@ describe('WhatTheHostIsHandedAndWhatComesBack', () => {
       network: card.network,
       token: card.token,
       amount: card.amount,
+      action: 'deposit',
     });
+  });
+
+  test('a move hands over where the money leaves, as well as where it goes', () => {
+    const move = requestOf({
+      ...card,
+      action: 'move',
+      amount: 'all',
+      fromPoolId: 'sol:kamino:vault:PRIME',
+      fromPool: 'USDC Prime',
+    });
+    assert.equal(move.action, 'move');
+    assert.equal(move.amount, 'all');
+    assert.equal(move.fromPoolId, 'sol:kamino:vault:PRIME');
+    assert.equal(move.fromPool, 'USDC Prime');
+  });
+
+  test('"all" is shown as the figure it was worth, not as the word', () => {
+    assert.equal(sizeOf({ ...card, amount: 'all', shown: '12.001555' }), '12.001555 USDC');
+    assert.equal(sizeOf({ ...card, amount: '5' }), '5 USDC');
   });
 
   test('a refusal keeps its reason', () => {
@@ -97,10 +117,21 @@ describe('WhatTheAgentIsToldAfterASignature', () => {
       amount: '12.0014',
       token: 'USDC',
       pool: 'Elemental USDC Turbo',
+      action: 'deposit',
+      from_pool: null,
       status: 'landed',
       signature: '5xy',
       error: null,
     });
+  });
+
+  test('a move is told as a move, from where to where', () => {
+    const told = settledOf(
+      { ...request, action: 'move', fromPoolId: 'sol:kamino:vault:PRIME', fromPool: 'USDC Prime' },
+      { ok: true, signature: '5xy', landed: 'landed' },
+    );
+    assert.equal(told?.action, 'move');
+    assert.equal(told?.from_pool, 'USDC Prime');
   });
 
   test('a rejection carries the reason the chain gave', () => {

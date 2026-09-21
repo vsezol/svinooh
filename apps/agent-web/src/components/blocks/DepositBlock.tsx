@@ -51,7 +51,13 @@ export function settledOf(
   request: DepositRequest,
   outcome: DepositOutcome | void,
 ): Settled | null {
-  const what = { amount: request.amount, token: request.token, pool: request.pool };
+  const what = {
+    amount: request.amount,
+    token: request.token,
+    pool: request.pool,
+    action: request.action ?? 'deposit',
+    from_pool: request.fromPool ?? null,
+  };
   if (!outcome) return null;
   if (outcome.ok === false) {
     return outcome.at === 'build'
@@ -77,7 +83,32 @@ export const requestOf = (block: DepositBlock): DepositRequest => ({
   network: block.network,
   token: block.token,
   amount: block.amount,
+  action: block.action ?? 'deposit',
+  ...(block.fromPoolId ? { fromPoolId: block.fromPoolId } : {}),
+  ...(block.fromPool ? { fromPool: block.fromPool } : {}),
 });
+
+const EYEBROW = {
+  deposit: 'PROPOSED DEPOSIT',
+  withdraw: 'PROPOSED WITHDRAWAL',
+  move: 'PROPOSED MOVE',
+} as const;
+
+const PRESS = {
+  deposit: 'Deposit from my wallet',
+  withdraw: 'Withdraw to my wallet',
+  move: 'Move it, one signature',
+} as const;
+
+const PROMISE = {
+  deposit: 'Your money goes straight to the protocol. Nothing moves until you sign.',
+  withdraw: 'The money comes back to your wallet. Nothing moves until you sign.',
+  move: 'Out of one pool and into the other in one transaction. Nothing moves until you sign.',
+} as const;
+
+/** What the card shows as its amount: the figure, even when what it asks for is "all". */
+export const sizeOf = (block: DepositBlock): string =>
+  block.amount === 'all' ? `${block.shown ?? 'All'} ${block.token}` : `${block.amount} ${block.token}`;
 
 export default function DepositBlockView({ block, onDeposit }: Props) {
   const [shown, setShown] = useState<Shown>({ state: 'idle', note: null, signature: null });
@@ -97,6 +128,7 @@ export default function DepositBlockView({ block, onDeposit }: Props) {
     }
   };
 
+  const action = block.action ?? 'deposit';
   const done = state === 'signed' || state === 'landed';
   const says = !onDeposit
     ? 'No wallet is connected here — open it on svinooh.com to sign.'
@@ -104,18 +136,19 @@ export default function DepositBlockView({ block, onDeposit }: Props) {
       ? (note ?? 'not signed')
       : done
         ? null
-        : 'Your money goes straight to the protocol. Nothing moves until you sign.';
+        : PROMISE[action];
 
   return (
     <div className="sv-a-b-card sv-a-b-deposit" data-state={state}>
-      <div className="sv-a-b-eyebrow">PROPOSED DEPOSIT</div>
+      <div className="sv-a-b-eyebrow">{EYEBROW[action]}</div>
       <div className="sv-a-b-deposit-head">
-        <span className="sv-a-b-deposit-size mono">
-          {block.amount} {block.token}
+        <span className="sv-a-b-deposit-size mono">{sizeOf(block)}</span>
+        <span className="sv-a-b-deposit-rate mono">
+          {action === 'move' && block.fromApy ? `${block.fromApy} → ${block.apy}` : block.apy}
         </span>
-        <span className="sv-a-b-deposit-rate mono">{block.apy}</span>
       </div>
       <div className="sv-a-b-deposit-where">
+        {action === 'move' && block.fromPool ? <span>{block.fromPool} → </span> : null}
         <a href={block.url} target="_blank" rel="noopener noreferrer">
           {block.pool}
         </a>
@@ -138,7 +171,7 @@ export default function DepositBlockView({ block, onDeposit }: Props) {
             onClick={sign}
             disabled={!onDeposit || state === 'working'}
           >
-            {state === 'working' ? 'Waiting for your wallet…' : 'Deposit from my wallet'}
+            {state === 'working' ? 'Waiting for your wallet…' : PRESS[action]}
           </button>
         )}
         {says ? <span className="sv-a-b-deposit-note mono">{says}</span> : null}

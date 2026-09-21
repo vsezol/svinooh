@@ -7,7 +7,7 @@ from langchain_core.tools import tool
 from ..adapters.earn import YieldCatalog
 from ..adapters.portfolio import DataSource
 from ..domain.asking import MAX_ANSWERS, MIN_ANSWERS, Choice
-from ..domain.earn import CatalogSnapshot, Deposit, YieldPool
+from ..domain.earn import CatalogSnapshot, Deposit, Held, YieldPool
 from ..domain.house import plain
 from ..domain.portfolio import History, Period, Portfolio, total_of
 from ..observability import metrics
@@ -179,6 +179,127 @@ def deposit_tools(catalog: YieldCatalog, prepared: list[Deposit]) -> list:
     return [propose_deposit]
 
 
+WHISKER = Decimal("1.001")
+
+
+def moving_tools(catalog: YieldCatalog, held: tuple[Held, ...], prepared: list[Deposit]) -> list:
+    def holding(pool_id: str) -> Held | None:
+        return next((one for one in held if one.pool.id == pool_id.strip()), None)
+
+    def nothing_there(pool_id: str) -> str:
+        if not held:
+            return (
+                "Nothing they have in a pool could be read, so there is nothing to take out "
+                "from here. Say so plainly."
+            )
+        return (
+            f"They have nothing in a pool with the id {pool_id}. Use an id exactly as it is "
+            "printed on the lines of what they have in pools."
+        )
+
+    def how_much(raw: str, source: Held) -> tuple[Decimal, bool] | str:
+        if str(raw).strip().lower() in ("", "all", "everything", "max"):
+            return source.amount, True
+        size = _amount(raw)
+        if size is None:
+            return 'That amount is not a number of tokens. Pass "all", or ask how much.'
+        if size > source.amount * WHISKER:
+            return (
+                f"They have {source.amount:f} {source.pool.token} in {source.pool.name}, less "
+                "than that. Tell them what is there and offer to take all of it."
+            )
+        return size, False
+
+    @tool
+    async def propose_withdraw(pool_id: str, amount: str = "all") -> str:
+        """Put a withdrawal in front of the user to sign: money out of a pool, back to their wallet.
+
+        `pool_id` is the id printed beside the pool on the lines of what they
+        have in pools. `amount` is "all" for everything in it, or a plain number
+        of tokens. Taking all of it also closes the accounts the deposit opened,
+        and the SOL they held comes back with the money. It moves nothing: they
+        sign it in their own wallet, and until they do, nothing has happened.
+        """
+        source = holding(pool_id)
+        if source is None:
+            return nothing_there(pool_id)
+        taken = how_much(amount, source)
+        if isinstance(taken, str):
+            return taken
+        size, everything = taken
+        pool = await catalog.pool(source.pool.id)
+        if pool is None or pool.terms is None:
+            return f"{source.pool.name} cannot be withdrawn from here. Say so."
+        prepared.append(
+            Deposit(
+                pool=pool, amount=size, terms=pool.terms, action="withdraw", everything=everything
+            )
+        )
+        what = f"all of it, about {size:f}" if everything else f"{size:f}"
+        return (
+            f"Ready for the user to sign: {what} {pool.token} out of {pool.name}, back to their "
+            "wallet. They see it as a card with a button. Say what it is in one or two sentences "
+            "and that nothing happens until they sign. Do not say it is done."
+        )
+
+    @tool
+    async def propose_move(from_pool_id: str, to_pool_id: str, amount: str = "all") -> str:
+        """Move money from a pool they are in to another pool, in one transaction signed once.
+
+        It takes the money out and puts it in together: never ask them to
+        withdraw and then deposit as two steps, and never send them to a
+        protocol's site to do either. `from_pool_id` is the id printed beside
+        the pool on the lines of what they have in pools; `to_pool_id` is the id
+        printed beside a pool in the rates. Both must take the same token.
+        `amount` is "all", or a plain number of tokens. It moves nothing until
+        they sign.
+        """
+        source = holding(from_pool_id)
+        if source is None:
+            return nothing_there(from_pool_id)
+        target = await catalog.pool(to_pool_id.strip())
+        if target is None:
+            return (
+                f"No pool has the id {to_pool_id}. Use an id exactly as it was printed beside a "
+                "pool in the rates, or read the rates again."
+            )
+        if target.id == source.pool.id:
+            return f"The money is already in {target.name}. Say so."
+        if target.token != source.pool.token:
+            return (
+                f"{source.pool.name} holds {source.pool.token} and {target.name} takes "
+                f"{target.token}. Moving between them needs a swap, which is not possible from "
+                "here yet. Say so, and offer a pool that takes the same token, or to take the "
+                "money out."
+            )
+        if target.terms is None:
+            return f"{target.name} cannot be deposited into from here. Offer another."
+        taken = how_much(amount, source)
+        if isinstance(taken, str):
+            return taken
+        size, everything = taken
+        prepared.append(
+            Deposit(
+                pool=target,
+                amount=size,
+                terms=target.terms,
+                action="move",
+                source=source.pool,
+                everything=everything,
+            )
+        )
+        what = f"all of it, about {size:f}" if everything else f"{size:f}"
+        return (
+            f"Ready for the user to sign: {what} {target.token} out of {source.pool.name} "
+            f"({as_percent(source.pool.apy_net)}) and into {target.name} "
+            f"({as_percent(target.apy_net)}), in one transaction. They see it as a card with a "
+            "button. Say what it is and what the rate becomes, in one or two sentences, and that "
+            "nothing happens until they sign. Do not say it is done."
+        )
+
+    return [propose_withdraw, propose_move]
+
+
 def _amount(raw: str) -> Decimal | None:
     try:
         size = Decimal(str(raw).strip().replace(",", "").replace("_", ""))
@@ -297,6 +418,12 @@ def tool_phrase(name: str, args: dict) -> str | None:
     if name == "propose_deposit":
         pool = str(args.get("pool_id", "")).strip()
         return f"Preparing a deposit · {pool}" if pool else "Preparing a deposit"
+    if name == "propose_withdraw":
+        pool = str(args.get("pool_id", "")).strip()
+        return f"Preparing a withdrawal · {pool}" if pool else "Preparing a withdrawal"
+    if name == "propose_move":
+        pool = str(args.get("to_pool_id", "")).strip()
+        return f"Preparing a move · {pool}" if pool else "Preparing a move"
     return None
 
 

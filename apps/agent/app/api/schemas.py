@@ -10,6 +10,8 @@ class SettledIn(BaseModel):
     status: Literal["landed", "failed", "sent", "refused"]
     signature: str | None = Field(default=None, max_length=128)
     error: str | None = Field(default=None, max_length=512)
+    action: Literal["deposit", "withdraw", "move"] = "deposit"
+    from_pool: str | None = Field(default=None, max_length=128)
 
 
 class ChatRequest(BaseModel):
@@ -46,6 +48,7 @@ class SignInBlock(BaseModel):
 
 class DepositBlock(BaseModel):
     kind: Literal["deposit"] = "deposit"
+    action: Literal["deposit", "withdraw", "move"] = "deposit"
     pool_id: str = Field(serialization_alias="poolId")
     pool: str
     protocol: str
@@ -53,9 +56,13 @@ class DepositBlock(BaseModel):
     network: str
     token: str
     amount: str
+    shown: str | None = None
     apy: str
     risk: str
     url: str
+    from_pool_id: str | None = Field(default=None, serialization_alias="fromPoolId")
+    from_pool: str | None = Field(default=None, serialization_alias="fromPool")
+    from_apy: str | None = Field(default=None, serialization_alias="fromApy")
 
 
 class ChoiceBlock(BaseModel):
