@@ -6,7 +6,8 @@
     "dev": "tsx watch src/main.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
-    "check": "tsx scripts/format.check.ts"
+    "check": "tsx scripts/format.check.ts",
+    "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@svinooh/common": "*",

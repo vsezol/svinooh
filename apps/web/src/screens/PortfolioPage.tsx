@@ -28,6 +28,7 @@ import { ShareButton } from '../components/ShareButton';
 import { GUEST_TABS, TAB_PARAM, homeTab, tabFromUrl, tabsFor, tabIndex, usePager } from '../components/tabs';
 import { usePaywall } from '../components/Paywall';
 import { AgentEmbed, preloadAgent } from '../components/agent/AgentEmbed';
+import { forgetQuestionInLink, questionInLink } from '../lib/handoff';
 import { SideNav, type Tab } from '../components/SideNav';
 import { SyncedAgo } from '../components/SyncedAgo';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -423,6 +424,14 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
     const asked = tabFromUrl(new URLSearchParams(window.location.search).get(TAB_PARAM), tabs);
     if (asked) setTabState(asked);
   }, [tabs]);
+
+  /**
+   * The question a link brought for the assistant — an alert's "rebalance"
+   * button — asked once the chat is up on this portfolio, and taken out of the
+   * address bar at once. See lib/handoff.
+   */
+  const [linked] = useState(questionInLink);
+  useEffect(forgetQuestionInLink, []);
 
   /**
    * Which page is open.
@@ -835,6 +844,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
                     slug={slug}
                     token={tokenStore.get() ?? undefined}
                     portfolios={me?.portfolios}
+                    initialQuestion={linked}
                     onConversations={setConversations}
                     onDeposit={onDeposit}
                     control={agent}

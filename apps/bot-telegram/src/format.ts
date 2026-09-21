@@ -228,7 +228,47 @@ export function formatAlert(event: AlertEvent, webUrl: string): { text: string; 
 
   const text = [`<b>${esc(wallet)}</b>`, `<code>${esc(event.walletAddress)}</code>`, ...body].join('\n');
   const url = `${webUrl}/p/${event.portfolioSlug}`;
-  return { text, markup: { inline_keyboard: [[{ text: 'Open portfolio →', url }]] } };
+  return {
+    text,
+    markup: {
+      inline_keyboard: [[{ text: 'Open portfolio →', url }], ...rebalanceButtons(event, webUrl)],
+    },
+  };
+}
+
+/** A message offers to put back at most this many positions — past it, the portfolio lists them. */
+const MOST_REBALANCES = 3;
+
+/**
+ * A Meteora position that left its range can be put back around the price
+ * from the chat: the button opens the portfolio's assistant with the question
+ * already asked, and it answers with a card to sign.
+ *
+ * The question travels in the link, so it names the pair and the range and
+ * never the position's address: a link's query lands in browser history and
+ * request logs, and the assistant finds the position among the wallet's own —
+ * or asks which, when two of them fit.
+ */
+export function rebalanceButtons(
+  event: AlertEvent,
+  webUrl: string,
+): Array<Array<{ text: string; url: string }>> {
+  const left = event.items.filter(
+    (item) =>
+      item.kind === 'range' &&
+      item.direction === 'entered' &&
+      item.band !== null &&
+      /meteora/i.test(item.platform),
+  );
+  return left.slice(0, MOST_REBALANCES).map((item) => {
+    const { pair, lower, upper, priceLabel } = item.band!;
+    const question =
+      `Rebalance my Meteora ${pair} position that went out of range ` +
+      `(${price(lower)} - ${price(upper)} ${priceLabel}): close it and place it again ` +
+      'around the current price, keeping its width.';
+    const link = `${webUrl}/p/${event.portfolioSlug}?tab=agent&q=${encodeURIComponent(question)}`;
+    return [{ text: left.length > 1 ? `Rebalance ${pair} with AI →` : 'Rebalance with AI →', url: link }];
+  });
 }
 
 /** "3 days" reads better than "4320 minutes" */

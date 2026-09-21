@@ -14,7 +14,7 @@ import { TAB_PARAM, tabsFor } from '../components/tabs';
 import { AGENT_ENABLED, AGENT_URL, AGENT_WIDGET_URL } from '../lib/agent';
 import { tokenStore } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { clearQuestion, peekQuestion } from '../lib/handoff';
+import { clearQuestion, forgetQuestionInLink, peekQuestion, questionInLink } from '../lib/handoff';
 
 /**
  * /ai — the app's front door, which is a conversation.
@@ -87,8 +87,11 @@ export function AgentPage({ conversationId }: { conversationId?: string } = {}) 
    * read, so a reload of this page is a fresh chat rather than the same
    * question asked again. See lib/handoff for why those are two steps.
    */
-  const [parked] = useState(peekQuestion);
-  useEffect(clearQuestion, []);
+  const [parked] = useState(() => questionInLink() ?? peekQuestion());
+  useEffect(() => {
+    clearQuestion();
+    forgetQuestionInLink();
+  }, []);
   /**
    * Whether we know who is asking yet.
    *
