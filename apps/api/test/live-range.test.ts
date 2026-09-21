@@ -5,9 +5,11 @@
  * account would make up crossings that never happened, so the fixture is a real
  * mainnet account and the test fails the day the layout moves. Believing every
  * crossing would turn a price sitting on a band's edge into a message per swap,
- * so the hold is exercised on the clock rather than trusted. And a socket that
+ * so the hold is exercised on the clock rather than trusted. A socket that
  * went quiet would leave a crossing unseen until the next scan, so Meteora's
  * own answer is shown to stand in for it — without winding back a newer push.
+ * And a restart starts from what the last scan stored, so a crossing made
+ * while the process was down is still a crossing.
  *
  * No network and no database: the positions Meteora would report are handed in,
  * the pushes the socket would deliver are called directly.
@@ -70,7 +72,16 @@ const position = (over: Partial<MeteoraWatchable> = {}): MeteoraWatchable => ({
   upperBinId: -5340,
   activeBinId: -5380,
   inRange: true,
+  lowerPrice: 115.8,
+  upperPrice: 116.5,
   ...over,
+});
+
+/** A row the last scan stored for this position — its band is Meteora's own prices */
+const row = (range: 'in' | 'out', over: { lower?: number; upper?: number } = {}) => ({
+  walletId: 'w-1',
+  range,
+  band: { lower: 115.8, upper: 116.5, ...over },
 });
 
 /** As the registry declares it */
@@ -87,13 +98,16 @@ class Watch extends RangeWatch {
   }
 }
 
-const watching = (positions: MeteoraWatchable[]) => {
+const watching = (positions: MeteoraWatchable[], stored: Array<ReturnType<typeof row>> = []) => {
   const watched: string[][] = [];
   const asked: string[] = [];
   let push: (account: string, data: Buffer) => void = () => {};
   const prisma = {
     position: {
-      findMany: async () => [{ walletId: 'w-1', wallet: { address: ADDRESS } }],
+      // Two questions reach this table: which wallets to watch, and what the
+      // last scan stored about their positions
+      findMany: async (args: { select: { range?: boolean } }) =>
+        args.select.range ? stored : [{ walletId: 'w-1', wallet: { address: ADDRESS } }],
     },
   } as unknown as PrismaService;
   const feed = {
@@ -197,6 +211,33 @@ describe('APriceLeavingItsBand', () => {
     watch.meanwhile = () => {};
     mock.timers.tick(HOLD_MS);
     assert.deepEqual(asked, ['w-1'], 'the push is newer, and it stands');
+  });
+
+  test('a restart: what changed while nobody was watching is read', async () => {
+    // The last scan stored "in"; by the time the process is back, the chain
+    // says out — the owner has not been told, and the watch is how they are
+    const { watch, asked } = watching([position({ activeBinId: -5405, inRange: false })], [row('in')]);
+    await watch.tick();
+    assert.deepEqual(asked, [], 'through the hold like any crossing');
+    mock.timers.tick(HOLD_MS);
+    assert.deepEqual(asked, ['w-1']);
+  });
+
+  test('a restart where nothing changed reads nothing', async () => {
+    const { watch, asked } = watching([position({ activeBinId: -5405, inRange: false })], [row('out')]);
+    await watch.tick();
+    mock.timers.tick(HOLD_MS * 2);
+    assert.deepEqual(asked, []);
+  });
+
+  test('a stored row that cannot be pinned to one position is not guessed at', async () => {
+    const { watch, asked } = watching(
+      [position({ activeBinId: -5405, inRange: false })],
+      [row('in'), row('in'), row('in', { lower: 100, upper: 101 })],
+    );
+    await watch.tick();
+    mock.timers.tick(HOLD_MS * 2);
+    assert.deepEqual(asked, [], 'two rows fit, so neither says anything; the scan on the clock covers it');
   });
 
   test('a position nobody holds any more is let go of', async () => {
