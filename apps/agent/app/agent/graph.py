@@ -64,6 +64,11 @@ from .tools import (
 
 logger = logging.getLogger("svinooh-ai")
 
+IN_WORDS = (
+    "(Nothing more can be looked up this turn. Write the answer now, in words, from what "
+    "came back.)"
+)
+
 
 def each_once(prepared: list[Card]) -> tuple[Card, ...]:
     """Every card the turn prepared, one per thing to sign: a later one for the same wins."""
@@ -468,7 +473,14 @@ class LangGraphAgent:
         async with step("answer", "Writing the answer"):
             said("the tool budget was spent")
             final = await self._models.ask(role, messages)
-        return {"answer": extract_text(final)}
+            answer = extract_text(final)
+            if not answer.strip():
+                # A model that ends on a tool's result with no tools left to call
+                # can answer with nothing at all — on 2026-09-21 a turn went out
+                # empty that way. Told plainly what is wanted, it answers.
+                final = await self._models.ask(role, [*messages, HumanMessage(content=IN_WORDS)])
+                answer = extract_text(final)
+        return {"answer": answer}
 
     async def _answer(self, system: str, state: AgentState) -> AgentState:
         async with step("answer", "Writing the answer"):

@@ -441,9 +441,30 @@ def liquidity_tools(
             "added some, say a fresh reading takes a minute."
         )
 
-    async def fitting(pool: PairPool, below: Decimal, above: Decimal) -> PairPool | None:
-        pools = await catalog.pair_pools(pool.x, pool.y, below, above)
-        return next((one for one in pools if one.id == pool.id), None)
+    seen: dict[str, PairPool] = {}
+
+    def remember(pools: tuple[PairPool, ...]) -> tuple[PairPool, ...]:
+        seen.update({pool.id: pool for pool in pools})
+        return pools
+
+    async def resolve(pool_id: str) -> PairPool | None:
+        """A pool by the id the model gave, forgiving a slip in copying one it was shown."""
+        asked = pool_id.strip()
+        pool = await catalog.pair_pool(asked)
+        if pool is not None:
+            return pool
+        near = [one for one in seen.values() if _distance(one.id, asked) <= TYPOS]
+        return await catalog.pair_pool(near[0].id) if len(near) == 1 else None
+
+    async def fitting(
+        pool: PairPool, below: Decimal, above: Decimal
+    ) -> tuple[str | None, list[PairPool]]:
+        """Why this pool cannot hold the range, and the pools of the pair that can."""
+        pools = remember(await catalog.pair_pools(pool.x, pool.y, below, above))
+        fit = next((one for one in pools if one.id == pool.id), None)
+        if fit is None or fit.why_not is None:
+            return None, []
+        return fit.why_not, [one for one in pools if one.why_not is None][:3]
 
     def at(address: str) -> LiquidityPosition | None:
         return next((one for one in placed if one.address == address.strip()), None)
@@ -475,7 +496,7 @@ def liquidity_tools(
         if isinstance(wanted, str):
             return wanted
         below, above = wanted if wanted else (None, None)
-        pools = await catalog.pair_pools(sides[0], sides[1], below, above)
+        pools = remember(await catalog.pair_pools(sides[0], sides[1], below, above))
         said(f"{len(pools)} pools" if pools else "no pools")
         if not pools:
             return (
@@ -527,7 +548,7 @@ def liquidity_tools(
         if isinstance(wanted, str):
             return wanted
         below, above = wanted
-        pool = await catalog.pair_pool(pool_id.strip())
+        pool = await resolve(pool_id)
         if pool is None:
             return (
                 f"No pool has the id {pool_id}. Use an id exactly as it was printed beside a pool."
@@ -535,9 +556,9 @@ def liquidity_tools(
         paid = pool.token(token)
         if paid is None:
             return f"{pool.name} takes {pool.x} and {pool.y}; ask which of those they pay with."
-        fit = await fitting(pool, below, above)
-        if fit is not None and fit.why_not:
-            return f"{fit.why_not}. Offer the pool of the pair that holds it, or a narrower range."
+        why, holding = await fitting(pool, below, above)
+        if why:
+            return _held_elsewhere(why, holding)
         symbol, mint = paid
         short = short_of(symbol, size)
         if short:
@@ -600,9 +621,9 @@ def liquidity_tools(
         if isinstance(wanted, str):
             return wanted
         if wanted:
-            fit = await fitting(held.pool, *wanted)
-            if fit is not None and fit.why_not:
-                return f"{fit.why_not}. Offer a narrower range, or keeping its width."
+            why, _ = await fitting(held.pool, *wanted)
+            if why:
+                return f"{why}. Offer a narrower range, or keeping its width."
         below, above = wanted if wanted else (None, None)
         prepared.append(
             Placement(
@@ -622,6 +643,38 @@ def liquidity_tools(
         )
 
     return [liquidity_pools, propose_liquidity, propose_close_liquidity, propose_rebalance]
+
+
+def _held_elsewhere(why: str, holding: list[PairPool]) -> str:
+    """A range one pool cannot hold, with the pools of the same pair that can."""
+    if not holding:
+        return f"{why}. No pool of the pair holds it; offer a narrower range."
+    options = "; ".join(
+        f"{one.name} with bins {one.bin_step / 100:g}% apart, {as_percent(one.fee_apr)} a year "
+        f"in fees, {as_money(one.tvl_usd)} in it, id {one.id}"
+        for one in holding
+    )
+    return (
+        f"{why}. The pools of the pair that hold it: {options}. Offer one of those, or a "
+        "narrower range here."
+    )
+
+
+TYPOS = 3
+"""How far a pool id the model copied may be off and still be the one it was shown."""
+
+
+def _distance(first: str, second: str) -> int:
+    """How many single characters turn one string into the other."""
+    previous = list(range(len(second) + 1))
+    for at, left in enumerate(first, 1):
+        current = [at]
+        for to, right in enumerate(second, 1):
+            current.append(
+                min(previous[to] + 1, current[to - 1] + 1, previous[to - 1] + (left != right))
+            )
+        previous = current
+    return previous[-1]
 
 
 def _amount(raw: str) -> Decimal | None:

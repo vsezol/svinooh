@@ -285,6 +285,30 @@ class TestWhereToPutMoney:
             await run(bot)
         assert "tool budget spent" in caplog.text, "a silent ceiling is a defect nobody can see"
 
+    async def test_an_empty_answer_after_the_last_hop_is_asked_for_again_in_words(self):
+        class Silent(Model):
+            """Calls a tool every hop, says nothing when it cannot, and answers once told to."""
+
+            with_tools = False
+
+            def bind_tools(self, tools):
+                self.with_tools = True
+                return super().bind_tools(tools)
+
+            async def ainvoke(self, messages):
+                with_tools, self.with_tools = self.with_tools, False
+                if "Write the answer now, in words" in str(messages[-1].content):
+                    self._tool_calls, self.text = [], "Here is what came back."
+                elif with_tools:
+                    self._tool_calls, self.text = [EARN_CALL], ""
+                else:
+                    self._tool_calls, self.text = [], ""
+                return await super().ainvoke(messages)
+
+        bot, _, _ = wire(intent="earn", catalog=Catalog(), model=Silent())
+        out = await run(bot)
+        assert out["answer"] == "Here is what came back."
+
     async def test_a_question_comes_back_as_buttons(self):
         asking = {
             "name": "ask_the_user",

@@ -282,3 +282,32 @@ class TestTheRulesForAPair:
 
         assert "Read the pools of the pair first" in LIQUIDITY
         assert "never one you remember" in LIQUIDITY
+
+
+class TestForgivingTheModel:
+    async def test_a_slip_in_copying_an_id_it_was_shown_is_still_that_pool(self):
+        prepared: list = []
+        listing = tools(shelf(), prepared)
+        await listing["liquidity_pools"].ainvoke({"pair": "SOL-USDC"})
+        slipped = PAIR.id.replace("Cgqw", "Cgwq")
+        await listing["propose_liquidity"].ainvoke({**CARD, "pool_id": slipped})
+        (card,) = prepared
+        assert card.pool.id == PAIR.id
+
+    async def test_an_id_it_was_never_shown_is_not_guessed_at(self):
+        prepared: list = []
+        said = await tools(shelf(), prepared)["propose_liquidity"].ainvoke(
+            {**CARD, "pool_id": "sol:meteora:dlmm:Cgwq"}
+        )
+        assert prepared == []
+        assert "No pool has the id" in said
+
+    async def test_a_range_one_pool_cannot_hold_names_the_pools_of_the_pair_that_can(self):
+        prepared: list = []
+        catalog = shelf(NARROW, PAIR)
+        said = await tools(catalog, prepared)["propose_liquidity"].ainvoke(
+            {**CARD, "pool_id": NARROW.id}
+        )
+        assert prepared == []
+        assert "The pools of the pair that hold it: SOL-USDC with bins 0.8% apart" in said
+        assert f"id {PAIR.id}" in said
