@@ -71,7 +71,8 @@ export function settledOf(
     ...what,
     status,
     signature: outcome.signature,
-    error: status === 'failed' ? (outcome.error ?? null) : null,
+    error: status === 'failed' || outcome.halfway ? (outcome.error ?? null) : null,
+    ...(outcome.halfway ? { halfway: true } : {}),
   };
 }
 
@@ -103,12 +104,19 @@ const PRESS = {
 const PROMISE = {
   deposit: 'Your money goes straight to the protocol. Nothing moves until you sign.',
   withdraw: 'The money comes back to your wallet. Nothing moves until you sign.',
-  move: 'Out of one pool and into the other in one transaction. Nothing moves until you sign.',
+  move: 'Out of one pool and into the other. Nothing moves until you sign.',
 } as const;
 
-/** What the card shows as its amount: the figure, even when what it asks for is "all". */
-export const sizeOf = (block: DepositBlock): string =>
-  block.amount === 'all' ? `${block.shown ?? 'All'} ${block.token}` : `${block.amount} ${block.token}`;
+/**
+ * What the card shows as its amount: the figure, even when what it asks for is
+ * "all", in the token it is counted in — the one a move leaves, when it swaps.
+ */
+export const sizeOf = (block: DepositBlock): string => {
+  const counted = block.fromToken ?? block.token;
+  const figure = block.amount === 'all' ? (block.shown ?? 'All') : block.amount;
+  const swapped = block.fromToken && block.fromToken !== block.token ? ` → ${block.token}` : '';
+  return `${figure} ${counted}${swapped}`;
+};
 
 export default function DepositBlockView({ block, onDeposit }: Props) {
   const [shown, setShown] = useState<Shown>({ state: 'idle', note: null, signature: null });

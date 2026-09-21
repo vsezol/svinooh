@@ -144,6 +144,7 @@ def _deposit_card(deposit: Deposit) -> DepositBlock:
         from_pool_id=source.id if source else None,
         from_pool=source.name if source else None,
         from_apy=_rate(source.apy_net) if source else None,
+        from_token=source.token if source else None,
     )
 
 

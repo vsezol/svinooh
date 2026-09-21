@@ -111,8 +111,13 @@ describe('WhereAMoveCanGo', () => {
     assert.match(whyNotMove(PRIME, PRIME) ?? '', /already in USDC Prime/);
   });
 
-  test('not across tokens, until there is a swap to do it with', () => {
-    assert.match(whyNotMove(PRIME, JITO) ?? '', /needs a swap/);
+  test('across tokens too, now that there is a swap to do it with', () => {
+    assert.equal(whyNotMove(PRIME, JITO), null);
+  });
+
+  test('not across networks', () => {
+    const elsewhere = pool({ address: 'ETH', id: { network: 'eth', protocol: 'kamino', kind: 'vault', address: 'ETH' } as never });
+    assert.match(whyNotMove(PRIME, elsewhere) ?? '', /different networks/);
   });
 });
 
@@ -151,9 +156,18 @@ describe('MovingMoneyBetweenPools', () => {
     assert.equal(moved[0].all, true);
   });
 
-  test('a move across tokens is refused before anything is read or built', async () => {
+  test('a move across tokens reaches the builder, which swaps on the way', async () => {
     const { lend, moved } = moving([holding(PRIME, '12')]);
-    const failure = await refused(() => lend.move(idOf(PRIME.id), idOf(JITO.id), 'all', OWNER));
+    await lend.move(idOf(PRIME.id), idOf(JITO.id), 'all', OWNER);
+    assert.deepEqual(
+      [moved[0].from.token.symbol, moved[0].to.token.symbol],
+      ['USDC', 'JitoSOL'],
+    );
+  });
+
+  test('a move into the pool it is already in is still refused', async () => {
+    const { lend, moved } = moving([holding(PRIME, '12')]);
+    const failure = await refused(() => lend.move(idOf(PRIME.id), idOf(PRIME.id), 'all', OWNER));
     assert.ok(failure instanceof MoveNotSupported);
     assert.deepEqual(moved, []);
   });

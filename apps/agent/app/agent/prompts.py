@@ -181,9 +181,9 @@ IN_POOLS = (
     "one and named none. Where it goes is chosen the way a deposit is — ask the "
     "risk they want when nothing they said tells you, then name one pool that "
     "takes the same token and say what the rate becomes. A pool paying less is "
-    "not a better home: say so rather than moving it there. Between different "
-    "tokens a move is not possible yet: say so and offer the same token, or "
-    "taking it out."
+    "not a better home: say so rather than moving it there. A pool of another "
+    "token is a move too: it swaps on the way, and says so, and their wallet "
+    "may ask them to sign twice."
 )
 
 ASKING = (
@@ -240,10 +240,11 @@ SETTLED = (
 
 def settled_prompt(system: str, settled: Settled) -> str:
     how_much = "all of it" if settled.amount == "all" else f"{settled.amount} {settled.token}"
+    outcome = HALFWAY if settled.halfway else _OUTCOMES[settled.status]
     lines = [
         f"- what they signed: {_WHAT[settled.action](settled)}",
         f"- how much: {how_much}",
-        f"- what the network did: {_OUTCOMES[settled.status]}",
+        f"- what the network did: {outcome}",
     ]
     if settled.error:
         lines.append(f"- why: {settled.error}")
@@ -258,6 +259,12 @@ _WHAT = {
         "in one transaction"
     ),
 }
+
+HALFWAY = (
+    "only the first half went through — the money left the first pool and was swapped, and "
+    "is in their wallet now; the deposit into the second was not made, so it is earning "
+    "nothing until they put it in"
+)
 
 _OUTCOMES = {
     "landed": "it went through, and the money is where it was sent",

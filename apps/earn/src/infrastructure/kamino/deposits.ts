@@ -51,19 +51,33 @@ export async function intoVault(
   signer: Signer,
   deposit: Deposit,
 ): Promise<Built> {
-  const terms = deposit.pool.deposit;
+  return intoLoaded(await loadVault(klend, rpc, deposit.pool), signer, deposit.amount);
+}
+
+export type LoadedVault = Awaited<ReturnType<typeof loadVault>>;
+
+/** A vault's state, reserves and farm: everything its deposit needs but the amount. */
+export async function loadVault(klend: Sdk, rpc: SdkRpc, pool: Deposit['pool']) {
   const vault = new klend.KaminoVault(
     rpc,
-    terms.address as never,
+    pool.deposit.address as never,
     SLOT_DURATION_MS,
     undefined,
-    terms.programId as never,
+    pool.deposit.programId as never,
   );
   const state = await vault.getState();
-  const client = vault.client;
-  const reserves = await client.loadVaultReserves(state);
-  const farm = await client.loadVaultFarmState(state);
-  const ixs = await client.depositIxs(signer, vault, deposit.amount, reserves, farm, null);
+  const reserves = await vault.client.loadVaultReserves(state);
+  const farm = await vault.client.loadVaultFarmState(state);
+  return { vault, state, reserves, farm };
+}
+
+export async function intoLoaded(
+  loaded: LoadedVault,
+  signer: Signer,
+  amount: Deposit['amount'],
+): Promise<Built> {
+  const { vault, state, reserves, farm } = loaded;
+  const ixs = await vault.client.depositIxs(signer, vault, amount, reserves, farm, null);
   const table = String(state.vaultLookupTable);
   return {
     instructions: [

@@ -28,5 +28,11 @@ export type DepositOutcome =
       landed?: DepositLanding;
       tracked?: boolean;
       error?: string | null;
+      /**
+       * A move in two transactions whose first landed and whose second did
+       * not: the money is out of the first pool and swapped, and waiting in
+       * the wallet.
+       */
+      halfway?: boolean;
     }
   | { ok: false; reason: string; at?: DepositStopped };

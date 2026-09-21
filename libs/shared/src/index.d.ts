@@ -117,6 +117,11 @@ export interface DepositBuiltDto {
   instructions: number;
   blockhash: string;
   lastValidBlockHeight: string;
+  /**
+   * The second half of a move one transaction could not hold: once this has
+   * landed, a deposit of `amount` into `poolId`.
+   */
+  then?: { poolId: string; amount: string };
 }
 
 export type DepositLandingStatus = 'pending' | 'landed' | 'failed';

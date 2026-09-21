@@ -13,6 +13,7 @@ const STAGE: Record<Stage, string> = {
   building: 'Reading the pool and building the deposit…',
   signing: 'Waiting for your wallet…',
   landing: 'Sent. Waiting for the network to confirm it…',
+  continuing: 'The swap landed. Preparing the deposit, the second signature…',
 };
 
 export function DepositDialog({

@@ -199,3 +199,22 @@ class TestAWithdrawalOrAMoveThatCameBack:
             },
         )
         assert "a move out of USDC Prime and into Elemental USDC Turbo" in model.system
+
+
+class TestHalfAMove:
+    async def test_a_move_that_stopped_halfway_says_where_the_money_is(self, client, model):
+        await client.post(
+            "/chat",
+            json={
+                "message": "signed",
+                "settled": {
+                    **LANDED,
+                    "action": "move",
+                    "from_pool": "USDC Prime",
+                    "halfway": True,
+                    "error": "User rejected the request.",
+                },
+            },
+        )
+        assert "only the first half went through" in model.system
+        assert "is in their wallet now" in model.system

@@ -115,6 +115,7 @@ export interface DepositBlock {
   fromPoolId?: string | null;
   fromPool?: string | null;
   fromApy?: string | null;
+  fromToken?: string | null;
 }
 
 export interface DepositRequest {
@@ -139,6 +140,7 @@ export type DepositOutcome =
       landed?: DepositLanding;
       tracked?: boolean;
       error?: string | null;
+      halfway?: boolean;
     }
   | { ok: false; reason: string; at?: 'connect' | 'build' | 'wallet' | 'cancelled' };
 
@@ -152,6 +154,7 @@ export interface Settled {
   error?: string | null;
   action?: DepositAction;
   from_pool?: string | null;
+  halfway?: boolean;
 }
 
 export interface ChoiceBlock {

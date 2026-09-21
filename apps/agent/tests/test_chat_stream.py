@@ -411,3 +411,39 @@ class TestAQuestionWithNothingAboveIt:
         name, done = parse(response.text)[-1]
         assert name == "done", "a question card is an answer, not a turn that failed"
         assert [b["kind"] for b in done["blocks"]] == ["trace", "choice"], "and no empty bubble"
+
+
+class TestAMoveAcrossTokensOnTheWire:
+    async def test_the_card_names_the_token_it_leaves(self, meter):
+        from decimal import Decimal
+
+        from app.domain.earn import Held, YieldPool
+
+        shelf = Catalog()
+        prime = YieldPool(
+            id="sol:kamino:vault:PRIME",
+            name="USDC Prime",
+            protocol="kamino",
+            kind="vault",
+            network="sol",
+            token="USDT",
+            apy_net=Decimal("0.042"),
+            apy_base=Decimal("0.042"),
+            apy_rewards=Decimal("0"),
+            apy_incentives=Decimal("0"),
+            tvl_usd=Decimal("90000000"),
+            url="https://kamino.com/earn/lend/PRIME",
+        )
+        shelf.held = (Held(pool=prime, amount=Decimal("12.001555")),)
+        wired = container(
+            model=Moving(),
+            limiter=meter,
+            intent="earn",
+            asked_to_place=True,
+            catalog=shelf,
+            portfolio=Holder(),
+        )
+        async with client_for(wired) as client:
+            answered = await client.post("/chat", json={"message": "move it", "portfolio": "p"})
+        card = next(b for b in answered.json()["blocks"] if b["kind"] == "deposit")
+        assert (card["fromToken"], card["token"]) == ("USDT", "USDC")
