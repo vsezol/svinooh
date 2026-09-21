@@ -12,13 +12,16 @@
  *   harness.wallets(1)            one wallet that can sign — no chooser
  *   harness.build(422, {message}) what the server answers the next build
  *   await harness.deposit()       the press, and everything it produced
+ *
+ * What the agent is told about the outcome is agent-web's half, covered by its
+ * own tests: nothing here may import another app, because the image this one
+ * ships in carries only this one.
  */
 import { createRoot } from 'react-dom/client';
 import { useState } from 'react';
 import { getWallets } from '@wallet-standard/app';
 import { useDeposits } from '../../src/components/agent/useDeposits';
 import type { DepositOutcome, DepositRequest } from '../../src/lib/deposit';
-import { settledOf } from '../../../agent-web/src/components/blocks/DepositBlock';
 import { fakeWallet, OWNER, type Fake } from '../support/fake-wallet';
 
 declare global {
@@ -140,8 +143,6 @@ window.harness = {
     const outcome = await press!(REQUEST);
     const result = {
       outcome,
-      // The agent's side of the same press, from agent-web's own code.
-      toldTheAgent: settledOf(REQUEST as never, outcome as never),
       dialogShown,
       asked: asked.map((one) => ({ path: one.path.replace(/^.*\/api/, '/api'), body: one.body })),
       handed: fakes.flatMap((fake) =>
