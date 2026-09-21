@@ -183,7 +183,10 @@ IN_POOLS = (
     "takes the same token and say what the rate becomes. A pool paying less is "
     "not a better home: say so rather than moving it there. A pool of another "
     "token is a move too: it swaps on the way, and says so, and their wallet "
-    "may ask them to sign twice."
+    "may ask them to sign twice. It is also a trade — from then on the money "
+    "rises and falls with the other token's price — and a few tenths of a "
+    "percent of rate rarely pays for that; say both in a sentence, and move it "
+    "if that is still what they want."
 )
 
 ASKING = (
