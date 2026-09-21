@@ -61,6 +61,15 @@ from .tools import (
 logger = logging.getLogger("svinooh-ai")
 
 
+def each_once(prepared: list[Deposit]) -> tuple[Deposit, ...]:
+    """Every card the turn prepared, one per thing to sign: a later one for the same wins."""
+    latest: dict[tuple[str, str, str | None], Deposit] = {}
+    for deposit in prepared:
+        source = deposit.source.id if deposit.source else None
+        latest[(deposit.action, deposit.pool.id, source)] = deposit
+    return tuple(latest.values())
+
+
 @dataclass(frozen=True)
 class Holdings:
     """What the earn branch reads of somebody's money before it answers."""
@@ -80,7 +89,7 @@ class AgentState(TypedDict, total=False):
     intent: str
     asked_to_place: bool
     language: str
-    deposit: Deposit | None
+    deposits: tuple[Deposit, ...]
     choices: tuple[Choice, ...]
     route: str
     target_portfolio: str
@@ -232,7 +241,7 @@ class LangGraphAgent:
         answered = await self._answer_with_tools(system, state, tools, waiting=lambda: bool(asked))
         return {
             **answered,
-            "deposit": None if asked else (prepared[-1] if prepared else None),
+            "deposits": () if asked else each_once(prepared),
             "choices": tuple(asked),
         }
 
@@ -491,6 +500,6 @@ def _reply(state: dict[str, Any]) -> Reply:
         pending_set=tuple(pending) if pending else None,
         pending_clear=bool(state.get("pending_clear")),
         portfolio_created=str(created) if created else None,
-        deposit=state.get("deposit"),
+        deposits=tuple(state.get("deposits") or ()),
         choices=state.get("choices") or (),
     )

@@ -24,7 +24,7 @@ logger = logging.getLogger("svinooh-ai")
 @dataclass(frozen=True)
 class Answered:
     text: str
-    deposit: Deposit | None = None
+    deposits: tuple[Deposit, ...] = ()
     choices: tuple[Choice, ...] = ()
 
 
@@ -110,7 +110,7 @@ class Turns:
         answered = await self._applied(reply, admitted)
         metrics.counted(metrics.turns, outcome="answered")
         metrics.timed(metrics.turn_duration, time.perf_counter() - started)
-        return Answered(text=answered, deposit=reply.deposit, choices=reply.choices)
+        return Answered(text=answered, deposits=reply.deposits, choices=reply.choices)
 
     async def watch(self, admitted: Admitted) -> AsyncIterator[tuple[str, dict]]:
         started = time.perf_counter()
@@ -125,7 +125,7 @@ class Turns:
                                 "done",
                                 {
                                     "text": await self._applied(reply, admitted),
-                                    "deposit": reply.deposit,
+                                    "deposits": reply.deposits,
                                     "choices": reply.choices,
                                 },
                             )

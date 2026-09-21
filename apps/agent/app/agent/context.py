@@ -108,11 +108,37 @@ def idle_lines(portfolio: Portfolio, limit: int = 10) -> str:
     return "\n".join(_idle_line(p) for p in idle[:limit])
 
 
+GAS_KEPT = 0.02
+"""SOL left in a wallet for what signing costs: the fee, and the rent a deposit locks."""
+
+
 def _is_idle(position: Position) -> bool:
-    return position.category == "token" and not _pays_something(position)
+    if position.category != "token" or _pays_something(position):
+        return False
+    return not _is_gas(position) or _spare(position) > 0
+
+
+def _is_gas(position: Position) -> bool:
+    return position.symbol.upper() == "SOL" and (position.network or "").lower() == "sol"
+
+
+def _spare(position: Position) -> float:
+    return max((position.amount or 0.0) - GAS_KEPT, 0.0)
 
 
 def _idle_line(position: Position) -> str:
+    """One idle holding, as much of it as can go into a pool.
+
+    Native SOL is the gas the wallet signs with. Offering all of it put a
+    deposit in front of somebody that would have left them unable to sign it —
+    and a wallet with nothing left over cannot sign anything after either.
+    """
+    if _is_gas(position):
+        spare = _spare(position)
+        value = spare * position.price_usd if position.price_usd else None
+        figure = f"SOL {_amount(spare, position.price_usd)}"
+        worth = f" = {usd(value)}" if value is not None else ""
+        return f"- {figure}{worth} on sol ({GAS_KEPT} SOL more is kept back for network fees)"
     held = _amount(position.amount, position.price_usd)
     figure = f"{held} = {usd(position.value_usd)}" if held else usd(position.value_usd)
     where = f" on {position.network}" if position.network else ""
