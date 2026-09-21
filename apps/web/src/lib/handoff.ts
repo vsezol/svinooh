@@ -50,3 +50,36 @@ export function clearQuestion(): void {
     // Nothing was parked in the first place.
   }
 }
+
+/**
+ * The question a link carries: the one an alert's button asks, so the chat
+ * answers the alert where it opens.
+ *
+ * In the URL this time, because a Telegram button can carry nothing else —
+ * and safe there, because it is ours to write: it names a pair and a range,
+ * never an address, and the page takes it out of the address bar the moment
+ * it has read it, so a reload or a copied link does not ask it again.
+ */
+const LINK_PARAM = 'q';
+
+export function questionInLink(): string | undefined {
+  try {
+    const asked = new URLSearchParams(window.location.search).get(LINK_PARAM);
+    return asked ? asked.slice(0, MAX) : undefined;
+  } catch {
+    // Rendered on the server, where there is no address bar to read.
+    return undefined;
+  }
+}
+
+/** Taken out of the address bar. Called once the page has read it. */
+export function forgetQuestionInLink(): void {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(LINK_PARAM)) return;
+    url.searchParams.delete(LINK_PARAM);
+    window.history.replaceState(window.history.state, '', url.toString());
+  } catch {
+    // Nothing to take out.
+  }
+}
