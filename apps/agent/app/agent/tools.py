@@ -282,6 +282,11 @@ def moving_tools(
             )
         if target.id == source.pool.id:
             return f"The money is already in {target.name}. Say so."
+        if target.kind != "vault":
+            return (
+                f"{target.name} is one lending market's reserve, and a move goes into a vault. "
+                "Offer the best vault that takes the token instead, or taking the money out."
+            )
         if target.terms is None:
             return f"{target.name} cannot be deposited into from here. Offer another."
         taken = how_much(amount, source)

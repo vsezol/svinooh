@@ -115,6 +115,11 @@ describe('WhereAMoveCanGo', () => {
     assert.equal(whyNotMove(PRIME, JITO), null);
   });
 
+  test('not into a lending market\'s reserve: the move builds a vault deposit', () => {
+    const reserve = pool({ address: 'RES', id: { network: 'sol', protocol: 'kamino', kind: 'reserve', address: 'RES' } });
+    assert.match(whyNotMove(PRIME, reserve) ?? '', /reserve; a move goes into a vault/);
+  });
+
   test('not across networks', () => {
     const elsewhere = pool({ address: 'ETH', id: { network: 'eth', protocol: 'kamino', kind: 'vault', address: 'ETH' } as never });
     assert.match(whyNotMove(PRIME, elsewhere) ?? '', /different networks/);

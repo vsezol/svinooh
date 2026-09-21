@@ -1011,3 +1011,20 @@ class TestASwapIsATrade:
         assert (
             "It is also a trade" in said and "rises and falls with the other token's price" in said
         )
+
+
+class TestAMoveGoesIntoAVault:
+    async def test_a_reserve_is_not_offered_as_where_a_move_goes(self):
+        reserve = replace(TURBO, id="sol:kamino:reserve:RES", name="SOL/BTC Market", kind="reserve")
+        shelf = Catalog(PRIME, reserve)
+        shelf.held = (TWELVE_IN_PRIME,)
+        out, model = await moving(
+            shelf,
+            {
+                "name": "propose_move",
+                "args": {"from_pool_id": PRIME.id, "to_pool_id": reserve.id},
+                "id": "m1",
+            },
+        )
+        assert out["deposits"] == ()
+        assert "a move goes into a vault" in str(model.seen[-1].content)
