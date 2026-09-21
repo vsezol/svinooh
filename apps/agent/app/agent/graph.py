@@ -250,37 +250,30 @@ class LangGraphAgent:
             async with step("portfolio", f"Reading portfolio · {target}"):
                 portfolio = await self._portfolio.portfolio(target, token)
                 said(positions_read(portfolio))
-            held, covered = await self._in_pools(portfolio)
+            read = await self._in_pools(portfolio)
             return Holdings(
                 idle=idle_lines(portfolio),
-                earning=earning_lines(without_what_the_chain_read(portfolio, covered)),
-                held=held,
+                earning=earning_lines(without_what_the_chain_read(portfolio, read)),
+                held=tuple(one for each in read.values() for one in each),
             )
         except Exception as error:  # noqa: BLE001 — advice without it beats no advice
             logger.warning("earn: holdings unavailable (%r)", error)
             return Holdings()
 
-    async def _in_pools(
-        self, portfolio: Portfolio
-    ) -> tuple[tuple[Held, ...], frozenset[tuple[str, str]]]:
-        """What every Solana wallet has in pools, from the chain, and the protocols it covers."""
+    async def _in_pools(self, portfolio: Portfolio) -> dict[str, tuple[Held, ...]]:
+        """What every Solana wallet in the portfolio has in pools, read from the chain."""
         addresses = [wallet.address for wallet in portfolio.wallets if wallet.chain == "SOL"]
         if not addresses:
-            return (), frozenset()
+            return {}
         try:
             async with step("held", "Reading what is in pools"):
                 found = await asyncio.gather(*(self._catalog.positions(a) for a in addresses))
-                held = tuple(one for each in found for one in each)
-                said(f"{len(held)} in pools" if held else "nothing in pools")
+                count = sum(len(each) for each in found)
+                said(f"{count} in pools" if count else "nothing in pools")
         except Exception as error:  # noqa: BLE001 — a deposit is still worth offering without it
             logger.warning("earn: positions unavailable (%r)", error)
-            return (), frozenset()
-        covered = frozenset(
-            (address, one.pool.protocol.lower())
-            for address, each in zip(addresses, found, strict=True)
-            for one in each
-        )
-        return held, covered
+            return {}
+        return dict(zip(addresses, found, strict=True))
 
     async def _grounded(self, state: AgentState) -> AgentState:
         system = system_prompt(self._config)
