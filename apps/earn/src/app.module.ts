@@ -7,6 +7,13 @@ import {
 } from '@nestjs/common';
 import { LendCoins, type FindCoin } from './application/coins';
 import {
+  LendLiquidity,
+  type LiquidityBuilders,
+  type ReadLiquidityPositions,
+  type ReadPairPool,
+  type ReadPairPools,
+} from './application/liquidity';
+import {
   LendDeposits,
   type BuildDeposit,
   type LookUpLanding,
@@ -26,6 +33,10 @@ import {
   buildersWith,
   coinsWith,
   holdingsWith,
+  liquidityPositionsWith,
+  liquidityWith,
+  pairPoolsWith,
+  pairPoolWith,
   landingsWith,
   movesWith,
   positionsWith,
@@ -36,6 +47,7 @@ import { KaminoApi } from './infrastructure/kamino/api';
 import { KaminoSource } from './infrastructure/kamino/source';
 import { HealthController } from './api/health.controller';
 import { LendController } from './api/lend.controller';
+import { LiquidityController } from './api/liquidity.controller';
 import { settingsFromEnv, type Settings } from './settings';
 import { CLOCK, REFRESHER, SETTINGS, SOURCES } from './tokens';
 
@@ -50,6 +62,10 @@ export interface Built {
   withdrawals?: Record<string, BuildWithdrawal>;
   moves?: Record<string, BuildMove>;
   coins?: Record<string, FindCoin>;
+  pairPools?: Record<string, ReadPairPools>;
+  pairPool?: Record<string, ReadPairPool>;
+  liquidityPositions?: Record<string, ReadLiquidityPositions>;
+  liquidity?: Record<string, LiquidityBuilders>;
 }
 
 @Module({})
@@ -57,7 +73,7 @@ export class AppModule implements OnModuleInit, OnApplicationShutdown {
   static with(built: Built = {}): DynamicModule {
     return {
       module: AppModule,
-      controllers: [HealthController, LendController],
+      controllers: [HealthController, LendController, LiquidityController],
       providers: providersFor(built),
     };
   }
@@ -120,6 +136,19 @@ function providersFor(built: Built) {
           built.holdings ?? holdingsWith(settings.solanaRpcUrl),
         ),
       inject: [LendQueries, LendCoins, SETTINGS],
+    },
+    {
+      provide: LendLiquidity,
+      useFactory: (settings: Settings) =>
+        new LendLiquidity(
+          built.pairPools ?? pairPoolsWith(),
+          built.pairPool ?? pairPoolWith(),
+          built.liquidityPositions ?? liquidityPositionsWith(),
+          settings.minTvlUsd,
+          built.liquidity ?? liquidityWith(settings.solanaRpcUrl),
+          built.holdings ?? holdingsWith(settings.solanaRpcUrl),
+        ),
+      inject: [SETTINGS],
     },
     {
       provide: SOURCES,

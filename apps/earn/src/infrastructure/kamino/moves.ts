@@ -4,36 +4,13 @@ import { DepositNotSupported, DepositWouldFail } from '../../application/errors'
 import { decimalsOf, mintOf, symbolOf, type Move, type Place } from '../../domain/move';
 import type { Pool } from '../../domain/pool';
 import { idOf } from '../../domain/values';
-import { assemble, fits, measure, type Payer, type Tables } from '../solana';
+import { assemble, attempts, budgeted, fits, measure, type Payer } from '../solana';
 import { intoLoaded, kamino, loadVault } from './deposits';
-import { kaminoRoutes } from './swap';
+import { kaminoRoutes, ROOMY, SLIPPAGE_BPS, TIGHT } from './swap';
 import { leaving } from './withdrawals';
 
 const NATIVE = 'So11111111111111111111111111111111111111112';
 
-/** Wide enough for a price that moves between building and signing, narrow enough to leave little behind. */
-const SLIPPAGE_BPS = 30;
-
-/** The smallest routes first when everything has to fit in one transaction. */
-const TIGHT = 8;
-
-/** A route on its own can afford a better price for more accounts. */
-const ROOMY = 20;
-
-/**
- * Compute for a move, and what to pay per unit of it.
- *
- * A wallet adds its own priority fee to a transaction that has none, and a
- * move is built close to the packet limit: two more instructions and the
- * compute budget program's address do not fit into the last few bytes, and a
- * wallet that cannot add them may refuse to send it at all. So a move carries
- * its own, and whether it fits is decided with them in it. The limit is the
- * most a transaction may use, since a route that runs out of it fails for a
- * reason nobody could act on; a hundred thousand micro-lamports a unit on it
- * is under two ten-thousandths of a SOL.
- */
-const UNITS = 1_400_000;
-const MICRO_LAMPORTS = 100_000n;
 
 /**
  * What leaving a pool takes: its instructions and their lookup tables, and —
@@ -99,13 +76,12 @@ async function sameToken(
   const { klend, rpc, signer } = await kamino(owner, rpcUrl);
   const into = await intoLoaded(await loadVault(klend, rpc, to), signer, amount);
   const whole = await budgeted(
-    UNITS,
     once([...out.instructions, ...alreadyWrapped(into.instructions, to), ...out.unwrap]),
   );
   const tables = { read: [...new Set([...out.lookups, ...into.lookups])] };
   const payer = { owner, token: to.token.symbol, decimals: to.token.decimals };
   if (await fits(owner, whole, rpcUrl, tables)) return assemble(payer, whole, rpcUrl, tables);
-  const first = await budgeted(UNITS, [...out.instructions, ...out.unwrap]);
+  const first = await budgeted([...out.instructions, ...out.unwrap]);
   const built = await assemble(payer, first, rpcUrl, { read: out.lookups });
   return {
     ...built,
@@ -163,7 +139,7 @@ async function acrossTokens(
   if ('coin' in to) {
     for (const maxAccounts of [ROOMY, TIGHT]) {
       for (const route of await swapping(maxAccounts, wallet)) {
-        const all = await budgeted(UNITS, once([...out.instructions, ...route.instructions, ...out.unwrap]));
+        const all = await budgeted(once([...out.instructions, ...route.instructions, ...out.unwrap]));
         const built = await trying.one(all, { read: out.lookups, known: route.tables }, blamed);
         if (built) return built;
       }
@@ -177,7 +153,6 @@ async function acrossTokens(
       for (const route of await swapping(TIGHT, wallet)) {
         const into = await intoLoaded(target, signer, inUnits(route.guaranteed, decimalsOf(to)));
         const all = await budgeted(
-          UNITS,
           once([
             ...out.instructions,
             ...route.instructions,
@@ -192,7 +167,7 @@ async function acrossTokens(
       }
     }
     for (const route of await swapping(ROOMY, wallet || tokenOut === NATIVE)) {
-      const all = await budgeted(UNITS, once([...out.instructions, ...route.instructions, ...out.unwrap]));
+      const all = await budgeted(once([...out.instructions, ...route.instructions, ...out.unwrap]));
       const built = await trying.one(all, { read: out.lookups, known: route.tables }, payerOf(from));
       if (built) {
         const amount = inUnits(route.guaranteed, decimalsOf(to));
@@ -223,7 +198,7 @@ async function outFirst(
   rpcUrl: string,
 ): Promise<BuiltTransaction> {
   const { from, to, owner } = move;
-  const first = await budgeted(UNITS, [...out.instructions, ...out.unwrap]);
+  const first = await budgeted([...out.instructions, ...out.unwrap]);
   const built = await assemble({ owner, ...payerOf(from) }, first, rpcUrl, { read: out.lookups });
   return {
     ...built,
@@ -233,33 +208,6 @@ async function outFirst(
       payWith: mintOf(from),
       holding: symbolOf(from),
     },
-  };
-}
-
-/**
- * Builds that may be refused one after another. A route that fits can still
- * be one the chain refuses — a router's account can go stale between its
- * quote and our simulation — so a refusal moves on to the next route, and is
- * what is said only when no route is left.
- */
-function attempts(owner: string, rpcUrl: string) {
-  let refusal: Error | null = null;
-  return {
-    async one(
-      all: unknown[],
-      tables: Tables,
-      blamed: Omit<Payer, 'owner'>,
-    ): Promise<BuiltTransaction | null> {
-      if (!(await fits(owner, all, rpcUrl, tables))) return null;
-      try {
-        return await assemble({ owner, ...blamed }, all, rpcUrl, tables);
-      } catch (error) {
-        if (!(error instanceof DepositWouldFail)) throw error;
-        refusal = error;
-        return null;
-      }
-    },
-    refused: () => refusal,
   };
 }
 
@@ -301,16 +249,6 @@ async function outOf(
   };
 }
 
-async function budgeted(units: number, instructions: unknown[]): Promise<unknown[]> {
-  const budget = await import('@solana-program/compute-budget');
-  return [
-    budget.getSetComputeUnitLimitInstruction({ units }),
-    budget.getSetComputeUnitPriceInstruction({ microLamports: MICRO_LAMPORTS }),
-    ...instructions.filter((one) => String((one as Composed).programAddress) !== COMPUTE_BUDGET),
-  ];
-}
-
-const COMPUTE_BUDGET = 'ComputeBudget111111111111111111111111111111';
 const SYSTEM = '11111111111111111111111111111111';
 const TOKEN = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 const TRANSFER = 2;

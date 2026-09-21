@@ -1,8 +1,10 @@
 import { Decimal } from 'decimal.js';
-import type { BuiltTransaction } from '../application/deposits';
+import type { BuiltTransaction, Then } from '../application/deposits';
+import type { PoolFit } from '../application/liquidity';
 import type { Landing } from '../domain/deposit';
 import type { Coin } from '../domain/move';
 import type { Catalog } from '../domain/catalog';
+import { feeApr, pairIdOf, type LiquidityPosition, type PairPool } from '../domain/liquidity';
 import { isStale } from '../domain/catalog';
 import { net, type Pool } from '../domain/pool';
 import type { TokenYield } from '../domain/tokens';
@@ -147,19 +149,26 @@ export function builtTransaction(built: BuiltTransaction) {
     instructions: built.instructions,
     blockhash: built.blockhash,
     last_valid_block_height: built.lastValidBlockHeight,
-    ...(built.then
-      ? {
-          then: {
-            ...(built.then.poolId ? { pool_id: built.then.poolId } : {}),
-            amount: built.then.amount,
-            ...(built.then.payWith ? { pay_with: built.then.payWith } : {}),
-            ...(built.then.receiveAs ? { receive_as: built.then.receiveAs } : {}),
-            holding: built.then.holding,
-          },
-        }
-      : {}),
+    ...(built.then ? { then: step(built.then) } : {}),
   };
 }
+
+const step = (then: Then) => {
+  const wire: Record<string, string> = {
+    action: then.action ?? '',
+    pool_id: then.poolId ?? '',
+    amount: then.amount ?? '',
+    pay_with: then.payWith ?? '',
+    receive_as: then.receiveAs ?? '',
+    position: then.position ?? '',
+    amount_x: then.amountX ?? '',
+    amount_y: then.amountY ?? '',
+    below_pct: then.belowPct ?? '',
+    above_pct: then.abovePct ?? '',
+    holding: then.holding,
+  };
+  return Object.fromEntries(Object.entries(wire).filter(([, value]) => value !== ''));
+};
 
 export function position(held: Position) {
   return {
@@ -184,5 +193,50 @@ export function coin(found: Coin) {
     mint: found.mint,
     decimals: found.decimals,
     program: found.program,
+  };
+}
+
+/** A price as it reads: enough places for a memecoin at a millionth of a cent, no trailing noise. */
+const price = (value: Decimal): string => value.toSignificantDigits(10).toFixed();
+
+export function pairPool(pool: PairPool) {
+  const token = (one: PairPool['x']) => ({ symbol: one.symbol, mint: one.mint, decimals: one.decimals });
+  return {
+    id: pairIdOf(pool.id),
+    name: pool.name,
+    protocol: pool.id.protocol,
+    kind: pool.id.kind,
+    network: pool.id.network,
+    x: token(pool.x),
+    y: token(pool.y),
+    bin_step: pool.binStep,
+    base_fee_pct: pool.baseFeePct.toString(),
+    tvl_usd: required(usd(pool.tvlUsd)),
+    volume_24h_usd: required(usd(pool.volume24hUsd)),
+    fees_24h_usd: required(usd(pool.fees24hUsd)),
+    fee_apr: required(rate(feeApr(pool))),
+    price: price(pool.price),
+    url: pool.url,
+  };
+}
+
+export const pairFit = (fit: PoolFit) => ({
+  ...pairPool(fit.pool),
+  range_bins: fit.bins,
+  range_fits: fit.bins === null ? null : fit.why === null,
+  why_not: fit.why,
+});
+
+export function liquidityPosition(held: LiquidityPosition) {
+  return {
+    address: held.address,
+    pool: pairPool(held.pool),
+    lower_price: price(held.lowerPrice),
+    upper_price: price(held.upperPrice),
+    in_range: held.inRange,
+    amount_x: held.amountX.toDecimalPlaces(held.pool.x.decimals, Decimal.ROUND_DOWN).toFixed(),
+    amount_y: held.amountY.toDecimalPlaces(held.pool.y.decimals, Decimal.ROUND_DOWN).toFixed(),
+    value_usd: required(usd(held.valueUsd)),
+    fees_usd: required(usd(held.feesUsd)),
   };
 }

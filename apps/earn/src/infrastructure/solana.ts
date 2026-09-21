@@ -8,6 +8,9 @@ import type { Token } from '../domain/pool';
 type Kit = typeof import('@solana/kit');
 type Rpc = ReturnType<Kit['createSolanaRpc']>;
 
+/** Keys that sign a transaction here, before its owner does. */
+export type Cosigners = Parameters<Kit['partiallySignTransaction']>[0];
+
 const PACKET_BYTES = 1232;
 
 const NATIVE = 'So11111111111111111111111111111111111111112';
@@ -35,15 +38,28 @@ export interface Tables {
   known?: Record<string, string[]>;
 }
 
+/**
+ * A transaction for the owner to sign, simulated the way their wallet will.
+ * `cosigners` sign it here first: the account a new position is opened at
+ * has to sign its own creation, with a key made for it and dropped after —
+ * the position belongs to the owner, and the key has nothing left to do.
+ */
 export async function assemble(
   payer: Payer,
   instructions: unknown[],
   rpcUrl: string,
   lookups: string[] | Tables = [],
+  cosigners: Cosigners = [],
 ): Promise<BuiltTransaction> {
   const kit = await import('@solana/kit');
   const rpc = kit.createSolanaRpc(rpcUrl);
-  const { transaction, blockhash } = await compile(payer.owner, instructions, rpc, tablesOf(lookups));
+  const { transaction, blockhash } = await compile(
+    payer.owner,
+    instructions,
+    rpc,
+    tablesOf(lookups),
+    cosigners,
+  );
   const bytes = Math.ceil((transaction.length * 3) / 4);
   if (bytes > PACKET_BYTES) {
     throw new DepositNotSupported(
@@ -118,7 +134,13 @@ async function readTables(rpc: Rpc, keys: string[]): Promise<Record<string, stri
   );
 }
 
-async function compile(owner: string, instructions: unknown[], rpc: Rpc, lookups: Tables) {
+async function compile(
+  owner: string,
+  instructions: unknown[],
+  rpc: Rpc,
+  lookups: Tables,
+  cosigners: Cosigners = [],
+) {
   const kit = await import('@solana/kit');
   const signer = kit.createNoopSigner(kit.address(owner));
   const blockhash = await finalizedBlockhash(rpc);
@@ -136,8 +158,40 @@ async function compile(owner: string, instructions: unknown[], rpc: Rpc, lookups
   const message = Object.keys(tables).length
     ? kit.compressTransactionMessageUsingAddressLookupTables(written, tables as never)
     : written;
-  const transaction = kit.getBase64EncodedWireTransaction(kit.compileTransaction(message));
+  const compiled = kit.compileTransaction(message);
+  const signed = cosigners.length ? await kit.partiallySignTransaction(cosigners, compiled) : compiled;
+  const transaction = kit.getBase64EncodedWireTransaction(signed);
   return { transaction, blockhash };
+}
+
+/**
+ * Compute for a transaction built close to the packet limit, and what to pay
+ * per unit of it.
+ *
+ * A wallet adds its own priority fee to a transaction that has none, and two
+ * more instructions and the compute budget program's address do not fit into
+ * the last few bytes of one built close to the limit; a wallet that cannot
+ * add them may refuse to send it at all. So such a transaction carries its
+ * own, and whether it fits is decided with them in it. The limit is the most
+ * a transaction may use, since one that runs out of it fails for a reason
+ * nobody could act on; a hundred thousand micro-lamports a unit on it is
+ * under two ten-thousandths of a SOL. A transaction another party signs
+ * first cannot have anything added by the wallet at all, so it needs its
+ * own even more.
+ */
+const UNITS = 1_400_000;
+const MICRO_LAMPORTS = 100_000n;
+const COMPUTE_BUDGET = 'ComputeBudget111111111111111111111111111111';
+
+export async function budgeted(instructions: unknown[]): Promise<unknown[]> {
+  const budget = await import('@solana-program/compute-budget');
+  return [
+    budget.getSetComputeUnitLimitInstruction({ units: UNITS }),
+    budget.getSetComputeUnitPriceInstruction({ microLamports: MICRO_LAMPORTS }),
+    ...instructions.filter(
+      (one) => String((one as { programAddress?: unknown }).programAddress) !== COMPUTE_BUDGET,
+    ),
+  ];
 }
 
 /**
@@ -227,6 +281,33 @@ async function tried(rpc: Rpc, transaction: string, payer: Payer): Promise<void>
   const logs = outcome.value.logs ?? [];
   new Logger('Deposits').warn(`refusing a transaction the chain would fail:\n${logs.slice(-12).join('\n')}`);
   throw new DepositWouldFail(whyItWouldFail(err, logs, payer.token, payer.decimals));
+}
+
+/**
+ * Builds that may be refused one after another. A route that fits can still
+ * be one the chain refuses — a router's account can go stale between its
+ * quote and our simulation — so a refusal moves on to the next route, and is
+ * what is said only when no route is left.
+ */
+export function attempts(owner: string, rpcUrl: string) {
+  let refusal: Error | null = null;
+  return {
+    async one(
+      all: unknown[],
+      tables: Tables,
+      blamed: Omit<Payer, 'owner'>,
+    ): Promise<BuiltTransaction | null> {
+      if (!(await fits(owner, all, rpcUrl, tables))) return null;
+      try {
+        return await assemble({ owner, ...blamed }, all, rpcUrl, tables);
+      } catch (error) {
+        if (!(error instanceof DepositWouldFail)) throw error;
+        refusal = error;
+        return null;
+      }
+    },
+    refused: () => refusal,
+  };
 }
 
 export const landingsVia =
