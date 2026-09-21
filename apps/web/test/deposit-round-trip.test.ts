@@ -127,12 +127,19 @@ describe('ADepositFromTheButtonToTheChain', () => {
 describe('WhenADepositDoesNotHappen', () => {
   test("a refusal in the wallet is said in the wallet's words, and nothing is claimed", async () => {
     const { done } = run({}, { refuse: 'User rejected the request.' });
-    assert.deepEqual(await done, { failed: 'User rejected the request.' });
+    assert.deepEqual(await done, { failed: 'User rejected the request.', at: 'wallet' });
+  });
+
+  test('where it stopped is carried, because a refused build is news and a refusal is not', async () => {
+    const refused = await run({ buildFails: 'not enough SOL for rent' }).done;
+    const rejected = await run({}, { refuse: 'User rejected the request.' }).done;
+    assert.equal('failed' in refused && refused.at, 'build');
+    assert.equal('failed' in rejected && rejected.at, 'wallet');
   });
 
   test('a build the server refuses never reaches the wallet', async () => {
     const { fake, stages, done } = run({ buildFails: 'this deposit is 1328 bytes' });
-    assert.deepEqual(await done, { failed: 'this deposit is 1328 bytes' });
+    assert.deepEqual(await done, { failed: 'this deposit is 1328 bytes', at: 'build' });
     assert.deepEqual(fake.handed, []);
     assert.deepEqual(stages, ['building']);
   });
@@ -145,6 +152,7 @@ describe('WhenADepositDoesNotHappen', () => {
     } };
     assert.deepEqual(await runDeposit({ request: REQUEST, wallet }), {
       failed: 'Phantom is locked',
+      at: 'connect',
     });
     assert.deepEqual(asked, []);
   });

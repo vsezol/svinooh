@@ -7,8 +7,8 @@ class SettledIn(BaseModel):
     amount: str = Field(max_length=64)
     token: str = Field(max_length=32)
     pool: str = Field(max_length=128)
-    status: Literal["landed", "failed", "sent"]
-    signature: str = Field(max_length=128)
+    status: Literal["landed", "failed", "sent", "refused"]
+    signature: str | None = Field(default=None, max_length=128)
     error: str | None = Field(default=None, max_length=512)
 
 

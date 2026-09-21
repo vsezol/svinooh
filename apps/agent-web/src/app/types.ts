@@ -124,15 +124,15 @@ export type DepositOutcome =
       tracked?: boolean;
       error?: string | null;
     }
-  | { ok: false; reason: string };
+  | { ok: false; reason: string; at?: 'connect' | 'build' | 'wallet' | 'cancelled' };
 
-/** What the network did with a deposit, as the agent is told it. */
+/** What became of a deposit, as the agent is told it. */
 export interface Settled {
   amount: string;
   token: string;
   pool: string;
-  status: 'landed' | 'failed' | 'sent';
-  signature: string;
+  status: 'landed' | 'failed' | 'sent' | 'refused';
+  signature?: string | null;
   error?: string | null;
 }
 

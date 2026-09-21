@@ -10,6 +10,9 @@ export interface DepositRequest {
 
 export type DepositLanding = 'pending' | 'landed' | 'failed';
 
+/** How far a deposit got before it stopped. */
+export type DepositStopped = 'connect' | 'build' | 'wallet' | 'cancelled';
+
 export type DepositOutcome =
   | {
       ok: true;
@@ -18,4 +21,4 @@ export type DepositOutcome =
       tracked?: boolean;
       error?: string | null;
     }
-  | { ok: false; reason: string };
+  | { ok: false; reason: string; at?: DepositStopped };

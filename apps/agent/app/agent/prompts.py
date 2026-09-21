@@ -204,15 +204,17 @@ PLACING = (
 
 
 SETTLED = (
-    "A deposit they signed has come back from the network. Tell them what "
+    "A deposit they pressed the button for has come back. Tell them what "
     "happened, in two sentences at most, and tell them the truth: money is "
     "working only where the network confirmed it, a rejected deposit moved "
-    "nothing and cost them only the network fee, and one that has not "
-    "confirmed yet is not done. Where it failed, give the reason in words "
-    "somebody who does not read chain errors would understand, and say what "
-    "would make it work if you can see it in the reason. Say nothing about "
-    "rates, pools or amounts beyond what is written here, and do not offer a "
-    "new deposit in the same breath as a failure."
+    "nothing and cost them only the network fee, one that has not confirmed "
+    "yet is not done, and one that was never built never reached their wallet "
+    "at all — nothing was signed and nothing was spent. Where it did not go "
+    "through, give the reason in words somebody who does not read chain "
+    "errors would understand, and say what would make it work when the reason "
+    "says so: a figure in the reason is the figure to give them. Say nothing "
+    "about rates, pools or amounts beyond what is written here, and do not "
+    "offer a new deposit in the same breath as a failure."
 )
 
 
@@ -223,14 +225,15 @@ def settled_prompt(system: str, settled: Settled) -> str:
         f"- what the network did: {_OUTCOMES[settled.status]}",
     ]
     if settled.error:
-        lines.append(f"- the reason it was rejected: {settled.error}")
+        lines.append(f"- why: {settled.error}")
     return f"{system}\n\n{SETTLED}\n" + "\n".join(lines)
 
 
 _OUTCOMES = {
     "landed": "it went through, and the money is in the pool",
-    "failed": "it was rejected, and nothing left the wallet",
+    "failed": "the network rejected it, and nothing left the wallet",
     "sent": "it was sent and has not been confirmed yet",
+    "refused": "it was never built, so their wallet was never opened and nothing was signed",
 }
 
 

@@ -40,17 +40,29 @@ export function afterDeposit(outcome: DepositOutcome | void): Shown {
   return { state: 'signed', note: signature, signature };
 }
 
+/**
+ * What there is to tell the agent about a deposit, or nothing.
+ *
+ * A wallet somebody closed is not news — they know, they closed it. A build
+ * the server would not make is: it knows why, in words, and the reason is
+ * usually something they can act on.
+ */
 export function settledOf(
   request: DepositRequest,
   outcome: DepositOutcome | void,
 ): Settled | null {
-  if (!outcome || outcome.ok === false || !outcome.signature) return null;
+  const what = { amount: request.amount, token: request.token, pool: request.pool };
+  if (!outcome) return null;
+  if (outcome.ok === false) {
+    return outcome.at === 'build'
+      ? { ...what, status: 'refused', signature: null, error: outcome.reason }
+      : null;
+  }
+  if (!outcome.signature) return null;
   const status =
     outcome.landed === 'landed' ? 'landed' : outcome.landed === 'failed' ? 'failed' : 'sent';
   return {
-    amount: request.amount,
-    token: request.token,
-    pool: request.pool,
+    ...what,
     status,
     signature: outcome.signature,
     error: status === 'failed' ? (outcome.error ?? null) : null,

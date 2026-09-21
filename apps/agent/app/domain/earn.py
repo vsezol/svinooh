@@ -88,7 +88,7 @@ class Deposit:
         return minimum is not None and self.amount < minimum
 
 
-SettledStatus = Literal["landed", "failed", "sent"]
+SettledStatus = Literal["landed", "failed", "sent", "refused"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,7 +97,7 @@ class Settled:
     token: str
     pool: str
     status: SettledStatus
-    signature: str
+    signature: str | None = None
     error: str | None = None
 
 

@@ -1,10 +1,10 @@
 import { buildDeposit, followDeposit } from './index';
-import type { DepositOutcome, DepositRequest } from './types';
+import type { DepositOutcome, DepositRequest, DepositStopped } from './types';
 import type { DepositWallet } from './wallet';
 
 export type DepositStage = 'building' | 'signing' | 'landing';
 
-export type DepositRun = { done: DepositOutcome } | { failed: string };
+export type DepositRun = { done: DepositOutcome } | { failed: string; at: DepositStopped };
 
 interface Asked {
   request: DepositRequest;
@@ -25,11 +25,18 @@ export async function runDeposit({
   try {
     signer = await wallet.connect();
   } catch (error) {
-    return { failed: why(error, `${wallet.name} did not connect`) };
+    return { failed: why(error, `${wallet.name} did not connect`), at: 'connect' };
   }
+  let built;
   try {
     onStage?.('building');
-    const built = await buildDeposit(request, signer.address);
+    built = await buildDeposit(request, signer.address);
+  } catch (error) {
+    // The server refused to build it — it knows why, in words, and that is a
+    // thing to say rather than a thing to retry.
+    return { failed: why(error, 'the deposit could not be prepared'), at: 'build' };
+  }
+  try {
     onStage?.('signing');
     const signature = await signer.signAndSend(built.transaction);
     onSent?.(signature);
@@ -47,7 +54,7 @@ export async function runDeposit({
       },
     };
   } catch (error) {
-    return { failed: why(error, 'the deposit was not sent') };
+    return { failed: why(error, 'the deposit was not sent'), at: 'wallet' };
   }
 }
 
