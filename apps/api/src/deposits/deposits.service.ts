@@ -77,7 +77,7 @@ export class DepositsService {
       return { status: 'landed', slot: seen.slot, error: null, tracked: false, portfolio: null };
     }
 
-    this.scans.now(tracked.walletId);
+    this.scans.landed(tracked.walletId);
     this.log.log(`${signature.slice(0, 8)}… landed, rescanning ${owner.slice(0, 6)}…`);
     return {
       status: 'landed',

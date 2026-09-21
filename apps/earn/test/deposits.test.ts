@@ -209,6 +209,7 @@ describe('FittingADepositToAWallet', () => {
 describe('WhyADepositWouldNotGoThrough', () => {
   test('no SOL for the account it opens is said in SOL, not in lamports', () => {
     const said = whyItWouldFail(
+      { InstructionError: [2, { Custom: 1 }] },
       ['Program log: Instruction: InitializeUser', 'Transfer: insufficient lamports 1480221, need 5323840'],
       'USDC',
     );
@@ -218,26 +219,50 @@ describe('WhyADepositWouldNotGoThrough', () => {
 
   test('no token to deposit names the token', () => {
     assert.match(
-      whyItWouldFail(['Program log: Error: insufficient funds'], 'USDC'),
+      whyItWouldFail({ InstructionError: [3, { Custom: 1 }] }, ['Program log: Error: insufficient funds'], 'USDC'),
       /does not hold enough USDC/,
     );
   });
 
   test('anything else is quoted rather than guessed at', () => {
-    const said = whyItWouldFail(['Program KLend failed: custom program error: 0x1771'], 'USDC');
+    const said = whyItWouldFail({}, ['Program KLend failed: custom program error: 0x1771'], 'USDC');
     assert.match(said, /custom program error: 0x1771/);
   });
 
   test('a refusal with no logs is still a refusal', () => {
-    assert.equal(whyItWouldFail([], 'USDC'), 'the network refused it');
+    assert.equal(whyItWouldFail({}, [], 'USDC'), 'the network refused it');
+  });
+
+  test('a wallet with no SOL at all is told so, though the chain gave no logs', () => {
+    // What mainnet answered for a payer with nothing, 2026-09-21
+    const said = whyItWouldFail('AccountNotFound', [], 'USDC');
+    assert.match(said, /no SOL at all/);
+    assert.match(said, /returnable/);
+  });
+
+  test('a wallet short of the fee itself is told that, not something vaguer', () => {
+    assert.match(whyItWouldFail('InsufficientFundsForFee', [], 'USDC'), /network fee/);
+  });
+
+  test('rent short at the transaction level is still rent', () => {
+    assert.match(
+      whyItWouldFail({ InsufficientFundsForRent: { account_index: 3 } }, [], 'USDC'),
+      /returnable deposit/,
+    );
+  });
+
+  test('the rent is called what it is, a deposit that comes back', () => {
+    const said = whyItWouldFail({}, ['Transfer: insufficient lamports 1480221, need 5323840'], 'USDC');
+    assert.match(said, /returnable deposit, not a fee/);
   });
 
   test('the first reason wins, so the rent is not buried under what it broke', () => {
     const said = whyItWouldFail(
+      {},
       ['Transfer: insufficient lamports 1, need 2', 'Program Farms failed: custom program error: 0x1'],
       'USDC',
     );
-    assert.match(said, /rent/);
+    assert.match(said, /returnable deposit/);
   });
 });
 

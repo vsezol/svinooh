@@ -88,8 +88,15 @@ const changeLabel = (change: Change): string =>
  * signs in a moment later; without refetching, `isOwner` would stay false and
  * the owner's controls wouldn't appear until a manual refresh.
  */
-/** How long the page stays on the fast cadence after money moves. */
-const CHASE_MS = 40_000;
+/**
+ * How long the page stays on the fast cadence after money moves: long enough
+ * to outlast the last of the api's catch-up reads (ScanRequests.landed) and the
+ * scan that read has to finish.
+ */
+const CHASE_MS = 70_000;
+
+/** A read every two seconds while it does: the position lands on the next one. */
+const CHASE_EVERY_MS = 2000;
 
 function usePortfolio(slug: string, viewerId: string | null) {
   const [data, setData] = useState<PortfolioDto | null>(null);
@@ -142,7 +149,7 @@ function usePortfolio(slug: string, viewerId: string | null) {
       () => {
         if (!document.hidden) void reload();
       },
-      hasPending || chaseUntil > Date.now() ? 3000 : 60_000,
+      hasPending ? 3000 : chaseUntil > Date.now() ? CHASE_EVERY_MS : 60_000,
     );
     return () => window.clearInterval(id);
   }, [data, reload, chaseUntil]);

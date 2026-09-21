@@ -26,7 +26,7 @@ const standing = (
   // The re-read used to be an HTTP call to the wallet service and showed up in
   // `calls`; the pipeline is in this process now, so it is asked directly
   const rescanned: string[] = [];
-  const scans = { now: (walletId: string) => rescanned.push(walletId) } as unknown as ScanRequests;
+  const scans = { landed: (walletId: string) => rescanned.push(walletId) } as unknown as ScanRequests;
 
   return { calls, rescanned, deposits: new DepositsService(prisma, scans) };
 };
