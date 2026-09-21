@@ -17,6 +17,11 @@ export interface BuiltTransaction {
   instructions: number;
   blockhash: string;
   lastValidBlockHeight: string;
+  /**
+   * What to sign once this has landed, when one transaction could not hold it
+   * all: a deposit of `amount` into `poolId`, the second half of a move.
+   */
+  then?: { poolId: string; amount: string };
 }
 
 export type BuildDeposit = (deposit: Deposit) => Promise<BuiltTransaction>;

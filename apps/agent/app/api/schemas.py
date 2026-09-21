@@ -12,6 +12,7 @@ class SettledIn(BaseModel):
     error: str | None = Field(default=None, max_length=512)
     action: Literal["deposit", "withdraw", "move"] = "deposit"
     from_pool: str | None = Field(default=None, max_length=128)
+    halfway: bool = False
 
 
 class ChatRequest(BaseModel):
@@ -63,6 +64,7 @@ class DepositBlock(BaseModel):
     from_pool_id: str | None = Field(default=None, serialization_alias="fromPoolId")
     from_pool: str | None = Field(default=None, serialization_alias="fromPool")
     from_apy: str | None = Field(default=None, serialization_alias="fromApy")
+    from_token: str | None = Field(default=None, serialization_alias="fromToken")
 
 
 class ChoiceBlock(BaseModel):

@@ -258,15 +258,16 @@ def moving_tools(
 
     @tool
     async def propose_move(from_pool_id: str, to_pool_id: str, amount: str = "all") -> str:
-        """Move money from a pool they are in to another pool, in one transaction signed once.
+        """Move money from a pool they are in to another pool, from one button.
 
         It takes the money out and puts it in together: never ask them to
         withdraw and then deposit as two steps, and never send them to a
-        protocol's site to do either. `from_pool_id` is the id printed beside
-        the pool on the lines of what they have in pools; `to_pool_id` is the id
-        printed beside a pool in the rates. Both must take the same token.
-        `amount` is "all", or a plain number of tokens. It moves nothing until
-        they sign.
+        protocol's site to do either. The pools may take different tokens —
+        then it swaps on the way, through Kamino Swap, and their wallet may ask
+        them to sign twice. `from_pool_id` is the id printed beside the pool on
+        the lines of what they have in pools; `to_pool_id` is the id printed
+        beside a pool in the rates. `amount` is "all", or a plain number of the
+        token that pool holds. It moves nothing until they sign.
         """
         source = holding(from_pool_id)
         if source is None:
@@ -281,13 +282,6 @@ def moving_tools(
             )
         if target.id == source.pool.id:
             return f"The money is already in {target.name}. Say so."
-        if target.token != source.pool.token:
-            return (
-                f"{source.pool.name} holds {source.pool.token} and {target.name} takes "
-                f"{target.token}. Moving between them needs a swap, which is not possible from "
-                "here yet. Say so, and offer a pool that takes the same token, or to take the "
-                "money out."
-            )
         if target.terms is None:
             return f"{target.name} cannot be deposited into from here. Offer another."
         taken = how_much(amount, source)
@@ -305,12 +299,19 @@ def moving_tools(
             )
         )
         what = f"all of it, about {size:f}" if everything else f"{size:f}"
+        swapped = target.token != source.pool.token
+        way = (
+            f", swapped from {source.pool.token} to {target.token} on the way — their wallet may "
+            "ask them to sign twice, once for taking out and swapping and once for putting in"
+            if swapped
+            else ", in one transaction"
+        )
         return (
-            f"Ready for the user to sign: {what} {target.token} out of {source.pool.name} "
+            f"Ready for the user to sign: {what} {source.pool.token} out of {source.pool.name} "
             f"({as_percent(source.pool.apy_net)}) and into {target.name} "
-            f"({as_percent(target.apy_net)}), in one transaction. They see it as a card with a "
-            "button. Say what it is and what the rate becomes, in one or two sentences, and that "
-            "nothing happens until they sign. Do not say it is done."
+            f"({as_percent(target.apy_net)}){way}. They see it as a card with a button. Say what "
+            "it is and what the rate becomes, in one or two sentences, and that nothing happens "
+            "until they sign. Do not say it is done."
         )
 
     return [propose_withdraw, propose_move]

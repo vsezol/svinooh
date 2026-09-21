@@ -20,6 +20,7 @@ interface WireDeposit {
   instructions: number;
   blockhash: string;
   last_valid_block_height: string;
+  then?: { pool_id: string; amount: string };
 }
 
 interface WireLanding {
@@ -63,6 +64,7 @@ export class DepositsService {
       instructions: data.instructions,
       blockhash: data.blockhash,
       lastValidBlockHeight: data.last_valid_block_height,
+      ...(data.then ? { then: { poolId: data.then.pool_id, amount: data.then.amount } } : {}),
     };
   }
 

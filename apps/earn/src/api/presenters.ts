@@ -146,6 +146,7 @@ export function builtTransaction(built: BuiltTransaction) {
     instructions: built.instructions,
     blockhash: built.blockhash,
     last_valid_block_height: built.lastValidBlockHeight,
+    ...(built.then ? { then: { pool_id: built.then.poolId, amount: built.then.amount } } : {}),
   };
 }
 

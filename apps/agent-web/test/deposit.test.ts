@@ -46,6 +46,23 @@ describe('WhatTheHostIsHandedAndWhatComesBack', () => {
     assert.equal(move.fromPool, 'USDC Prime');
   });
 
+  test('a move across tokens is counted in the token it leaves, and says what it becomes', () => {
+    assert.equal(
+      sizeOf({ ...card, amount: 'all', shown: '12.0016', fromToken: 'USDC', token: 'SOL' }),
+      '12.0016 USDC → SOL',
+    );
+    assert.equal(sizeOf({ ...card, amount: 'all', shown: '12.0016', fromToken: 'USDC' }), '12.0016 USDC');
+  });
+
+  test('half a move is told as half, with why the second half did not happen', () => {
+    const told = settledOf(
+      { ...card, action: 'move', amount: 'all' } as never,
+      { ok: true, signature: '5xy', landed: 'landed', halfway: true, error: 'User rejected the request.' },
+    );
+    assert.equal(told?.halfway, true);
+    assert.equal(told?.error, 'User rejected the request.');
+  });
+
   test('"all" is shown as the figure it was worth, not as the word', () => {
     assert.equal(sizeOf({ ...card, amount: 'all', shown: '12.001555' }), '12.001555 USDC');
     assert.equal(sizeOf({ ...card, amount: '5' }), '5 USDC');

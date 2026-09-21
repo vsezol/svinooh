@@ -132,6 +132,7 @@ class Settled:
     error: str | None = None
     action: "Action" = "deposit"
     from_pool: str | None = None
+    halfway: bool = False
 
 
 @dataclass(frozen=True, slots=True)

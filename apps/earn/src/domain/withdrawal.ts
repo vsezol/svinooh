@@ -64,11 +64,5 @@ export function whyNotMove(from: Pool, to: Pool): string | null {
   if (from.id.network !== to.id.network) {
     return `${from.name} and ${to.name} are on different networks`;
   }
-  if (from.token.mint !== to.token.mint) {
-    return (
-      `${from.name} holds ${from.token.symbol} and ${to.name} takes ${to.token.symbol}; ` +
-      'moving between them needs a swap, which is not wired here yet'
-    );
-  }
   return null;
 }

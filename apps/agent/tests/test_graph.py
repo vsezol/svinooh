@@ -786,7 +786,7 @@ class TestMovingMoney:
         assert (card.source.name, card.pool.name) == ("USDC Prime", "Elemental USDC Turbo")
         assert card.everything
 
-    async def test_across_tokens_it_is_refused_with_what_can_be_done(self):
+    async def test_across_tokens_it_is_a_move_that_swaps_on_the_way(self):
         out, model = await moving(
             in_pools(TWELVE_IN_PRIME),
             {
@@ -795,9 +795,11 @@ class TestMovingMoney:
                 "id": "m1",
             },
         )
-        assert out["deposits"] == ()
+        (card,) = out["deposits"]
+        assert (card.source.token, card.pool.token) == ("USDC", "JitoSOL")
         said = str(model.seen[-1].content)
-        assert "needs a swap" in said and "take the money out" in said
+        assert "swapped from USDC to JitoSOL" in said and "sign twice" in said
+        assert "12.001555 USDC out of USDC Prime" in said, "the amount is in the token it leaves"
 
     async def test_into_the_pool_it_is_already_in_prepares_nothing(self):
         out, _ = await moving(

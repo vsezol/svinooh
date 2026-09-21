@@ -21,15 +21,25 @@ export interface Payer {
   token: string;
 }
 
+/**
+ * The lookup tables a transaction may compress its accounts through: some to
+ * be read from the chain by address, some already read by whoever handed them
+ * over — a swap route arrives with the tables it was built against.
+ */
+export interface Tables {
+  read?: string[];
+  known?: Record<string, string[]>;
+}
+
 export async function assemble(
   payer: Payer,
   instructions: unknown[],
   rpcUrl: string,
-  lookups: string[] = [],
+  lookups: string[] | Tables = [],
 ): Promise<BuiltTransaction> {
   const kit = await import('@solana/kit');
   const rpc = kit.createSolanaRpc(rpcUrl);
-  const { transaction, blockhash } = await compile(payer.owner, instructions, rpc, lookups);
+  const { transaction, blockhash } = await compile(payer.owner, instructions, rpc, tablesOf(lookups));
   const bytes = Math.ceil((transaction.length * 3) / 4);
   if (bytes > PACKET_BYTES) {
     throw new DepositNotSupported(
@@ -46,26 +56,81 @@ export async function assemble(
   };
 }
 
-async function compile(owner: string, instructions: unknown[], rpc: Rpc, lookups: string[]) {
+/** Whether these instructions fit in one transaction at all, before anything is asked of the chain. */
+export async function fits(
+  owner: string,
+  instructions: unknown[],
+  rpcUrl: string,
+  lookups: Tables,
+): Promise<boolean> {
   const kit = await import('@solana/kit');
-  const signer = kit.createNoopSigner(kit.address(owner));
+  const { transaction } = await compile(owner, instructions, kit.createSolanaRpc(rpcUrl), lookups);
+  return Math.ceil((transaction.length * 3) / 4) <= PACKET_BYTES;
+}
+
+const tablesOf = (lookups: string[] | Tables): Tables =>
+  Array.isArray(lookups) ? { read: lookups } : lookups;
+
+type Blockhash = Awaited<ReturnType<ReturnType<Rpc['getLatestBlockhash']>['send']>>['value'];
+
+/**
+ * One blockhash for every transaction assembled in the same few seconds, and
+ * each lookup table read once a minute. A move across tokens tries route
+ * after route, and asking the node for both before every attempt is the
+ * difference between one read per route and three — a public node answers
+ * the third with 429.
+ */
+const FRESH_MS = 3_000;
+const TABLE_MS = 60_000;
+let lastBlockhash: { at: number; value: Blockhash } | null = null;
+const tablesRead = new Map<string, { at: number; addresses: string[] }>();
+
+async function finalizedBlockhash(rpc: Rpc): Promise<Blockhash> {
+  if (lastBlockhash && Date.now() - lastBlockhash.at < FRESH_MS) return lastBlockhash.value;
   // Finalized, not the kit's default of confirmed. A wallet simulates what it is
   // handed exactly as it is, and a simulator reading the finalized bank does
   // not know a confirmed blockhash for another dozen seconds: Phantom answered
   // "Failed to simulate the results of this request" and three screens of
   // UNSAFE for a transaction that went through the moment it was forced.
-  const { value: blockhash } = await rpc.getLatestBlockhash({ commitment: 'finalized' }).send();
+  const { value } = await rpc.getLatestBlockhash({ commitment: 'finalized' }).send();
+  lastBlockhash = { at: Date.now(), value };
+  return value;
+}
+
+async function readTables(rpc: Rpc, keys: string[]): Promise<Record<string, string[]>> {
+  const kit = await import('@solana/kit');
+  const stale = keys.filter((key) => (tablesRead.get(key)?.at ?? 0) < Date.now() - TABLE_MS);
+  if (stale.length) {
+    const fetched = await kit.fetchAddressesForLookupTables(stale.map(kit.address), rpc);
+    for (const [key, addresses] of Object.entries(fetched)) {
+      tablesRead.set(key, { at: Date.now(), addresses: (addresses as string[]).map(String) });
+    }
+  }
+  return Object.fromEntries(
+    keys.flatMap((key) => {
+      const known = tablesRead.get(key);
+      return known ? [[key, known.addresses]] : [];
+    }),
+  );
+}
+
+async function compile(owner: string, instructions: unknown[], rpc: Rpc, lookups: Tables) {
+  const kit = await import('@solana/kit');
+  const signer = kit.createNoopSigner(kit.address(owner));
+  const blockhash = await finalizedBlockhash(rpc);
   const written = kit.pipe(
     kit.createTransactionMessage({ version: 0 }),
     (m) => kit.setTransactionMessageFeePayerSigner(signer, m),
     (m) => kit.setTransactionMessageLifetimeUsingBlockhash(blockhash, m),
     (m) => kit.appendTransactionMessageInstructions(instructions as never[], m),
   );
-  const message = lookups.length
-    ? kit.compressTransactionMessageUsingAddressLookupTables(
-        written,
-        await kit.fetchAddressesForLookupTables(lookups.map(kit.address), rpc),
-      )
+  const tables = Object.fromEntries(
+    Object.entries({ ...(await readTables(rpc, lookups.read ?? [])), ...(lookups.known ?? {}) }).map(
+      ([table, addresses]) => [table, addresses.map((one) => kit.address(one))],
+    ),
+  );
+  const message = Object.keys(tables).length
+    ? kit.compressTransactionMessageUsingAddressLookupTables(written, tables as never)
     : written;
   const transaction = kit.getBase64EncodedWireTransaction(kit.compileTransaction(message));
   return { transaction, blockhash };
@@ -101,20 +166,23 @@ export async function measure(
     .send()
     .then(({ value }) => BigInt(value.amount))
     .catch(() => 0n);
-  const { transaction } = await compile(payer.owner, instructions, rpc, lookups);
+  const { transaction } = await compile(payer.owner, instructions, rpc, { read: lookups });
+  // Only the amount is wanted here, so the node may put its own blockhash in:
+  // a node a few slots behind the one that gave ours would otherwise refuse to
+  // run it at all, with no logs to say why.
   const outcome = await rpc
     .simulateTransaction(transaction as never, {
       encoding: 'base64',
       sigVerify: false,
-      replaceRecentBlockhash: false,
+      replaceRecentBlockhash: true,
       commitment: 'finalized',
       accounts: { encoding: 'jsonParsed', addresses: [account] },
     })
     .send();
   if (outcome.value.err) {
-    throw new DepositWouldFail(
-      whyItWouldFail(outcome.value.err, outcome.value.logs ?? [], payer.token),
-    );
+    const logs = outcome.value.logs ?? [];
+    new Logger('Deposits').warn(`the withdrawal could not be measured:\n${logs.slice(-12).join('\n')}`);
+    throw new DepositWouldFail(whyItWouldFail(outcome.value.err, logs, payer.token));
   }
   const after = (outcome.value.accounts?.[0] as { data?: { parsed?: { info?: { tokenAmount?: { amount?: string } } } } } | null)
     ?.data?.parsed?.info?.tokenAmount?.amount;
@@ -152,7 +220,9 @@ async function tried(rpc: Rpc, transaction: string, token: string): Promise<void
     new Logger('Deposits').warn('the simulator did not know a finalized blockhash; not refusing on that');
     return;
   }
-  throw new DepositWouldFail(whyItWouldFail(err, outcome.value.logs ?? [], token));
+  const logs = outcome.value.logs ?? [];
+  new Logger('Deposits').warn(`refusing a transaction the chain would fail:\n${logs.slice(-12).join('\n')}`);
+  throw new DepositWouldFail(whyItWouldFail(err, logs, token));
 }
 
 export const landingsVia =

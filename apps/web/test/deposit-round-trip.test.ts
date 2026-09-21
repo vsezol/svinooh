@@ -23,16 +23,23 @@ interface Server {
   buildFails?: string;
   landingFails?: boolean;
   status?: string;
+  /** The first build is half a move: a deposit into this pool follows it. */
+  then?: { poolId: string; amount: string };
+  /** The build that comes after the first is refused, with this. */
+  secondFails?: string;
 }
 
 const serving = (how: Server = {}) => {
   const asked: { path: string; body: unknown }[] = [];
+  let builds = 0;
   globalThis.fetch = (async (url: string, init: RequestInit) => {
     const path = String(url);
     asked.push({ path, body: JSON.parse(String(init.body)) });
     if (path.includes('/deposits/build')) {
-      return how.buildFails
-        ? ({ ok: false, status: 422, json: async () => ({ message: how.buildFails }) } as Response)
+      builds += 1;
+      const refusal = builds === 1 ? how.buildFails : how.secondFails;
+      return refusal
+        ? ({ ok: false, status: 422, json: async () => ({ message: refusal }) } as Response)
         : ({
             ok: true,
             status: 200,
@@ -42,6 +49,7 @@ const serving = (how: Server = {}) => {
               instructions: 3,
               blockhash: 'b',
               lastValidBlockHeight: '1',
+              ...(builds === 1 && how.then ? { then: how.then } : {}),
             }),
           } as Response);
     }
@@ -190,5 +198,98 @@ describe('WhenADepositDoesNotHappen', () => {
     assert.deepEqual(await done, {
       done: { ok: true, signature: SIGNATURE, landed: undefined, tracked: undefined, error: null },
     });
+  });
+});
+
+
+describe('AMoveInTwoTransactions', () => {
+  const THEN = { poolId: 'sol:kamino:vault:ALLEZ', amount: '0.101202053' };
+  const moving = (how: Server = {}, made = {}) => {
+    const asked = serving({ then: THEN, ...how });
+    const fake = fakeWallet(made);
+    const stages: DepositStage[] = [];
+    return {
+      asked,
+      fake,
+      stages,
+      done: runDeposit({
+        request: { ...REQUEST, action: 'move', amount: 'all', fromPoolId: 'sol:kamino:vault:PRIME' },
+        wallet: depositWallet(fake.wallet),
+        onStage: (stage) => stages.push(stage),
+        wait: async () => {},
+      }),
+    };
+  };
+  const builds = (asked: { path: string; body: unknown }[]) =>
+    asked.filter((one) => one.path.endsWith('/deposits/build')).map((one) => one.body);
+
+  test('once the first half lands, the deposit of what it brought is built and signed', async () => {
+    const { asked, fake, done } = moving();
+    const finished = await done;
+    assert.deepEqual(builds(asked)[1], {
+      poolId: THEN.poolId,
+      amount: THEN.amount,
+      owner: OWNER,
+      action: 'deposit',
+      fromPoolId: 'sol:kamino:vault:PRIME',
+    });
+    assert.equal(fake.handed.length, 2, 'two signatures, one button');
+    assert.ok('done' in finished && finished.done.ok && finished.done.landed === 'landed');
+  });
+
+  test('the person is told when the second half starts', async () => {
+    const { stages, done } = moving();
+    await done;
+    assert.deepEqual(stages, [
+      'building',
+      'signing',
+      'landing',
+      'continuing',
+      'signing',
+      'landing',
+    ]);
+  });
+
+  test('a first half the chain did not take is not followed by a second', async () => {
+    const { asked, fake, done } = moving({ status: 'failed' });
+    await done;
+    assert.equal(builds(asked).length, 1);
+    assert.equal(fake.handed.length, 1);
+  });
+
+  test('a second half that cannot be built leaves the money swapped in the wallet, and says so', async () => {
+    const { done } = moving({ secondFails: 'the pool is full' });
+    const finished = await done;
+    assert.ok('done' in finished && finished.done.ok);
+    assert.equal(finished.done.ok && finished.done.halfway, true);
+    assert.equal(finished.done.ok && finished.done.error, 'the pool is full');
+  });
+
+  test('a second signature refused is halfway too, not a failure of the whole', async () => {
+    const asked = serving({ then: THEN });
+    const fake = fakeWallet();
+    const signer = depositWallet(fake.wallet);
+    let signatures = 0;
+    const wallet = {
+      ...signer,
+      connect: async () => {
+        const connected = await signer.connect();
+        return {
+          ...connected,
+          signAndSend: async (transaction: string) => {
+            signatures += 1;
+            if (signatures === 2) throw new Error('User rejected the request.');
+            return connected.signAndSend(transaction);
+          },
+        };
+      },
+    };
+    const finished = await runDeposit({
+      request: { ...REQUEST, action: 'move', amount: 'all' },
+      wallet,
+      wait: async () => {},
+    });
+    assert.ok('done' in finished && finished.done.ok && finished.done.halfway);
+    assert.equal(builds(asked).length, 2);
   });
 });

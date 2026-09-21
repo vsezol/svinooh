@@ -58,6 +58,24 @@ describe('WhatACardAsksEarnToBuild', () => {
     ]);
   });
 
+  test('the second half of a move comes back with the first', async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { ...BUILT, then: { pool_id: TURBO, amount: '0.1012' } } }),
+      }) as Response) as typeof fetch;
+    const service = new DepositsService({} as PrismaService, {} as ScanRequests);
+    const built = await new DepositsController(service).build({
+      poolId: TURBO,
+      fromPoolId: PRIME,
+      amount: 'all',
+      owner: OWNER,
+      action: 'move',
+    });
+    assert.deepEqual(built.then, { poolId: TURBO, amount: '0.1012' });
+  });
+
   test('a move that does not say where from is refused before earn is asked', async () => {
     const { asked, controller } = building();
     await assert.rejects(
