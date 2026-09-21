@@ -413,3 +413,91 @@ describe('ALongerWayRound', () => {
     assert.equal(finished.done.ok && finished.done.holding, 'USDC');
   });
 });
+
+describe('LiquidityForAPair', () => {
+  const PAIR = 'sol:meteora:dlmm:CgqwPL';
+  const POSITION = '8PBf2k9bvDgWTWs8HjrwDXzhGfwsLgM1AHvHYfLPcCp';
+  const builds = (asked: { path: string; body: unknown }[]) =>
+    asked.filter((one) => one.path.endsWith('/deposits/build')).map((one) => one.body);
+  const card: DepositRequest = {
+    ...REQUEST,
+    poolId: PAIR,
+    pool: 'SOL-USDC',
+    protocol: 'meteora',
+    poolKind: 'dlmm',
+    token: 'USDC',
+    amount: '5',
+    action: 'provide',
+    payWith: { mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', symbol: 'USDC' },
+    belowPct: '10.3',
+    abovePct: '5.5',
+  };
+  const run = async (request: DepositRequest, how: Server) => {
+    const asked = serving(how);
+    const fake = fakeWallet();
+    const finished = await runDeposit({
+      request,
+      wallet: depositWallet(fake.wallet),
+      wait: async () => {},
+    });
+    return { asked, fake, finished };
+  };
+
+  test('placing liquidity asks for the amount, the coin and the range', async () => {
+    const { asked } = await run(card, {});
+    assert.deepEqual(builds(asked)[0], {
+      poolId: PAIR,
+      amount: '5',
+      owner: OWNER,
+      action: 'provide',
+      payWith: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+      belowPct: '10.3',
+      abovePct: '5.5',
+    });
+  });
+
+  test('after the swap, the position is built for both tokens, and signed', async () => {
+    const { asked, fake, finished } = await run(card, {
+      steps: [
+        {
+          action: 'provide',
+          poolId: PAIR,
+          amountX: '0.013224704',
+          amountY: '3.443325',
+          belowPct: '10.3',
+          abovePct: '5.5',
+          holding: 'SOL and USDC',
+        } as never,
+      ],
+    });
+    assert.deepEqual(builds(asked)[1], {
+      poolId: PAIR,
+      owner: OWNER,
+      action: 'provide',
+      amountX: '0.013224704',
+      amountY: '3.443325',
+      belowPct: '10.3',
+      abovePct: '5.5',
+    });
+    assert.equal(fake.handed.length, 2);
+    assert.ok('done' in finished && finished.done.ok && finished.done.landed === 'landed');
+  });
+
+  test('a rebalance closes over two steps, then places what came back', async () => {
+    const { asked, fake } = await run(
+      { ...card, action: 'rebalance', amount: '', payWith: undefined, position: POSITION, belowPct: '5', abovePct: '5' },
+      {
+        steps: [
+          { action: 'rebalance', position: POSITION, amountX: '0.0244', amountY: '9.28', belowPct: '5', abovePct: '5', holding: 'SOL and USDC' } as never,
+          { action: 'provide', poolId: PAIR, amountX: '0.0244', amountY: '9.28', belowPct: '5', abovePct: '5', holding: 'SOL and USDC' } as never,
+        ],
+      },
+    );
+    assert.deepEqual(
+      builds(asked).map((body) => (body as { action: string }).action),
+      ['rebalance', 'rebalance', 'provide'],
+    );
+    assert.equal((builds(asked)[1] as { position: string }).position, POSITION);
+    assert.equal(fake.handed.length, 3);
+  });
+});

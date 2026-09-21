@@ -41,7 +41,12 @@ class Labeler:
             self.refusals -= 1
             raise Exception(self.saying)
         return IntentLabel(
-            intent=self.label, reason="stubbed", stance="asking", language="English", risk="unknown"
+            intent=self.label,
+            reason="stubbed",
+            stance="asking",
+            language="English",
+            risk="unknown",
+            lp_range="unknown",
         )
 
 

@@ -289,3 +289,46 @@ class TestWhatASwapBecame:
             json={"message": "signed", "settled": {**LANDED, "token": "SOL", "into": "USDC"}},
         )
         assert "a deposit into Elemental USDC Turbo, swapped from SOL to USDC" in model.system
+
+
+class TestLiquidityThatCameBack:
+    async def test_placed_liquidity_is_told_as_placed(self, client, model):
+        await client.post(
+            "/chat",
+            json={
+                "message": "signed",
+                "settled": {**LANDED, "action": "provide", "pool": "SOL-USDC", "amount": "5"},
+            },
+        )
+        assert "liquidity placed in SOL-USDC" in model.system
+
+    async def test_a_rebalance_that_stopped_after_the_close_says_where_the_money_is(
+        self, client, model
+    ):
+        await client.post(
+            "/chat",
+            json={
+                "message": "signed",
+                "settled": {
+                    **LANDED,
+                    "action": "rebalance",
+                    "pool": "SOL-USDC",
+                    "amount": "all",
+                    "halfway": True,
+                    "holding": "SOL and USDC",
+                    "error": "User rejected the request.",
+                },
+            },
+        )
+        assert "is in their wallet now as SOL and USDC" in model.system
+        assert "the new position in SOL-USDC was not opened" in model.system
+
+    async def test_a_close_that_stopped_halfway_says_the_rest_is_still_in(self, client, model):
+        await client.post(
+            "/chat",
+            json={
+                "message": "signed",
+                "settled": {**LANDED, "action": "close", "pool": "SOL-USDC", "halfway": True},
+            },
+        )
+        assert "the rest is still in the position" in model.system

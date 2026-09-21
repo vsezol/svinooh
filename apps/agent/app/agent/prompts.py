@@ -118,6 +118,7 @@ def earn_prompt(
     already_earning: str = "",
     asked_to_place: bool = False,
     held: str = "",
+    placed: str = "",
 ) -> str:
     rules = (
         f"{system}\n\nThe user is asking where to put money to work. Recommend only "
@@ -129,11 +130,13 @@ def earn_prompt(
         "plainly that a deposit goes into a third-party protocol — the money is "
         "at risk there, not with svinooh."
     )
-    rules = f"{rules}\n\n{PLACING if asked_to_place else ASKING}"
+    rules = f"{rules}\n\n{PLACING if asked_to_place else ASKING}\n\n{LIQUIDITY}"
     if idle:
         rules = f"{rules}\n\n{HOLDING}\n{idle}"
     if held:
         rules = f"{rules}\n\n{IN_POOLS}\n{held}"
+    if placed:
+        rules = f"{rules}\n\n{PLACED}\n{placed}"
     if not already_earning:
         return rules
     return (
@@ -191,6 +194,32 @@ IN_POOLS = (
     "falls with the other token's price — and a few tenths of a percent of "
     "rate rarely pays for that; say both in a sentence, and do it if that is "
     "still what they want."
+)
+
+LIQUIDITY = (
+    "Liquidity for a pair is not lending. The money goes in as two tokens across a "
+    "range of prices around the current one, and it earns the fees of trades only "
+    "while the price stays inside that range; once the price leaves it, it earns "
+    "nothing and sits in whichever of the two tokens the price left it in. Two "
+    "things decide a placement, and neither is yours to guess: how much, and the "
+    "range — how far under the price it reaches and how far over. Ask for what you "
+    "do not have with buttons; for the range offer a narrow one, a middle one and a "
+    "wide one, each written as its percent under and over, and say they can type "
+    "their own. With both in hand, read the pools of the pair for that range and "
+    "name one it fits in, saying why that one: a higher fee rate comes from more "
+    "trading or from less money in the pool, and less money is more risk. They pay "
+    "with one of the pool's two tokens; say that part of it is swapped into the "
+    "other so both sides fill, and that opening a position locks about 0.057 SOL of "
+    "rent, returned when it closes."
+)
+
+PLACED = (
+    "Their liquidity positions, read just now, each with the address to act on it "
+    "by. One that is out of range earns nothing until the price comes back or it is "
+    "rebalanced — closed, and what it held placed again around the price, from one "
+    "button; offer that when they ask about it, keeping its width unless they name "
+    "a new range. Closing one brings both tokens, the fees and the rent back to "
+    "their wallet."
 )
 
 ASKING = (
@@ -263,6 +292,13 @@ def _swapped(settled: Settled) -> str:
 
 
 _WHAT = {
+    "provide": lambda settled: f"liquidity placed in {settled.pool}",
+    "close": lambda settled: (
+        f"their {settled.pool} position closed, both tokens and its fees back to their wallet"
+    ),
+    "rebalance": lambda settled: (
+        f"their {settled.pool} position closed and placed again around the price"
+    ),
     "deposit": lambda settled: f"a deposit into {settled.pool}{_swapped(settled)}",
     "withdraw": lambda settled: (
         f"a withdrawal out of {settled.pool}, back to their wallet{_swapped(settled)}"
@@ -277,6 +313,16 @@ _WHAT = {
 def _halfway(settled: Settled) -> str:
     """Where the money is when only the first steps of several went through."""
     waits = f" as {settled.holding}" if settled.holding else ""
+    if settled.action == "close":
+        return (
+            f"only part of it came out: some of the {settled.pool} position is back in their "
+            "wallet and the rest is still in the position — closing it again takes the rest"
+        )
+    if settled.action in ("provide", "rebalance"):
+        return (
+            f"only the first part went through: the money is in their wallet now{waits}, and "
+            f"the new position in {settled.pool} was not opened — it earns nothing until it is"
+        )
     if settled.action == "withdraw":
         return (
             f"only the first part went through: the money is out of {settled.pool} and in "

@@ -6,7 +6,15 @@ from typing import Protocol
 import httpx
 from pydantic import BaseModel, ConfigDict
 
-from ..domain.earn import CatalogSnapshot, Coin, DepositTerms, Held, YieldPool
+from ..domain.earn import (
+    CatalogSnapshot,
+    Coin,
+    DepositTerms,
+    Held,
+    LiquidityPosition,
+    PairPool,
+    YieldPool,
+)
 
 
 class YieldCatalog(Protocol):
@@ -19,6 +27,15 @@ class YieldCatalog(Protocol):
 
     async def coin(self, query: str, owners: tuple[str, ...]) -> Coin | None:
         """The coin a ticker or a mint names, looked for first among what these wallets hold."""
+
+    async def pair_pools(
+        self, first: str, second: str, below_pct: Decimal | None, above_pct: Decimal | None
+    ) -> tuple[PairPool, ...]:
+        """Pools pairing two tokens, most money first; with a range, whether each holds it."""
+
+    async def pair_pool(self, pool_id: str) -> PairPool | None: ...
+
+    async def liquidity_positions(self, owner: str) -> tuple[LiquidityPosition, ...]: ...
 
 
 class EarnApiSource:
@@ -47,6 +64,36 @@ class EarnApiSource:
         )
         response.raise_for_status()
         return _PositionsAnswer.model_validate(response.json()).domain()
+
+    async def pair_pools(
+        self, first: str, second: str, below_pct: Decimal | None, above_pct: Decimal | None
+    ) -> tuple[PairPool, ...]:
+        params: dict[str, str] = {"network": "sol", "pair": f"{first}-{second}"}
+        if below_pct is not None and above_pct is not None:
+            params |= {"below_pct": f"{below_pct:f}", "above_pct": f"{above_pct:f}"}
+        response = await self._client.get(f"{self._base}/v1/liquidity/pools", params=params)
+        if response.status_code == 422:
+            return ()
+        response.raise_for_status()
+        return tuple(
+            pool.domain() for pool in _PairPoolsAnswer.model_validate(response.json()).data
+        )
+
+    async def pair_pool(self, pool_id: str) -> PairPool | None:
+        response = await self._client.get(f"{self._base}/v1/liquidity/pools/{pool_id}")
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return _PairPoolAnswer.model_validate(response.json()).data.domain()
+
+    async def liquidity_positions(self, owner: str) -> tuple[LiquidityPosition, ...]:
+        response = await self._client.get(
+            f"{self._base}/v1/liquidity/positions", params={"network": "sol", "owner": owner}
+        )
+        response.raise_for_status()
+        return tuple(
+            one.domain() for one in _LiquidityPositionsAnswer.model_validate(response.json()).data
+        )
 
     async def coin(self, query: str, owners: tuple[str, ...]) -> Coin | None:
         response = await self._client.get(
@@ -197,3 +244,76 @@ class _CoinAnswer(_WirePart):
 
     def domain(self) -> Coin:
         return Coin(symbol=self.data.symbol, mint=self.data.mint, decimals=self.data.decimals)
+
+
+class _WirePairToken(_WirePart):
+    symbol: str
+    mint: str
+
+
+class _WirePairPool(_WirePart):
+    id: str
+    name: str
+    x: _WirePairToken
+    y: _WirePairToken
+    bin_step: int
+    fee_apr: str
+    tvl_usd: str
+    price: str
+    url: str
+    range_bins: int | None = None
+    why_not: str | None = None
+
+    def domain(self) -> PairPool:
+        return PairPool(
+            id=self.id,
+            name=self.name,
+            x=self.x.symbol,
+            y=self.y.symbol,
+            x_mint=self.x.mint,
+            y_mint=self.y.mint,
+            bin_step=self.bin_step,
+            fee_apr=_number(self.fee_apr),
+            tvl_usd=_number(self.tvl_usd),
+            price=_number(self.price),
+            url=self.url,
+            range_bins=self.range_bins,
+            why_not=self.why_not,
+        )
+
+
+class _PairPoolsAnswer(_WirePart):
+    data: list[_WirePairPool]
+
+
+class _PairPoolAnswer(_WirePart):
+    data: _WirePairPool
+
+
+class _WireLiquidityPosition(_WirePart):
+    address: str
+    pool: _WirePairPool
+    lower_price: str
+    upper_price: str
+    in_range: bool
+    amount_x: str
+    amount_y: str
+    value_usd: str
+    fees_usd: str = "0"
+
+    def domain(self) -> LiquidityPosition:
+        return LiquidityPosition(
+            address=self.address,
+            pool=self.pool.domain(),
+            lower_price=_number(self.lower_price),
+            upper_price=_number(self.upper_price),
+            in_range=self.in_range,
+            amount_x=_number(self.amount_x),
+            amount_y=_number(self.amount_y),
+            value_usd=_number(self.value_usd),
+            fees_usd=_number(self.fees_usd),
+        )
+
+
+class _LiquidityPositionsAnswer(_WirePart):
+    data: list[_WireLiquidityPosition]

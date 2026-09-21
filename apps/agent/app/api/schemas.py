@@ -10,7 +10,7 @@ class SettledIn(BaseModel):
     status: Literal["landed", "failed", "sent", "refused"]
     signature: str | None = Field(default=None, max_length=128)
     error: str | None = Field(default=None, max_length=512)
-    action: Literal["deposit", "withdraw", "move"] = "deposit"
+    action: Literal["deposit", "withdraw", "move", "provide", "close", "rebalance"] = "deposit"
     from_pool: str | None = Field(default=None, max_length=128)
     into: str | None = Field(default=None, max_length=32)
     halfway: bool = False
@@ -56,7 +56,7 @@ class CoinBlock(BaseModel):
 
 class DepositBlock(BaseModel):
     kind: Literal["deposit"] = "deposit"
-    action: Literal["deposit", "withdraw", "move"] = "deposit"
+    action: Literal["deposit", "withdraw", "move", "provide", "close", "rebalance"] = "deposit"
     pool_id: str = Field(serialization_alias="poolId")
     pool: str
     protocol: str
@@ -74,6 +74,12 @@ class DepositBlock(BaseModel):
     from_token: str | None = Field(default=None, serialization_alias="fromToken")
     pay_with: CoinBlock | None = Field(default=None, serialization_alias="payWith")
     receive_as: CoinBlock | None = Field(default=None, serialization_alias="receiveAs")
+    below_pct: str | None = Field(default=None, serialization_alias="belowPct")
+    above_pct: str | None = Field(default=None, serialization_alias="abovePct")
+    lower_price: str | None = Field(default=None, serialization_alias="lowerPrice")
+    upper_price: str | None = Field(default=None, serialization_alias="upperPrice")
+    price: str | None = None
+    position: str | None = None
 
 
 class ChoiceBlock(BaseModel):

@@ -73,7 +73,15 @@ export function DepositDialog({
   );
 }
 
-const TITLE = { deposit: 'Deposit', withdraw: 'Withdraw', move: 'Move', swap: 'Swap' } as const;
+const TITLE = {
+  deposit: 'Deposit',
+  withdraw: 'Withdraw',
+  move: 'Move',
+  swap: 'Swap',
+  provide: 'Add liquidity',
+  close: 'Close position',
+  rebalance: 'Rebalance',
+} as const;
 
 function saying(request: DepositRequest): string {
   const spent = request.payWith?.symbol ?? request.fromToken ?? request.token;
@@ -88,6 +96,12 @@ function saying(request: DepositRequest): string {
       return `${how} out of ${request.fromPool ?? 'the pool it is in'} and into ${request.pool}.`;
     case 'swap':
       return `${how} swapped to ${request.receiveAs?.symbol ?? 'another coin'}, in your wallet.`;
+    case 'provide':
+      return `${how} into ${request.pool}, from ${request.belowPct}% below the price to ${request.abovePct}% above it. ${leaves}`;
+    case 'close':
+      return `Everything in your ${request.pool} position back to your wallet, with its fees.`;
+    case 'rebalance':
+      return `Your ${request.pool} position closed and placed again around the price. ${leaves}`;
     default:
       return request.payWith
         ? `${how}, swapped to ${request.token} on the way into ${request.pool}. ${leaves}`

@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import type { DepositBlock, DepositOutcome, DepositRequest, Settled } from '../../app/types';
+import type {
+  DepositAction,
+  DepositBlock,
+  DepositOutcome,
+  DepositRequest,
+  Settled,
+} from '../../app/types';
 
 type State = 'idle' | 'working' | 'signed' | 'landed' | 'refused';
 
@@ -107,25 +113,53 @@ export const requestOf = (block: DepositBlock): DepositRequest => ({
   ...(block.fromToken ? { fromToken: block.fromToken } : {}),
   ...(block.payWith ? { payWith: block.payWith } : {}),
   ...(block.receiveAs ? { receiveAs: block.receiveAs } : {}),
+  ...(block.belowPct ? { belowPct: block.belowPct } : {}),
+  ...(block.abovePct ? { abovePct: block.abovePct } : {}),
+  ...(block.position ? { position: block.position } : {}),
 });
 
 const EYEBROW = {
   deposit: 'PROPOSED DEPOSIT',
   withdraw: 'PROPOSED WITHDRAWAL',
   move: 'PROPOSED MOVE',
+  provide: 'PROPOSED LIQUIDITY',
+  close: 'PROPOSED CLOSE',
+  rebalance: 'PROPOSED REBALANCE',
 } as const;
 
 const PRESS = {
   deposit: 'Deposit from my wallet',
   withdraw: 'Withdraw to my wallet',
   move: 'Move it',
+  provide: 'Add liquidity',
+  close: 'Close the position',
+  rebalance: 'Rebalance it',
 } as const;
 
 const PROMISE = {
   deposit: 'Your money goes straight to the protocol.',
   withdraw: 'The money comes back to your wallet.',
   move: 'Out of one pool and into the other.',
+  provide:
+    'It earns fees only while the price stays in the range. Opening it locks about 0.057 SOL as rent, returned when it closes.',
+  close: 'Both tokens and the fees come back to your wallet, and the rent with them.',
+  rebalance:
+    'The old position closes and what it held goes back in around the price, swapped to fit.',
 } as const;
+
+const LIQUIDITY = new Set<DepositAction>(['provide', 'close', 'rebalance']);
+
+/**
+ * The range a liquidity card places money in: the two prices it reaches and
+ * how far each is from the price now — "105.17 – 123.70 · −10.3% / +5.5%".
+ */
+export const rangeOf = (block: DepositBlock): string | null => {
+  if (!block.belowPct || !block.abovePct) return null;
+  const share = `−${block.belowPct}% / +${block.abovePct}%`;
+  return block.lowerPrice && block.upperPrice
+    ? `${block.lowerPrice} – ${block.upperPrice} · ${share}`
+    : share;
+};
 
 /**
  * What the card promises under its button. A swap on the way is said, and so
@@ -133,6 +167,11 @@ const PROMISE = {
  * wallet asks for a signature per step.
  */
 export const promiseOf = (block: DepositBlock): string => {
+  const action = block.action ?? 'deposit';
+  if (LIQUIDITY.has(action)) {
+    const signatures = action === 'close' ? '' : ' Your wallet may ask you to sign more than once.';
+    return `${PROMISE[action]}${signatures} Nothing moves until you sign.`;
+  }
   const { spent, ends } = coinsOf(block);
   const swapped =
     spent !== ends
@@ -147,8 +186,13 @@ export const promiseOf = (block: DepositBlock): string => {
  * what that becomes.
  */
 export const sizeOf = (block: DepositBlock): string => {
+  const action = block.action ?? 'deposit';
+  if (action === 'close' || action === 'rebalance') {
+    return block.shown ? `${block.shown} in ${block.pool}` : block.pool;
+  }
   const { spent, ends } = coinsOf(block);
   const figure = block.amount === 'all' ? (block.shown ?? 'All') : block.amount;
+  if (action === 'provide') return `${figure} ${spent} → ${block.pool}`;
   return `${figure} ${spent}${ends !== spent ? ` → ${ends}` : ''}`;
 };
 
@@ -197,6 +241,12 @@ export default function DepositBlockView({ block, onDeposit }: Props) {
         <span className="sv-a-b-deposit-meta mono">
           {block.protocol} · {block.network} · risk {block.risk}
         </span>
+        {rangeOf(block) ? (
+          <span className="sv-a-b-deposit-meta mono">
+            range {rangeOf(block)}
+            {block.price ? ` · now ${block.price}` : ''}
+          </span>
+        ) : null}
       </div>
       <div className="sv-a-b-deposit-foot">
         {done ? (

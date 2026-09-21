@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from ..application.turns import Admitted, Answered, Question
 from ..container import Container
 from ..domain.asking import Choice
-from ..domain.earn import Coin, Deposit, Settled
+from ..domain.earn import Card, Coin, Placement, Settled
 from ..domain.identity import ANON_HEADER, Caller
 from ..observability import metrics
 from ..panel import NOTHING_DECIDED
@@ -127,7 +127,10 @@ def _choice_card(choice: Choice) -> ChoiceBlock:
     )
 
 
-def _deposit_card(deposit: Deposit) -> DepositBlock:
+def _deposit_card(card: Card) -> DepositBlock:
+    if isinstance(card, Placement):
+        return _liquidity_card(card)
+    deposit = card
     pool, source = deposit.pool, deposit.source
     return DepositBlock(
         action=deposit.action,
@@ -149,6 +152,42 @@ def _deposit_card(deposit: Deposit) -> DepositBlock:
         pay_with=_coin(deposit.pay_with),
         receive_as=_coin(deposit.receive_as),
     )
+
+
+def _liquidity_card(card: Placement) -> DepositBlock:
+    pool, held = card.pool, card.position
+    below, above = card.below_pct, card.above_pct
+    lower = _price(pool.price * (1 - below / 100)) if below is not None else None
+    upper = _price(pool.price * (1 + above / 100)) if above is not None else None
+    shown = None
+    if held is not None:
+        shown = f"${held.value_usd:.2f}"
+    amount = f"{card.amount:f}" if card.amount is not None else "all"
+    return DepositBlock(
+        action=card.action,
+        pool_id=pool.id,
+        pool=pool.name,
+        protocol="meteora",
+        pool_kind="dlmm",
+        network="sol",
+        token=card.pay_with.symbol if card.pay_with else pool.x,
+        amount=amount,
+        shown=shown,
+        apy=_rate(pool.fee_apr),
+        risk=pool.risk,
+        url=pool.url,
+        pay_with=_coin(card.pay_with),
+        below_pct=f"{below:f}" if below is not None else None,
+        above_pct=f"{above:f}" if above is not None else None,
+        lower_price=lower if above is not None else None,
+        upper_price=upper if below is not None else None,
+        price=_price(pool.price),
+        position=held.address if held else None,
+    )
+
+
+def _price(value: Decimal) -> str:
+    return f"{value:.6g}" if value < 1 else f"{value:.2f}"
 
 
 def _coin(coin: Coin | None) -> CoinBlock | None:

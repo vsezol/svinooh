@@ -93,8 +93,11 @@ export async function runDeposit({
   }
 }
 
-/** Out, swap, in: the most there is to a move, and one to spare. */
-const MOST_STEPS = 4;
+/**
+ * The most steps one button signs: out, swap and in for a move, or a
+ * position emptied over two transactions, a swap and a new one opened.
+ */
+const MOST_STEPS = 5;
 
 /**
  * What to ask for after a step that landed: what it left in the wallet, and
@@ -102,11 +105,28 @@ const MOST_STEPS = 4;
  * pool's own token, or swapped into the coin the whole thing ends as.
  */
 export function stepAfter(request: DepositRequest, then: DepositStepDto): DepositRequest {
+  if (then.action) {
+    // Liquidity says what its next step is, and carries every figure it needs.
+    return {
+      ...request,
+      action: then.action,
+      poolId: then.poolId ?? request.poolId,
+      amount: then.amount ?? '',
+      fromPoolId: undefined,
+      payWith: undefined,
+      receiveAs: undefined,
+      position: then.position ?? request.position,
+      amountX: then.amountX,
+      amountY: then.amountY,
+      belowPct: then.belowPct ?? request.belowPct,
+      abovePct: then.abovePct ?? request.abovePct,
+    };
+  }
   return {
     ...request,
     action: then.poolId ? 'deposit' : 'swap',
     poolId: then.poolId ?? request.poolId,
-    amount: then.amount,
+    amount: then.amount ?? '',
     fromPoolId: undefined,
     payWith: then.payWith ? { mint: then.payWith, symbol: then.holding } : undefined,
     receiveAs: then.receiveAs

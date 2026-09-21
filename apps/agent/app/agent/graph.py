@@ -13,7 +13,7 @@ from ..adapters.portfolio import PortfolioApiSource
 from ..config import Config
 from ..domain.asking import Choice
 from ..domain.conversation import Turn
-from ..domain.earn import Deposit, Held, Settled
+from ..domain.earn import Card, Held, LiquidityPosition, Placement, Settled
 from ..domain.portfolio import Portfolio
 from ..observability import metrics
 from ..ports import Ask, Failed, Finished, Progress, Reply, Update
@@ -21,6 +21,7 @@ from .context import (
     earning_lines,
     held_lines,
     idle_lines,
+    placed_lines,
     positions_read,
     replayed,
     without_what_the_chain_read,
@@ -53,6 +54,7 @@ from .tools import (
     asking_tools,
     deposit_tools,
     earn_tools,
+    liquidity_tools,
     moving_tools,
     portfolio_tools,
     run_tools,
@@ -61,12 +63,15 @@ from .tools import (
 logger = logging.getLogger("svinooh-ai")
 
 
-def each_once(prepared: list[Deposit]) -> tuple[Deposit, ...]:
+def each_once(prepared: list[Card]) -> tuple[Card, ...]:
     """Every card the turn prepared, one per thing to sign: a later one for the same wins."""
-    latest: dict[tuple[str, str, str | None], Deposit] = {}
-    for deposit in prepared:
-        source = deposit.source.id if deposit.source else None
-        latest[(deposit.action, deposit.pool.id, source)] = deposit
+    latest: dict[tuple[str, str, str | None], Card] = {}
+    for card in prepared:
+        if isinstance(card, Placement):
+            which = card.position.address if card.position else None
+        else:
+            which = card.source.id if card.source else None
+        latest[(card.action, card.pool.id, which)] = card
     return tuple(latest.values())
 
 
@@ -82,6 +87,7 @@ class Holdings:
     earning: str = ""
     held: tuple[Held, ...] = ()
     owners: tuple[str, ...] = ()
+    placed: tuple[LiquidityPosition, ...] = ()
 
 
 class AgentState(TypedDict, total=False):
@@ -94,8 +100,9 @@ class AgentState(TypedDict, total=False):
     intent: str
     asked_to_place: bool
     risk: str
+    lp_range: str
     language: str
-    deposits: tuple[Deposit, ...]
+    deposits: tuple[Card, ...]
     choices: tuple[Choice, ...]
     route: str
     target_portfolio: str
@@ -185,6 +192,7 @@ class LangGraphAgent:
                 "intent": "settled" if state.get("settled") else label.intent,
                 "asked_to_place": label.stance == "placing",
                 "risk": label.risk,
+                "lp_range": label.lp_range,
                 "language": label.language,
             }
         except Exception as error:  # noqa: BLE001 — the fail-safe IS the handling
@@ -237,14 +245,17 @@ class LangGraphAgent:
             holdings.earning,
             asked_to_place=asked_to_place,
             held=held_lines(holdings.held),
+            placed=placed_lines(holdings.placed),
         )
-        prepared: list[Deposit] = []
+        prepared: list[Card] = []
         asked: list[Choice] = []
         risk_known = state.get("risk", "unknown") != "unknown"
+        range_known = state.get("lp_range", "unknown") != "unknown"
         tools = (
             earn_tools(self._catalog)
             + deposit_tools(self._catalog, prepared, risk_known, holdings.owners)
             + moving_tools(self._catalog, holdings.held, prepared, risk_known, holdings.owners)
+            + liquidity_tools(self._catalog, holdings.placed, prepared, range_known)
             + asking_tools(asked)
         )
         answered = await self._answer_with_tools(system, state, tools, waiting=lambda: bool(asked))
@@ -268,12 +279,13 @@ class LangGraphAgent:
             async with step("portfolio", f"Reading portfolio · {target}"):
                 portfolio = await self._portfolio.portfolio(target, token)
                 said(positions_read(portfolio))
-            read = await self._in_pools(portfolio)
+            read, placed = await asyncio.gather(self._in_pools(portfolio), self._placed(portfolio))
             return Holdings(
                 idle=idle_lines(portfolio),
-                earning=earning_lines(without_what_the_chain_read(portfolio, read)),
+                earning=earning_lines(without_what_the_chain_read(portfolio, read, bool(placed))),
                 held=tuple(one for each in read.values() for one in each),
                 owners=solana_wallets(portfolio),
+                placed=placed,
             )
         except Exception as error:  # noqa: BLE001 — advice without it beats no advice
             logger.warning("earn: holdings unavailable (%r)", error)
@@ -293,6 +305,23 @@ class LangGraphAgent:
             logger.warning("earn: positions unavailable (%r)", error)
             return {}
         return dict(zip(addresses, found, strict=True))
+
+    async def _placed(self, portfolio: Portfolio) -> tuple[LiquidityPosition, ...]:
+        """What every Solana wallet in the portfolio has placed as liquidity for a pair."""
+        addresses = solana_wallets(portfolio)
+        if not addresses:
+            return ()
+        try:
+            async with step("placed", "Reading liquidity positions"):
+                found = await asyncio.gather(
+                    *(self._catalog.liquidity_positions(a) for a in addresses)
+                )
+                placed = tuple(one for each in found for one in each)
+                said(f"{len(placed)} positions" if placed else "no liquidity positions")
+        except Exception as error:  # noqa: BLE001 — the rest of the answer does not need it
+            logger.warning("earn: liquidity positions unavailable (%r)", error)
+            return ()
+        return placed
 
     async def _grounded(self, state: AgentState) -> AgentState:
         system = system_prompt(self._config)

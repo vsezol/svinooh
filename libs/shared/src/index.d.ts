@@ -95,7 +95,14 @@ export interface PositionDto {
 }
 
 /** What a card asks the wallet to do with a pool. */
-export type DepositAction = 'deposit' | 'withdraw' | 'move' | 'swap';
+export type DepositAction =
+  | 'deposit'
+  | 'withdraw'
+  | 'move'
+  | 'swap'
+  | 'provide'
+  | 'close'
+  | 'rebalance';
 
 /**
  * `poolId` is the pool the card is about: where money goes in a deposit and a
@@ -108,12 +115,23 @@ export type DepositAction = 'deposit' | 'withdraw' | 'move' | 'swap';
  */
 export interface DepositBuildDto {
   poolId?: string;
-  amount: string;
+  amount?: string;
   owner: string;
   action?: DepositAction;
   fromPoolId?: string;
   payWith?: string;
   receiveAs?: string;
+  /**
+   * Liquidity for a pair: `provide` places `amount` of `payWith` — or
+   * `amountX` and `amountY` of the pool's two tokens — across the range from
+   * `belowPct` under the price to `abovePct` over it; `close` and `rebalance`
+   * act on `position`, and a rebalance may name the new range.
+   */
+  position?: string;
+  amountX?: string;
+  amountY?: string;
+  belowPct?: string;
+  abovePct?: string;
 }
 
 /**
@@ -124,10 +142,17 @@ export interface DepositBuildDto {
  * is a plain deposit. `holding` is what the money sits in meanwhile.
  */
 export interface DepositStepDto {
+  /** What the step is, for liquidity; a deposit or a swap when absent. */
+  action?: 'provide' | 'close' | 'rebalance';
   poolId?: string;
-  amount: string;
+  amount?: string;
   payWith?: string;
   receiveAs?: string;
+  position?: string;
+  amountX?: string;
+  amountY?: string;
+  belowPct?: string;
+  abovePct?: string;
   holding: string;
 }
 

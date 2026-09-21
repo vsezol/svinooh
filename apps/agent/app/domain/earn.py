@@ -120,6 +120,82 @@ class Deposit:
 
 
 @dataclass(frozen=True, slots=True)
+class PairPool:
+    """A pool pairing two tokens, priced in bins (Meteora DLMM).
+
+    `price` is how much `y` one `x` costs. `fee_apr` is a year of the last
+    day's fees — paid only to liquidity inside the price's range, and only as
+    steady as the trading behind it. With a range asked about, `range_bins`
+    is how many of the pool's bins it spans and `why_not` why one position
+    will not hold it.
+    """
+
+    id: str
+    name: str
+    x: str
+    y: str
+    x_mint: str
+    y_mint: str
+    bin_step: int
+    fee_apr: Decimal
+    tvl_usd: Decimal
+    price: Decimal
+    url: str
+    range_bins: int | None = None
+    why_not: str | None = None
+
+    @property
+    def risk(self) -> RiskBand:
+        return "high" if self.tvl_usd < THIN_TVL_USD else "medium"
+
+    def token(self, named: str) -> tuple[str, str] | None:
+        """The pool's token a ticker or a mint names, as (symbol, mint)."""
+        asked = named.strip()
+        for symbol, mint in ((self.x, self.x_mint), (self.y, self.y_mint)):
+            if asked == mint or asked.upper() == symbol.upper():
+                return symbol, mint
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class LiquidityPosition:
+    """Liquidity somebody has placed in a pair pool: its range, and what it holds now."""
+
+    address: str
+    pool: PairPool
+    lower_price: Decimal
+    upper_price: Decimal
+    in_range: bool
+    amount_x: Decimal
+    amount_y: Decimal
+    value_usd: Decimal
+    fees_usd: Decimal
+
+
+PlacementAction = Literal["provide", "close", "rebalance"]
+
+
+@dataclass(frozen=True, slots=True)
+class Placement:
+    """Liquidity a card asks the wallet to sign.
+
+    `provide` places `amount` of `pay_with` — one of the pool's two tokens,
+    the rest swapped into the other so both sides fill — from `below_pct`
+    under the price to `above_pct` over it. `close` empties `position`;
+    `rebalance` closes it and places what it held again around the price,
+    across the range given or, with none, as wide as it was.
+    """
+
+    action: PlacementAction
+    pool: PairPool
+    amount: Decimal | None = None
+    pay_with: Coin | None = None
+    below_pct: Decimal | None = None
+    above_pct: Decimal | None = None
+    position: LiquidityPosition | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Held:
     """Money somebody has in a pool, read from the chain, in the pool's token.
 
@@ -131,6 +207,10 @@ class Held:
     pool: YieldPool
     amount: Decimal
     shares: Decimal | None = None
+
+
+Card = Deposit | Placement
+"""Anything a card asks the wallet to sign."""
 
 
 SettledStatus = Literal["landed", "failed", "sent", "refused"]
@@ -152,7 +232,7 @@ class Settled:
     status: SettledStatus
     signature: str | None = None
     error: str | None = None
-    action: "Action" = "deposit"
+    action: "Action | PlacementAction" = "deposit"
     from_pool: str | None = None
     into: str | None = None
     halfway: bool = False

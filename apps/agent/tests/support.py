@@ -23,7 +23,15 @@ from app.application.sessions import SessionStore
 from app.application.turns import Turns
 from app.config import Config
 from app.container import Container
-from app.domain.earn import CatalogSnapshot, Coin, DepositTerms, Held, YieldPool
+from app.domain.earn import (
+    CatalogSnapshot,
+    Coin,
+    DepositTerms,
+    Held,
+    LiquidityPosition,
+    PairPool,
+    YieldPool,
+)
 from app.panel import NOTHING_DECIDED, PanelValues
 from app.settings import Settings
 
@@ -44,11 +52,13 @@ class Intents:
         asked_to_place: bool = False,
         language: str = "English",
         risk: str = "low",
+        lp_range: str = "said",
     ):
         self.label = label
         self.asked_to_place = asked_to_place
         self.language = language
         self.risk = risk
+        self.lp_range = lp_range
         self.heard: tuple = ()
 
     async def classify(self, _question: str, history: tuple = ()) -> IntentLabel:
@@ -60,6 +70,7 @@ class Intents:
             stance=stance,
             language=self.language,
             risk=self.risk,
+            lp_range=self.lp_range,
         )
 
 
@@ -130,6 +141,19 @@ class Catalog:
     async def coin(self, query: str, owners: tuple[str, ...]) -> Coin | None:
         self.coins_asked.append((query, owners))
         return self.coins.get(query.upper())
+
+    pairs: tuple[PairPool, ...] = ()
+    placed: tuple[LiquidityPosition, ...] = ()
+
+    async def pair_pools(self, first, second, below_pct, above_pct) -> tuple[PairPool, ...]:
+        self.pairs_asked = (first, second, below_pct, above_pct)
+        return self.pairs
+
+    async def pair_pool(self, pool_id: str) -> PairPool | None:
+        return next((pool for pool in self.pairs if pool.id == pool_id), None)
+
+    async def liquidity_positions(self, owner: str) -> tuple[LiquidityPosition, ...]:
+        return self.placed
 
 
 class NoHost:
