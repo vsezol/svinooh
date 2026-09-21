@@ -25,7 +25,12 @@ export async function assemble(
   const kit = await import('@solana/kit');
   const rpc = kit.createSolanaRpc(rpcUrl);
   const signer = kit.createNoopSigner(kit.address(owner));
-  const { value: blockhash } = await rpc.getLatestBlockhash().send();
+  // Finalized, not the kit's default of confirmed. A wallet simulates what it is
+  // handed exactly as it is, and a simulator reading the finalized bank does
+  // not know a confirmed blockhash for another dozen seconds: Phantom answered
+  // "Failed to simulate the results of this request" and three screens of
+  // UNSAFE for a transaction that went through the moment it was forced.
+  const { value: blockhash } = await rpc.getLatestBlockhash({ commitment: 'finalized' }).send();
   const written = kit.pipe(
     kit.createTransactionMessage({ version: 0 }),
     (m) => kit.setTransactionMessageFeePayerSigner(signer, m),
@@ -59,19 +64,33 @@ export async function assemble(
  * The wallet will simulate this before it shows anybody a signature prompt,
  * and a wallet that cannot simulate it says so in red. Better to find out here
  * and say why in words than to hand somebody a transaction that burns a fee to
- * fail. A simulator we cannot reach is not evidence, so it does not refuse.
+ * fail.
+ *
+ * Simulated the way a wallet will: as handed over, blockhash and all, against
+ * the finalized bank. Replacing the blockhash would test the instructions and
+ * miss the one thing that made every wallet refuse to simulate a transaction
+ * the chain was happy to run.
+ *
+ * A simulator we cannot reach, or one that does not know a blockhash it was
+ * just handed, is not evidence about the deposit, so neither refuses it.
  */
 async function tried(rpc: Rpc, transaction: string, token: string): Promise<void> {
   const outcome = await rpc
     .simulateTransaction(transaction as never, {
       encoding: 'base64',
       sigVerify: false,
-      replaceRecentBlockhash: true,
+      replaceRecentBlockhash: false,
+      commitment: 'finalized',
     })
     .send()
     .catch(() => null);
-  if (!outcome?.value?.err) return;
-  throw new DepositWouldFail(whyItWouldFail(outcome.value.logs ?? [], token));
+  const err = outcome?.value?.err;
+  if (!err) return;
+  if (err === 'BlockhashNotFound') {
+    new Logger('Deposits').warn('the simulator did not know a finalized blockhash; not refusing on that');
+    return;
+  }
+  throw new DepositWouldFail(whyItWouldFail(err, outcome.value.logs ?? [], token));
 }
 
 export const landingsVia =

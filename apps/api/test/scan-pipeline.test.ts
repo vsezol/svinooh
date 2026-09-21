@@ -8,12 +8,12 @@
  * no database, no broker.
  */
 import { strict as assert } from 'node:assert';
-import { describe, test } from 'node:test';
+import { describe, mock, test } from 'node:test';
 import type { Wallet } from '@prisma/client';
 import { MetricsService, type RabbitService } from '@svinooh/common';
 import type { PrismaService } from '@svinooh/db';
 import type { ScanResult } from '@svinooh/shared';
-import { ScanRequests } from '../src/wallet/scan-requests.service';
+import { CATCHING_UP_MS, ScanRequests } from '../src/wallet/scan-requests.service';
 import { ScanResultConsumerService } from '../src/wallet/sync/scan-result-consumer.service';
 import type { SyncService } from '../src/wallet/sync/sync.service';
 
@@ -75,6 +75,39 @@ describe('AJustAddedWalletIsScannedNow', () => {
     scans.now('w-1');
     await new Promise((r) => setImmediate(r));
     assert.deepEqual(published, []);
+  });
+
+  test('a landed deposit is read at once, not when the clock next says so', async () => {
+    // The clock had this address scheduled five minutes out. That reading was
+    // taken before the money moved, and yielding to it is four minutes of
+    // somebody staring at a wallet that does not show what they just did.
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const { published, leased, scans } = pipeline(false);
+      scans.landed('w-1');
+      await new Promise((r) => setImmediate(r));
+      assert.equal(published.length, 1, 'read now, whatever the schedule says');
+      assert.deepEqual(leased, [ADDRESS]);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  test('and read again while the indexers catch up with the chain', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const { published, scans } = pipeline(false);
+      scans.landed('w-1');
+      await new Promise((r) => setImmediate(r));
+      for (const after of CATCHING_UP_MS) {
+        mock.timers.tick(after - (CATCHING_UP_MS[CATCHING_UP_MS.indexOf(after) - 1] ?? 0));
+        await new Promise((r) => setImmediate(r));
+      }
+      assert.equal(published.length, 1 + CATCHING_UP_MS.length);
+      assert.ok(Math.max(...CATCHING_UP_MS) <= 60_000, 'all of it inside the minute the page is watching');
+    } finally {
+      mock.timers.reset();
+    }
   });
 
   test('a recheck is read now even when the clock says it is not due', async () => {

@@ -21,6 +21,9 @@ import { SyncService } from './sync/sync.service';
  * opening the same wallet is one address asked for twice. So this claims the
  * address the same way the producer does, and publishes only if it got it.
  */
+/** When to read a wallet again after something landed, for the indexers to catch up. */
+export const CATCHING_UP_MS = [15_000, 45_000];
+
 @Injectable()
 export class ScanRequests {
   constructor(
@@ -54,6 +57,22 @@ export class ScanRequests {
    */
   recheck(walletId: string): void {
     void this.enqueue(walletId, true).catch(() => {});
+  }
+
+  /**
+   * Something done from this app just landed on chain — a deposit — and the
+   * person who signed it is looking at the page, waiting to see it.
+   *
+   * A `recheck`, because the scan the clock has scheduled was read before the
+   * money moved: `now` yields to it, and on 2026-09-21 that is what made a
+   * landed deposit take four minutes to appear, the forced scan quietly
+   * dropped in favour of one five minutes out. Then twice more, because a
+   * reading comes through indexers that can trail the chain by seconds, and a
+   * first read that beats them is a read of the old wallet.
+   */
+  landed(walletId: string): void {
+    this.recheck(walletId);
+    for (const after of CATCHING_UP_MS) setTimeout(() => this.recheck(walletId), after).unref();
   }
 
   private async enqueue(walletId: string, force: boolean): Promise<void> {
