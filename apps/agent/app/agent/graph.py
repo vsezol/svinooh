@@ -17,7 +17,14 @@ from ..domain.earn import Deposit, Held, Settled
 from ..domain.portfolio import Portfolio
 from ..observability import metrics
 from ..ports import Ask, Failed, Finished, Progress, Reply, Update
-from .context import earning_lines, held_lines, idle_lines, positions_read, replayed
+from .context import (
+    earning_lines,
+    held_lines,
+    idle_lines,
+    positions_read,
+    replayed,
+    without_what_the_chain_read,
+)
 from .intent import IntentClassifier
 from .llm import Models, extract_text
 from .onboarding import (
@@ -243,29 +250,37 @@ class LangGraphAgent:
             async with step("portfolio", f"Reading portfolio · {target}"):
                 portfolio = await self._portfolio.portfolio(target, token)
                 said(positions_read(portfolio))
+            held, covered = await self._in_pools(portfolio)
             return Holdings(
                 idle=idle_lines(portfolio),
-                earning=earning_lines(portfolio),
-                held=await self._in_pools(portfolio),
+                earning=earning_lines(without_what_the_chain_read(portfolio, covered)),
+                held=held,
             )
         except Exception as error:  # noqa: BLE001 — advice without it beats no advice
             logger.warning("earn: holdings unavailable (%r)", error)
             return Holdings()
 
-    async def _in_pools(self, portfolio: Portfolio) -> tuple[Held, ...]:
-        """What they have in pools, from the chain, for every Solana wallet in the portfolio."""
+    async def _in_pools(
+        self, portfolio: Portfolio
+    ) -> tuple[tuple[Held, ...], frozenset[tuple[str, str]]]:
+        """What every Solana wallet has in pools, from the chain, and the protocols it covers."""
         addresses = [wallet.address for wallet in portfolio.wallets if wallet.chain == "SOL"]
         if not addresses:
-            return ()
+            return (), frozenset()
         try:
             async with step("held", "Reading what is in pools"):
                 found = await asyncio.gather(*(self._catalog.positions(a) for a in addresses))
                 held = tuple(one for each in found for one in each)
                 said(f"{len(held)} in pools" if held else "nothing in pools")
-                return held
         except Exception as error:  # noqa: BLE001 — a deposit is still worth offering without it
             logger.warning("earn: positions unavailable (%r)", error)
-            return ()
+            return (), frozenset()
+        covered = frozenset(
+            (address, one.pool.protocol.lower())
+            for address, each in zip(addresses, found, strict=True)
+            for one in each
+        )
+        return held, covered
 
     async def _grounded(self, state: AgentState) -> AgentState:
         system = system_prompt(self._config)
