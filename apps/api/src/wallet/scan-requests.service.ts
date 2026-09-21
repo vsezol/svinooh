@@ -6,7 +6,9 @@ import { SyncService } from './sync/sync.service';
 
 /**
  * "Scan this one now" — the whole of what the rest of the api may ask of the
- * scan pipeline.
+ * scan pipeline, in the two tones it can be asked in: `now`, which yields to a
+ * scan already on its way, and `recheck`, which does not because it knows
+ * something that scan does not.
  *
  * It was a POST to the wallet service's /internal/scan, called with fetch and
  * a five-second timeout from two places that did not wait for the answer. The
@@ -29,10 +31,32 @@ export class ScanRequests {
 
   /** Fire and forget: the caller has an HTTP response to return */
   now(walletId: string): void {
-    void this.enqueue(walletId).catch(() => {});
+    void this.enqueue(walletId, false).catch(() => {});
   }
 
-  private async enqueue(walletId: string): Promise<void> {
+  /**
+   * The chain moved under a position somebody is watching: read this address
+   * whether or not the clock says it is due.
+   *
+   * The difference from `now` is the whole point of it. `now` asks politely —
+   * an address already claimed by a scan on its way is left alone, because the
+   * answer that scan brings back is the one the caller was waiting for anyway.
+   * This one has news that scan does not have: the reading it is about to
+   * return was taken BEFORE the price left the band, and waiting out the
+   * interval for the next one is the delay this exists to remove.
+   *
+   * So it takes the claim rather than asking for it. Landing on top of a scan
+   * already in flight costs a second read of one Solana address — the watch's
+   * cooldown is what keeps that from being often — and the writer applies both
+   * in turn, with the later reading winning. What it must never cost is a
+   * duplicate message: that is decided further down, against what the owner was
+   * last told, and two identical readings say nothing twice.
+   */
+  recheck(walletId: string): void {
+    void this.enqueue(walletId, true).catch(() => {});
+  }
+
+  private async enqueue(walletId: string, force: boolean): Promise<void> {
     const wallet = await this.prisma.wallet.findUnique({ where: { id: walletId } });
     if (!wallet) return;
     const job: ScanJob = {
@@ -41,9 +65,13 @@ export class ScanRequests {
       previousTotal: wallet.lastTotalUsd,
       tronResourcesAt: wallet.tronResourcesAt?.toISOString() ?? null,
     };
-    // Somebody is already scanning this address — the wallet gets that result,
-    // which is the one it was going to wait for anyway
-    if (!(await this.sync.takeIfFree(job.chain, job.address))) return;
+    if (force) {
+      await this.sync.lease([{ chain: job.chain, address: job.address }]);
+    } else if (!(await this.sync.takeIfFree(job.chain, job.address))) {
+      // Somebody is already scanning this address — the wallet gets that
+      // result, which is the one this caller was going to wait for anyway
+      return;
+    }
     // Somebody is watching a spinner right now: ahead of whatever is queued
     await this.rabbit.publish(scanQueueName(job.chain), job, { priority: SCAN_MAX_PRIORITY });
   }

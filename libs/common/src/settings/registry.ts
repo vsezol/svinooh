@@ -120,6 +120,48 @@ export const REGISTRY = {
     live: true,
   },
 
+  'live.ranges': {
+    kind: 'choice',
+    group: 'sync',
+    label: 'Live pool watch',
+    about:
+      'Listens to Solana for the pools people hold Meteora positions in, and reads a wallet the second its price leaves a position instead of at the next interval. It sends nothing itself — the scan and the alerts decide that, exactly as they do without it.',
+    options: ['on', 'off'],
+    default: 'on',
+    env: 'LIVE_RANGES',
+    readBy: ['api'],
+    live: true,
+    note: 'One WebSocket to SOLANA_WS_URL (or the first SOLANA_RPC_URL, or Solana\'s public node), one subscription per pool held. Off is the pace everything ran at before it existed.',
+  },
+  'live.cooldownSec': {
+    kind: 'number',
+    group: 'sync',
+    label: 'Live re-read cooldown',
+    about:
+      'The least time between two live-triggered reads of the same wallet. A price sitting on a boundary crosses it over and over; crossings inside the cooldown are collapsed into one later read rather than dropped.',
+    unit: 'sec',
+    default: 45,
+    min: 5,
+    max: 3600,
+    env: 'LIVE_COOLDOWN_SEC',
+    readBy: ['api'],
+    live: true,
+  },
+  'live.reconcileMin': {
+    kind: 'number',
+    group: 'sync',
+    label: 'Live watch re-reads positions',
+    about:
+      'How often the watch asks Meteora which positions each wallet holds and in which bins. The chain cannot announce a position we never subscribed to, so this is what notices a new one — and what lets go of a pool nobody holds any more.',
+    unit: 'min',
+    default: 5,
+    min: 1,
+    max: 120,
+    env: 'LIVE_RECONCILE_MIN',
+    readBy: ['api'],
+    live: true,
+  },
+
   'scan.reloadSec': {
     kind: 'number',
     group: 'queue',

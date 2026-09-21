@@ -18,8 +18,10 @@ apps/
             /auth/* proxied to the auth service. It also carries two fenced-off
             modules that were services of their own: src/admin (the tunables)
             and src/wallet (the scan pipeline — what is due, one RabbitMQ queue
-            per chain, the SOL/TRON/BTC scanners, snapshots), and src/alerts
-            (who should be told what, the trial meter, the renewal sweeps)
+            per chain, the SOL/TRON/BTC scanners, snapshots, and the live
+            watch that reads a wallet the second its Meteora pool leaves a
+            position's range), and src/alerts (who should be told what, the
+            trial meter, the renewal sweeps)
   auth/   — sign-in (NestJS): Telegram bot and login widget, X, wallet
             signatures; issues JWTs, owns User
   scanner-evm/ — the EVM scanner (NestJS): a headless browser (lightpanda or
@@ -51,6 +53,8 @@ web ──HTTPS+JWT──▶ api ──HTTP /auth/*───▶ auth ──▶ T
                     ├──▶ RabbitMQ (scan.evm, scan.sol, …) ──▶ scanner-evm ──▶ browser (lightpanda)
                     │      ▲ the api's own scan pipeline drains scan.sol/tron/btc
                     │      └─ and scan.result, where every reading is judged and stored
+                    ├──WS accountSubscribe──▶ Solana node (SOLANA_WS_URL): the Meteora
+                    │      pools somebody holds; a bin leaving a position → scan it now
                     └──▶ Postgres ◀── auth
 ```
 

@@ -51,6 +51,32 @@ interface MeteoraPosition {
   minPrice?: number | string;
   maxPrice?: number | string;
   poolActivePrice?: number | string;
+  /** The bins the position was opened between — the same range the prices describe */
+  lowerBinId?: number;
+  upperBinId?: number;
+  /** Where the pool's price stands, as a bin */
+  poolActiveBinId?: number;
+}
+
+/**
+ * One position, as something to watch on-chain rather than to draw.
+ *
+ * The prices are what a person reads; the BINS are what the pool itself is
+ * written in, and they are what makes a live answer possible. A DLMM pool's
+ * account carries one number that matters here — the active bin — so a
+ * position is in range exactly while that number is between these two, and
+ * that is a comparison of integers with nothing to convert and nothing to
+ * round. See `apps/api/src/wallet/live`.
+ */
+export interface MeteoraWatchable {
+  poolAddress: string;
+  positionAddress: string;
+  pairLabel: string;
+  lowerBinId: number;
+  upperBinId: number;
+  /** As Meteora saw it when it answered — the baseline until the chain says otherwise */
+  activeBinId: number;
+  inRange: boolean;
 }
 
 async function paged<T>(path: string, key: 'pools' | 'positions'): Promise<T[]> {
@@ -130,4 +156,55 @@ export async function meteoraPositions(address: string): Promise<MeteoraPoolPosi
       };
     })
     .filter((p) => p.valueUsd > 0.01);
+}
+
+/**
+ * The wallet's open positions in the bins they were opened between.
+ *
+ * The same two hops as the rest of this file, and the numbers come from the
+ * same answer — Meteora reports `lowerBinId`/`upperBinId` beside the prices,
+ * so nothing is derived and nothing is converted. A position missing either
+ * of them is dropped rather than guessed at: what this feeds decides whether
+ * somebody is woken up.
+ *
+ * `inRange` is Meteora's own verdict, kept as the baseline the live watch
+ * starts from — and, because it is computed here the same way the watch will
+ * compute it, a position whose two answers disagree is one whose bins we have
+ * read wrong, and it is dropped too.
+ */
+export async function meteoraWatchables(address: string): Promise<MeteoraWatchable[]> {
+  const pools = await paged<MeteoraPool>(`/portfolio/open?user=${address}`, 'pools');
+  if (!pools.length) return [];
+
+  const perPool = await Promise.all(
+    pools.map(async (pool) => {
+      const symX = pool.tokenX || (pool.tokenXMint ?? '').slice(0, 4);
+      const symY = pool.tokenY || (pool.tokenYMint ?? '').slice(0, 4);
+      const positions = await paged<MeteoraPosition>(
+        `/positions/${pool.poolAddress}/pnl?user=${address}`,
+        'positions',
+      );
+      return positions
+        .filter(
+          (p) =>
+            !p.isClosed &&
+            typeof p.lowerBinId === 'number' &&
+            typeof p.upperBinId === 'number' &&
+            typeof p.poolActiveBinId === 'number',
+        )
+        .map((p) => ({
+          poolAddress: pool.poolAddress,
+          positionAddress: p.positionAddress,
+          pairLabel: `${symX}/${symY}`,
+          lowerBinId: p.lowerBinId as number,
+          upperBinId: p.upperBinId as number,
+          activeBinId: p.poolActiveBinId as number,
+          inRange: !p.isOutOfRange,
+        }))
+        .filter(
+          (w) => w.inRange === (w.activeBinId >= w.lowerBinId && w.activeBinId <= w.upperBinId),
+        );
+    }),
+  );
+  return perPool.flat();
 }
