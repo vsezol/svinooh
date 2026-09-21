@@ -135,7 +135,14 @@ def asking_tools(asked: list[Choice]) -> list:
     return [ask_the_user]
 
 
-def deposit_tools(catalog: YieldCatalog, prepared: list[Deposit]) -> list:
+RISK_FIRST = (
+    "Nobody has said how much risk they want, so no pool is chosen yet. Ask it with "
+    "buttons — the safest pools against the highest rates, each with its rate — and "
+    "prepare nothing until they answer."
+)
+
+
+def deposit_tools(catalog: YieldCatalog, prepared: list[Deposit], risk_known: bool = True) -> list:
     @tool
     async def propose_deposit(pool_id: str, amount: str) -> str:
         """Put a deposit in front of the user to sign, once you know both facts.
@@ -150,6 +157,8 @@ def deposit_tools(catalog: YieldCatalog, prepared: list[Deposit]) -> list:
         size = _amount(amount)
         if size is None:
             return "That amount is not a number of tokens. Ask the user how much, and call again."
+        if not risk_known:
+            return RISK_FIRST
         pool = await catalog.pool(pool_id.strip())
         if pool is None:
             return (
@@ -182,7 +191,12 @@ def deposit_tools(catalog: YieldCatalog, prepared: list[Deposit]) -> list:
 WHISKER = Decimal("1.001")
 
 
-def moving_tools(catalog: YieldCatalog, held: tuple[Held, ...], prepared: list[Deposit]) -> list:
+def moving_tools(
+    catalog: YieldCatalog,
+    held: tuple[Held, ...],
+    prepared: list[Deposit],
+    risk_known: bool = True,
+) -> list:
     def holding(pool_id: str) -> Held | None:
         return next((one for one in held if one.pool.id == pool_id.strip()), None)
 
@@ -257,6 +271,8 @@ def moving_tools(catalog: YieldCatalog, held: tuple[Held, ...], prepared: list[D
         source = holding(from_pool_id)
         if source is None:
             return nothing_there(from_pool_id)
+        if not risk_known:
+            return RISK_FIRST
         target = await catalog.pool(to_pool_id.strip())
         if target is None:
             return (

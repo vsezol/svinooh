@@ -961,3 +961,42 @@ class TestEveryCardItPrepared:
         first = Deposit(pool=TURBO, amount=Decimal("1"), terms=terms)
         again = Deposit(pool=TURBO, amount=Decimal("2"), terms=terms)
         assert each_once([first, again]) == (again,)
+
+
+class TestNoPoolBeforeTheRiskIsKnown:
+    """He asked for the risk to be a question every time, never a guess."""
+
+    async def unknown(self, *calls: dict):
+        bot, _, model = wire(
+            intent="earn",
+            catalog=in_pools(TWELVE_IN_PRIME),
+            api=with_a_solana_wallet(),
+            model=Model(tool_calls=list(calls)),
+            asked_to_place=True,
+        )
+        bot.intents.risk = "unknown"
+        out = await run(bot, portfolio="on-screen", authorization="Bearer T")
+        return out, model
+
+    async def test_a_move_waits_for_the_risk(self):
+        out, model = await self.unknown(MOVE_ON_A_GUESS)
+        assert out["deposits"] == ()
+        assert "Nobody has said how much risk they want" in str(model.seen[-1].content)
+
+    async def test_a_deposit_waits_for_the_risk(self):
+        out, _ = await self.unknown(
+            {"name": "propose_deposit", "args": {"pool_id": TURBO.id, "amount": "5"}, "id": "d1"}
+        )
+        assert out["deposits"] == ()
+
+    async def test_taking_money_out_needs_no_risk(self):
+        out, _ = await self.unknown(
+            {"name": "propose_withdraw", "args": {"pool_id": PRIME.id}, "id": "w1"}
+        )
+        assert [card.action for card in out["deposits"]] == ["withdraw"]
+
+    def test_a_better_rate_is_not_a_risk(self):
+        from app.agent.intent import IntentLabel
+
+        told = IntentLabel.model_json_schema()["properties"]["risk"]["description"]
+        assert "'повыгоднее'" in told and "`unknown`" in told

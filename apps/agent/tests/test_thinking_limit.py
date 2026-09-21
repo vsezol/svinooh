@@ -40,7 +40,9 @@ class Labeler:
         if self.refusals > 0:
             self.refusals -= 1
             raise Exception(self.saying)
-        return IntentLabel(intent=self.label, reason="stubbed", stance="asking", language="English")
+        return IntentLabel(
+            intent=self.label, reason="stubbed", stance="asking", language="English", risk="unknown"
+        )
 
 
 def models(client=None, **env) -> Models:

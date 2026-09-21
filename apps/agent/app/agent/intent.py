@@ -67,6 +67,18 @@ class IntentLabel(BaseModel):
             "every time; there is no default."
         )
     )
+    risk: Literal["low", "medium", "high", "unknown"] = Field(
+        description=(
+            "How much risk the user has said they want, anywhere in this "
+            "conversation: `low` for safe, reliable, conservative, "
+            "'надёжный', 'безопасный', 'спокойно', 'низкий'; `high` for the "
+            "highest rate, risky, aggressive, 'максимум', 'рискованно', "
+            "'высокий'; `medium` for something between. A button they pressed "
+            "that names a band counts as saying it. A wish for a better rate "
+            "is not a risk: 'повыгоднее', 'more profitable', 'the best' are "
+            "`unknown`. Say `unknown` whenever they have not said it."
+        )
+    )
 
 
 class IntentClassifier:
