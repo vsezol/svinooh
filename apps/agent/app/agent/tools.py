@@ -433,10 +433,12 @@ def liquidity_tools(
             return None
         return (
             f"Their wallets hold {held:f} {symbol} free right now — what sits in a pool is not "
-            "free, and SOL keeps a little back for fees. Nothing is placed. Say so, and offer to "
-            "place what they hold, or to take money out of a pool first. A reading can lag a "
-            "top-up by a few minutes; if they say they just added some, say a fresh reading "
-            "takes a minute."
+            "free, and SOL keeps a little back for fees. Nothing is placed. Say so, and offer "
+            "what can be done: placing what they hold free, or taking the money out of the pool "
+            "first — a withdrawal card of its own, signed before, and the liquidity prepared "
+            "once the money is in their wallet. Never promise the two as one card or one "
+            "signature. A reading can lag a top-up by a few minutes; if they say they just "
+            "added some, say a fresh reading takes a minute."
         )
 
     async def fitting(pool: PairPool, below: Decimal, above: Decimal) -> PairPool | None:
