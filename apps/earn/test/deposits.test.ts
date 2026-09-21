@@ -6,7 +6,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Decimal } from 'decimal.js';
 import { AppModule } from '../src/app.module';
 import { ProblemFilter } from '../src/api/problems';
-import { LendDeposits, type BuildDeposit, type BuiltDeposit } from '../src/application/deposits';
+import { LendDeposits, type BuildDeposit, type BuiltTransaction } from '../src/application/deposits';
 import {
   AmountBelowMinimum,
   DepositNotSupported,
@@ -32,7 +32,7 @@ import { settingsFromEnv } from '../src/settings';
 import { RecordedKamino } from './fixtures/kamino';
 import { policy, pool } from './support';
 
-const TRANSACTION: BuiltDeposit = {
+const TRANSACTION: BuiltTransaction = {
   transaction: 'AQAB',
   feePayer: 'owner',
   instructions: 3,

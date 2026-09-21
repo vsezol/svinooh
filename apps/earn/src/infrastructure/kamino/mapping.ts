@@ -112,6 +112,7 @@ export function vaultToPool(
       sharesDecimals: state.sharesMintDecimals ?? null,
       tokenProgram: state.tokenProgram ?? null,
       lendingMarket: null,
+      farm: farmOf(state.vaultFarm),
     },
     url: `${APP}/earn/lend/${address}`,
     apyWindows: {
@@ -167,6 +168,7 @@ export function reserveToPool(
       sharesDecimals: null,
       tokenProgram: null,
       lendingMarket: market,
+      farm: null,
     },
     url: `${APP}/borrow/reserve/${market}/${address}`,
     apyWindows: null,
@@ -201,3 +203,8 @@ function minDeposit(raw: unknown, decimals: unknown): Decimal | null {
   if (amount === null || amount.lessThan(0) || !Number.isInteger(decimals)) return null;
   return amount.dividedBy(new Decimal(10).pow(decimals as number));
 }
+
+const NO_FARM = '11111111111111111111111111111111';
+
+const farmOf = (farm: string | undefined): string | null =>
+  farm && farm !== NO_FARM ? farm : null;

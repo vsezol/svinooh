@@ -50,6 +50,7 @@ export interface DepositTerms {
   sharesDecimals: number | null;
   tokenProgram: string | null;
   lendingMarket: string | null;
+  farm: string | null;
 }
 
 export interface Pool {

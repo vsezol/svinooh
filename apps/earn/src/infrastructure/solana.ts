@@ -1,8 +1,8 @@
 import { Logger } from '@nestjs/common';
 import { Decimal } from 'decimal.js';
-import type { BuiltDeposit, LookUpLanding, ReadHoldings } from '../application/deposits';
+import type { BuiltTransaction, LookUpLanding, ReadHoldings } from '../application/deposits';
 import { DepositNotSupported, DepositWouldFail } from '../application/errors';
-import { whyItWouldFail, type Deposit } from '../domain/deposit';
+import { whyItWouldFail } from '../domain/deposit';
 import type { Pool } from '../domain/pool';
 
 type Kit = typeof import('@solana/kit');
@@ -15,15 +15,39 @@ const NATIVE = 'So11111111111111111111111111111111111111112';
 /** Rent for the accounts a deposit opens, and the fee to send it. */
 const KEPT_BACK = new Decimal('0.01');
 
+/** Who pays for a transaction, and what to call the token when explaining a refusal. */
+export interface Payer {
+  owner: string;
+  token: string;
+}
+
 export async function assemble(
-  deposit: Deposit,
+  payer: Payer,
   instructions: unknown[],
   rpcUrl: string,
   lookups: string[] = [],
-): Promise<BuiltDeposit> {
-  const owner = deposit.owner;
+): Promise<BuiltTransaction> {
   const kit = await import('@solana/kit');
   const rpc = kit.createSolanaRpc(rpcUrl);
+  const { transaction, blockhash } = await compile(payer.owner, instructions, rpc, lookups);
+  const bytes = Math.ceil((transaction.length * 3) / 4);
+  if (bytes > PACKET_BYTES) {
+    throw new DepositNotSupported(
+      `this transaction is ${bytes} bytes and one may be ${PACKET_BYTES}`,
+    );
+  }
+  await tried(rpc, transaction, payer.token);
+  return {
+    transaction,
+    feePayer: payer.owner,
+    instructions: instructions.length,
+    blockhash: blockhash.blockhash,
+    lastValidBlockHeight: String(blockhash.lastValidBlockHeight),
+  };
+}
+
+async function compile(owner: string, instructions: unknown[], rpc: Rpc, lookups: string[]) {
+  const kit = await import('@solana/kit');
   const signer = kit.createNoopSigner(kit.address(owner));
   // Finalized, not the kit's default of confirmed. A wallet simulates what it is
   // handed exactly as it is, and a simulator reading the finalized bank does
@@ -44,20 +68,58 @@ export async function assemble(
       )
     : written;
   const transaction = kit.getBase64EncodedWireTransaction(kit.compileTransaction(message));
-  const bytes = Math.ceil((transaction.length * 3) / 4);
-  if (bytes > PACKET_BYTES) {
-    throw new DepositNotSupported(
-      `this deposit is ${bytes} bytes and a transaction may be ${PACKET_BYTES}`,
+  return { transaction, blockhash };
+}
+
+/**
+ * How much of a token these instructions put in the owner's account, found by
+ * running them rather than by predicting it.
+ *
+ * A vault charges for a withdrawal — on 2026-09-21, 12.001427 USDC of shares
+ * came out as 12.000426 — so a move that deposits what the shares are worth
+ * asks for money that is not there and fails at the last instruction. The
+ * simulator answers with the balance after; the difference is what arrived.
+ * The share price only rises between now and the signature, so the real
+ * withdrawal brings at least this much.
+ */
+export async function measure(
+  payer: Payer & { mint: string; tokenProgram: string | null },
+  instructions: unknown[],
+  rpcUrl: string,
+  lookups: string[] = [],
+): Promise<bigint> {
+  const kit = await import('@solana/kit');
+  const token = await import('@solana-program/token');
+  const rpc = kit.createSolanaRpc(rpcUrl);
+  const [account] = await token.findAssociatedTokenPda({
+    owner: kit.address(payer.owner),
+    mint: kit.address(payer.mint),
+    tokenProgram: kit.address(payer.tokenProgram ?? token.TOKEN_PROGRAM_ADDRESS),
+  });
+  const before = await rpc
+    .getTokenAccountBalance(account, { commitment: 'finalized' })
+    .send()
+    .then(({ value }) => BigInt(value.amount))
+    .catch(() => 0n);
+  const { transaction } = await compile(payer.owner, instructions, rpc, lookups);
+  const outcome = await rpc
+    .simulateTransaction(transaction as never, {
+      encoding: 'base64',
+      sigVerify: false,
+      replaceRecentBlockhash: false,
+      commitment: 'finalized',
+      accounts: { encoding: 'jsonParsed', addresses: [account] },
+    })
+    .send();
+  if (outcome.value.err) {
+    throw new DepositWouldFail(
+      whyItWouldFail(outcome.value.err, outcome.value.logs ?? [], payer.token),
     );
   }
-  await tried(rpc, transaction, deposit.pool.token.symbol);
-  return {
-    transaction,
-    feePayer: owner,
-    instructions: instructions.length,
-    blockhash: blockhash.blockhash,
-    lastValidBlockHeight: String(blockhash.lastValidBlockHeight),
-  };
+  const after = (outcome.value.accounts?.[0] as { data?: { parsed?: { info?: { tokenAmount?: { amount?: string } } } } } | null)
+    ?.data?.parsed?.info?.tokenAmount?.amount;
+  if (after === undefined) throw new DepositWouldFail('the simulator did not say what arrived');
+  return BigInt(after) - before;
 }
 
 /**

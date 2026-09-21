@@ -112,6 +112,38 @@ export function depositBody(body: unknown): DepositBody {
   return { amount: parsed, owner };
 }
 
+export interface TakeBody {
+  take: Decimal | 'all';
+  owner: string;
+}
+
+/** A withdrawal's or a move's body: how much ("all", or a number of tokens) and whose. */
+export function takeBody(body: unknown): TakeBody {
+  const given = (body ?? {}) as Record<string, unknown>;
+  const owner = given.owner;
+  if (typeof owner !== 'string' || !BASE58.test(owner)) {
+    throw new InvalidParameter('owner: Input should be a base58 account address');
+  }
+  if (given.amount === 'all') return { take: 'all', owner };
+  return { take: depositBody({ amount: given.amount, owner }).amount, owner };
+}
+
+export function poolIdOf(body: unknown, field: 'from' | 'to'): string {
+  const value = ((body ?? {}) as Record<string, unknown>)[field];
+  if (typeof value !== 'string' || !value) {
+    throw new InvalidParameter(`${field}: Input should be a pool id`);
+  }
+  return value;
+}
+
+export function ownerOf(query: Query): string {
+  const owner = one(query, 'owner');
+  if (owner === null || !BASE58.test(owner)) {
+    throw new InvalidParameter('owner: Input should be a base58 account address');
+  }
+  return owner;
+}
+
 const SIGNATURE = /^[1-9A-HJ-NP-Za-km-z]{64,90}$/;
 
 export function signatureOf(raw: string): string {

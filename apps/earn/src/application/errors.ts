@@ -21,3 +21,7 @@ export class AmountBelowMinimum extends EarnError {}
 export class NotEnoughHeld extends EarnError {}
 
 export class DepositWouldFail extends EarnError {}
+
+export class NothingThere extends EarnError {}
+
+export class MoveNotSupported extends EarnError {}

@@ -1,19 +1,40 @@
 import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query } from '@nestjs/common';
 import { LendDeposits } from '../application/deposits';
+import { LendMoves } from '../application/moves';
 import { LendQueries } from '../application/queries';
 import { ageMs, isStale } from '../domain/catalog';
 import type { Clock } from '../application/refresher';
 import type { Settings } from '../settings';
 import { CLOCK, SETTINGS } from '../tokens';
 import { encode, decode } from './cursors';
-import { depositBody, networkOf, pageSize, poolFilter, poolSelection, signatureOf } from './params';
-import { builtDeposit, chainMeta, detail, landing, meta, summary, tokenYield } from './presenters';
+import {
+  depositBody,
+  networkOf,
+  ownerOf,
+  pageSize,
+  poolFilter,
+  poolIdOf,
+  poolSelection,
+  signatureOf,
+  takeBody,
+} from './params';
+import {
+  builtTransaction,
+  chainMeta,
+  detail,
+  landing,
+  meta,
+  position,
+  summary,
+  tokenYield,
+} from './presenters';
 
 @Controller('v1/lend')
 export class LendController {
   constructor(
     @Inject(LendQueries) private readonly queries: LendQueries,
     @Inject(LendDeposits) private readonly deposits: LendDeposits,
+    @Inject(LendMoves) private readonly moves: LendMoves,
     @Inject(SETTINGS) private readonly settings: Settings,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -49,7 +70,41 @@ export class LendController {
     const { amount, owner } = depositBody(body);
     const answer = await this.deposits.build(poolId, amount, owner);
     return {
-      data: builtDeposit(answer.built),
+      data: builtTransaction(answer.built),
+      meta: meta(answer.catalog, this.clock(), this.settings.staleAfterMs),
+    };
+  }
+
+  @Get('positions')
+  async listPositions(@Query() query: Record<string, string>) {
+    const answer = await this.moves.positions(networkOf(query), ownerOf(query));
+    return {
+      data: answer.positions.map(position),
+      meta: meta(answer.catalog, this.clock(), this.settings.staleAfterMs, {
+        count: answer.positions.length,
+        total: answer.positions.length,
+      }),
+    };
+  }
+
+  @Post('pools/:poolId/withdraw')
+  @HttpCode(200)
+  async buildWithdrawal(@Param('poolId') poolId: string, @Body() body: unknown) {
+    const { take, owner } = takeBody(body);
+    const answer = await this.moves.withdraw(poolId, take, owner);
+    return {
+      data: builtTransaction(answer.built),
+      meta: meta(answer.catalog, this.clock(), this.settings.staleAfterMs),
+    };
+  }
+
+  @Post('moves')
+  @HttpCode(200)
+  async buildMove(@Body() body: unknown) {
+    const { take, owner } = takeBody(body);
+    const answer = await this.moves.move(poolIdOf(body, 'from'), poolIdOf(body, 'to'), take, owner);
+    return {
+      data: builtTransaction(answer.built),
       meta: meta(answer.catalog, this.clock(), this.settings.staleAfterMs),
     };
   }

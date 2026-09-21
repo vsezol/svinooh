@@ -1,19 +1,19 @@
 import type { KaminoVault } from '@kamino-finance/klend-sdk';
-import type { BuiltDeposit } from '../../application/deposits';
+import type { BuiltTransaction } from '../../application/deposits';
 import { DepositNotSupported } from '../../application/errors';
 import { baseUnits, type Deposit } from '../../domain/deposit';
 import { assemble } from '../solana';
 
-type SdkRpc = ConstructorParameters<typeof KaminoVault>[0];
-type Sdk = typeof import('@kamino-finance/klend-sdk');
+export type SdkRpc = ConstructorParameters<typeof KaminoVault>[0];
+export type Sdk = typeof import('@kamino-finance/klend-sdk');
 type Kit = typeof import('@solana/kit');
-type Signer = ReturnType<Kit['createNoopSigner']>;
+export type Signer = ReturnType<Kit['createNoopSigner']>;
 
-const SLOT_DURATION_MS = 450;
+export const SLOT_DURATION_MS = 450;
 
-const NO_TABLE = '11111111111111111111111111111111';
+export const NO_TABLE = '11111111111111111111111111111111';
 
-interface Built {
+export interface Built {
   instructions: unknown[];
   lookups: string[];
 }
@@ -21,7 +21,7 @@ interface Built {
 export async function buildKaminoDeposit(
   deposit: Deposit,
   rpcUrl: string,
-): Promise<BuiltDeposit> {
+): Promise<BuiltTransaction> {
   const kit = await import('@solana/kit');
   const klend = await import('@kamino-finance/klend-sdk');
   const rpc = kit.createSolanaRpc(rpcUrl) as unknown as SdkRpc;
@@ -33,14 +33,24 @@ export async function buildKaminoDeposit(
       : kind === 'reserve'
         ? await intoReserve(klend, kit, rpc, signer, deposit)
         : refuse(kind);
-  return assemble(deposit, built.instructions, rpcUrl, built.lookups);
+  return assemble(
+    { owner: deposit.owner, token: deposit.pool.token.symbol },
+    built.instructions,
+    rpcUrl,
+    built.lookups,
+  );
 }
 
 function refuse(kind: never): never {
   throw new DepositNotSupported(`kamino ${kind} pools are not wired for deposits here yet`);
 }
 
-async function intoVault(klend: Sdk, rpc: SdkRpc, signer: Signer, deposit: Deposit): Promise<Built> {
+export async function intoVault(
+  klend: Sdk,
+  rpc: SdkRpc,
+  signer: Signer,
+  deposit: Deposit,
+): Promise<Built> {
   const terms = deposit.pool.deposit;
   const vault = new klend.KaminoVault(
     rpc,

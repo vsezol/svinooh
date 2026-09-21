@@ -11,7 +11,7 @@ import type { Pool } from '../domain/pool';
 import { AmountBelowMinimum, DepositNotSupported, NotEnoughHeld } from './errors';
 import type { LendQueries } from './queries';
 
-export interface BuiltDeposit {
+export interface BuiltTransaction {
   transaction: string;
   feePayer: string;
   instructions: number;
@@ -19,7 +19,7 @@ export interface BuiltDeposit {
   lastValidBlockHeight: string;
 }
 
-export type BuildDeposit = (deposit: Deposit) => Promise<BuiltDeposit>;
+export type BuildDeposit = (deposit: Deposit) => Promise<BuiltTransaction>;
 
 export type LookUpLanding = (signature: string) => Promise<Landing>;
 
@@ -27,7 +27,7 @@ export type LookUpLanding = (signature: string) => Promise<Landing>;
 export type ReadHoldings = (owner: string, pool: Pool) => Promise<Decimal | null>;
 
 export interface DepositAnswer {
-  built: BuiltDeposit;
+  built: BuiltTransaction;
   catalog: Catalog;
 }
 
