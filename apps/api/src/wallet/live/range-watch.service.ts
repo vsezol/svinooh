@@ -7,6 +7,10 @@ import { ScanRequests } from '../scan-requests.service';
 import { activeBinId, holds } from './lb-pair';
 import { PoolFeed } from './pool-feed.service';
 
+/** Two prices parsed from the same string, compared without trusting the last bit */
+const same = (a: number, b: number): boolean =>
+  Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+
 /** One position, and whose wallet it hangs off */
 interface Watched extends MeteoraWatchable {
   walletId: string;
@@ -135,16 +139,37 @@ export class RangeWatch implements OnApplicationBootstrap, OnApplicationShutdown
       else watched.set(position.poolAddress, [position]);
     }
 
-    // A position we have never judged takes its first answer silently — it has
-    // been in whatever state it is in for an unknown while, and that is not
-    // this pass's news any more than it is the first scan's
     const live = new Set<string>();
-    for (const [pool, positions] of watched) {
+    const unjudged: Watched[] = [];
+    for (const positions of watched.values()) {
       for (const position of positions) {
         live.add(position.positionAddress);
-        if (this.known.has(position.positionAddress)) continue;
-        const bin = this.active.get(pool)?.bin ?? position.activeBinId;
-        this.known.set(position.positionAddress, holds(position, bin));
+        if (!this.known.has(position.positionAddress)) unjudged.push(position);
+      }
+    }
+
+    // A position we have not judged yet starts from what the last scan stored
+    // about it — what this system last BELIEVED, and so what its owner was last
+    // told. That is what makes a restart lose nothing: a crossing that happened
+    // while the process was down, or before it first looked, is a difference
+    // between that and the chain, and it goes through the hold like any other.
+    // Only a position no stored row can be pinned to takes its first answer
+    // silently, as it did before; the scan on the clock still covers it.
+    const stored = await this.lastStored(unjudged);
+    if (unjudged.length) {
+      this.logger.log(
+        `${stored.size} of ${unjudged.length} new position(s) start from what the last scan stored; the rest from the chain`,
+      );
+    }
+    for (const position of unjudged) {
+      const bin = this.active.get(position.poolAddress)?.bin ?? position.activeBinId;
+      const now = holds(position, bin);
+      const was = stored.get(position.positionAddress);
+      this.known.set(position.positionAddress, was ?? now);
+      if (was !== undefined && was !== now) {
+        this.logger.log(
+          `${position.pairLabel} ${position.positionAddress.slice(0, 6)}… is ${now ? 'in' : 'out of'} range, the last scan said ${was ? 'in' : 'out'} — changed while nobody was watching`,
+        );
       }
     }
     for (const position of [...this.known.keys()]) {
@@ -173,6 +198,45 @@ export class RangeWatch implements OnApplicationBootstrap, OnApplicationShutdown
       const fresh = positions.find((position) => answered.has(position.positionAddress));
       if (fresh) this.observe(pool, fresh.activeBinId, askedAt);
     }
+    // A reading that did not move the pool's bin judges nobody, and a position
+    // just seeded from the last scan may already disagree with the bin we have
+    for (const position of unjudged) this.judge(position);
+  }
+
+  /**
+   * What the last scan stored about each of these positions: in range or not.
+   *
+   * A stored row is recognised by its band — the scan writes Meteora's own
+   * min and max price there, and those are the same numbers this position
+   * carries. Only a row that is the ONE match counts: a wallet holding two
+   * positions in a pool can have them folded into one row with no band, and a
+   * guess about which of them it describes is worse than no answer.
+   */
+  private async lastStored(positions: Watched[]): Promise<Map<string, boolean>> {
+    const stored = new Map<string, boolean>();
+    if (!positions.length) return stored;
+    const rows = await this.prisma.position.findMany({
+      where: {
+        walletId: { in: [...new Set(positions.map((position) => position.walletId))] },
+        platform: 'meteora',
+        range: { not: null },
+      },
+      select: { walletId: true, range: true, band: true },
+    });
+    for (const position of positions) {
+      const matches = rows.filter((row) => {
+        const band = row.band as { lower?: unknown; upper?: unknown } | null;
+        return (
+          row.walletId === position.walletId &&
+          typeof band?.lower === 'number' &&
+          typeof band?.upper === 'number' &&
+          same(band.lower, position.lowerPrice) &&
+          same(band.upper, position.upperPrice)
+        );
+      });
+      if (matches.length === 1) stored.set(position.positionAddress, matches[0].range === 'in');
+    }
+    return stored;
   }
 
   /**
