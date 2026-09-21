@@ -19,6 +19,23 @@ if (existsSync(envPath)) {
 process.env.DATABASE_URL ??= 'postgresql://svinooh:svinooh@localhost:5432/svinooh';
 
 /**
+ * Where the live pool watch listens, as a WebSocket.
+ *
+ * One name for the endpoint, taken from SOLANA_WS_URL if it is set and
+ * otherwise from the first SOLANA_RPC_URL — the same node answers both, and
+ * having to set the same host twice is how the two end up pointing at
+ * different places. Solana's own public endpoint is the fallback: it carries
+ * account subscriptions and is rate-limited enough that a handful of pools is
+ * the honest limit of it, which is what a private node is for.
+ */
+function solanaWsUrl(): string {
+  const explicit = (process.env.SOLANA_WS_URL || '').trim();
+  if (explicit) return explicit;
+  const rpc = (process.env.SOLANA_RPC_URL || '').split(',')[0].trim();
+  return rpc.startsWith('http') ? rpc.replace(/^http/, 'ws') : 'wss://api.mainnet-beta.solana.com';
+}
+
+/**
  * The gateway's config. Sign-in lives in the auth service and scanning in the
  * scanners it drives itself, so nothing about Telegram belongs here — the api
  * needs to know how to reach the auth service, the broker, its cache and its
@@ -72,4 +89,6 @@ export const config = {
     '',
   ),
   webOrigin: process.env.WEB_ORIGIN || '*',
+  // The node the live pool watch subscribes to — see wallet/live
+  solanaWsUrl: solanaWsUrl(),
 };

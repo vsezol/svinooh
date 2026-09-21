@@ -60,6 +60,19 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  /**
+   * Range crossings the chain reported before a scan was due — the fast path
+   * doing its job. It is the number that says whether the live watch is
+   * earning its socket: every one of these is a message that went out in
+   * seconds instead of at the end of an interval.
+   */
+  readonly liveCrossings = new Counter({
+    name: 'svinooh_live_crossings_total',
+    help: 'Position range crossings seen live on-chain, by platform and direction',
+    labelNames: ['platform', 'direction'] as const, // direction: in | out
+    registers: [this.registry],
+  });
+
   readonly errors = new Counter({
     name: 'svinooh_errors_total',
     help: 'Errors by type',

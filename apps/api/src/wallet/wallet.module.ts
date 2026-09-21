@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { PoolFeed } from './live/pool-feed.service';
+import { RangeWatch } from './live/range-watch.service';
 import { ScanRequests } from './scan-requests.service';
 import { SyncModule } from './sync/sync.module';
 
@@ -24,6 +26,14 @@ import { SyncModule } from './sync/sync.module';
  * `npm run -w apps/api check:boundary` reads the imports and fails if any of
  * that stops being true.
  *
+ * `live/` is the newest thing in here and the one that needs saying out loud:
+ * it listens to Solana for the pools somebody holds a Meteora position in, and
+ * when the price leaves one of those positions it asks for that wallet to be
+ * read NOW. It sends nothing. Everything about who hears what still happens
+ * exactly once, downstream, where it always did — the watch only moves the
+ * moment of the reading from "when the clock came round" to "when it
+ * happened".
+ *
  * What did NOT change: the broker. EVM is scanned by apps/scanner-evm, a real
  * service on the other side of scan.evm, so the queues are the contract
  * between two processes and stay exactly as they were. SOL, TRON and BTC are
@@ -32,7 +42,7 @@ import { SyncModule } from './sync/sync.module';
  */
 @Module({
   imports: [SyncModule],
-  providers: [ScanRequests],
+  providers: [ScanRequests, PoolFeed, RangeWatch],
   exports: [ScanRequests],
 })
 export class WalletModule {}

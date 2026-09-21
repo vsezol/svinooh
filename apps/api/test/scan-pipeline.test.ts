@@ -51,8 +51,14 @@ describe('AJustAddedWalletIsScannedNow', () => {
         return true;
       },
     } as unknown as RabbitService;
-    const sync = { takeIfFree: async () => free } as unknown as SyncService;
-    return { published, scans: new ScanRequests(prisma, rabbit, sync) };
+    const leased: string[] = [];
+    const sync = {
+      takeIfFree: async () => free,
+      lease: async (addresses: Array<{ address: string }>) => {
+        leased.push(...addresses.map((a) => a.address));
+      },
+    } as unknown as SyncService;
+    return { published, leased, scans: new ScanRequests(prisma, rabbit, sync) };
   };
 
   test('the address is claimed, then published to its own queue, ahead of the rest', async () => {
@@ -69,6 +75,18 @@ describe('AJustAddedWalletIsScannedNow', () => {
     scans.now('w-1');
     await new Promise((r) => setImmediate(r));
     assert.deepEqual(published, []);
+  });
+
+  test('a recheck is read now even when the clock says it is not due', async () => {
+    // The live watch saw the price leave a band: the reading the clock is
+    // waiting on was taken before that happened, so this one does not wait
+    const { published, leased, scans } = pipeline(false);
+    scans.recheck('w-1');
+    await new Promise((r) => setImmediate(r));
+    assert.deepEqual(leased, [ADDRESS], 'the claim is taken, not asked for');
+    assert.equal(published.length, 1);
+    assert.equal(published[0].queue, 'scan.v2.sol');
+    assert.ok((published[0].priority ?? 0) > 0, 'ahead of the routine top-ups');
   });
 });
 
