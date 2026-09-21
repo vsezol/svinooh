@@ -243,3 +243,36 @@ class TestAPastTurnAsTheModelsSeeIt:
 
         asked, answered = replayed(Turn(q="", a="", at=0, blocks=[]))
         assert asked and answered, "an empty message is one some model APIs refuse outright"
+
+
+class TestTheGasTheWalletSignsWith:
+    def portfolio_with_sol(self, amount: float):
+        from app.domain.portfolio import Portfolio, Position, Wallet
+
+        sol = Position(
+            symbol="SOL",
+            value_usd=amount * 118.0,
+            network="sol",
+            platform="wallet",
+            category="token",
+            amount=amount,
+            price_usd=118.0,
+        )
+        return Portfolio(
+            slug="p",
+            total_usd=sol.value_usd,
+            wallets=(Wallet(address="A", chain="SOL", status="ok", positions=(sol,)),),
+        )
+
+    def test_what_is_only_gas_is_not_offered_as_idle(self):
+        from app.agent.context import idle_lines
+
+        said = idle_lines(self.portfolio_with_sol(0.0137))
+        assert "SOL" not in said, "all of it would have left the wallet unable to sign"
+
+    def test_above_the_gas_only_the_rest_is_offered(self):
+        from app.agent.context import idle_lines
+
+        said = idle_lines(self.portfolio_with_sol(1.5))
+        assert "SOL 1.48" in said
+        assert "0.02 SOL more is kept back for network fees" in said

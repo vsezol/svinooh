@@ -323,7 +323,7 @@ class TestWhereToPutMoney:
         )
         out = await run(bot)
         assert out["choices"], "the question stands"
-        assert out["deposit"] is None, "a deposit chosen on a guess is the guess we removed"
+        assert out["deposits"] == (), "a deposit chosen on a guess is the guess we removed"
 
     async def test_the_tool_that_prepares_a_deposit_is_there_either_way(self):
         bot, _, model = wire(intent="earn", catalog=Catalog(), model=Model(tool_calls=[EARN_CALL]))
@@ -351,9 +351,9 @@ class TestWhereToPutMoney:
         )
         out = await run(bot)
         assert "propose_deposit" in model.tools_bound
-        assert out["deposit"] is not None
-        assert out["deposit"].amount == Decimal("250")
-        assert out["deposit"].pool.id == "sol:kamino:vault:AAA"
+        (card,) = out["deposits"]
+        assert card.amount == Decimal("250")
+        assert card.pool.id == "sol:kamino:vault:AAA"
 
     async def test_nothing_is_on_the_reply_when_the_model_only_talked(self):
         bot, _, _ = wire(
@@ -362,7 +362,7 @@ class TestWhereToPutMoney:
             model=Model(tool_calls=[EARN_CALL]),
             asked_to_place=True,
         )
-        assert (await run(bot))["deposit"] is None
+        assert (await run(bot))["deposits"] == ()
 
     async def test_a_portfolio_that_will_not_answer_still_gets_advice(self):
         bot, _, model = wire(
@@ -750,7 +750,7 @@ class TestTakingMoneyOut:
                 "id": "w1",
             },
         )
-        card = out["deposit"]
+        (card,) = out["deposits"]
         assert card.action == "withdraw" and card.pool.name == "USDC Prime"
         assert card.everything and card.amount == Decimal("12.001555")
 
@@ -759,7 +759,7 @@ class TestTakingMoneyOut:
             in_pools(TWELVE_IN_PRIME),
             {"name": "propose_withdraw", "args": {"pool_id": TURBO.id}, "id": "w1"},
         )
-        assert out["deposit"] is None
+        assert out["deposits"] == ()
         assert "nothing in a pool with the id" in str(model.seen[-1].content)
 
     async def test_more_than_is_there_says_what_is(self):
@@ -767,7 +767,7 @@ class TestTakingMoneyOut:
             in_pools(TWELVE_IN_PRIME),
             {"name": "propose_withdraw", "args": {"pool_id": PRIME.id, "amount": "50"}, "id": "w1"},
         )
-        assert out["deposit"] is None
+        assert out["deposits"] == ()
         assert "12.001555 USDC in USDC Prime" in str(model.seen[-1].content)
 
 
@@ -781,7 +781,7 @@ class TestMovingMoney:
                 "id": "m1",
             },
         )
-        card = out["deposit"]
+        (card,) = out["deposits"]
         assert card.action == "move"
         assert (card.source.name, card.pool.name) == ("USDC Prime", "Elemental USDC Turbo")
         assert card.everything
@@ -795,7 +795,7 @@ class TestMovingMoney:
                 "id": "m1",
             },
         )
-        assert out["deposit"] is None
+        assert out["deposits"] == ()
         said = str(model.seen[-1].content)
         assert "needs a swap" in said and "take the money out" in said
 
@@ -808,7 +808,7 @@ class TestMovingMoney:
                 "id": "m1",
             },
         )
-        assert out["deposit"] is None
+        assert out["deposits"] == ()
 
 
 class Script:
@@ -860,7 +860,7 @@ class TestAQuestionOnScreenEndsTheTurn:
         out = await run(bot, portfolio="on-screen", authorization="Bearer T")
         assert model.asked == 1, "a second hop is where the same question got asked twice"
         assert len(out["choices"]) == 1
-        assert out["deposit"] is None, "nothing is prepared on a guess at what was just asked"
+        assert out["deposits"] == (), "nothing is prepared on a guess at what was just asked"
         assert out["answer"] == "Pick one."
 
     async def test_a_question_with_no_words_above_it_is_still_an_answer(self):
@@ -933,3 +933,31 @@ class TestOneSumOfMoneyIsCountedOnce:
     def test_another_protocol_is_untouched(self):
         orca = replace(self.FARMING_THE_SAME_SHARES, platform="orca")
         assert self.read(orca) == (orca,)
+
+
+class TestEveryCardItPrepared:
+    async def test_a_move_and_a_deposit_in_one_turn_are_two_cards(self):
+        both = [
+            MOVE_ON_A_GUESS,
+            {"name": "propose_deposit", "args": {"pool_id": TURBO.id, "amount": "1"}, "id": "d1"},
+        ]
+        bot, _, _ = wire(
+            intent="earn",
+            catalog=in_pools(TWELVE_IN_PRIME),
+            api=with_a_solana_wallet(),
+            model=Model(tool_calls=both),
+            asked_to_place=True,
+        )
+        out = await run(bot, portfolio="on-screen", authorization="Bearer T")
+        assert [card.action for card in out["deposits"]] == ["move", "deposit"], (
+            "a turn that said it prepared two things and showed one lost a button"
+        )
+
+    def test_the_same_thing_prepared_twice_is_one_card(self):
+        from app.agent.graph import each_once
+        from app.domain.earn import Deposit, DepositTerms
+
+        terms = DepositTerms(program_id="p", address="a", token_mint="m")
+        first = Deposit(pool=TURBO, amount=Decimal("1"), terms=terms)
+        again = Deposit(pool=TURBO, amount=Decimal("2"), terms=terms)
+        assert each_once([first, again]) == (again,)

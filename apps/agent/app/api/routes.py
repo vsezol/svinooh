@@ -88,10 +88,9 @@ def _answered(
 
 def _blocks(answered: Answered, receipt: TraceBlock | None = None) -> list[Drawn]:
     drawn: list[Drawn] = [receipt] if receipt is not None else []
-    if answered.text or not (answered.deposit or answered.choices):
+    if answered.text or not (answered.deposits or answered.choices):
         drawn.append(TextBlock(text=answered.text))
-    if answered.deposit is not None:
-        drawn.append(_deposit_card(answered.deposit))
+    drawn.extend(_deposit_card(deposit) for deposit in answered.deposits)
     drawn.extend(_choice_card(choice) for choice in answered.choices)
     return drawn
 
@@ -210,7 +209,7 @@ async def chat_stream(
                 continue
             answered = Answered(
                 text=data["text"],
-                deposit=data.get("deposit"),
+                deposits=tuple(data.get("deposits") or ()),
                 choices=data.get("choices") or (),
             )
             body = _answered(admitted.session_id, answered, _receipt(seen))

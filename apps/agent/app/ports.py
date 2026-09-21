@@ -64,7 +64,7 @@ class Reply:
     pending_set: tuple[str, ...] | None = None
     pending_clear: bool = False
     portfolio_created: str | None = None
-    deposit: Deposit | None = None
+    deposits: tuple[Deposit, ...] = ()
     choices: tuple[Choice, ...] = ()
 
 
