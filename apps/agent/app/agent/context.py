@@ -1,4 +1,5 @@
 from dataclasses import replace
+from decimal import Decimal
 
 from ..domain.conversation import Turn
 from ..domain.earn import Held, LiquidityPosition
@@ -110,6 +111,18 @@ def idle_lines(portfolio: Portfolio, limit: int = 10) -> str:
 
 GAS_KEPT = 0.02
 """SOL left in a wallet for what signing costs: the fee, and the rent a deposit locks."""
+
+
+def free_on_solana(portfolio: Portfolio) -> dict[str, Decimal]:
+    """What the Solana wallets hold free, by ticker: the idle lines as figures, SOL less its gas."""
+    free: dict[str, Decimal] = {}
+    for position in portfolio.positions:
+        if not _is_idle(position) or (position.network or "").lower() != "sol":
+            continue
+        amount = _spare(position) if _is_gas(position) else (position.amount or 0.0)
+        symbol = position.symbol.upper()
+        free[symbol] = free.get(symbol, Decimal(0)) + Decimal(str(amount))
+    return free
 
 
 def _is_idle(position: Position) -> bool:
