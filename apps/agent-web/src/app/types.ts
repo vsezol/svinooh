@@ -92,11 +92,20 @@ export interface SignInBlock {
 
 export type DepositAction = 'deposit' | 'withdraw' | 'move';
 
+/** A coin by its mint, and what to call it. */
+export interface Coin {
+  mint: string;
+  symbol: string;
+}
+
 /**
  * A card asking the wallet to sign. `pool` is the pool the card is about —
  * where the money goes in a deposit and a move, where it comes out of in a
- * withdrawal; a move also names where it leaves. `amount` is tokens, or "all",
- * in which case `shown` is what all of it was worth when it was read.
+ * withdrawal; a move also names where it leaves. `payWith` is the coin a
+ * deposit spends when that is not the pool's own token, and `receiveAs` the
+ * coin a withdrawal ends as — each swapped on the way. `amount` is tokens of
+ * what is spent, or "all", in which case `shown` is what all of it was worth
+ * when it was read.
  */
 export interface DepositBlock {
   kind: 'deposit';
@@ -116,6 +125,8 @@ export interface DepositBlock {
   fromPool?: string | null;
   fromApy?: string | null;
   fromToken?: string | null;
+  payWith?: Coin | null;
+  receiveAs?: Coin | null;
 }
 
 export interface DepositRequest {
@@ -129,6 +140,9 @@ export interface DepositRequest {
   action?: DepositAction;
   fromPoolId?: string;
   fromPool?: string;
+  fromToken?: string;
+  payWith?: Coin;
+  receiveAs?: Coin;
 }
 
 export type DepositLanding = 'pending' | 'landed' | 'failed';
@@ -141,10 +155,16 @@ export type DepositOutcome =
       tracked?: boolean;
       error?: string | null;
       halfway?: boolean;
+      /** What the money waits in when only part of it went through. */
+      holding?: string;
     }
   | { ok: false; reason: string; at?: 'connect' | 'build' | 'wallet' | 'cancelled' };
 
-/** What became of a deposit, as the agent is told it. */
+/**
+ * What became of a deposit, as the agent is told it. `token` is what
+ * `amount` is counted in — what left — and `into` what it became, when it
+ * was swapped on the way.
+ */
 export interface Settled {
   amount: string;
   token: string;
@@ -154,7 +174,9 @@ export interface Settled {
   error?: string | null;
   action?: DepositAction;
   from_pool?: string | null;
+  into?: string | null;
   halfway?: boolean;
+  holding?: string | null;
 }
 
 export interface ChoiceBlock {

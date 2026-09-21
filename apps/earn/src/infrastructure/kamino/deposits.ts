@@ -18,6 +18,15 @@ export interface Built {
   lookups: string[];
 }
 
+/** The SDK, a node to ask, and the owner as a signer nobody holds a key for. */
+export async function kamino(owner: string, rpcUrl: string) {
+  const kit = await import('@solana/kit');
+  const klend: Sdk = await import('@kamino-finance/klend-sdk');
+  const rpc = kit.createSolanaRpc(rpcUrl) as unknown as SdkRpc;
+  const signer: Signer = kit.createNoopSigner(kit.address(owner));
+  return { kit, klend, rpc, signer };
+}
+
 export async function buildKaminoDeposit(
   deposit: Deposit,
   rpcUrl: string,

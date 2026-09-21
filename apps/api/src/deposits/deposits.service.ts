@@ -20,7 +20,13 @@ interface WireDeposit {
   instructions: number;
   blockhash: string;
   last_valid_block_height: string;
-  then?: { pool_id: string; amount: string };
+  then?: {
+    pool_id?: string;
+    amount: string;
+    pay_with?: string;
+    receive_as?: string;
+    holding: string;
+  };
 }
 
 interface WireLanding {
@@ -32,10 +38,42 @@ interface WireLanding {
 
 const THE_CALLER_CAN_FIX = new Set([400, 404, 422]);
 
-type Built = Required<Pick<DepositBuildDto, 'poolId' | 'amount' | 'owner' | 'action'>> &
-  Pick<DepositBuildDto, 'fromPoolId'>;
+type Built = Required<Pick<DepositBuildDto, 'amount' | 'owner' | 'action'>> &
+  Pick<DepositBuildDto, 'poolId' | 'fromPoolId' | 'payWith' | 'receiveAs'>;
 
 const CHAINS: Record<string, string> = { sol: 'SOL' };
+
+/**
+ * Which of earn's endpoints builds what a card asks for. A deposit and a
+ * withdrawal of the pool's own token are plain; paying with another coin,
+ * ending as another, or leaving another pool is a move, swapped on the way
+ * wherever the tokens differ.
+ */
+function earnRequestFor(asked: Built): [string, Record<string, string | undefined>] {
+  const { poolId, amount, owner, action, fromPoolId, payWith, receiveAs } = asked;
+  const pool = encodeURIComponent(poolId ?? '');
+  if (action === 'swap') {
+    return ['/v1/lend/moves', { from_coin: payWith, to_coin: receiveAs, amount, owner }];
+  }
+  if (action === 'move') {
+    return ['/v1/lend/moves', { from: fromPoolId, to: poolId, amount, owner }];
+  }
+  if (action === 'withdraw') {
+    return receiveAs
+      ? ['/v1/lend/moves', { from: poolId, to_coin: receiveAs, amount, owner }]
+      : [`/v1/lend/pools/${pool}/withdraw`, { amount, owner }];
+  }
+  return payWith
+    ? ['/v1/lend/moves', { from_coin: payWith, to: poolId, amount, owner }]
+    : [`/v1/lend/pools/${pool}/deposit`, { amount, owner }];
+}
+
+/** Where a build goes, for the log: "EPjFWd… -> PRIME", "PRIME -> as So1111…". */
+const routeOf = ({ poolId, fromPoolId, payWith, receiveAs }: Built): string => {
+  const from = fromPoolId ?? (payWith ? `${payWith.slice(0, 6)}…` : null);
+  const as = receiveAs ? `as ${receiveAs.slice(0, 6)}…` : null;
+  return [from, poolId, as].filter(Boolean).join(' -> ');
+};
 
 @Injectable()
 export class DepositsService {
@@ -47,24 +85,28 @@ export class DepositsService {
   ) {}
 
   async build(asked: Built): Promise<DepositBuiltDto> {
-    const { poolId, amount, owner, action, fromPoolId } = asked;
-    const pool = encodeURIComponent(poolId);
-    const [path, body] =
-      action === 'withdraw'
-        ? [`/v1/lend/pools/${pool}/withdraw`, { amount, owner }]
-        : action === 'move'
-          ? ['/v1/lend/moves', { from: fromPoolId, to: poolId, amount, owner }]
-          : [`/v1/lend/pools/${pool}/deposit`, { amount, owner }];
+    const { amount, owner, action } = asked;
+    const [path, body] = earnRequestFor(asked);
     const data = await this.earn<WireDeposit>(path, { method: 'POST', body: JSON.stringify(body) });
-    const route = action === 'move' ? `${fromPoolId} -> ${poolId}` : poolId;
-    this.log.log(`built ${action} ${amount} ${route} for ${owner.slice(0, 6)}…`);
+    this.log.log(`built ${action} ${amount} ${routeOf(asked)} for ${owner.slice(0, 6)}…`);
+    const then = data.then;
     return {
       transaction: data.transaction,
       feePayer: data.fee_payer,
       instructions: data.instructions,
       blockhash: data.blockhash,
       lastValidBlockHeight: data.last_valid_block_height,
-      ...(data.then ? { then: { poolId: data.then.pool_id, amount: data.then.amount } } : {}),
+      ...(then
+        ? {
+            then: {
+              ...(then.pool_id ? { poolId: then.pool_id } : {}),
+              amount: then.amount,
+              ...(then.pay_with ? { payWith: then.pay_with } : {}),
+              ...(then.receive_as ? { receiveAs: then.receive_as } : {}),
+              holding: then.holding,
+            },
+          }
+        : {}),
     };
   }
 

@@ -95,20 +95,40 @@ export interface PositionDto {
 }
 
 /** What a card asks the wallet to do with a pool. */
-export type DepositAction = 'deposit' | 'withdraw' | 'move';
+export type DepositAction = 'deposit' | 'withdraw' | 'move' | 'swap';
 
 /**
  * `poolId` is the pool the card is about: where money goes in a deposit and a
- * move, where it comes out of in a withdrawal. A move also names where it
- * leaves, `fromPoolId`. `amount` is a number of tokens, or "all" for taking
- * out everything there is.
+ * move, where it comes out of in a withdrawal; a swap has none. A move also
+ * names where it leaves, `fromPoolId`. `payWith` is the coin a deposit or a
+ * swap spends when that is not the pool's own token, and `receiveAs` the coin
+ * a withdrawal or a swap ends as — each by its mint, and each swapped on the
+ * way. `amount` is a number of tokens of what is spent, or "all" for
+ * everything there is.
  */
 export interface DepositBuildDto {
-  poolId: string;
+  poolId?: string;
   amount: string;
   owner: string;
   action?: DepositAction;
   fromPoolId?: string;
+  payWith?: string;
+  receiveAs?: string;
+}
+
+/**
+ * The next step of something one transaction could not hold, built and signed
+ * once the step before it has landed: `amount` of what that step left in the
+ * wallet, into `poolId` or — with no pool — as `receiveAs`. `payWith` is the
+ * coin it spends when that is not the pool's own token; without it the step
+ * is a plain deposit. `holding` is what the money sits in meanwhile.
+ */
+export interface DepositStepDto {
+  poolId?: string;
+  amount: string;
+  payWith?: string;
+  receiveAs?: string;
+  holding: string;
 }
 
 export interface DepositBuiltDto {
@@ -117,11 +137,8 @@ export interface DepositBuiltDto {
   instructions: number;
   blockhash: string;
   lastValidBlockHeight: string;
-  /**
-   * The second half of a move one transaction could not hold: once this has
-   * landed, a deposit of `amount` into `poolId`.
-   */
-  then?: { poolId: string; amount: string };
+  /** What to build and sign once this has landed, when one transaction could not hold it all. */
+  then?: DepositStepDto;
 }
 
 export type DepositLandingStatus = 'pending' | 'landed' | 'failed';

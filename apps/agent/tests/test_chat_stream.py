@@ -447,3 +447,52 @@ class TestAMoveAcrossTokensOnTheWire:
             answered = await client.post("/chat", json={"message": "move it", "portfolio": "p"})
         card = next(b for b in answered.json()["blocks"] if b["kind"] == "deposit")
         assert (card["fromToken"], card["token"]) == ("USDT", "USDC")
+
+
+class Paying(Model):
+    async def ainvoke(self, _messages, **_kwargs):
+        called, self._called = self._called, True
+
+        class Reply:
+            content = "Swapped on the way in."
+            tool_calls = (
+                []
+                if called
+                else [
+                    {
+                        "name": "propose_deposit",
+                        "args": {
+                            "pool_id": "sol:kamino:vault:AAA",
+                            "amount": "0.5",
+                            "token": "SOL",
+                        },
+                        "id": "d1",
+                    }
+                ]
+            )
+
+        return Reply()
+
+
+class TestACoinPaidWithOnTheWire:
+    async def test_the_card_names_the_coin_it_spends_by_mint(self, meter):
+        from app.domain.earn import Coin
+
+        shelf = Catalog()
+        sol = Coin(symbol="SOL", mint="So11111111111111111111111111111111111111112", decimals=9)
+        shelf.coins = {"SOL": sol}
+        wired = container(
+            model=Paying(),
+            limiter=meter,
+            intent="earn",
+            asked_to_place=True,
+            catalog=shelf,
+            portfolio=Holder(),
+        )
+        async with client_for(wired) as client:
+            answered = await client.post(
+                "/chat", json={"message": "put my SOL in", "portfolio": "p"}
+            )
+        card = next(b for b in answered.json()["blocks"] if b["kind"] == "deposit")
+        assert card["payWith"] == {"mint": sol.mint, "symbol": "SOL"}
+        assert card["receiveAs"] is None

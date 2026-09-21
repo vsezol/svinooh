@@ -72,11 +72,16 @@ def each_once(prepared: list[Deposit]) -> tuple[Deposit, ...]:
 
 @dataclass(frozen=True)
 class Holdings:
-    """What the earn branch reads of somebody's money before it answers."""
+    """What the earn branch reads of somebody's money before it answers.
+
+    `owners` are the Solana wallets it was read from: where a coin somebody
+    names is looked for first.
+    """
 
     idle: str = ""
     earning: str = ""
     held: tuple[Held, ...] = ()
+    owners: tuple[str, ...] = ()
 
 
 class AgentState(TypedDict, total=False):
@@ -238,8 +243,8 @@ class LangGraphAgent:
         risk_known = state.get("risk", "unknown") != "unknown"
         tools = (
             earn_tools(self._catalog)
-            + deposit_tools(self._catalog, prepared, risk_known)
-            + moving_tools(self._catalog, holdings.held, prepared, risk_known)
+            + deposit_tools(self._catalog, prepared, risk_known, holdings.owners)
+            + moving_tools(self._catalog, holdings.held, prepared, risk_known, holdings.owners)
             + asking_tools(asked)
         )
         answered = await self._answer_with_tools(system, state, tools, waiting=lambda: bool(asked))
@@ -268,6 +273,7 @@ class LangGraphAgent:
                 idle=idle_lines(portfolio),
                 earning=earning_lines(without_what_the_chain_read(portfolio, read)),
                 held=tuple(one for each in read.values() for one in each),
+                owners=solana_wallets(portfolio),
             )
         except Exception as error:  # noqa: BLE001 — advice without it beats no advice
             logger.warning("earn: holdings unavailable (%r)", error)
@@ -275,7 +281,7 @@ class LangGraphAgent:
 
     async def _in_pools(self, portfolio: Portfolio) -> dict[str, tuple[Held, ...]]:
         """What every Solana wallet in the portfolio has in pools, read from the chain."""
-        addresses = [wallet.address for wallet in portfolio.wallets if wallet.chain == "SOL"]
+        addresses = solana_wallets(portfolio)
         if not addresses:
             return {}
         try:
@@ -478,6 +484,10 @@ class LangGraphAgent:
         for leaf in ANSWERING_NODES:
             builder.add_edge(leaf, END)
         return builder.compile()
+
+
+def solana_wallets(portfolio: Portfolio) -> tuple[str, ...]:
+    return tuple(wallet.address for wallet in portfolio.wallets if wallet.chain == "SOL")
 
 
 def _last_question(state: AgentState) -> str:

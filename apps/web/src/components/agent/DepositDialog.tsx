@@ -73,17 +73,24 @@ export function DepositDialog({
   );
 }
 
-const TITLE = { deposit: 'Deposit', withdraw: 'Withdraw', move: 'Move' } as const;
+const TITLE = { deposit: 'Deposit', withdraw: 'Withdraw', move: 'Move', swap: 'Swap' } as const;
 
 function saying(request: DepositRequest): string {
-  const how =
-    request.amount === 'all' ? `All of your ${request.token}` : `${request.amount} ${request.token}`;
+  const spent = request.payWith?.symbol ?? request.fromToken ?? request.token;
+  const how = request.amount === 'all' ? `All of your ${spent}` : `${request.amount} ${spent}`;
+  const leaves = `The money leaves your wallet for ${request.protocol} and never touches svinooh.`;
   switch (request.action) {
     case 'withdraw':
-      return `${how} out of ${request.pool}, back to your wallet.`;
+      return request.receiveAs
+        ? `${how} out of ${request.pool}, swapped to ${request.receiveAs.symbol} on the way back to your wallet.`
+        : `${how} out of ${request.pool}, back to your wallet.`;
     case 'move':
-      return `${how} out of ${request.fromPool ?? 'the pool it is in'} and into ${request.pool}, in one transaction.`;
+      return `${how} out of ${request.fromPool ?? 'the pool it is in'} and into ${request.pool}.`;
+    case 'swap':
+      return `${how} swapped to ${request.receiveAs?.symbol ?? 'another coin'}, in your wallet.`;
     default:
-      return `${how} into ${request.pool}. The money leaves your wallet for ${request.protocol} and never touches svinooh.`;
+      return request.payWith
+        ? `${how}, swapped to ${request.token} on the way into ${request.pool}. ${leaves}`
+        : `${how} into ${request.pool}. ${leaves}`;
   }
 }

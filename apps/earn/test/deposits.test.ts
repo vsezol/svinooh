@@ -256,6 +256,32 @@ describe('WhyADepositWouldNotGoThrough', () => {
     assert.match(said, /returnable deposit, not a fee/);
   });
 
+  test('a vault that cannot pay everything out now says how much it can, in the token', () => {
+    // What Kamino's vault program logged taking 101 SOL out of Allez SOL, 2026-09-21
+    const said = whyItWouldFail(
+      { InstructionError: [6, { Custom: 11 }] },
+      [
+        'Program log: Instruction: WithdrawFromAvailable',
+        'Program log: Available to send to user 60357260824',
+        'Program log: Error: Non-native account can only be closed if its balance is zero',
+        'Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA failed: custom program error: 0xb',
+      ],
+      'SOL',
+      9,
+    );
+    assert.match(said, /can pay out 60\.357260824 SOL right now/);
+    assert.match(said, /lent out to borrowers/);
+  });
+
+  test('without its figure, a vault short of money still says it cannot pay all of it now', () => {
+    const said = whyItWouldFail(
+      {},
+      ['Program log: Error: Non-native account can only be closed if its balance is zero'],
+      'SOL',
+    );
+    assert.match(said, /can pay out only part of it right now/);
+  });
+
   test('the first reason wins, so the rent is not buried under what it broke', () => {
     const said = whyItWouldFail(
       {},

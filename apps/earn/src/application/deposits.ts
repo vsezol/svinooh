@@ -7,7 +7,7 @@ import {
   type Deposit,
   type Landing,
 } from '../domain/deposit';
-import type { Pool } from '../domain/pool';
+import type { Pool, Token } from '../domain/pool';
 import { AmountBelowMinimum, DepositNotSupported, NotEnoughHeld } from './errors';
 import type { LendQueries } from './queries';
 
@@ -17,19 +17,33 @@ export interface BuiltTransaction {
   instructions: number;
   blockhash: string;
   lastValidBlockHeight: string;
-  /**
-   * What to sign once this has landed, when one transaction could not hold it
-   * all: a deposit of `amount` into `poolId`, the second half of a move.
-   */
-  then?: { poolId: string; amount: string };
+  /** What to build and sign once this has landed, when one transaction could not hold it all. */
+  then?: Then;
+}
+
+/**
+ * The next step of something one transaction could not hold, built only once
+ * the step before it has landed: `amount` of what that step left in the
+ * wallet, into `poolId` or — when it ends in the wallet — as `receiveAs`.
+ * `payWith` is the coin it spends when that is not the pool's own token, so
+ * the step swaps on the way; without it the step is a plain deposit.
+ * `holding` is what the money sits in meanwhile, to say so should the next
+ * step never happen.
+ */
+export interface Then {
+  poolId?: string;
+  amount: string;
+  payWith?: string;
+  receiveAs?: string;
+  holding: string;
 }
 
 export type BuildDeposit = (deposit: Deposit) => Promise<BuiltTransaction>;
 
 export type LookUpLanding = (signature: string) => Promise<Landing>;
 
-/** What the owner holds of the pool's token, or null when nobody could look. */
-export type ReadHoldings = (owner: string, pool: Pool) => Promise<Decimal | null>;
+/** What the owner holds of a token, or null when nobody could look. */
+export type ReadHoldings = (owner: string, token: Token) => Promise<Decimal | null>;
 
 export interface DepositAnswer {
   built: BuiltTransaction;
@@ -79,7 +93,7 @@ export class LendDeposits {
     if (!read) return amount;
     // A chain nobody could reach is not evidence of an empty wallet: refuse on
     // what a balance says, never on the silence where one should have been.
-    const held = await read(owner, pool);
+    const held = await read(owner, pool.token);
     if (held === null) return amount;
     const fit = fitToHoldings({ pool, amount, owner }, held);
     if ('short' in fit) {

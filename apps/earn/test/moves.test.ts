@@ -7,14 +7,16 @@ import { Decimal } from 'decimal.js';
 import { AppModule } from '../src/app.module';
 import { ProblemFilter } from '../src/api/problems';
 import type { BuiltTransaction } from '../src/application/deposits';
-import { MoveNotSupported, NotEnoughHeld, NothingThere } from '../src/application/errors';
+import { LendCoins } from '../src/application/coins';
+import { CoinNotFound, MoveNotSupported, NotEnoughHeld, NothingThere } from '../src/application/errors';
 import { LendMoves, type ReadPositions } from '../src/application/moves';
 import { LendQueries } from '../src/application/queries';
 import { CatalogStore } from '../src/application/store';
 import { buildCatalog } from '../src/domain/catalog';
 import type { Pool } from '../src/domain/pool';
 import { idOf } from '../src/domain/values';
-import { burnFor, whyNotMove, type Move, type Withdrawal } from '../src/domain/withdrawal';
+import { whyNotMove, type Coin, type Move } from '../src/domain/move';
+import { burnFor, type Withdrawal } from '../src/domain/withdrawal';
 import { KaminoApi } from '../src/infrastructure/kamino/api';
 import { KaminoSource } from '../src/infrastructure/kamino/source';
 import { settingsFromEnv } from '../src/settings';
@@ -22,6 +24,10 @@ import { RecordedKamino } from './fixtures/kamino';
 import { policy, pool } from './support';
 
 const OWNER = '5Hb8BfQVmvEhaKsoXBV2g3EExoqTCKsVNXrGsrbadHJS';
+
+const PYUSD = '2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo';
+
+const STEP = { amount: '5.1', payWith: 'USDSwr', receiveAs: 'DezX', holding: 'USDS' };
 
 const BUILT: BuiltTransaction = {
   transaction: 'AQAB',
@@ -53,16 +59,30 @@ const queriesOver = (...pools: Pool[]): LendQueries => {
   return new LendQueries(store);
 };
 
-const moving = (held: ReturnType<typeof holding>[]) => {
+const BONK: Coin = { symbol: 'Bonk', mint: 'DezX', decimals: 5, program: 'Tokenkeg' };
+
+const moving = (held: ReturnType<typeof holding>[], wallet: Record<string, string | null> = {}) => {
   const withdrawn: Withdrawal[] = [];
   const moved: Move[] = [];
   const read: ReadPositions = async (_owner, pools) =>
     held.filter((one) => pools.some((p) => idOf(p.id) === idOf(one.pool.id)));
+  const queries = queriesOver(PRIME, TURBO, JITO);
+  const coins = new LendCoins(queries, {
+    sol: async (query) => (query.toLowerCase() === 'bonk' || query === BONK.mint ? BONK : null),
+  });
+  const build = async (move: Move) => (moved.push(move), BUILT);
   const lend = new LendMoves(
-    queriesOver(PRIME, TURBO, JITO),
+    queries,
     { sol: read },
     { 'sol:kamino': async (withdrawal) => (withdrawn.push(withdrawal), BUILT) },
-    { 'sol:kamino': async (move) => (moved.push(move), BUILT) },
+    { 'sol:kamino': build, sol: build },
+    coins,
+    {
+      sol: async (_owner, token) => {
+        const figure = wallet[token.symbol];
+        return figure === undefined ? new Decimal(0) : figure === null ? null : new Decimal(figure);
+      },
+    },
   );
   return { lend, withdrawn, moved };
 };
@@ -103,26 +123,50 @@ describe('HowMuchOfAPositionAWithdrawalTakes', () => {
 });
 
 describe('WhereAMoveCanGo', () => {
+  const USDC: Coin = { symbol: 'USDC', mint: 'EPjF', decimals: 6, program: 'Tokenkeg' };
+  const reserve = pool({
+    address: 'RES',
+    id: { network: 'sol', protocol: 'kamino', kind: 'reserve', address: 'RES' },
+  });
+
   test('between two pools of the same token', () => {
-    assert.equal(whyNotMove(PRIME, TURBO), null);
+    assert.equal(whyNotMove({ pool: PRIME }, { pool: TURBO }), null);
   });
 
   test('not into the pool it is already in', () => {
-    assert.match(whyNotMove(PRIME, PRIME) ?? '', /already in USDC Prime/);
+    assert.match(whyNotMove({ pool: PRIME }, { pool: PRIME }) ?? '', /already in USDC Prime/);
   });
 
   test('across tokens too, now that there is a swap to do it with', () => {
-    assert.equal(whyNotMove(PRIME, JITO), null);
+    assert.equal(whyNotMove({ pool: PRIME }, { pool: JITO }), null);
   });
 
-  test('not into a lending market\'s reserve: the move builds a vault deposit', () => {
-    const reserve = pool({ address: 'RES', id: { network: 'sol', protocol: 'kamino', kind: 'reserve', address: 'RES' } });
-    assert.match(whyNotMove(PRIME, reserve) ?? '', /reserve; a move goes into a vault/);
+  test('not out of one pool into a lending market\'s reserve: a move goes into a vault', () => {
+    assert.match(whyNotMove({ pool: PRIME }, { pool: reserve }) ?? '', /reserve; a move goes into a vault/);
   });
 
   test('not across networks', () => {
     const elsewhere = pool({ address: 'ETH', id: { network: 'eth', protocol: 'kamino', kind: 'vault', address: 'ETH' } as never });
-    assert.match(whyNotMove(PRIME, elsewhere) ?? '', /different networks/);
+    assert.match(whyNotMove({ pool: PRIME }, { pool: elsewhere }) ?? '', /different networks/);
+  });
+
+  test('out of a pool into the wallet as any coin, its own token included', () => {
+    assert.equal(whyNotMove({ pool: PRIME }, { coin: BONK }), null);
+    assert.equal(whyNotMove({ pool: PRIME }, { coin: USDC }), null);
+  });
+
+  test('from the wallet into a pool of another token, a reserve included', () => {
+    assert.equal(whyNotMove({ coin: BONK }, { pool: PRIME }), null);
+    assert.equal(whyNotMove({ coin: BONK }, { pool: reserve }), null);
+  });
+
+  test('from the wallet into a pool of the same token is a deposit, not a move', () => {
+    assert.match(whyNotMove({ coin: USDC }, { pool: PRIME }) ?? '', /that is a deposit/);
+  });
+
+  test('one coin for another, and never a coin for itself', () => {
+    assert.equal(whyNotMove({ coin: BONK }, { coin: USDC }), null);
+    assert.match(whyNotMove({ coin: USDC }, { coin: USDC }) ?? '', /USDC already/);
   });
 });
 
@@ -155,24 +199,27 @@ describe('TakingMoneyOut', () => {
 describe('MovingMoneyBetweenPools', () => {
   test('the builder gets both pools and the shares leaving the first', async () => {
     const { lend, moved } = moving([holding(PRIME, '12.001555', '11.59424')]);
-    await lend.move(idOf(PRIME.id), idOf(TURBO.id), 'all', OWNER);
+    await lend.move({ pool: idOf(PRIME.id) }, { pool: idOf(TURBO.id) }, 'all', OWNER);
     assert.equal(moved.length, 1);
-    assert.deepEqual([moved[0].from.name, moved[0].to.name], ['USDC Prime', 'Elemental USDC Turbo']);
-    assert.equal(moved[0].all, true);
+    const { from, to } = moved[0];
+    assert.ok('pool' in from && 'pool' in to);
+    assert.deepEqual([from.pool.name, to.pool.name], ['USDC Prime', 'Elemental USDC Turbo']);
+    assert.equal(from.all, true);
   });
 
   test('a move across tokens reaches the builder, which swaps on the way', async () => {
     const { lend, moved } = moving([holding(PRIME, '12')]);
-    await lend.move(idOf(PRIME.id), idOf(JITO.id), 'all', OWNER);
-    assert.deepEqual(
-      [moved[0].from.token.symbol, moved[0].to.token.symbol],
-      ['USDC', 'JitoSOL'],
-    );
+    await lend.move({ pool: idOf(PRIME.id) }, { pool: idOf(JITO.id) }, 'all', OWNER);
+    const { from, to } = moved[0];
+    assert.ok('pool' in from && 'pool' in to);
+    assert.deepEqual([from.pool.token.symbol, to.pool.token.symbol], ['USDC', 'JitoSOL']);
   });
 
   test('a move into the pool it is already in is still refused', async () => {
     const { lend, moved } = moving([holding(PRIME, '12')]);
-    const failure = await refused(() => lend.move(idOf(PRIME.id), idOf(PRIME.id), 'all', OWNER));
+    const failure = await refused(() =>
+      lend.move({ pool: idOf(PRIME.id) }, { pool: idOf(PRIME.id) }, 'all', OWNER),
+    );
     assert.ok(failure instanceof MoveNotSupported);
     assert.deepEqual(moved, []);
   });
@@ -180,9 +227,100 @@ describe('MovingMoneyBetweenPools', () => {
   test('a move out of nothing is refused as a withdrawal would be', async () => {
     const { lend } = moving([]);
     assert.ok(
-      (await refused(() => lend.move(idOf(PRIME.id), idOf(TURBO.id), 'all', OWNER))) instanceof
-        NothingThere,
+      (await refused(() =>
+        lend.move({ pool: idOf(PRIME.id) }, { pool: idOf(TURBO.id) }, 'all', OWNER),
+      )) instanceof NothingThere,
     );
+  });
+});
+
+describe('MovingBetweenPoolsAndTheWallet', () => {
+  test('out of a pool into the wallet as another coin is a move that swaps', async () => {
+    const { lend, moved, withdrawn } = moving([holding(PRIME, '12', '11')]);
+    await lend.move({ pool: idOf(PRIME.id) }, { coin: 'bonk' }, 'all', OWNER);
+    assert.equal(withdrawn.length, 0);
+    const { from, to } = moved[0];
+    assert.ok('pool' in from && 'coin' in to);
+    assert.equal(from.pool.name, 'USDC Prime');
+    assert.equal(from.all, true);
+    assert.deepEqual(to.coin, BONK);
+  });
+
+  test('out of a pool into its own token is a withdrawal, built as one', async () => {
+    const { lend, moved, withdrawn } = moving([holding(PRIME, '12', '11')]);
+    await lend.move({ pool: idOf(PRIME.id) }, { coin: 'usdc' }, new Decimal('5'), OWNER);
+    assert.equal(moved.length, 0);
+    assert.equal(withdrawn[0].pool.name, 'USDC Prime');
+    assert.equal(withdrawn[0].all, false);
+  });
+
+  test('a coin from the wallet goes into a pool of another token', async () => {
+    const { lend, moved } = moving([], { Bonk: '5000' });
+    await lend.move({ coin: 'bonk' }, { pool: idOf(PRIME.id) }, new Decimal('1000'), OWNER);
+    const { from, to } = moved[0];
+    assert.ok('coin' in from && 'pool' in to);
+    assert.equal(from.coin.mint, BONK.mint);
+    assert.equal(from.amount.toString(), '1000');
+    assert.equal(to.pool.name, 'USDC Prime');
+  });
+
+  test('a coin the catalog knows is its own, by ticker or by mint', async () => {
+    const { lend, moved } = moving([], { USDC: '20' });
+    await lend.move({ coin: 'EPjF' }, { coin: 'bonk' }, new Decimal('3'), OWNER);
+    const { from } = moved[0];
+    assert.ok('coin' in from);
+    assert.deepEqual(from.coin, { symbol: 'USDC', mint: 'EPjF', decimals: 6, program: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' });
+  });
+
+  test('all of a coin is what the wallet holds, to the places the coin counts in', async () => {
+    const { lend, moved } = moving([], { Bonk: '1234.567891' });
+    await lend.move({ coin: 'bonk' }, { pool: idOf(PRIME.id) }, 'all', OWNER);
+    const { from } = moved[0];
+    assert.ok('coin' in from);
+    assert.equal(from.amount.toString(), '1234.56789');
+  });
+
+  test('the figure a screen rounded up is what the wallet holds, not a refusal', async () => {
+    const { lend, moved } = moving([], { Bonk: '999.5' });
+    await lend.move({ coin: 'bonk' }, { pool: idOf(PRIME.id) }, new Decimal('1000'), OWNER);
+    const { from } = moved[0];
+    assert.ok('coin' in from);
+    assert.equal(from.amount.toString(), '999.5');
+  });
+
+  test('more than the wallet holds is refused with what it holds', async () => {
+    const { lend, moved } = moving([], { Bonk: '10' });
+    const failure = await refused(() =>
+      lend.move({ coin: 'bonk' }, { pool: idOf(PRIME.id) }, new Decimal('50'), OWNER),
+    );
+    assert.ok(failure instanceof NotEnoughHeld);
+    assert.match(failure.message, /holds 10 Bonk/);
+    assert.deepEqual(moved, []);
+  });
+
+  test('a wallet nobody could read spends the figure asked for, but cannot say what all is', async () => {
+    const { lend, moved } = moving([], { Bonk: null });
+    await lend.move({ coin: 'bonk' }, { pool: idOf(PRIME.id) }, new Decimal('7'), OWNER);
+    const { from } = moved[0];
+    assert.ok('coin' in from);
+    assert.equal(from.amount.toString(), '7');
+    const failure = await refused(() => lend.move({ coin: 'bonk' }, { pool: idOf(PRIME.id) }, 'all', OWNER));
+    assert.match(failure.message, /could not be read/);
+  });
+
+  test('one coin for another goes to the network\'s swap', async () => {
+    const { lend, moved } = moving([], { Bonk: '100' });
+    await lend.move({ coin: 'bonk' }, { coin: 'USDC' }, new Decimal('100'), OWNER);
+    const { from, to } = moved[0];
+    assert.ok('coin' in from && 'coin' in to);
+    assert.deepEqual([from.coin.symbol, to.coin.symbol], ['Bonk', 'USDC']);
+  });
+
+  test('a coin nobody trades is refused by name', async () => {
+    const { lend } = moving([holding(PRIME, '12')]);
+    const failure = await refused(() => lend.move({ pool: idOf(PRIME.id) }, { coin: 'NOPE' }, 'all', OWNER));
+    assert.ok(failure instanceof CoinNotFound);
+    assert.match(failure.message, /no coin called NOPE/);
   });
 });
 
@@ -212,7 +350,12 @@ describe('TheEndpointsForTakingMoneyOut', () => {
           sol: async (_owner, pools) => pools.slice(0, 1).map((one) => holding(one, '12', '11')),
         },
         withdrawals: { 'sol:kamino': async (withdrawal) => (withdrawn.push(withdrawal), BUILT) },
-        moves: { 'sol:kamino': async (move) => (moved.push(move), BUILT) },
+        moves: {
+          'sol:kamino': async (move) => (moved.push(move), { ...BUILT, then: STEP }),
+          sol: async (move) => (moved.push(move), BUILT),
+        },
+        coins: { sol: async (query) => (query === 'bonk' ? BONK : null) },
+        holdings: { sol: async () => new Decimal('100') },
       }),
       { logger: false },
     );
@@ -257,6 +400,66 @@ describe('TheEndpointsForTakingMoneyOut', () => {
     const { status, body } = await ask('POST', '/v1/lend/moves', { amount: 'all', owner: OWNER });
     assert.equal(status, 422);
     assert.match(body.detail, /from/);
+  });
+
+  test('a move says what comes after it when one transaction could not hold it', async () => {
+    const { body: listed } = await ask('GET', `/v1/lend/positions?network=sol&owner=${OWNER}`);
+    const { status, body } = await ask('POST', '/v1/lend/moves', {
+      from: listed.data[0].pool.id,
+      to_coin: 'bonk',
+      amount: 'all',
+      owner: OWNER,
+    });
+    assert.equal(status, 200);
+    assert.deepEqual(body.data.then, {
+      amount: '5.1',
+      pay_with: 'USDSwr',
+      receive_as: 'DezX',
+      holding: 'USDS',
+    });
+    const last = moved.at(-1);
+    assert.ok(last && 'pool' in last.from && 'coin' in last.to);
+  });
+
+  test('a coin from the wallet, into a pool or for another coin', async () => {
+    const { body: listed } = await ask('GET', `/v1/lend/positions?network=sol&owner=${OWNER}`);
+    const into = await ask('POST', '/v1/lend/moves', {
+      from_coin: 'bonk',
+      to: listed.data[0].pool.id,
+      amount: '40',
+      owner: OWNER,
+    });
+    assert.equal(into.status, 200);
+    const swapped = await ask('POST', '/v1/lend/moves', {
+      from_coin: 'bonk',
+      to_coin: 'pyusd',
+      amount: '40',
+      owner: OWNER,
+    });
+    assert.equal(swapped.status, 200);
+    const last = moved.at(-1);
+    assert.ok(last && 'coin' in last.from && 'coin' in last.to);
+    assert.equal(last.to.coin.mint, PYUSD);
+  });
+
+  test('a coin the catalog lists is found by ticker, with its mint, places and program', async () => {
+    const { status, body } = await ask('GET', '/v1/lend/coins?network=sol&q=pyusd');
+    assert.equal(status, 200);
+    assert.equal(body.data.symbol, 'PYUSD');
+    assert.equal(body.data.mint, PYUSD);
+    assert.equal(body.data.decimals, 6);
+    assert.equal(body.data.program, 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb', 'the program its pool keeps it with');
+  });
+
+  test('a coin nobody trades is a 404 that says so', async () => {
+    const { status, body } = await ask('GET', `/v1/lend/coins?network=sol&q=NOPE&owner=${OWNER}`);
+    assert.equal(status, 404);
+    assert.match(body.detail, /no coin called NOPE/);
+  });
+
+  test('what is not a ticker or a mint is a problem before anything is looked up', async () => {
+    const { status } = await ask('GET', '/v1/lend/coins?network=sol&q=%24%24%24%24%24%24%24%24%24%24%24%24%24%24%24%24%24%24%24%24%24');
+    assert.equal(status, 422);
   });
 
   test('an owner that is not an address is a problem, not a crash', async () => {

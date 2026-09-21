@@ -1,5 +1,6 @@
 import { Decimal } from 'decimal.js';
 import { EarnError } from '../application/errors';
+import type { Named } from '../application/moves';
 import {
   DEFAULT_SORT,
   NO_FILTER,
@@ -128,12 +129,48 @@ export function takeBody(body: unknown): TakeBody {
   return { take: depositBody({ amount: given.amount, owner }).amount, owner };
 }
 
-export function poolIdOf(body: unknown, field: 'from' | 'to'): string {
-  const value = ((body ?? {}) as Record<string, unknown>)[field];
-  if (typeof value !== 'string' || !value) {
-    throw new InvalidParameter(`${field}: Input should be a pool id`);
+const COIN = /^([1-9A-HJ-NP-Za-km-z]{32,44}|[\w$.\-]{1,20})$/;
+
+export interface MoveBody extends TakeBody {
+  from: Named;
+  to: Named;
+}
+
+/**
+ * A move's body: each end a pool by its id (`from`, `to`) or a coin in the
+ * wallet by its mint or ticker (`from_coin`, `to_coin`), and how much, and whose.
+ */
+export function moveBody(body: unknown): MoveBody {
+  const given = (body ?? {}) as Record<string, unknown>;
+  return { from: endOf(given, 'from'), to: endOf(given, 'to'), ...takeBody(body) };
+}
+
+function endOf(given: Record<string, unknown>, side: 'from' | 'to'): Named {
+  const pool = given[side];
+  if (typeof pool === 'string' && pool) return { pool };
+  const coin = given[`${side}_coin`];
+  if (typeof coin === 'string' && COIN.test(coin)) return { coin };
+  throw new InvalidParameter(
+    `${side}: Input should be a pool id, or ${side}_coin a coin's mint or ticker`,
+  );
+}
+
+export function coinOf(query: Query): string {
+  const asked = one(query, 'q');
+  if (asked === null || !COIN.test(asked)) {
+    throw new InvalidParameter("q: Input should be a coin's mint or ticker");
   }
-  return value;
+  return asked;
+}
+
+/** The wallets to look in first, when there are any: `owner`, once or more. */
+export function ownersOf(query: Query): string[] {
+  const raw = query.owner;
+  const owners = (Array.isArray(raw) ? raw : raw ? [raw] : []).filter(Boolean);
+  if (owners.length > 10 || owners.some((owner) => !BASE58.test(owner))) {
+    throw new InvalidParameter('owner: Input should be up to ten base58 account addresses');
+  }
+  return owners;
 }
 
 export function ownerOf(query: Query): string {

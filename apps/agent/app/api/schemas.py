@@ -12,7 +12,9 @@ class SettledIn(BaseModel):
     error: str | None = Field(default=None, max_length=512)
     action: Literal["deposit", "withdraw", "move"] = "deposit"
     from_pool: str | None = Field(default=None, max_length=128)
+    into: str | None = Field(default=None, max_length=32)
     halfway: bool = False
+    holding: str | None = Field(default=None, max_length=32)
 
 
 class ChatRequest(BaseModel):
@@ -47,6 +49,11 @@ class SignInBlock(BaseModel):
     pending_question: str | None = Field(default=None, serialization_alias="pendingQuestion")
 
 
+class CoinBlock(BaseModel):
+    mint: str
+    symbol: str
+
+
 class DepositBlock(BaseModel):
     kind: Literal["deposit"] = "deposit"
     action: Literal["deposit", "withdraw", "move"] = "deposit"
@@ -65,6 +72,8 @@ class DepositBlock(BaseModel):
     from_pool: str | None = Field(default=None, serialization_alias="fromPool")
     from_apy: str | None = Field(default=None, serialization_alias="fromApy")
     from_token: str | None = Field(default=None, serialization_alias="fromToken")
+    pay_with: CoinBlock | None = Field(default=None, serialization_alias="payWith")
+    receive_as: CoinBlock | None = Field(default=None, serialization_alias="receiveAs")
 
 
 class ChoiceBlock(BaseModel):

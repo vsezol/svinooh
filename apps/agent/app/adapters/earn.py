@@ -6,7 +6,7 @@ from typing import Protocol
 import httpx
 from pydantic import BaseModel, ConfigDict
 
-from ..domain.earn import CatalogSnapshot, DepositTerms, Held, YieldPool
+from ..domain.earn import CatalogSnapshot, Coin, DepositTerms, Held, YieldPool
 
 
 class YieldCatalog(Protocol):
@@ -16,6 +16,9 @@ class YieldCatalog(Protocol):
     async def pool(self, pool_id: str) -> YieldPool | None: ...
 
     async def positions(self, owner: str) -> tuple[Held, ...]: ...
+
+    async def coin(self, query: str, owners: tuple[str, ...]) -> Coin | None:
+        """The coin a ticker or a mint names, looked for first among what these wallets hold."""
 
 
 class EarnApiSource:
@@ -44,6 +47,16 @@ class EarnApiSource:
         )
         response.raise_for_status()
         return _PositionsAnswer.model_validate(response.json()).domain()
+
+    async def coin(self, query: str, owners: tuple[str, ...]) -> Coin | None:
+        response = await self._client.get(
+            f"{self._base}/v1/lend/coins",
+            params={"network": "sol", "q": query, "owner": list(owners)},
+        )
+        if response.status_code in (404, 422):
+            return None
+        response.raise_for_status()
+        return _CoinAnswer.model_validate(response.json()).domain()
 
 
 def _number(raw: str | None) -> Decimal:
@@ -171,3 +184,16 @@ class _PositionsAnswer(_WirePart):
 
     def domain(self) -> tuple[Held, ...]:
         return tuple(held.domain() for held in self.data)
+
+
+class _WireCoin(_WirePart):
+    symbol: str
+    mint: str
+    decimals: int
+
+
+class _CoinAnswer(_WirePart):
+    data: _WireCoin
+
+    def domain(self) -> Coin:
+        return Coin(symbol=self.data.symbol, mint=self.data.mint, decimals=self.data.decimals)

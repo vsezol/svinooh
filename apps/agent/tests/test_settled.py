@@ -216,5 +216,76 @@ class TestHalfAMove:
                 },
             },
         )
-        assert "only the first half went through" in model.system
+        assert "only the first part went through" in model.system
         assert "is in their wallet now" in model.system
+
+    async def test_stopping_between_steps_says_what_the_money_waits_in(self, client, model):
+        await client.post(
+            "/chat",
+            json={
+                "message": "signed",
+                "settled": {
+                    **LANDED,
+                    "action": "move",
+                    "from_pool": "Keel Flagship USDS",
+                    "token": "USDS",
+                    "into": "USDC",
+                    "halfway": True,
+                    "holding": "USDS",
+                    "error": "User rejected the request.",
+                },
+            },
+        )
+        assert "is in their wallet now as USDS" in model.system
+        assert "it did not reach Elemental USDC Turbo" in model.system
+
+    async def test_a_withdrawal_that_stopped_before_its_swap_says_it_was_not_swapped(
+        self, client, model
+    ):
+        await client.post(
+            "/chat",
+            json={
+                "message": "signed",
+                "settled": {
+                    **LANDED,
+                    "action": "withdraw",
+                    "pool": "Allez USX",
+                    "token": "USX",
+                    "into": "SOL",
+                    "halfway": True,
+                    "holding": "USX",
+                },
+            },
+        )
+        assert "out of Allez USX and in their wallet as USX" in model.system
+        assert "it was not swapped to SOL" in model.system
+
+
+class TestWhatASwapBecame:
+    async def test_a_withdrawal_taken_out_as_another_coin_says_what_it_became(self, client, model):
+        await client.post(
+            "/chat",
+            json={
+                "message": "signed",
+                "settled": {
+                    **LANDED,
+                    "action": "withdraw",
+                    "pool": "Allez SOL",
+                    "amount": "0.1",
+                    "token": "SOL",
+                    "into": "USDC",
+                },
+            },
+        )
+        assert (
+            "a withdrawal out of Allez SOL, back to their wallet, swapped from SOL to USDC"
+            in model.system
+        )
+        assert "0.1 SOL" in model.system
+
+    async def test_a_deposit_paid_with_another_coin_says_so(self, client, model):
+        await client.post(
+            "/chat",
+            json={"message": "signed", "settled": {**LANDED, "token": "SOL", "into": "USDC"}},
+        )
+        assert "a deposit into Elemental USDC Turbo, swapped from SOL to USDC" in model.system

@@ -12,8 +12,12 @@ once the user says yes, the transaction that puts the money there.
 GET  /v1/lend/pools                      the list, narrowed by query parameters
 GET  /v1/lend/pools/{pool_id}            one pool, everything about it
 GET  /v1/lend/tokens                     what is earnable, best rate per token
+GET  /v1/lend/coins?q=                   a coin by ticker or mint, to pay with or end as
+GET  /v1/lend/positions?owner=           what a wallet has in pools, read from the chain
 POST /v1/lend/pools/{pool_id}/deposit    the transaction that puts money in
-GET  /v1/lend/deposits/{signature}       whether a signed deposit is on the chain
+POST /v1/lend/pools/{pool_id}/withdraw   the transaction that takes it out
+POST /v1/lend/moves                      from a pool or a coin into a pool or a coin
+GET  /v1/lend/deposits/{signature}       whether a signed transaction is on the chain
 GET  /health                             is there a catalog to serve from
 ```
 
@@ -142,9 +146,10 @@ on it is not a fact.
 
 **Errors are RFC 9457 problem documents**, `application/problem+json`. A person
 reads `title` and `detail`; a program branches on `type`, which is a stable URI:
-`not-ready`, `not-found`, `invalid-cursor`, `cursor-expired`,
+`not-ready`, `not-found`, `coin-not-found`, `invalid-cursor`, `cursor-expired`,
 `cursor-query-mismatch`, `invalid-parameter`, `deposit-not-supported`,
-`amount-below-minimum`. The whole translation table is
+`amount-below-minimum`, `not-enough-held`, `deposit-would-fail`, `nothing-there`,
+`move-not-supported`. The whole translation table is
 `src/api/problems.ts`, and anything not in it surfaces as the 500 it is rather
 than being flattened into a polite 400.
 
@@ -246,6 +251,20 @@ chain — and a deposit that runs out of funds fails *after* it was signed.
 error when there is one. `meta.catalog` is null there: nothing in that answer
 came from a catalog, so it answers while the first one is still loading.
 
+**A move is from one place into another, whatever the tokens.** Each end of
+`POST /v1/lend/moves` is a pool (`from`, `to`) or a coin in the wallet by its
+mint or ticker (`from_coin`, `to_coin`): pool to pool, out of a pool as another
+coin, a coin into a pool of another token, one coin for another. Where the
+tokens differ it swaps on the way, through Kamino Swap's routes. What a pool
+pays out is measured by simulating the withdrawal, never priced from the
+shares. It is one transaction when that fits in 1232 bytes; when it does not,
+the answer carries `then` — the next step, to be built and signed only once
+this one has landed: out and swap now and the deposit after, or the
+withdrawal alone and the swap from the wallet after. A coin is found first
+among the catalog's own tokens, then among what the wallet holds, then among
+the coins Jupiter's directory has verified: anybody can mint a token and call
+it USDC.
+
 **What the catalog knows is not asked for again.** The request carries the
 amount and the owner. The program id, the vault or reserve address, the share
 mint, the token program, the lending market and the minimum deposit come from
@@ -261,7 +280,7 @@ npm run -w apps/earn dev      # watch mode on PORT (3000 by default)
 Two gates, both of which must be green:
 
 ```bash
-npm run -w apps/earn test         # 67 tests, no network
+npm run -w apps/earn test         # no network
 npx tsc --noEmit -p apps/earn     # strict
 ```
 

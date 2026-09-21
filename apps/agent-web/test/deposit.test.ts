@@ -1,6 +1,12 @@
 import { strict as assert } from 'node:assert';
 import { describe, test } from 'node:test';
-import { afterDeposit, requestOf, settledOf, sizeOf } from '../src/components/blocks/DepositBlock';
+import {
+  afterDeposit,
+  promiseOf,
+  requestOf,
+  settledOf,
+  sizeOf,
+} from '../src/components/blocks/DepositBlock';
 import type { DepositRequest } from '../src/app/types';
 import type { DepositBlock } from '../src/app/types';
 
@@ -52,6 +58,31 @@ describe('WhatTheHostIsHandedAndWhatComesBack', () => {
       '12.0016 USDC → SOL',
     );
     assert.equal(sizeOf({ ...card, amount: 'all', shown: '12.0016', fromToken: 'USDC' }), '12.0016 USDC');
+  });
+
+  test('a deposit paid with another coin is counted in that coin, and says what it becomes', () => {
+    const paid = { ...card, amount: '0.5', payWith: { mint: 'So11', symbol: 'SOL' } };
+    assert.equal(sizeOf(paid), '0.5 SOL → USDC');
+    assert.deepEqual(requestOf(paid).payWith, { mint: 'So11', symbol: 'SOL' });
+    assert.match(promiseOf(paid), /SOL becomes USDC on the way/);
+    assert.match(promiseOf(paid), /sign more than once/);
+  });
+
+  test('a withdrawal taken out as another coin says what it comes back as', () => {
+    const out = {
+      ...card,
+      action: 'withdraw' as const,
+      token: 'SOL',
+      amount: 'all',
+      shown: '0.1',
+      receiveAs: { mint: 'EPjF', symbol: 'USDC' },
+    };
+    assert.equal(sizeOf(out), '0.1 SOL → USDC');
+    assert.deepEqual(requestOf(out).receiveAs, { mint: 'EPjF', symbol: 'USDC' });
+  });
+
+  test('nothing is promised about a swap there is not', () => {
+    assert.equal(promiseOf(card), 'Your money goes straight to the protocol. Nothing moves until you sign.');
   });
 
   test('half a move is told as half, with why the second half did not happen', () => {
@@ -149,6 +180,30 @@ describe('WhatTheAgentIsToldAfterASignature', () => {
     );
     assert.equal(told?.action, 'move');
     assert.equal(told?.from_pool, 'USDC Prime');
+  });
+
+  test('what was swapped is told in what left and what it became', () => {
+    const told = settledOf(
+      { ...request, action: 'withdraw', token: 'SOL', amount: '0.1', receiveAs: { mint: 'EPjF', symbol: 'USDC' } },
+      { ok: true, signature: '5xy', landed: 'landed' },
+    );
+    assert.equal(told?.token, 'SOL');
+    assert.equal(told?.into, 'USDC');
+    const paid = settledOf(
+      { ...request, amount: '0.5', payWith: { mint: 'So11', symbol: 'SOL' } },
+      { ok: true, signature: '5xy', landed: 'landed' },
+    );
+    assert.deepEqual([paid?.token, paid?.into], ['SOL', 'USDC']);
+  });
+
+  test('stopping between steps says what the money waits in', () => {
+    const told = settledOf(
+      { ...request, action: 'move', fromToken: 'USDS', fromPool: 'Keel Flagship USDS' },
+      { ok: true, signature: '5xy', landed: 'landed', halfway: true, holding: 'USDS', error: 'User rejected the request.' },
+    );
+    assert.equal(told?.halfway, true);
+    assert.equal(told?.holding, 'USDS');
+    assert.equal(told?.token, 'USDS');
   });
 
   test('a rejection carries the reason the chain gave', () => {

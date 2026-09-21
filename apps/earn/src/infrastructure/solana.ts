@@ -3,7 +3,7 @@ import { Decimal } from 'decimal.js';
 import type { BuiltTransaction, LookUpLanding, ReadHoldings } from '../application/deposits';
 import { DepositNotSupported, DepositWouldFail } from '../application/errors';
 import { whyItWouldFail } from '../domain/deposit';
-import type { Pool } from '../domain/pool';
+import type { Token } from '../domain/pool';
 
 type Kit = typeof import('@solana/kit');
 type Rpc = ReturnType<Kit['createSolanaRpc']>;
@@ -15,10 +15,14 @@ const NATIVE = 'So11111111111111111111111111111111111111112';
 /** Rent for the accounts a deposit opens, and the fee to send it. */
 const KEPT_BACK = new Decimal('0.01');
 
-/** Who pays for a transaction, and what to call the token when explaining a refusal. */
+/**
+ * Who pays for a transaction, and what to call the token when explaining a
+ * refusal — with the places it counts in, when a figure of it may be quoted.
+ */
 export interface Payer {
   owner: string;
   token: string;
+  decimals?: number | null;
 }
 
 /**
@@ -46,7 +50,7 @@ export async function assemble(
       `this transaction is ${bytes} bytes and one may be ${PACKET_BYTES}`,
     );
   }
-  await tried(rpc, transaction, payer.token);
+  await tried(rpc, transaction, payer);
   return {
     transaction,
     feePayer: payer.owner,
@@ -182,7 +186,7 @@ export async function measure(
   if (outcome.value.err) {
     const logs = outcome.value.logs ?? [];
     new Logger('Deposits').warn(`the withdrawal could not be measured:\n${logs.slice(-12).join('\n')}`);
-    throw new DepositWouldFail(whyItWouldFail(outcome.value.err, logs, payer.token));
+    throw new DepositWouldFail(whyItWouldFail(outcome.value.err, logs, payer.token, payer.decimals));
   }
   const after = (outcome.value.accounts?.[0] as { data?: { parsed?: { info?: { tokenAmount?: { amount?: string } } } } } | null)
     ?.data?.parsed?.info?.tokenAmount?.amount;
@@ -204,7 +208,7 @@ export async function measure(
  * A simulator we cannot reach, or one that does not know a blockhash it was
  * just handed, is not evidence about the deposit, so neither refuses it.
  */
-async function tried(rpc: Rpc, transaction: string, token: string): Promise<void> {
+async function tried(rpc: Rpc, transaction: string, payer: Payer): Promise<void> {
   const outcome = await rpc
     .simulateTransaction(transaction as never, {
       encoding: 'base64',
@@ -222,7 +226,7 @@ async function tried(rpc: Rpc, transaction: string, token: string): Promise<void
   }
   const logs = outcome.value.logs ?? [];
   new Logger('Deposits').warn(`refusing a transaction the chain would fail:\n${logs.slice(-12).join('\n')}`);
-  throw new DepositWouldFail(whyItWouldFail(err, logs, token));
+  throw new DepositWouldFail(whyItWouldFail(err, logs, payer.token, payer.decimals));
 }
 
 export const landingsVia =
@@ -245,32 +249,32 @@ export const landingsVia =
 
 export const holdingsVia =
   (rpcUrl: string): ReadHoldings =>
-  async (owner, pool) => {
+  async (owner, token) => {
     try {
-      return await holdings(rpcUrl, owner, pool);
+      return await holdings(rpcUrl, owner, token);
     } catch (unreachable) {
       new Logger('Holdings').warn(
-        `could not read ${owner.slice(0, 6)}… on ${pool.id.network}: ${String(unreachable)}`,
+        `could not read ${token.symbol} of ${owner.slice(0, 6)}…: ${String(unreachable)}`,
       );
       return null;
     }
   };
 
-async function holdings(rpcUrl: string, owner: string, pool: Pool): Promise<Decimal> {
+async function holdings(rpcUrl: string, owner: string, token: Token): Promise<Decimal> {
   const kit = await import('@solana/kit');
   const rpc = kit.createSolanaRpc(rpcUrl);
   const held = kit.address(owner);
-  if (pool.token.mint === NATIVE) {
+  if (token.mint === NATIVE) {
     const { value } = await rpc.getBalance(held).send();
     const sol = new Decimal(String(value)).div(new Decimal(10).pow(9));
     return Decimal.max(sol.minus(KEPT_BACK), 0);
   }
   const { value } = await rpc
-    .getTokenAccountsByOwner(held, { mint: kit.address(pool.token.mint) }, { encoding: 'jsonParsed' })
+    .getTokenAccountsByOwner(held, { mint: kit.address(token.mint) }, { encoding: 'jsonParsed' })
     .send();
   const base = value.reduce(
     (all, one) => all.plus(new Decimal(one.account.data.parsed.info.tokenAmount.amount)),
     new Decimal(0),
   );
-  return base.div(new Decimal(10).pow(pool.token.decimals ?? 0));
+  return base.div(new Decimal(10).pow(token.decimals ?? 0));
 }

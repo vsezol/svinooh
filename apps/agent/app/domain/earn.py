@@ -80,14 +80,26 @@ Action = Literal["deposit", "withdraw", "move"]
 
 
 @dataclass(frozen=True, slots=True)
+class Coin:
+    """A coin by its mint, and what to call it."""
+
+    symbol: str
+    mint: str
+    decimals: int
+
+
+@dataclass(frozen=True, slots=True)
 class Deposit:
     """What a card asks the wallet to sign.
 
     `pool` is the pool the card is about: where the money goes in a deposit
     and a move, where it comes out of in a withdrawal. A move also says where
-    it leaves, `source`. `everything` takes out all there is, whatever the
-    shares are worth by the time it is signed; `amount` is then the figure it
-    was worth when it was read, for showing.
+    it leaves, `source`. `pay_with` is the coin a deposit spends when that is
+    not the pool's own token, and `receive_as` the coin a withdrawal ends as —
+    each swapped on the way. `amount` is counted in what is spent.
+    `everything` takes out all there is, whatever the shares are worth by the
+    time it is signed; `amount` is then the figure it was worth when it was
+    read, for showing.
     """
 
     pool: YieldPool
@@ -96,10 +108,12 @@ class Deposit:
     action: Action = "deposit"
     source: YieldPool | None = None
     everything: bool = False
+    pay_with: Coin | None = None
+    receive_as: Coin | None = None
 
     @property
     def below_minimum(self) -> bool:
-        if self.action == "withdraw":
+        if self.action == "withdraw" or self.pay_with is not None:
             return False
         minimum = self.terms.min_amount
         return minimum is not None and self.amount < minimum
@@ -124,6 +138,14 @@ SettledStatus = Literal["landed", "failed", "sent", "refused"]
 
 @dataclass(frozen=True, slots=True)
 class Settled:
+    """What became of something signed from a card.
+
+    `token` is what `amount` is counted in — what left — and `into` what it
+    became, when it was swapped on the way. `halfway` is a thing in several
+    transactions whose first landed and whose rest did not; the money then
+    waits in the wallet as `holding`.
+    """
+
     amount: str
     token: str
     pool: str
@@ -132,7 +154,9 @@ class Settled:
     error: str | None = None
     action: "Action" = "deposit"
     from_pool: str | None = None
+    into: str | None = None
     halfway: bool = False
+    holding: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

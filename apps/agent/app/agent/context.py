@@ -324,8 +324,15 @@ def _on_screen(block: dict) -> str | None:
             if block.get("fromPool")
             else f"{'out of' if block.get('action') == 'withdraw' else 'into'} {block.get('pool')}"
         )
-        return f"(put {what} of {amount} {block.get('token')} {route} on screen for them to sign)"
+        spent = _symbol(block.get("payWith")) or block.get("fromToken") or block.get("token")
+        ends = _symbol(block.get("receiveAs")) or block.get("token")
+        swapped = f", swapped to {ends}" if ends != spent else ""
+        return f"(put {what} of {amount} {spent} {route}{swapped} on screen for them to sign)"
     return None
+
+
+def _symbol(coin: object) -> str | None:
+    return str(coin.get("symbol")) if isinstance(coin, dict) and coin.get("symbol") else None
 
 
 def without_what_the_chain_read(

@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query } from '@nestjs/common';
+import { LendCoins } from '../application/coins';
 import { LendDeposits } from '../application/deposits';
 import { LendMoves } from '../application/moves';
 import { LendQueries } from '../application/queries';
@@ -8,12 +9,14 @@ import type { Settings } from '../settings';
 import { CLOCK, SETTINGS } from '../tokens';
 import { encode, decode } from './cursors';
 import {
+  coinOf,
   depositBody,
+  moveBody,
   networkOf,
   ownerOf,
+  ownersOf,
   pageSize,
   poolFilter,
-  poolIdOf,
   poolSelection,
   signatureOf,
   takeBody,
@@ -21,6 +24,7 @@ import {
 import {
   builtTransaction,
   chainMeta,
+  coin,
   detail,
   landing,
   meta,
@@ -35,6 +39,7 @@ export class LendController {
     @Inject(LendQueries) private readonly queries: LendQueries,
     @Inject(LendDeposits) private readonly deposits: LendDeposits,
     @Inject(LendMoves) private readonly moves: LendMoves,
+    @Inject(LendCoins) private readonly coins: LendCoins,
     @Inject(SETTINGS) private readonly settings: Settings,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -101,12 +106,18 @@ export class LendController {
   @Post('moves')
   @HttpCode(200)
   async buildMove(@Body() body: unknown) {
-    const { take, owner } = takeBody(body);
-    const answer = await this.moves.move(poolIdOf(body, 'from'), poolIdOf(body, 'to'), take, owner);
+    const { from, to, take, owner } = moveBody(body);
+    const answer = await this.moves.move(from, to, take, owner);
     return {
       data: builtTransaction(answer.built),
       meta: meta(answer.catalog, this.clock(), this.settings.staleAfterMs),
     };
+  }
+
+  @Get('coins')
+  async findCoin(@Query() query: Record<string, string | string[]>) {
+    const found = await this.coins.find(networkOf(query), coinOf(query), ownersOf(query));
+    return { data: coin(found), meta: chainMeta(this.clock()) };
   }
 
   @Get('deposits/:signature')

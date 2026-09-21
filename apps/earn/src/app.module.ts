@@ -5,6 +5,7 @@ import {
   type OnApplicationShutdown,
   type OnModuleInit,
 } from '@nestjs/common';
+import { LendCoins, type FindCoin } from './application/coins';
 import {
   LendDeposits,
   type BuildDeposit,
@@ -23,6 +24,7 @@ import { CatalogStore } from './application/store';
 import type { ListingPolicy } from './domain/catalog';
 import {
   buildersWith,
+  coinsWith,
   holdingsWith,
   landingsWith,
   movesWith,
@@ -47,6 +49,7 @@ export interface Built {
   positions?: Record<string, ReadPositions>;
   withdrawals?: Record<string, BuildWithdrawal>;
   moves?: Record<string, BuildMove>;
+  coins?: Record<string, FindCoin>;
 }
 
 @Module({})
@@ -100,15 +103,23 @@ function providersFor(built: Built) {
       inject: [LendQueries, SETTINGS],
     },
     {
-      provide: LendMoves,
+      provide: LendCoins,
       useFactory: (queries: LendQueries, settings: Settings) =>
+        new LendCoins(queries, built.coins ?? coinsWith(settings.solanaRpcUrl)),
+      inject: [LendQueries, SETTINGS],
+    },
+    {
+      provide: LendMoves,
+      useFactory: (queries: LendQueries, coins: LendCoins, settings: Settings) =>
         new LendMoves(
           queries,
           built.positions ?? positionsWith(settings.solanaRpcUrl),
           built.withdrawals ?? withdrawalsWith(settings.solanaRpcUrl),
           built.moves ?? movesWith(settings.solanaRpcUrl),
+          coins,
+          built.holdings ?? holdingsWith(settings.solanaRpcUrl),
         ),
-      inject: [LendQueries, SETTINGS],
+      inject: [LendQueries, LendCoins, SETTINGS],
     },
     {
       provide: SOURCES,

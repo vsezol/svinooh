@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { afterEach, describe, test } from 'node:test';
 import { kaminoRoutes } from '../src/infrastructure/kamino/swap';
-import { alreadyWrapped, once } from '../src/infrastructure/kamino/withdrawals';
+import { alreadyWrapped, closesAccount, once } from '../src/infrastructure/kamino/moves';
 import { pool } from './support';
 
 const OWNER = '5Hb8BfQVmvEhaKsoXBV2g3EExoqTCKsVNXrGsrbadHJS';
@@ -97,6 +97,16 @@ describe('PuttingAMoveTogether', () => {
     const again = await instruction('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL', [1]);
     const other = await instruction('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL', [1], USDC);
     assert.deepEqual(once([create, again, other]), [create, other]);
+  });
+
+  test('the unwrap of wrapped SOL is told apart from every other close', async () => {
+    const wrapped = 'BUBjpUB5vPxBxLqWrAUpHqDpu1gd8Wg3pWsB8C9TJhVb';
+    const close = await instruction('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', [9], wrapped);
+    const shares = await instruction('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', [9], USDC);
+    const transfer = await instruction('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', [3], wrapped);
+    assert.equal(closesAccount(close, wrapped), true);
+    assert.equal(closesAccount(shares, wrapped), false, 'the shares account closes where the SDK put it');
+    assert.equal(closesAccount(transfer, wrapped), false);
   });
 
   test('a SOL vault does not wrap SOL the swap has already wrapped', async () => {

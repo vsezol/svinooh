@@ -10,6 +10,7 @@ import {
   AmountBelowMinimum,
   CatalogNotReady,
   CatalogVersionGone,
+  CoinNotFound,
   DepositNotSupported,
   DepositWouldFail,
   EarnError,
@@ -43,6 +44,7 @@ const TRANSLATIONS: Array<[new (...args: never[]) => Error, Translation]> = [
     },
   ],
   [PoolNotFound, { status: 404, slug: 'not-found', title: 'Not found' }],
+  [CoinNotFound, { status: 404, slug: 'coin-not-found', title: 'No such coin' }],
   [
     CatalogVersionGone,
     {

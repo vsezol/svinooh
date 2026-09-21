@@ -160,8 +160,10 @@ HOLDING = (
     "sits on one network and a pool on another cannot take it.\n"
     "Place what they named and nothing else. A token they asked about that is "
     "not on these lines is a token they do not hold: say so, name what they do "
-    "hold, and ask which of those to place. Swapping one for another quietly "
-    "is placing money they never mentioned.\n"
+    "hold, and ask which of those to place. What they hold can go into a pool "
+    "of another token — it is swapped on the way, and that is a trade you name "
+    "— but only a coin they named or picked is ever spent: swapping one for "
+    "another quietly is placing money they never mentioned.\n"
     "These figures are from the last reading of their wallets, which happens "
     "every few minutes. If they say they have just moved money and the figure "
     "has not caught up, say what the reading shows and offer to place that, "
@@ -174,19 +176,21 @@ IN_POOLS = (
     "taken out or moved, each line with the id to do it by. Take out of or move "
     "from these pools and no others.\n"
     "Asked to take money out, prepare the withdrawal of what they named — all of "
-    "it unless they said how much. Asked to move it somewhere better or safer, "
-    "it is one transaction: the money leaves and arrives together and they sign "
-    "once, so never tell them to withdraw first and deposit after. Which pool it "
-    "leaves is on these lines; ask with buttons only when they are in more than "
-    "one and named none. Where it goes is chosen the way a deposit is — ask the "
-    "risk they want when nothing they said tells you, then name one pool that "
-    "takes the same token and say what the rate becomes. A pool paying less is "
-    "not a better home: say so rather than moving it there. A pool of another "
-    "token is a move too: it swaps on the way, and says so, and their wallet "
-    "may ask them to sign twice. It is also a trade — from then on the money "
-    "rises and falls with the other token's price — and a few tenths of a "
-    "percent of rate rarely pays for that; say both in a sentence, and move it "
-    "if that is still what they want."
+    "it unless they said how much; asked for it back as another coin, the "
+    "withdrawal swaps on the way out. Asked to move it somewhere better or "
+    "safer, it is one card: the money leaves and arrives from one button, so "
+    "never tell them to withdraw first and deposit after — their wallet asks "
+    "for another signature only where one transaction cannot hold it all. "
+    "Which pool it leaves is on these lines; ask with buttons only when they "
+    "are in more than one and named none. Where it goes is chosen the way a "
+    "deposit is — ask the risk they want when nothing they said tells you, "
+    "then name one pool that takes the same token and say what the rate "
+    "becomes. A pool paying less is not a better home: say so rather than "
+    "moving it there. A pool of another token is a move too, and it swaps on "
+    "the way. Any swap is also a trade — from then on the money rises and "
+    "falls with the other token's price — and a few tenths of a percent of "
+    "rate rarely pays for that; say both in a sentence, and do it if that is "
+    "still what they want."
 )
 
 ASKING = (
@@ -243,7 +247,7 @@ SETTLED = (
 
 def settled_prompt(system: str, settled: Settled) -> str:
     how_much = "all of it" if settled.amount == "all" else f"{settled.amount} {settled.token}"
-    outcome = HALFWAY if settled.halfway else _OUTCOMES[settled.status]
+    outcome = _halfway(settled) if settled.halfway else _OUTCOMES[settled.status]
     lines = [
         f"- what they signed: {_WHAT[settled.action](settled)}",
         f"- how much: {how_much}",
@@ -254,20 +258,36 @@ def settled_prompt(system: str, settled: Settled) -> str:
     return f"{system}\n\n{SETTLED}\n" + "\n".join(lines)
 
 
+def _swapped(settled: Settled) -> str:
+    return f", swapped from {settled.token} to {settled.into} on the way" if settled.into else ""
+
+
 _WHAT = {
-    "deposit": lambda settled: f"a deposit into {settled.pool}",
-    "withdraw": lambda settled: f"a withdrawal out of {settled.pool}, back to their wallet",
+    "deposit": lambda settled: f"a deposit into {settled.pool}{_swapped(settled)}",
+    "withdraw": lambda settled: (
+        f"a withdrawal out of {settled.pool}, back to their wallet{_swapped(settled)}"
+    ),
     "move": lambda settled: (
-        f"a move out of {settled.from_pool or 'the pool it was in'} and into {settled.pool}, "
-        "in one transaction"
+        f"a move out of {settled.from_pool or 'the pool it was in'} and into {settled.pool}"
+        f"{_swapped(settled)}"
     ),
 }
 
-HALFWAY = (
-    "only the first half went through — the money left the first pool and was swapped, and "
-    "is in their wallet now; the deposit into the second was not made, so it is earning "
-    "nothing until they put it in"
-)
+
+def _halfway(settled: Settled) -> str:
+    """Where the money is when only the first steps of several went through."""
+    waits = f" as {settled.holding}" if settled.holding else ""
+    if settled.action == "withdraw":
+        return (
+            f"only the first part went through: the money is out of {settled.pool} and in "
+            f"their wallet{waits}, but it was not swapped to {settled.into or 'the coin asked for'}"
+        )
+    return (
+        "only the first part went through: the money left where it was and is in their wallet "
+        f"now{waits}; it did not reach {settled.pool}, so it is earning nothing until they put "
+        "it in"
+    )
+
 
 _OUTCOMES = {
     "landed": "it went through, and the money is where it was sent",

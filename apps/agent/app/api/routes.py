@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from ..application.turns import Admitted, Answered, Question
 from ..container import Container
 from ..domain.asking import Choice
-from ..domain.earn import Deposit, Settled
+from ..domain.earn import Coin, Deposit, Settled
 from ..domain.identity import ANON_HEADER, Caller
 from ..observability import metrics
 from ..panel import NOTHING_DECIDED
@@ -22,6 +22,7 @@ from .schemas import (
     ChatSummary,
     ChatTurn,
     ChoiceBlock,
+    CoinBlock,
     DepositBlock,
     SignInBlock,
     TextBlock,
@@ -145,7 +146,13 @@ def _deposit_card(deposit: Deposit) -> DepositBlock:
         from_pool=source.name if source else None,
         from_apy=_rate(source.apy_net) if source else None,
         from_token=source.token if source else None,
+        pay_with=_coin(deposit.pay_with),
+        receive_as=_coin(deposit.receive_as),
     )
+
+
+def _coin(coin: Coin | None) -> CoinBlock | None:
+    return CoinBlock(mint=coin.mint, symbol=coin.symbol) if coin else None
 
 
 def _rate(apy: Decimal) -> str:
