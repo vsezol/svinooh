@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any, TypedDict
 
@@ -17,7 +17,7 @@ from ..domain.earn import Deposit, Held, Settled
 from ..domain.portfolio import Portfolio
 from ..observability import metrics
 from ..ports import Ask, Failed, Finished, Progress, Reply, Update
-from .context import earning_lines, held_lines, idle_lines, positions_read
+from .context import earning_lines, held_lines, idle_lines, positions_read, replayed
 from .intent import IntentClassifier
 from .llm import Models, extract_text
 from .onboarding import (
@@ -150,9 +150,10 @@ class LangGraphAgent:
             async with step("route", "Reading the question"):
                 label = await self._intents.classify(asked, state.get("history", ()))
             logger.info(
-                "intent: %s%s (%s) q=%.80s",
+                "intent: %s %s in %s (%s) q=%.80s",
                 label.intent,
-                f" {label.stance}",
+                label.stance,
+                label.language,
                 label.reason,
                 asked,
             )
@@ -221,7 +222,7 @@ class LangGraphAgent:
             + moving_tools(self._catalog, holdings.held, prepared)
             + asking_tools(asked)
         )
-        answered = await self._answer_with_tools(system, state, tools)
+        answered = await self._answer_with_tools(system, state, tools, waiting=lambda: bool(asked))
         return {
             **answered,
             "deposit": None if asked else (prepared[-1] if prepared else None),
@@ -362,11 +363,27 @@ class LangGraphAgent:
             SystemMessage(content=in_language(system, state.get("language")))
         ]
         for turn in state.get("history", ()):
-            messages += [HumanMessage(content=turn.q), AIMessage(content=turn.a)]
+            asked, answered = replayed(turn)
+            messages += [HumanMessage(content=asked), AIMessage(content=answered)]
         messages.append(HumanMessage(content=state["question"]))
         return messages
 
-    async def _answer_with_tools(self, system: str, state: AgentState, tools: list) -> AgentState:
+    async def _answer_with_tools(
+        self,
+        system: str,
+        state: AgentState,
+        tools: list,
+        waiting: Callable[[], bool] = lambda: False,
+    ) -> AgentState:
+        """Answer with tools until the model is done, or until the turn is.
+
+        `waiting` is the turn's own knowledge that it has put something to the
+        user that only they can answer. From then on another hop has nothing
+        to find and everything to spoil: on 2026-09-21 it asked the same
+        question twice, and prepared a move on a guess at the very risk it had
+        just asked about, then said the card was on screen when the question
+        was. So the turn ends there, with whatever line came with the question.
+        """
         if not tools:
             return await self._answer(system, state)
 
@@ -382,6 +399,8 @@ class LangGraphAgent:
                 return {"answer": extract_text(reply)}
             messages.append(reply)
             messages.extend(await run_tools(calls, tools))
+            if waiting():
+                return {"answer": extract_text(reply)}
         logger.warning(
             "tool budget spent after %d hops — answering without another tool",
             self._config.tool_hops(),

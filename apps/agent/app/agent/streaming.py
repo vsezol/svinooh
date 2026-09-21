@@ -31,7 +31,7 @@ async def turn_events(
         yield "error", {"message": "the answer could not be finished"}
         return
 
-    if not final.get("answer"):
+    if not (final.get("answer") or final.get("choices") or final.get("deposit")):
         logger.warning("turn produced no answer: %s", sorted(final))
         yield "error", {"message": "the answer could not be finished"}
         return

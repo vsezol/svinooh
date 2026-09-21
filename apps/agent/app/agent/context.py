@@ -1,3 +1,4 @@
+from ..domain.conversation import Turn
 from ..domain.earn import Held
 from ..domain.portfolio import Portfolio, Position, Total, Wallet, total_of
 
@@ -261,3 +262,39 @@ def held_lines(held: tuple[Held, ...]) -> str:
         f"{one.pool.kind}) paying {one.pool.apy_net * 100:.2f}% net. id {one.pool.id}"
         for one in sorted(held, key=lambda one: -one.amount)
     )
+
+
+NOBODY_TYPED = "(the wallet reported back on what they signed)"
+
+_ACTIONS = {"deposit": "a deposit", "withdraw": "a withdrawal", "move": "a move"}
+
+
+def replayed(turn: Turn) -> tuple[str, str]:
+    """A past turn as the models are shown it: what was said, and what was on screen.
+
+    The stored answer is only the words. The question the assistant put up
+    with buttons, and the card it prepared, were the rest of the answer — and
+    without them "Risk: low" arrives answering a question the model cannot see
+    it asked. A turn the user did not type, a deposit coming back, is said to
+    be one, so no message goes to a model empty.
+    """
+    shown = [line for line in (_on_screen(block) for block in turn.blocks) if line]
+    said = " ".join(part for part in (turn.a, *shown) if part)
+    return turn.q or NOBODY_TYPED, said or "(nothing was said)"
+
+
+def _on_screen(block: dict) -> str | None:
+    kind = block.get("kind")
+    if kind == "choice":
+        options = " / ".join(str(option) for option in block.get("options", []))
+        return f"(asked with buttons — {block.get('question')} Options: {options})"
+    if kind == "deposit":
+        what = _ACTIONS.get(str(block.get("action") or "deposit"), "a deposit")
+        amount = block.get("shown") or block.get("amount")
+        route = (
+            f"from {block.get('fromPool')} into {block.get('pool')}"
+            if block.get("fromPool")
+            else f"{'out of' if block.get('action') == 'withdraw' else 'into'} {block.get('pool')}"
+        )
+        return f"(put {what} of {amount} {block.get('token')} {route} on screen for them to sign)"
+    return None

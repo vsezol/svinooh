@@ -807,3 +807,74 @@ class TestMovingMoney:
             },
         )
         assert out["deposit"] is None
+
+
+class Script:
+    """A model that says each reply in turn, and records how many it was asked for."""
+
+    def __init__(self, *replies: tuple[str, list]):
+        self.replies = list(replies)
+        self.asked = 0
+        self.prompts: list[str] = []
+
+    def bind_tools(self, _tools):
+        return self
+
+    async def ainvoke(self, messages):
+        self.prompts.append(messages[0].content)
+        text, calls = self.replies[min(self.asked, len(self.replies) - 1)]
+        self.asked += 1
+
+        class Reply:
+            content = text
+            tool_calls = calls
+
+        return Reply()
+
+
+ASK_RISK = {
+    "name": "ask_the_user",
+    "args": {"header": "Risk", "question": "How much risk?", "options": ["Low", "High"]},
+    "id": "q1",
+}
+
+MOVE_ON_A_GUESS = {
+    "name": "propose_move",
+    "args": {"from_pool_id": PRIME.id, "to_pool_id": TURBO.id},
+    "id": "m1",
+}
+
+
+class TestAQuestionOnScreenEndsTheTurn:
+    async def test_the_model_is_not_asked_again_once_it_has_asked(self):
+        model = Script(("Pick one.", [ASK_RISK]), ("", [ASK_RISK]), ("", [MOVE_ON_A_GUESS]))
+        bot, _, _ = wire(
+            intent="earn",
+            catalog=in_pools(TWELVE_IN_PRIME),
+            api=with_a_solana_wallet(),
+            model=model,
+            asked_to_place=True,
+        )
+        out = await run(bot, portfolio="on-screen", authorization="Bearer T")
+        assert model.asked == 1, "a second hop is where the same question got asked twice"
+        assert len(out["choices"]) == 1
+        assert out["deposit"] is None, "nothing is prepared on a guess at what was just asked"
+        assert out["answer"] == "Pick one."
+
+    async def test_a_question_with_no_words_above_it_is_still_an_answer(self):
+        model = Script(("", [ASK_RISK]))
+        bot, _, _ = wire(
+            intent="earn",
+            catalog=in_pools(TWELVE_IN_PRIME),
+            api=with_a_solana_wallet(),
+            model=model,
+            asked_to_place=True,
+        )
+        out = await run(bot, portfolio="on-screen", authorization="Bearer T")
+        assert out["answer"] == "" and out["choices"]
+
+    async def test_a_turn_with_no_question_keeps_using_its_tools(self):
+        model = Script(("", [EARN_CALL]), ("Here is the best.", []))
+        bot, _, _ = wire(intent="earn", catalog=Catalog(), model=model)
+        out = await run(bot)
+        assert model.asked == 2 and out["answer"] == "Here is the best."
