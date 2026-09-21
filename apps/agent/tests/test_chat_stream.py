@@ -366,3 +366,48 @@ class TestAMoveOnTheWire:
         )
         assert (card["poolId"], card["pool"]) == ("sol:kamino:vault:AAA", "Steakhouse USDC")
         assert card["amount"] == "all" and card["shown"] == "12.001555"
+
+
+class QuietAsking(Model):
+    """Asks, and says nothing above the buttons."""
+
+    async def ainvoke(self, _messages, **_kwargs):
+        called, self._called = self._called, True
+
+        class Reply:
+            content = ""
+            tool_calls = (
+                []
+                if called
+                else [
+                    {
+                        "name": "ask_the_user",
+                        "args": {
+                            "header": "Token",
+                            "question": "Which one do we place?",
+                            "options": ["USDC 12.00", "SOL 0.009"],
+                        },
+                        "id": "q1",
+                    }
+                ]
+            )
+
+        return Reply()
+
+
+class TestAQuestionWithNothingAboveIt:
+    @pytest.fixture
+    def wired(self, meter):
+        return container(
+            model=QuietAsking(),
+            limiter=meter,
+            intent="earn",
+            asked_to_place=True,
+            catalog=Catalog(),
+        )
+
+    async def test_the_stream_ends_with_the_card_not_an_error(self, client):
+        response = await client.post("/chat/stream", json={"message": "put my money to work"})
+        name, done = parse(response.text)[-1]
+        assert name == "done", "a question card is an answer, not a turn that failed"
+        assert [b["kind"] for b in done["blocks"]] == ["trace", "choice"], "and no empty bubble"

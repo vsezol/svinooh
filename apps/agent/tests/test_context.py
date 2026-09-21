@@ -187,3 +187,59 @@ class TestWhatIsLyingAround:
         said = idle_lines(held)
         assert said.startswith("nothing idle")
         assert "collateral" in said
+
+
+class TestAPastTurnAsTheModelsSeeIt:
+    def test_the_question_it_put_on_screen_is_part_of_what_it_said(self):
+        from app.agent.context import replayed
+        from app.domain.conversation import Turn
+
+        turn = Turn(
+            q="move my money somewhere better",
+            a="Pick one.",
+            at=0,
+            blocks=[
+                {"kind": "trace", "steps": []},
+                {"kind": "text", "text": "Pick one."},
+                {
+                    "kind": "choice",
+                    "header": "Risk",
+                    "question": "How much risk?",
+                    "options": ["Low — 8.52%", "High — 11.96%"],
+                },
+            ],
+        )
+        asked, answered = replayed(turn)
+        assert asked == "move my money somewhere better"
+        assert answered.startswith("Pick one.")
+        assert "How much risk? Options: Low — 8.52% / High — 11.96%" in answered
+
+    def test_a_card_it_prepared_is_named_with_both_ends(self):
+        from app.agent.context import replayed
+        from app.domain.conversation import Turn
+
+        turn = Turn(
+            q="Risk: low",
+            a="",
+            at=0,
+            blocks=[
+                {
+                    "kind": "deposit",
+                    "action": "move",
+                    "amount": "all",
+                    "shown": "12.0015",
+                    "token": "USDC",
+                    "pool": "Kamino Institutional",
+                    "fromPool": "USDC Prime",
+                }
+            ],
+        )
+        _, answered = replayed(turn)
+        assert "a move of 12.0015 USDC from USDC Prime into Kamino Institutional" in answered
+
+    def test_no_message_goes_to_a_model_empty(self):
+        from app.agent.context import replayed
+        from app.domain.conversation import Turn
+
+        asked, answered = replayed(Turn(q="", a="", at=0, blocks=[]))
+        assert asked and answered, "an empty message is one some model APIs refuse outright"

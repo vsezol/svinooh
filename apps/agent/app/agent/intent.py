@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from ..config import Config
 from ..domain.conversation import Turn
+from .context import replayed
 from .llm import Models, structured
 
 logger = logging.getLogger("svinooh-ai")
@@ -76,7 +77,8 @@ class IntentClassifier:
     async def classify(self, question: str, history: tuple[Turn, ...] = ()) -> IntentLabel:
         messages: list[Any] = [SystemMessage(content=CLASSIFIER_PROMPT)]
         for turn in history[-RECENT_TURNS:]:
-            messages += [HumanMessage(content=turn.q), AIMessage(content=turn.a)]
+            asked, answered = replayed(turn)
+            messages += [HumanMessage(content=asked), AIMessage(content=answered)]
         messages.append(HumanMessage(content=question))
         labelling, answering = self._config.labelling(), self._config.answering()
         try:

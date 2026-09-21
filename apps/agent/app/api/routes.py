@@ -88,7 +88,8 @@ def _answered(
 
 def _blocks(answered: Answered, receipt: TraceBlock | None = None) -> list[Drawn]:
     drawn: list[Drawn] = [receipt] if receipt is not None else []
-    drawn.append(TextBlock(text=answered.text))
+    if answered.text or not (answered.deposit or answered.choices):
+        drawn.append(TextBlock(text=answered.text))
     if answered.deposit is not None:
         drawn.append(_deposit_card(answered.deposit))
     drawn.extend(_choice_card(choice) for choice in answered.choices)
