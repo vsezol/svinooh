@@ -1008,4 +1008,6 @@ class TestASwapIsATrade:
     async def test_the_prompt_says_a_move_into_another_token_changes_what_they_hold(self):
         _, model = await moving(in_pools(TWELVE_IN_PRIME))
         said = model.prompts[0]
-        assert "It is also a trade" in said and "rises and falls with the other token's price" in said
+        assert (
+            "It is also a trade" in said and "rises and falls with the other token's price" in said
+        )
