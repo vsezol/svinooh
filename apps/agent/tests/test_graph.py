@@ -878,3 +878,45 @@ class TestAQuestionOnScreenEndsTheTurn:
         bot, _, _ = wire(intent="earn", catalog=Catalog(), model=model)
         out = await run(bot)
         assert model.asked == 2 and out["answer"] == "Here is the best."
+
+
+class TestOneSumOfMoneyIsCountedOnce:
+    async def test_the_scanners_view_of_a_vault_the_chain_read_is_not_offered_again(self):
+        farming = fx.position("Kamino", 12.0, network="sol", platform="kamino", category="staked")
+        farming["name"] = "Farming"
+        farming["apy"] = 0.081
+        holder = Api(
+            portfolio=fx.as_portfolio(
+                fx.portfolio([fx.wallet(fx.SOL_ADDRESS, [farming, fx.USDC_SOL], chain="SOL")])
+            )
+        )
+        bot, _, model = wire(
+            intent="earn",
+            catalog=in_pools(TWELVE_IN_PRIME),
+            api=holder,
+            model=Model(tool_calls=[EARN_CALL]),
+            asked_to_place=True,
+        )
+        await run(bot, portfolio="on-screen", authorization="Bearer T")
+        said = model.prompts[0]
+        assert "12.001555 USDC in USDC Prime" in said
+        assert "Farming" not in said, "twelve dollars, offered as two things to move"
+
+    async def test_a_loan_on_the_same_protocol_stays(self):
+        from app.agent.context import without_what_the_chain_read
+        from app.domain.portfolio import Leg, Portfolio, Position, Wallet
+
+        loan = Position(
+            symbol="Kamino",
+            value_usd=500.0,
+            platform="kamino",
+            category="lending",
+            legs=(Leg(symbol="USDC", role="supply", value_usd=900.0, apy=0.05),),
+        )
+        staked = Position(symbol="Kamino", value_usd=12.0, platform="kamino", category="staked")
+        wallet = Wallet(address="A", chain="SOL", status="ok", positions=(loan, staked))
+        kept = without_what_the_chain_read(
+            Portfolio(slug="p", total_usd=512.0, wallets=(wallet,)),
+            frozenset({("A", "kamino")}),
+        )
+        assert kept.wallets[0].positions == (loan,)

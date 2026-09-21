@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from ..domain.conversation import Turn
 from ..domain.earn import Held
 from ..domain.portfolio import Portfolio, Position, Total, Wallet, total_of
@@ -298,3 +300,32 @@ def _on_screen(block: dict) -> str | None:
         )
         return f"(put {what} of {amount} {block.get('token')} {route} on screen for them to sign)"
     return None
+
+
+def without_what_the_chain_read(
+    portfolio: Portfolio, covered: frozenset[tuple[str, str]]
+) -> Portfolio:
+    """The portfolio less the positions the chain was just read for, wallet by protocol.
+
+    The scanner reports a vault share staked in its farm as a protocol position
+    of its own — "Kamino Farming, $12", no legs to say which vault — and the
+    chain read names the vault. Both is one sum of money counted twice: on
+    2026-09-21 the agent offered to move "USDC Prime" and "Kamino Farming", and
+    "both", for twelve dollars. A position with legs is a loan the chain read
+    does not cover, and stays.
+    """
+    return replace(
+        portfolio,
+        wallets=tuple(
+            replace(
+                wallet,
+                positions=tuple(
+                    position
+                    for position in wallet.positions
+                    if position.legs
+                    or (wallet.address, (position.platform or "").lower()) not in covered
+                ),
+            )
+            for wallet in portfolio.wallets
+        ),
+    )
