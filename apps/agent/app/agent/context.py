@@ -303,16 +303,18 @@ def _on_screen(block: dict) -> str | None:
 
 
 def without_what_the_chain_read(
-    portfolio: Portfolio, covered: frozenset[tuple[str, str]]
+    portfolio: Portfolio, read: dict[str, tuple[Held, ...]]
 ) -> Portfolio:
-    """The portfolio less the positions the chain was just read for, wallet by protocol.
+    """The portfolio less the positions the chain was just read for, wallet by wallet.
 
     The scanner reports a vault share staked in its farm as a protocol position
-    of its own — "Kamino Farming, $12", no legs to say which vault — and the
-    chain read names the vault. Both is one sum of money counted twice: on
-    2026-09-21 the agent offered to move "USDC Prime" and "Kamino Farming", and
-    "both", for twelve dollars. A position with legs is a loan the chain read
-    does not cover, and stays.
+    of its own — "Kamino Farming, $12" — while the chain read names the vault.
+    Both is one sum of money counted twice: on 2026-09-21 the agent offered to
+    move "USDC Prime" and "Kamino Farming", and "both", for twelve dollars.
+    They are told apart by the shares: the scanner's position carries them as
+    a supply leg, the chain read counts them, and the same count on the same
+    protocol is the same money. A position that holds other shares, or owes
+    something, is not this one, and stays.
     """
     return replace(
         portfolio,
@@ -322,10 +324,28 @@ def without_what_the_chain_read(
                 positions=tuple(
                     position
                     for position in wallet.positions
-                    if position.legs
-                    or (wallet.address, (position.platform or "").lower()) not in covered
+                    if not _read_already(position, read.get(wallet.address, ()))
                 ),
             )
             for wallet in portfolio.wallets
         ),
+    )
+
+
+SAME_SHARES = 0.001
+
+
+def _read_already(position: Position, held: tuple[Held, ...]) -> bool:
+    protocol = (position.platform or "").lower()
+    here = [one for one in held if one.pool.protocol.lower() == protocol]
+    if not here or position.has_debt:
+        return False
+    if not position.legs:
+        return True
+    counted = [float(one.shares) for one in here if one.shares]
+    return any(
+        leg.role == "supply"
+        and leg.amount is not None
+        and any(abs(leg.amount - shares) <= shares * SAME_SHARES for shares in counted)
+        for leg in position.legs
     )

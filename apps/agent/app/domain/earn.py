@@ -107,10 +107,16 @@ class Deposit:
 
 @dataclass(frozen=True, slots=True)
 class Held:
-    """Money somebody has in a pool, read from the chain, in the pool's token."""
+    """Money somebody has in a pool, read from the chain, in the pool's token.
+
+    `shares` is how many of the pool's shares that is: the one number both the
+    chain and a portfolio scanner report for the same position, so it is what
+    tells the two apart from two positions.
+    """
 
     pool: YieldPool
     amount: Decimal
+    shares: Decimal | None = None
 
 
 SettledStatus = Literal["landed", "failed", "sent", "refused"]

@@ -1,11 +1,13 @@
+from dataclasses import replace
 from decimal import Decimal
 
 import pytest
 
+from app.agent.context import without_what_the_chain_read
 from app.agent.onboarding import create_portfolio_with_wallets
 from app.domain.conversation import Turn
 from app.domain.earn import Held, YieldPool
-from app.domain.portfolio import Me, PortfolioRef
+from app.domain.portfolio import Leg, Me, Portfolio, PortfolioRef, Position, Wallet
 from app.ports import Ask, Failed, Finished, Progress
 from tests import fixtures as fx
 from tests.support import Catalog, Intents, agent
@@ -881,42 +883,53 @@ class TestAQuestionOnScreenEndsTheTurn:
 
 
 class TestOneSumOfMoneyIsCountedOnce:
-    async def test_the_scanners_view_of_a_vault_the_chain_read_is_not_offered_again(self):
-        farming = fx.position("Kamino", 12.0, network="sol", platform="kamino", category="staked")
-        farming["name"] = "Farming"
-        farming["apy"] = 0.081
-        holder = Api(
-            portfolio=fx.as_portfolio(
-                fx.portfolio([fx.wallet(fx.SOL_ADDRESS, [farming, fx.USDC_SOL], chain="SOL")])
-            )
-        )
-        bot, _, model = wire(
-            intent="earn",
-            catalog=in_pools(TWELVE_IN_PRIME),
-            api=holder,
-            model=Model(tool_calls=[EARN_CALL]),
-            asked_to_place=True,
-        )
-        await run(bot, portfolio="on-screen", authorization="Bearer T")
-        said = model.prompts[0]
-        assert "12.001555 USDC in USDC Prime" in said
-        assert "Farming" not in said, "twelve dollars, offered as two things to move"
+    """The scanner and the chain, reporting the same vault shares, are one position."""
 
-    async def test_a_loan_on_the_same_protocol_stays(self):
-        from app.agent.context import without_what_the_chain_read
-        from app.domain.portfolio import Leg, Portfolio, Position, Wallet
+    FARMING_THE_SAME_SHARES = Position(
+        symbol="Kamino",
+        name="Farming",
+        value_usd=12.0,
+        platform="kamino",
+        category="staked",
+        apy=0.081,
+        legs=(Leg(symbol="kV-gtUSDCp", role="supply", value_usd=11.998, amount=11.59424),),
+    )
 
+    def read(self, *positions: Position) -> tuple[Position, ...]:
+        wallet = Wallet(address="A", chain="SOL", status="ok", positions=positions)
+        held = Held(pool=PRIME, amount=Decimal("12.001555"), shares=Decimal("11.59424"))
+        kept = without_what_the_chain_read(
+            Portfolio(slug="p", total_usd=0.0, wallets=(wallet,)), {"A": (held,)}
+        )
+        return kept.wallets[0].positions
+
+    def test_the_scanners_view_of_the_same_shares_is_not_offered_again(self):
+        assert self.read(self.FARMING_THE_SAME_SHARES) == ()
+
+    def test_a_position_with_no_legs_on_the_protocol_that_was_read_is_the_same_money(self):
+        bare = Position(symbol="Kamino", value_usd=12.0, platform="kamino", category="staked")
+        assert self.read(bare) == ()
+
+    def test_other_shares_on_the_same_protocol_are_another_position(self):
+        other = replace(
+            self.FARMING_THE_SAME_SHARES,
+            legs=(Leg(symbol="kV-JITO", role="supply", value_usd=500.0, amount=4.2),),
+        )
+        assert self.read(other) == (other,)
+
+    def test_a_loan_on_the_same_protocol_stays(self):
         loan = Position(
             symbol="Kamino",
             value_usd=500.0,
             platform="kamino",
             category="lending",
-            legs=(Leg(symbol="USDC", role="supply", value_usd=900.0, apy=0.05),),
+            legs=(
+                Leg(symbol="USDC", role="supply", value_usd=900.0, amount=900.0, apy=0.05),
+                Leg(symbol="SOL", role="borrow", value_usd=-400.0, amount=3.0),
+            ),
         )
-        staked = Position(symbol="Kamino", value_usd=12.0, platform="kamino", category="staked")
-        wallet = Wallet(address="A", chain="SOL", status="ok", positions=(loan, staked))
-        kept = without_what_the_chain_read(
-            Portfolio(slug="p", total_usd=512.0, wallets=(wallet,)),
-            frozenset({("A", "kamino")}),
-        )
-        assert kept.wallets[0].positions == (loan,)
+        assert self.read(loan) == (loan,)
+
+    def test_another_protocol_is_untouched(self):
+        orca = replace(self.FARMING_THE_SAME_SHARES, platform="orca")
+        assert self.read(orca) == (orca,)

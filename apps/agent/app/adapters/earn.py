@@ -156,9 +156,14 @@ class _CatalogAnswer(_WirePart):
 class _WireHeld(_WirePart):
     pool: _WirePool
     amount: str
+    shares: str | None = None
 
     def domain(self) -> Held:
-        return Held(pool=self.pool.domain(), amount=_number(self.amount))
+        return Held(
+            pool=self.pool.domain(),
+            amount=_number(self.amount),
+            shares=_number(self.shares) if self.shares else None,
+        )
 
 
 class _PositionsAnswer(_WirePart):
