@@ -170,3 +170,122 @@ describe('WhatACardAsksEarnToBuild', () => {
     assert.deepEqual(asked, []);
   });
 });
+
+describe('WhatALiquidityCardAsksEarnToBuild', () => {
+  const PAIR = 'sol:meteora:dlmm:CgqwPLSFfht89pF5RSKGUUMFj5zRxoUt4861w2SkXaqY';
+  const POSITION = '8PBf2k9bvDgWTWs8HjrwDXzhGfwsLgM1AHvHYfLPcCp';
+
+  test('placing an amount of one token across a range', async () => {
+    const { asked, controller } = building();
+    await controller.build({
+      poolId: PAIR,
+      amount: '5',
+      payWith: 'USDC',
+      owner: OWNER,
+      action: 'provide',
+      belowPct: '10.3',
+      abovePct: '5.5',
+    });
+    assert.deepEqual(asked, [
+      {
+        path: `/v1/liquidity/pools/${PAIR}/provide`,
+        body: { owner: OWNER, coin: 'USDC', amount: '5', below_pct: '10.3', above_pct: '5.5' },
+      },
+    ]);
+  });
+
+  test('the step after a swap places both tokens', async () => {
+    const { asked, controller } = building();
+    await controller.build({
+      poolId: PAIR,
+      owner: OWNER,
+      action: 'provide',
+      amountX: '0.013224704',
+      amountY: '3.443325',
+      belowPct: '10.3',
+      abovePct: '5.5',
+    });
+    assert.deepEqual(asked[0].body, {
+      owner: OWNER,
+      amount_x: '0.013224704',
+      amount_y: '3.443325',
+      below_pct: '10.3',
+      above_pct: '5.5',
+    });
+  });
+
+  test('closing and rebalancing act on a position in its pool', async () => {
+    const { asked, controller } = building();
+    await controller.build({ poolId: PAIR, owner: OWNER, action: 'close', position: POSITION });
+    await controller.build({
+      poolId: PAIR,
+      owner: OWNER,
+      action: 'rebalance',
+      position: POSITION,
+      belowPct: '5',
+      abovePct: '5',
+    });
+    assert.deepEqual(
+      asked.map((one) => one.path),
+      [
+        `/v1/liquidity/pools/${PAIR}/positions/${POSITION}/close`,
+        `/v1/liquidity/pools/${PAIR}/positions/${POSITION}/rebalance`,
+      ],
+    );
+    assert.deepEqual(asked[1].body, { owner: OWNER, below_pct: '5', above_pct: '5' });
+  });
+
+  test('what comes next is handed on with its action', async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            ...BUILT,
+            then: {
+              action: 'provide',
+              pool_id: PAIR,
+              amount_x: '0.02',
+              amount_y: '3.3',
+              below_pct: '10',
+              above_pct: '10',
+              holding: 'SOL and USDC',
+            },
+          },
+        }),
+      }) as Response) as typeof fetch;
+    const service = new DepositsService({} as PrismaService, {} as ScanRequests);
+    const built = await new DepositsController(service).build({
+      poolId: PAIR,
+      amount: '0.05',
+      payWith: 'SOL',
+      owner: OWNER,
+      action: 'provide',
+      belowPct: '10',
+      abovePct: '10',
+    });
+    assert.deepEqual(built.then, {
+      action: 'provide',
+      poolId: PAIR,
+      amountX: '0.02',
+      amountY: '3.3',
+      belowPct: '10',
+      abovePct: '10',
+      holding: 'SOL and USDC',
+    });
+  });
+
+  test('a range is required to place, and a position to close', async () => {
+    const { asked, controller } = building();
+    await assert.rejects(
+      () => controller.build({ poolId: PAIR, amount: '5', payWith: 'USDC', owner: OWNER, action: 'provide' }),
+      /belowPct and abovePct/,
+    );
+    await assert.rejects(
+      () => controller.build({ poolId: PAIR, owner: OWNER, action: 'close' }),
+      /needs position/,
+    );
+    assert.deepEqual(asked, []);
+  });
+});

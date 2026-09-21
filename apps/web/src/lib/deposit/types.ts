@@ -20,13 +20,23 @@ export interface DepositRequest {
   network: string;
   token: string;
   amount: string;
-  action?: 'deposit' | 'withdraw' | 'move' | 'swap';
+  action?: 'deposit' | 'withdraw' | 'move' | 'swap' | 'provide' | 'close' | 'rebalance';
   fromPoolId?: string;
   fromPool?: string;
   /** The token a move leaves in, when it is not the one it arrives as. */
   fromToken?: string;
   payWith?: DepositCoin;
   receiveAs?: DepositCoin;
+  /**
+   * Liquidity for a pair: the range as percent below and above the price;
+   * `amountX`/`amountY` are what goes in of each once a swap has balanced
+   * them; `position` is the one a close or a rebalance acts on.
+   */
+  belowPct?: string;
+  abovePct?: string;
+  amountX?: string;
+  amountY?: string;
+  position?: string;
 }
 
 export type DepositLanding = 'pending' | 'landed' | 'failed';

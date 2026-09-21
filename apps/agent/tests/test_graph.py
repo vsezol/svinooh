@@ -333,6 +333,10 @@ class TestWhereToPutMoney:
             "propose_deposit",
             "propose_withdraw",
             "propose_move",
+            "liquidity_pools",
+            "propose_liquidity",
+            "propose_close_liquidity",
+            "propose_rebalance",
             "ask_the_user",
         ]
         assert "prepare nothing until they answer it" in model.prompts[0]

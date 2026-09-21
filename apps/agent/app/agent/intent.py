@@ -22,8 +22,10 @@ CLASSIFIER_PROMPT = (
     "PUT money rather than what they already hold: where to invest, park, "
     "deposit, lend or earn, what rates are on offer, what to do with idle "
     "funds — and when they want money taken OUT of a pool or moved from one "
-    "pool to another. `earn` wins even when they say 'my' — 'put my USDC to "
-    "work' is asking where to put it, and 'move my USDC somewhere that pays "
+    "pool to another, and liquidity for a pair: providing it, its price range, "
+    "closing or rebalancing a liquidity position. `earn` wins even when they "
+    "say 'my' — 'put my USDC to work' is asking where to put it, and 'move my "
+    "USDC somewhere that pays "
     "more' is asking where to move it, not what it is worth. Label `general` for "
     "everything else: DeFi concepts, how the app works, small talk. When in "
     "doubt between portfolio and general, prefer `portfolio` — a wrong general "
@@ -77,6 +79,15 @@ class IntentLabel(BaseModel):
             "that names a band counts as saying it. A wish for a better rate "
             "is not a risk: 'повыгоднее', 'more profitable', 'the best' are "
             "`unknown`. Say `unknown` whenever they have not said it."
+        )
+    )
+    lp_range: Literal["said", "unknown"] = Field(
+        description=(
+            "For liquidity for a pair: `said` when the user has said, anywhere in "
+            "this conversation, the price range they want — how far under and over "
+            "the price, like '-10.3% +5.5%', '±5%', 'от -10 до +5', or a range "
+            "button they pressed. `unknown` when they have not, and for anything "
+            "that is not liquidity."
         )
     )
 

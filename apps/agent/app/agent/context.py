@@ -1,7 +1,7 @@
 from dataclasses import replace
 
 from ..domain.conversation import Turn
-from ..domain.earn import Held
+from ..domain.earn import Held, LiquidityPosition
 from ..domain.portfolio import Portfolio, Position, Total, Wallet, total_of
 
 MAX_CHARS = 6000
@@ -296,6 +296,8 @@ NOBODY_TYPED = "(the wallet reported back on what they signed)"
 
 _ACTIONS = {"deposit": "a deposit", "withdraw": "a withdrawal", "move": "a move"}
 
+_LIQUIDITY = {"provide": "liquidity", "close": "the closing", "rebalance": "a rebalance"}
+
 
 def replayed(turn: Turn) -> tuple[str, str]:
     """A past turn as the models are shown it: what was said, and what was on screen.
@@ -316,6 +318,22 @@ def _on_screen(block: dict) -> str | None:
     if kind == "choice":
         options = " / ".join(str(option) for option in block.get("options", []))
         return f"(asked with buttons — {block.get('question')} Options: {options})"
+    if kind == "deposit" and block.get("action") in _LIQUIDITY:
+        span = (
+            f" across -{block.get('belowPct')}% / +{block.get('abovePct')}%"
+            if block.get("belowPct")
+            else ""
+        )
+        if block.get("action") == "provide":
+            spent = _symbol(block.get("payWith")) or block.get("token")
+            return (
+                f"(put liquidity of {block.get('amount')} {spent} into {block.get('pool')}{span} "
+                "on screen for them to sign)"
+            )
+        return (
+            f"(put {_LIQUIDITY[str(block.get('action'))]} of their {block.get('pool')} position "
+            f"{block.get('position')}{span} on screen for them to sign)"
+        )
     if kind == "deposit":
         what = _ACTIONS.get(str(block.get("action") or "deposit"), "a deposit")
         amount = block.get("shown") or block.get("amount")
@@ -335,8 +353,25 @@ def _symbol(coin: object) -> str | None:
     return str(coin.get("symbol")) if isinstance(coin, dict) and coin.get("symbol") else None
 
 
+def placed_lines(placed: tuple[LiquidityPosition, ...]) -> str:
+    """Their liquidity positions: where the price stands, and the address to act on each by."""
+    return "\n".join(_placed_line(one) for one in sorted(placed, key=lambda one: -one.value_usd))
+
+
+def _placed_line(one: LiquidityPosition) -> str:
+    pool = one.pool
+    state = "in range, earning." if one.in_range else "OUT OF RANGE, earning nothing."
+    return (
+        f"- {pool.name} on Meteora (bins {pool.bin_step / 100:g}% apart): "
+        f"{one.amount_x:f} {pool.x} and {one.amount_y:f} {pool.y}, "
+        f"{usd(float(one.value_usd))}, fees earned {usd(float(one.fees_usd))}. "
+        f"Range {one.lower_price:f} to {one.upper_price:f} {pool.y} per {pool.x}, "
+        f"price {pool.price:f} — {state} position {one.address}, pool id {pool.id}"
+    )
+
+
 def without_what_the_chain_read(
-    portfolio: Portfolio, read: dict[str, tuple[Held, ...]]
+    portfolio: Portfolio, read: dict[str, tuple[Held, ...]], placed: bool = False
 ) -> Portfolio:
     """The portfolio less the positions the chain was just read for, wallet by wallet.
 
@@ -358,6 +393,7 @@ def without_what_the_chain_read(
                     position
                     for position in wallet.positions
                     if not _read_already(position, read.get(wallet.address, ()))
+                    and not (placed and (position.platform or "").lower() == "meteora")
                 ),
             )
             for wallet in portfolio.wallets

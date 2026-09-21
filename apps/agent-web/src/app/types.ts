@@ -90,7 +90,7 @@ export interface SignInBlock {
   pendingQuestion?: string;
 }
 
-export type DepositAction = 'deposit' | 'withdraw' | 'move';
+export type DepositAction = 'deposit' | 'withdraw' | 'move' | 'provide' | 'close' | 'rebalance';
 
 /** A coin by its mint, and what to call it. */
 export interface Coin {
@@ -113,7 +113,7 @@ export interface DepositBlock {
   poolId: string;
   pool: string;
   protocol: string;
-  poolKind: 'vault' | 'reserve';
+  poolKind: 'vault' | 'reserve' | 'dlmm';
   network: string;
   token: string;
   amount: string;
@@ -127,13 +127,24 @@ export interface DepositBlock {
   fromToken?: string | null;
   payWith?: Coin | null;
   receiveAs?: Coin | null;
+  /**
+   * Liquidity for a pair: the range as percent below and above the price, the
+   * two prices it reaches and the price now, in the pool's y per x; and the
+   * position a close or a rebalance acts on.
+   */
+  belowPct?: string | null;
+  abovePct?: string | null;
+  lowerPrice?: string | null;
+  upperPrice?: string | null;
+  price?: string | null;
+  position?: string | null;
 }
 
 export interface DepositRequest {
   poolId: string;
   pool: string;
   protocol: string;
-  poolKind: 'vault' | 'reserve';
+  poolKind: 'vault' | 'reserve' | 'dlmm';
   network: string;
   token: string;
   amount: string;
@@ -143,6 +154,9 @@ export interface DepositRequest {
   fromToken?: string;
   payWith?: Coin;
   receiveAs?: Coin;
+  belowPct?: string;
+  abovePct?: string;
+  position?: string;
 }
 
 export type DepositLanding = 'pending' | 'landed' | 'failed';

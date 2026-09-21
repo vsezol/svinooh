@@ -10,6 +10,7 @@ import type {
   DepositBuiltDto,
   DepositLandingDto,
   DepositLandingStatus,
+  DepositStepDto,
 } from '@svinooh/shared';
 import { config } from '../config';
 import { ScanRequests } from '../wallet/scan-requests.service';
@@ -21,10 +22,16 @@ interface WireDeposit {
   blockhash: string;
   last_valid_block_height: string;
   then?: {
+    action?: 'provide' | 'close' | 'rebalance';
     pool_id?: string;
-    amount: string;
+    amount?: string;
     pay_with?: string;
     receive_as?: string;
+    position?: string;
+    amount_x?: string;
+    amount_y?: string;
+    below_pct?: string;
+    above_pct?: string;
     holding: string;
   };
 }
@@ -38,8 +45,7 @@ interface WireLanding {
 
 const THE_CALLER_CAN_FIX = new Set([400, 404, 422]);
 
-type Built = Required<Pick<DepositBuildDto, 'amount' | 'owner' | 'action'>> &
-  Pick<DepositBuildDto, 'poolId' | 'fromPoolId' | 'payWith' | 'receiveAs'>;
+type Built = DepositBuildDto & Required<Pick<DepositBuildDto, 'owner' | 'action'>>;
 
 const CHAINS: Record<string, string> = { sol: 'SOL' };
 
@@ -52,6 +58,22 @@ const CHAINS: Record<string, string> = { sol: 'SOL' };
 function earnRequestFor(asked: Built): [string, Record<string, string | undefined>] {
   const { poolId, amount, owner, action, fromPoolId, payWith, receiveAs } = asked;
   const pool = encodeURIComponent(poolId ?? '');
+  const liquidity = {
+    amount_x: asked.amountX,
+    amount_y: asked.amountY,
+    below_pct: asked.belowPct,
+    above_pct: asked.abovePct,
+  };
+  if (action === 'provide') {
+    return [
+      `/v1/liquidity/pools/${pool}/provide`,
+      { owner, ...(payWith ? { coin: payWith, amount } : {}), ...liquidity },
+    ];
+  }
+  if (action === 'close' || action === 'rebalance') {
+    const position = encodeURIComponent(asked.position ?? '');
+    return [`/v1/liquidity/pools/${pool}/positions/${position}/${action}`, { owner, ...liquidity }];
+  }
   if (action === 'swap') {
     return ['/v1/lend/moves', { from_coin: payWith, to_coin: receiveAs, amount, owner }];
   }
@@ -68,11 +90,31 @@ function earnRequestFor(asked: Built): [string, Record<string, string | undefine
     : [`/v1/lend/pools/${pool}/deposit`, { amount, owner }];
 }
 
+const stepOf = (then: NonNullable<WireDeposit['then']>): DepositStepDto => {
+  const step: Record<string, string | undefined> = {
+    action: then.action,
+    poolId: then.pool_id,
+    amount: then.amount,
+    payWith: then.pay_with,
+    receiveAs: then.receive_as,
+    position: then.position,
+    amountX: then.amount_x,
+    amountY: then.amount_y,
+    belowPct: then.below_pct,
+    abovePct: then.above_pct,
+  };
+  return {
+    ...Object.fromEntries(Object.entries(step).filter(([, value]) => value !== undefined)),
+    holding: then.holding,
+  } as DepositStepDto;
+};
+
 /** Where a build goes, for the log: "EPjFWd… -> PRIME", "PRIME -> as So1111…". */
-const routeOf = ({ poolId, fromPoolId, payWith, receiveAs }: Built): string => {
+const routeOf = ({ poolId, fromPoolId, payWith, receiveAs, position }: Built): string => {
   const from = fromPoolId ?? (payWith ? `${payWith.slice(0, 6)}…` : null);
   const as = receiveAs ? `as ${receiveAs.slice(0, 6)}…` : null;
-  return [from, poolId, as].filter(Boolean).join(' -> ');
+  const at = position ? `position ${position.slice(0, 6)}…` : null;
+  return [from, poolId, as, at].filter(Boolean).join(' -> ');
 };
 
 @Injectable()
@@ -88,7 +130,8 @@ export class DepositsService {
     const { amount, owner, action } = asked;
     const [path, body] = earnRequestFor(asked);
     const data = await this.earn<WireDeposit>(path, { method: 'POST', body: JSON.stringify(body) });
-    this.log.log(`built ${action} ${amount} ${routeOf(asked)} for ${owner.slice(0, 6)}…`);
+    const how = amount ?? [asked.amountX, asked.amountY].filter(Boolean).join(' + ');
+    this.log.log(`built ${action} ${how} ${routeOf(asked)} for ${owner.slice(0, 6)}…`);
     const then = data.then;
     return {
       transaction: data.transaction,
@@ -96,17 +139,7 @@ export class DepositsService {
       instructions: data.instructions,
       blockhash: data.blockhash,
       lastValidBlockHeight: data.last_valid_block_height,
-      ...(then
-        ? {
-            then: {
-              ...(then.pool_id ? { poolId: then.pool_id } : {}),
-              amount: then.amount,
-              ...(then.pay_with ? { payWith: then.pay_with } : {}),
-              ...(then.receive_as ? { receiveAs: then.receive_as } : {}),
-              holding: then.holding,
-            },
-          }
-        : {}),
+      ...(then ? { then: stepOf(then) } : {}),
     };
   }
 

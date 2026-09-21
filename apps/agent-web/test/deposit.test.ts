@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import {
   afterDeposit,
   promiseOf,
+  rangeOf,
   requestOf,
   settledOf,
   sizeOf,
@@ -255,5 +256,59 @@ describe('WhenTheDepositNeverReachedTheWallet', () => {
     assert.equal(settledOf(request, { ok: false, at: 'wallet', reason: 'User rejected' }), null);
     assert.equal(settledOf(request, { ok: false, at: 'cancelled', reason: 'cancelled' }), null);
     assert.equal(settledOf(request, { ok: false, at: 'connect', reason: 'locked' }), null);
+  });
+});
+
+describe('ALiquidityCard', () => {
+  const lp: DepositBlock = {
+    kind: 'deposit',
+    action: 'provide',
+    poolId: 'sol:meteora:dlmm:CgqwPL',
+    pool: 'SOL-USDC',
+    protocol: 'meteora',
+    poolKind: 'dlmm',
+    network: 'sol',
+    token: 'USDC',
+    amount: '5',
+    apy: '19.96%',
+    risk: 'medium',
+    url: 'https://app.meteora.ag/dlmm/CgqwPL',
+    payWith: { mint: 'EPjF', symbol: 'USDC' },
+    belowPct: '10.3',
+    abovePct: '5.5',
+    lowerPrice: '105.17',
+    upperPrice: '123.70',
+    price: '117.25',
+  };
+
+  test('says what goes in and where, and the range with the prices it reaches', () => {
+    assert.equal(sizeOf(lp), '5 USDC → SOL-USDC');
+    assert.equal(rangeOf(lp), '105.17 – 123.70 · −10.3% / +5.5%');
+  });
+
+  test('promises fees only in range, and says the rent comes back', () => {
+    assert.match(promiseOf(lp), /only while the price stays in the range/);
+    assert.match(promiseOf(lp), /0\.057 SOL as rent, returned/);
+  });
+
+  test('hands the host the range and the coin to build it with', () => {
+    const request = requestOf(lp);
+    assert.equal(request.action, 'provide');
+    assert.equal(request.belowPct, '10.3');
+    assert.equal(request.abovePct, '5.5');
+    assert.deepEqual(request.payWith, { mint: 'EPjF', symbol: 'USDC' });
+  });
+
+  test('a rebalance names the position and what it holds', () => {
+    const rebalance = {
+      ...lp,
+      action: 'rebalance' as const,
+      position: '8PBf2k',
+      shown: '$12.16',
+      belowPct: '5',
+      abovePct: '5',
+    };
+    assert.equal(sizeOf(rebalance), '$12.16 in SOL-USDC');
+    assert.equal(requestOf(rebalance).position, '8PBf2k');
   });
 });

@@ -4,7 +4,7 @@ from typing import Literal, Protocol
 
 from .domain.asking import Choice
 from .domain.conversation import Chat, Turn
-from .domain.earn import Deposit, Settled
+from .domain.earn import Card, Settled
 from .panel import PanelValues
 
 
@@ -64,7 +64,7 @@ class Reply:
     pending_set: tuple[str, ...] | None = None
     pending_clear: bool = False
     portfolio_created: str | None = None
-    deposits: tuple[Deposit, ...] = ()
+    deposits: tuple[Card, ...] = ()
     choices: tuple[Choice, ...] = ()
 
 

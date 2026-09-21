@@ -15,12 +15,17 @@ export async function buildDeposit(
     method: 'POST',
     body: JSON.stringify({
       poolId: request.poolId,
-      amount: request.amount,
+      amount: request.amount || undefined,
       owner,
       action: request.action ?? 'deposit',
       fromPoolId: request.fromPoolId,
       payWith: request.payWith?.mint,
       receiveAs: request.receiveAs?.mint,
+      position: request.position,
+      amountX: request.amountX,
+      amountY: request.amountY,
+      belowPct: request.belowPct,
+      abovePct: request.abovePct,
     }),
   });
 }

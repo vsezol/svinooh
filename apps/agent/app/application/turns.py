@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
 from ..domain.asking import Choice
-from ..domain.earn import Deposit, Settled
+from ..domain.earn import Card, Settled
 from ..domain.errors import (
     EmptyMessageError,
     MessageTooLongError,
@@ -24,7 +24,7 @@ logger = logging.getLogger("svinooh-ai")
 @dataclass(frozen=True)
 class Answered:
     text: str
-    deposits: tuple[Deposit, ...] = ()
+    deposits: tuple[Card, ...] = ()
     choices: tuple[Choice, ...] = ()
 
 
