@@ -4,6 +4,7 @@ import pytest
 
 from app.agent.onboarding import create_portfolio_with_wallets
 from app.domain.conversation import Turn
+from app.domain.earn import Held, YieldPool
 from app.domain.portfolio import Me, PortfolioRef
 from app.ports import Ask, Failed, Finished, Progress
 from tests import fixtures as fx
@@ -325,7 +326,13 @@ class TestWhereToPutMoney:
     async def test_the_tool_that_prepares_a_deposit_is_there_either_way(self):
         bot, _, model = wire(intent="earn", catalog=Catalog(), model=Model(tool_calls=[EARN_CALL]))
         await run(bot)
-        assert model.tools_bound == ["earn_options", "propose_deposit", "ask_the_user"]
+        assert model.tools_bound == [
+            "earn_options",
+            "propose_deposit",
+            "propose_withdraw",
+            "propose_move",
+            "ask_the_user",
+        ]
         assert "prepare nothing until they answer it" in model.prompts[0]
 
     async def test_being_told_to_place_it_puts_the_deposit_on_the_reply(self):
@@ -636,3 +643,167 @@ class TestTheContractWithTheLayerAbove:
         updates = [update async for update in bot.watch(Ask(question="q"))]
         assert isinstance(updates[-1], Failed)
         assert "could not be finished" in updates[-1].message
+
+
+PRIME = YieldPool(
+    id="sol:kamino:vault:PRIME",
+    name="USDC Prime",
+    protocol="kamino",
+    kind="vault",
+    network="sol",
+    token="USDC",
+    apy_net=Decimal("0.042"),
+    apy_base=Decimal("0.042"),
+    apy_rewards=Decimal("0"),
+    apy_incentives=Decimal("0"),
+    tvl_usd=Decimal("90000000"),
+    url="https://kamino.com/earn/lend/PRIME",
+)
+
+TURBO = YieldPool(
+    id="sol:kamino:vault:TURBO",
+    name="Elemental USDC Turbo",
+    protocol="kamino",
+    kind="vault",
+    network="sol",
+    token="USDC",
+    apy_net=Decimal("0.1265"),
+    apy_base=Decimal("0.08"),
+    apy_rewards=Decimal("0"),
+    apy_incentives=Decimal("0.0465"),
+    tvl_usd=Decimal("5300000"),
+    url="https://kamino.com/earn/lend/TURBO",
+)
+
+JITO = YieldPool(
+    id="sol:kamino:vault:JITO",
+    name="JitoSOL vault",
+    protocol="kamino",
+    kind="vault",
+    network="sol",
+    token="JitoSOL",
+    apy_net=Decimal("0.07"),
+    apy_base=Decimal("0.07"),
+    apy_rewards=Decimal("0"),
+    apy_incentives=Decimal("0"),
+    tvl_usd=Decimal("50000000"),
+    url="https://kamino.com/earn/lend/JITO",
+)
+
+
+def in_pools(*held: Held) -> Catalog:
+    shelf = Catalog(PRIME, TURBO, JITO)
+    shelf.held = held
+    return shelf
+
+
+def with_a_solana_wallet() -> "Api":
+    return Api(
+        portfolio=fx.as_portfolio(
+            fx.portfolio([fx.wallet(fx.SOL_ADDRESS, [fx.USDC_SOL], chain="SOL")])
+        )
+    )
+
+
+async def moving(shelf: Catalog, *calls: dict):
+    bot, _, model = wire(
+        intent="earn",
+        catalog=shelf,
+        api=with_a_solana_wallet(),
+        model=Model(tool_calls=list(calls)),
+        asked_to_place=True,
+    )
+    out = await run(bot, portfolio="on-screen", authorization="Bearer T")
+    return out, model
+
+
+TWELVE_IN_PRIME = Held(pool=PRIME, amount=Decimal("12.001555"))
+
+
+class TestWhatIsInPools:
+    async def test_every_solana_wallet_is_asked_what_it_has_in_pools(self):
+        shelf = in_pools(TWELVE_IN_PRIME)
+        await moving(shelf)
+        assert shelf.owners == [fx.SOL_ADDRESS]
+
+    async def test_it_is_on_a_line_of_its_own_with_the_id_to_take_it_by(self):
+        _, model = await moving(in_pools(TWELVE_IN_PRIME))
+        said = model.prompts[0]
+        assert "12.001555 USDC in USDC Prime" in said
+        assert "id sol:kamino:vault:PRIME" in said
+        assert "one transaction" in said and "never tell them to withdraw first" in said
+
+    async def test_nothing_in_pools_adds_no_such_block(self):
+        _, model = await moving(in_pools())
+        assert "What they have in pools" not in model.prompts[0]
+
+
+class TestTakingMoneyOut:
+    async def test_all_of_it_is_a_withdrawal_card_asking_for_all(self):
+        out, _ = await moving(
+            in_pools(TWELVE_IN_PRIME),
+            {
+                "name": "propose_withdraw",
+                "args": {"pool_id": PRIME.id, "amount": "all"},
+                "id": "w1",
+            },
+        )
+        card = out["deposit"]
+        assert card.action == "withdraw" and card.pool.name == "USDC Prime"
+        assert card.everything and card.amount == Decimal("12.001555")
+
+    async def test_a_pool_they_are_not_in_prepares_nothing(self):
+        out, model = await moving(
+            in_pools(TWELVE_IN_PRIME),
+            {"name": "propose_withdraw", "args": {"pool_id": TURBO.id}, "id": "w1"},
+        )
+        assert out["deposit"] is None
+        assert "nothing in a pool with the id" in str(model.seen[-1].content)
+
+    async def test_more_than_is_there_says_what_is(self):
+        out, model = await moving(
+            in_pools(TWELVE_IN_PRIME),
+            {"name": "propose_withdraw", "args": {"pool_id": PRIME.id, "amount": "50"}, "id": "w1"},
+        )
+        assert out["deposit"] is None
+        assert "12.001555 USDC in USDC Prime" in str(model.seen[-1].content)
+
+
+class TestMovingMoney:
+    async def test_a_move_is_one_card_naming_both_pools(self):
+        out, _ = await moving(
+            in_pools(TWELVE_IN_PRIME),
+            {
+                "name": "propose_move",
+                "args": {"from_pool_id": PRIME.id, "to_pool_id": TURBO.id},
+                "id": "m1",
+            },
+        )
+        card = out["deposit"]
+        assert card.action == "move"
+        assert (card.source.name, card.pool.name) == ("USDC Prime", "Elemental USDC Turbo")
+        assert card.everything
+
+    async def test_across_tokens_it_is_refused_with_what_can_be_done(self):
+        out, model = await moving(
+            in_pools(TWELVE_IN_PRIME),
+            {
+                "name": "propose_move",
+                "args": {"from_pool_id": PRIME.id, "to_pool_id": JITO.id},
+                "id": "m1",
+            },
+        )
+        assert out["deposit"] is None
+        said = str(model.seen[-1].content)
+        assert "needs a swap" in said and "take the money out" in said
+
+    async def test_into_the_pool_it_is_already_in_prepares_nothing(self):
+        out, _ = await moving(
+            in_pools(TWELVE_IN_PRIME),
+            {
+                "name": "propose_move",
+                "args": {"from_pool_id": PRIME.id, "to_pool_id": PRIME.id},
+                "id": "m1",
+            },
+        )
+        assert out["deposit"] is None

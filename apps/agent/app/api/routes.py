@@ -1,6 +1,7 @@
 import json
 import logging
 from collections.abc import AsyncIterator
+from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Request
@@ -126,19 +127,28 @@ def _choice_card(choice: Choice) -> ChoiceBlock:
 
 
 def _deposit_card(deposit: Deposit) -> DepositBlock:
-    pool = deposit.pool
+    pool, source = deposit.pool, deposit.source
     return DepositBlock(
+        action=deposit.action,
         pool_id=pool.id,
         pool=pool.name,
         protocol=pool.protocol,
         pool_kind=pool.kind,
         network=pool.network,
         token=pool.token,
-        amount=f"{deposit.amount:f}",
-        apy=f"{pool.apy_net * 100:.2f}%",
+        amount="all" if deposit.everything else f"{deposit.amount:f}",
+        shown=f"{deposit.amount:f}" if deposit.everything else None,
+        apy=_rate(pool.apy_net),
         risk=pool.risk,
         url=pool.url,
+        from_pool_id=source.id if source else None,
+        from_pool=source.name if source else None,
+        from_apy=_rate(source.apy_net) if source else None,
     )
+
+
+def _rate(apy: Decimal) -> str:
+    return f"{apy * 100:.2f}%"
 
 
 def _sign_in_card(question: str) -> SignInBlock:

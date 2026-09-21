@@ -280,3 +280,89 @@ class TestTheReceipt:
         ) as walled:
             events = parse((await walled.post("/chat/stream", json={"message": "q"})).text)
         assert [b["kind"] for b in events[-1][1]["blocks"]] == ["signin"]
+
+
+class Moving(Model):
+    async def ainvoke(self, _messages, **_kwargs):
+        called, self._called = self._called, True
+
+        class Reply:
+            content = "One signature and it is in Turbo."
+            tool_calls = (
+                []
+                if called
+                else [
+                    {
+                        "name": "propose_move",
+                        "args": {
+                            "from_pool_id": "sol:kamino:vault:PRIME",
+                            "to_pool_id": "sol:kamino:vault:AAA",
+                            "amount": "all",
+                        },
+                        "id": "m1",
+                    }
+                ]
+            )
+
+        return Reply()
+
+
+class Holder:
+    """A host with one Solana wallet, for the earn branch to read pools against."""
+
+    async def me(self, token):
+        raise AssertionError("the host was asked who is asking")
+
+    async def portfolio(self, ref, token):
+        from tests import fixtures as fx
+
+        return fx.as_portfolio(
+            fx.portfolio([fx.wallet(fx.SOL_ADDRESS, [fx.USDC_SOL], chain="SOL")])
+        )
+
+
+class TestAMoveOnTheWire:
+    @pytest.fixture
+    def wired(self, meter):
+        from decimal import Decimal
+
+        from app.domain.earn import Held, YieldPool
+
+        shelf = Catalog()
+        prime = YieldPool(
+            id="sol:kamino:vault:PRIME",
+            name="USDC Prime",
+            protocol="kamino",
+            kind="vault",
+            network="sol",
+            token="USDC",
+            apy_net=Decimal("0.042"),
+            apy_base=Decimal("0.042"),
+            apy_rewards=Decimal("0"),
+            apy_incentives=Decimal("0"),
+            tvl_usd=Decimal("90000000"),
+            url="https://kamino.com/earn/lend/PRIME",
+        )
+        shelf.held = (Held(pool=prime, amount=Decimal("12.001555")),)
+        return container(
+            model=Moving(),
+            limiter=meter,
+            intent="earn",
+            asked_to_place=True,
+            catalog=shelf,
+            portfolio=Holder(),
+        )
+
+    async def test_the_card_names_both_pools_and_asks_for_all(self, client):
+        answered = await client.post(
+            "/chat", json={"message": "move it somewhere better", "portfolio": "p"}
+        )
+        card = next(b for b in answered.json()["blocks"] if b["kind"] == "deposit")
+        assert card["action"] == "move"
+        assert (card["fromPoolId"], card["fromPool"], card["fromApy"]) == (
+            "sol:kamino:vault:PRIME",
+            "USDC Prime",
+            "4.20%",
+        )
+        assert (card["poolId"], card["pool"]) == ("sol:kamino:vault:AAA", "Steakhouse USDC")
+        assert card["amount"] == "all" and card["shown"] == "12.001555"

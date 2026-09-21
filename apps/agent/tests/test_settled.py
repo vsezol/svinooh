@@ -79,7 +79,7 @@ class TestADepositThatCameBack:
         assert answered.status_code == 200
         assert "Elemental USDC Turbo" in model.system
         assert "12.0014 USDC" in model.system
-        assert "the money is in the pool" in model.system
+        assert "the money is where it was sent" in model.system
 
     async def test_a_rejection_is_carried_with_its_reason(self, client, model):
         await client.post("/chat", json={"message": "signed", "settled": FAILED})
@@ -176,3 +176,26 @@ class TestADepositThatNeverReachedTheWallet:
 
     async def test_it_needs_no_signature_to_be_told(self):
         assert Settled(**REFUSED).signature is None
+
+
+class TestAWithdrawalOrAMoveThatCameBack:
+    async def test_a_withdrawal_is_told_as_one(self, client, model):
+        await client.post(
+            "/chat",
+            json={
+                "message": "signed",
+                "settled": {**LANDED, "action": "withdraw", "amount": "all", "pool": "USDC Prime"},
+            },
+        )
+        assert "a withdrawal out of USDC Prime, back to their wallet" in model.system
+        assert "all of it" in model.system
+
+    async def test_a_move_names_both_ends(self, client, model):
+        await client.post(
+            "/chat",
+            json={
+                "message": "signed",
+                "settled": {**LANDED, "action": "move", "from_pool": "USDC Prime"},
+            },
+        )
+        assert "a move out of USDC Prime and into Elemental USDC Turbo" in model.system
