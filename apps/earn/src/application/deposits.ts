@@ -29,12 +29,23 @@ export interface BuiltTransaction {
  * the step swaps on the way; without it the step is a plain deposit.
  * `holding` is what the money sits in meanwhile, to say so should the next
  * step never happen.
+ *
+ * Liquidity for a pair says its `action`: `provide` places `amountX` and
+ * `amountY` in `poolId` across the range `belowPct`/`abovePct` from the
+ * price; `close` and `rebalance` go on with `position` where the step before
+ * left off.
  */
 export interface Then {
+  action?: 'provide' | 'close' | 'rebalance';
   poolId?: string;
-  amount: string;
+  amount?: string;
   payWith?: string;
   receiveAs?: string;
+  position?: string;
+  amountX?: string;
+  amountY?: string;
+  belowPct?: string;
+  abovePct?: string;
   holding: string;
 }
 

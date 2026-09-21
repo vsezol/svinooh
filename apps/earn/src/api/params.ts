@@ -197,3 +197,97 @@ export function networkOf(query: Query): Network {
   }
   return network;
 }
+
+/**
+ * The pair a query asks about: `pair=SOL-USDC` (or `SOL/USDC`), each side a
+ * ticker or a mint.
+ */
+export function pairOf(query: Query): [string, string] {
+  const raw = one(query, 'pair');
+  const sides = raw ? raw.split(/[-/]/).map((side) => side.trim()) : [];
+  if (sides.length !== 2 || sides.some((side) => !COIN.test(side))) {
+    throw new InvalidParameter('pair: Input should be two tickers or mints, as SOL-USDC');
+  }
+  return [sides[0], sides[1]];
+}
+
+/**
+ * A range around the current price, in percent each way — `below_pct=10.3&
+ * above_pct=5.5` is from 10.3% under the price to 5.5% over it — or null when
+ * neither is given.
+ */
+export function rangeOf(query: Query): { below: Decimal; above: Decimal } | null {
+  const below = decimalAtLeast(query, 'below_pct', 0);
+  const above = decimalAtLeast(query, 'above_pct', 0);
+  if (below === null && above === null) return null;
+  if (below === null || above === null) {
+    throw new InvalidParameter('below_pct and above_pct: Input should be given together');
+  }
+  if (below.gte(100)) throw new InvalidParameter('below_pct: Input should be less than 100');
+  return { below: below.div(100), above: above.div(100) };
+}
+
+export interface ProvideBody {
+  owner: string;
+  spend: { coin: string; amount: Decimal | 'all' } | { amountX: Decimal; amountY: Decimal };
+  range: { below: Decimal; above: Decimal };
+}
+
+const tokensIn = (given: Record<string, unknown>, name: string): Decimal => {
+  const raw = given[name];
+  if (raw === undefined || raw === null || raw === '') return new Decimal(0);
+  if (typeof raw !== 'string' || !/^\d+(\.\d+)?$/.test(raw)) {
+    throw new InvalidParameter(`${name}: Input should be a number of tokens`);
+  }
+  return new Decimal(raw);
+};
+
+/**
+ * What goes into a pair pool: `amount` of `coin` (one of the pool's two
+ * tokens, or "all" of it), or `amount_x` and `amount_y` of each; and the
+ * range, `below_pct` and `above_pct` from the price.
+ */
+export function provideBody(body: unknown): ProvideBody {
+  const given = (body ?? {}) as Record<string, unknown>;
+  const range = rangeOf(given as Query);
+  if (!range) throw new InvalidParameter('below_pct and above_pct: Input should be given');
+  const owner = ownerIn(given);
+  if (given.amount_x !== undefined || given.amount_y !== undefined) {
+    return { owner, range, spend: { amountX: tokensIn(given, 'amount_x'), amountY: tokensIn(given, 'amount_y') } };
+  }
+  const coin = given.coin;
+  if (typeof coin !== 'string' || !COIN.test(coin)) {
+    throw new InvalidParameter("coin: Input should be one of the pool's two tokens, by ticker or mint");
+  }
+  const { take } = takeBody(given);
+  return { owner, range, spend: { coin, amount: take } };
+}
+
+export interface PositionBody {
+  owner: string;
+  range: { below: Decimal; above: Decimal } | null;
+  carried: { amountX: Decimal; amountY: Decimal } | null;
+}
+
+/** A close's or a rebalance's body: whose, and for a rebalance the new range and what an earlier step carried. */
+export function positionBody(body: unknown): PositionBody {
+  const given = (body ?? {}) as Record<string, unknown>;
+  const carried =
+    given.amount_x !== undefined || given.amount_y !== undefined
+      ? { amountX: tokensIn(given, 'amount_x'), amountY: tokensIn(given, 'amount_y') }
+      : null;
+  return { owner: ownerIn(given), range: rangeOf(given as Query), carried };
+}
+
+function ownerIn(given: Record<string, unknown>): string {
+  const owner = given.owner;
+  if (typeof owner !== 'string' || !BASE58.test(owner)) {
+    throw new InvalidParameter('owner: Input should be a base58 account address');
+  }
+  return owner;
+}
+
+export function addressOf(raw: string, name: string): string {
+  if (!BASE58.test(raw)) throw new InvalidParameter(`${name}: Input should be a base58 account address`);
+  return raw;
+}

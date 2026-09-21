@@ -13,6 +13,15 @@ const KSWAP = 'https://api.kamino.finance/kswap';
 
 const TIMEOUT_MS = 15_000;
 
+/** Wide enough for a price that moves between building and signing, narrow enough to leave little behind. */
+export const SLIPPAGE_BPS = 30;
+
+/** The smallest routes first when everything has to fit in one transaction. */
+export const TIGHT = 8;
+
+/** A route on its own can afford a better price for more accounts. */
+export const ROOMY = 20;
+
 export interface Route {
   router: string;
   instructions: unknown[];
