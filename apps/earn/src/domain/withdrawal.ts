@@ -64,5 +64,8 @@ export function whyNotMove(from: Pool, to: Pool): string | null {
   if (from.id.network !== to.id.network) {
     return `${from.name} and ${to.name} are on different networks`;
   }
+  if (to.id.kind !== 'vault') {
+    return `${to.name} is one lending market's reserve; a move goes into a vault`;
+  }
   return null;
 }
