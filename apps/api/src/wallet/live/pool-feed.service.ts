@@ -1,5 +1,7 @@
 import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import { config } from '../../config';
+import { solanaRpc } from '../scanners/defi/solana-rpc';
 
 /** What arrives, and from which account */
 export type AccountListener = (account: string, data: Buffer) => void;
@@ -18,12 +20,23 @@ const LAST_RETRY_MS = 60_000;
  */
 const SILENCE_MS = 10 * 60_000;
 
+/** How many accounts one getMultipleAccounts may name */
+const READ_BATCH = 100;
+
 interface Reply {
   id?: number;
   result?: unknown;
   error?: unknown;
   method?: string;
-  params?: { subscription?: number; result?: { value?: { data?: [string, string] } } };
+  params?: {
+    subscription?: number;
+    result?: { context?: { slot?: number }; value?: { data?: [string, string] } };
+  };
+}
+
+interface Accounts {
+  context: { slot: number };
+  value: Array<{ data: [string, string] } | null>;
 }
 
 /**
@@ -54,6 +67,11 @@ export class PoolFeed implements OnApplicationShutdown {
   private retryMs = FIRST_RETRY_MS;
   private retry: NodeJS.Timeout | null = null;
   private heardAt = 0;
+  /** account → the slot of the newest state handed on, so nothing older follows it */
+  private slots = new Map<string, number>();
+  /** accounts subscribed since the last read of their current state */
+  private unread = new Set<string>();
+  private reading = false;
   private stopped = false;
   private listener: AccountListener = () => {};
 
@@ -69,16 +87,26 @@ export class PoolFeed implements OnApplicationShutdown {
    */
   watch(accounts: string[]): void {
     this.wanted = new Set(accounts);
+    for (const account of [...this.slots.keys()]) if (!this.wanted.has(account)) this.slots.delete(account);
     if (!this.wanted.size) {
       this.drop();
       return;
     }
-    if (this.socket && this.heardAt && Date.now() - this.heardAt > SILENCE_MS) {
-      this.logger.warn(`nothing heard for ${Math.round((Date.now() - this.heardAt) / 60_000)}m — reconnecting`);
-      this.drop();
-    }
     this.connect();
     this.reconcile();
+  }
+
+  /**
+   * A socket nobody has heard from in a while is replaced. On its own clock,
+   * once a minute, rather than riding on the watch's reconcile: that runs every
+   * few minutes, and a dead socket would have been dead for all of them.
+   */
+  @Interval('live-feed-silence', 60_000)
+  checkSilence(): void {
+    if (!this.socket || !this.heardAt || Date.now() - this.heardAt <= SILENCE_MS) return;
+    this.logger.warn(`nothing heard for ${Math.round((Date.now() - this.heardAt) / 60_000)}m — reconnecting`);
+    this.drop();
+    this.connect();
   }
 
   onApplicationShutdown(): void {
@@ -169,7 +197,7 @@ export class PoolFeed implements OnApplicationShutdown {
       const account = this.byId.get(message.params?.subscription ?? -1);
       const encoded = message.params?.result?.value?.data?.[0];
       if (account && typeof encoded === 'string') {
-        this.listener(account, Buffer.from(encoded, 'base64'));
+        this.hand(account, message.params?.result?.context?.slot ?? 0, encoded);
       }
       return;
     }
@@ -182,10 +210,58 @@ export class PoolFeed implements OnApplicationShutdown {
       this.byId.set(message.result, account);
       // It may have stopped being wanted while we were asking
       if (!this.wanted.has(account)) this.reconcile();
+      this.unread.add(account);
+      void this.readCurrent();
       return;
     }
     // Left unsubscribed: the next pass asks again
     this.logger.warn(`${account} refused: ${JSON.stringify(message.error ?? message.result)}`);
+  }
+
+  /**
+   * The state as of now, for every account just subscribed to.
+   *
+   * A subscription only ever reports the NEXT change. Whatever happened while
+   * there was none — a dropped socket, a restart, the seconds before the first
+   * subscribe — would otherwise wait for the pool's next trade to surface, and
+   * a quiet pool may not trade for an hour. So each new subscription is
+   * followed by one read of where the account stands.
+   *
+   * After, not before: a change landing between a read and a subscribe would
+   * be seen by neither. Read after, it is seen by at least one, and the slot
+   * decides which of the two is newer when both arrive.
+   */
+  private async readCurrent(): Promise<void> {
+    if (this.reading) return;
+    this.reading = true;
+    try {
+      while (this.unread.size) {
+        const batch = [...this.unread].slice(0, READ_BATCH);
+        for (const account of batch) this.unread.delete(account);
+        try {
+          const read = await solanaRpc<Accounts>('getMultipleAccounts', [
+            batch,
+            { encoding: 'base64', commitment: 'confirmed' },
+          ]);
+          read.value.forEach((value, i) => {
+            const encoded = value?.data?.[0];
+            if (typeof encoded === 'string') this.hand(batch[i], read.context.slot, encoded);
+          });
+        } catch (error) {
+          // The push is still coming; this was the shortcut to it
+          this.logger.warn(`could not read ${batch.length} account(s): ${(error as Error).message}`);
+        }
+      }
+    } finally {
+      this.reading = false;
+    }
+  }
+
+  /** On to the listener, unless something newer already went */
+  private hand(account: string, slot: number, encoded: string): void {
+    if (!this.wanted.has(account) || slot < (this.slots.get(account) ?? 0)) return;
+    this.slots.set(account, slot);
+    this.listener(account, Buffer.from(encoded, 'base64'));
   }
 
   /** Everything the connection owned, which is every subscription it held */

@@ -40,10 +40,15 @@ export class RangeWatch implements OnApplicationBootstrap, OnApplicationShutdown
   private readonly logger = new Logger(RangeWatch.name);
   /** pool account → the positions somebody holds in it */
   private watched = new Map<string, Watched[]>();
-  /** position → in range, as far as we know. Absent means never judged: baseline, say nothing */
+  /**
+   * position → in range, as last CONFIRMED: held for the whole hold, or taken
+   * as the baseline. Absent means never judged — the first answer is silent.
+   */
   private known = new Map<string, boolean>();
-  /** pool → the bin its price was in when we last heard */
-  private active = new Map<string, number>();
+  /** pool → the bin its price was in at the latest reading, and when that reading was taken */
+  private active = new Map<string, { bin: number; at: number }>();
+  /** position → the timer waiting to see whether a crossing holds */
+  private holding = new Map<string, NodeJS.Timeout>();
   private askedAt = new Map<string, number>();
   private queued = new Map<string, NodeJS.Timeout>();
   private ticking = false;
@@ -54,7 +59,10 @@ export class RangeWatch implements OnApplicationBootstrap, OnApplicationShutdown
     private readonly scans: ScanRequests,
     private readonly metrics: MetricsService,
   ) {
-    this.feed.onAccount((pool, data) => this.moved(pool, data));
+    this.feed.onAccount((pool, data) => {
+      const bin = activeBinId(data);
+      if (bin !== null) this.observe(pool, bin, Date.now());
+    });
   }
 
   /** Not awaited: startup does not wait on Meteora, and the first pass is minutes early anyway */
@@ -63,8 +71,9 @@ export class RangeWatch implements OnApplicationBootstrap, OnApplicationShutdown
   }
 
   onApplicationShutdown(): void {
-    for (const timer of this.queued.values()) clearTimeout(timer);
+    for (const timer of [...this.queued.values(), ...this.holding.values()]) clearTimeout(timer);
     this.queued.clear();
+    this.holding.clear();
   }
 
   /**
@@ -94,16 +103,23 @@ export class RangeWatch implements OnApplicationBootstrap, OnApplicationShutdown
       this.watched = new Map();
       this.known.clear();
       this.active.clear();
+      for (const timer of this.holding.values()) clearTimeout(timer);
+      this.holding.clear();
       this.feed.watch([]);
       return;
     }
 
+    // Meteora's answer is a reading of the pool as of when we ASKED. A push
+    // that lands while we wait for it is newer and must not be overwritten
+    const askedAt = Date.now();
     const wallets = await this.watchableWallets();
     const found: Watched[] = [];
+    const answered = new Set<string>();
     for (const wallet of wallets) {
       try {
         const positions = await this.positionsOf(wallet.address);
         found.push(...positions.map((position) => ({ ...position, ...wallet })));
+        for (const position of positions) answered.add(position.positionAddress);
       } catch (error) {
         // Meteora said nothing, which is not the same as "no positions": keep
         // watching what this wallet had until it answers otherwise
@@ -127,11 +143,16 @@ export class RangeWatch implements OnApplicationBootstrap, OnApplicationShutdown
       for (const position of positions) {
         live.add(position.positionAddress);
         if (this.known.has(position.positionAddress)) continue;
-        const bin = this.active.get(pool) ?? position.activeBinId;
+        const bin = this.active.get(pool)?.bin ?? position.activeBinId;
         this.known.set(position.positionAddress, holds(position, bin));
       }
     }
-    for (const position of [...this.known.keys()]) if (!live.has(position)) this.known.delete(position);
+    for (const position of [...this.known.keys()]) {
+      if (live.has(position)) continue;
+      this.known.delete(position);
+      clearTimeout(this.holding.get(position));
+      this.holding.delete(position);
+    }
     for (const pool of [...this.active.keys()]) if (!watched.has(pool)) this.active.delete(pool);
 
     const was = [...this.watched.keys()].sort().join();
@@ -141,6 +162,16 @@ export class RangeWatch implements OnApplicationBootstrap, OnApplicationShutdown
       this.logger.log(
         `watching ${live.size} Meteora position(s) in ${watched.size} pool(s) across ${wallets.length} wallet(s)`,
       );
+    }
+
+    // The same answer, read as a reading of the pool. The socket is what is
+    // supposed to deliver these, and when it has gone quiet — dropped without
+    // a word, or a pool that simply has not traded since we reconnected — this
+    // is the only other place the current bin comes from. A crossing it finds
+    // goes through the hold like any other.
+    for (const [pool, positions] of watched) {
+      const fresh = positions.find((position) => answered.has(position.positionAddress));
+      if (fresh) this.observe(pool, fresh.activeBinId, askedAt);
     }
   }
 
@@ -191,38 +222,77 @@ export class RangeWatch implements OnApplicationBootstrap, OnApplicationShutdown
   }
 
   /**
-   * The pool moved. Most pushes are not news — fees accrue and reserves shift
-   * on every swap while the price stays in the same bin — so the bin itself is
-   * the only thing compared.
+   * Where the pool's price is, as of `at`. Most readings are not news — fees
+   * accrue and reserves shift on every swap while the price stays in the same
+   * bin — so the bin is the only thing compared, and a reading older than the
+   * one we have is dropped rather than allowed to wind the pool back.
    */
-  private moved(pool: string, data: Buffer): void {
-    const bin = activeBinId(data);
-    if (bin === null || this.active.get(pool) === bin) return;
-    this.active.set(pool, bin);
+  private observe(pool: string, bin: number, at: number): void {
+    const last = this.active.get(pool);
+    if (last && (at < last.at || last.bin === bin)) return;
+    this.active.set(pool, { bin, at });
+    for (const position of this.watched.get(pool) ?? []) this.judge(position);
+  }
 
-    for (const position of this.watched.get(pool) ?? []) {
-      const now = holds(position, bin);
-      const before = this.known.get(position.positionAddress);
-      if (before === now) continue;
+  /**
+   * A position against the latest bin of its pool.
+   *
+   * A crossing is not believed the moment it is seen: it has to HOLD for
+   * `live.holdSec`. A price sitting on a band's edge crosses it on every other
+   * swap — on 2026-09-21 a SOL/USDC position at a 0.01% bin step went out and
+   * back fourteen times in fifteen minutes — and every crossing that gets as
+   * far as a scan is a message. So a crossing starts a timer, going back
+   * cancels it, and only a state still true when the timer runs out is
+   * confirmed and read. What that costs is the hold itself, once, on a real
+   * exit; what it saves is the owner's phone.
+   */
+  private judge(position: Watched): void {
+    const bin = this.active.get(position.poolAddress)?.bin;
+    if (bin === undefined) return;
+    const now = holds(position, bin);
+    const confirmed = this.known.get(position.positionAddress);
+    if (confirmed === undefined) {
       this.known.set(position.positionAddress, now);
-      if (before === undefined) continue;
-      this.metrics.liveCrossings.inc({ platform: 'meteora', direction: now ? 'in' : 'out' });
-      this.logger.log(
-        `${position.pairLabel} ${position.positionAddress.slice(0, 6)}… ${now ? 'back in' : 'out of'} range: bin ${bin} against ${position.lowerBinId}..${position.upperBinId} — reading ${position.address} now`,
-      );
-      this.ask(position.walletId);
+      return;
     }
+    const waiting = this.holding.get(position.positionAddress);
+    if (now === confirmed) {
+      // Back where it was before the hold ran out: nothing happened
+      if (waiting) clearTimeout(waiting);
+      this.holding.delete(position.positionAddress);
+      return;
+    }
+    // Two states only, so a timer already running is waiting for this one
+    if (waiting) return;
+    const holdMs = setting('live.holdSec') * 1000;
+    if (holdMs === 0) return this.confirm(position, now, bin);
+    this.holding.set(
+      position.positionAddress,
+      setTimeout(() => {
+        this.holding.delete(position.positionAddress);
+        const latest = this.active.get(position.poolAddress)?.bin;
+        if (latest !== undefined && holds(position, latest) === now) this.confirm(position, now, latest);
+      }, holdMs),
+    );
+  }
+
+  private confirm(position: Watched, now: boolean, bin: number): void {
+    this.known.set(position.positionAddress, now);
+    this.metrics.liveCrossings.inc({ platform: 'meteora', direction: now ? 'in' : 'out' });
+    this.logger.log(
+      `${position.pairLabel} ${position.positionAddress.slice(0, 6)}… ${now ? 'back in' : 'out of'} range: bin ${bin} against ${position.lowerBinId}..${position.upperBinId} — reading ${position.address} now`,
+    );
+    this.ask(position.walletId);
   }
 
   /**
    * "Read this wallet now", at most once per wallet per cooldown.
    *
-   * A price sitting on a boundary crosses it repeatedly, and every crossing
-   * would otherwise be a scan — so the first one goes at once and anything
-   * inside the cooldown is collapsed into a single later read. Collapsed, not
-   * dropped: the scan reads the protocol when it runs, so whatever is true
-   * then is what gets said, and a crossing followed by a crossing back is one
-   * scan that finds nothing changed and says nothing.
+   * The hold has already dealt with a price flickering on one boundary; this
+   * is for a wallet with several positions confirming one after another. The
+   * first goes at once and anything inside the cooldown is collapsed into a
+   * single later read — collapsed, not dropped: the scan reads the protocol
+   * when it runs, so whatever is true then is what gets said.
    */
   private ask(walletId: string): void {
     if (this.queued.has(walletId)) return;

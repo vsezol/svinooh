@@ -1,18 +1,19 @@
 /**
  * The live range watch: bytes off the chain, and what is done about them.
  *
- * The two things that could go wrong quietly. Reading the wrong four bytes out
- * of a pool account would make up crossings that never happened, so the fixture
- * is a real mainnet account and the test fails the day the layout moves. And
- * asking for a scan too eagerly — on every push, or on a price flickering
- * across a boundary — would turn a swap into a queue of scans, so the cooldown
- * is exercised on the clock rather than trusted.
+ * What could go wrong quietly. Reading the wrong four bytes out of a pool
+ * account would make up crossings that never happened, so the fixture is a real
+ * mainnet account and the test fails the day the layout moves. Believing every
+ * crossing would turn a price sitting on a band's edge into a message per swap,
+ * so the hold is exercised on the clock rather than trusted. And a socket that
+ * went quiet would leave a crossing unseen until the next scan, so Meteora's
+ * own answer is shown to stand in for it — without winding back a newer push.
  *
  * No network and no database: the positions Meteora would report are handed in,
  * the pushes the socket would deliver are called directly.
  */
 import { strict as assert } from 'node:assert';
-import { describe, mock, test } from 'node:test';
+import { afterEach, beforeEach, describe, mock, test } from 'node:test';
 import { MetricsService } from '@svinooh/common';
 import type { PrismaService } from '@svinooh/db';
 import { activeBinId, holds } from '../src/wallet/live/lb-pair';
@@ -72,15 +73,16 @@ const position = (over: Partial<MeteoraWatchable> = {}): MeteoraWatchable => ({
   ...over,
 });
 
+/** As the registry declares it */
+const HOLD_MS = 60_000;
+
 /** The watch, with Meteora's answer handed to it instead of fetched */
 class Watch extends RangeWatch {
-  constructor(
-    private readonly answer: MeteoraWatchable[],
-    ...rest: ConstructorParameters<typeof RangeWatch>
-  ) {
-    super(...rest);
-  }
+  answer: MeteoraWatchable[] = [];
+  /** Runs while Meteora is "being asked" — for a push that lands mid-answer */
+  meanwhile: () => void = () => {};
   protected override positionsOf(): Promise<MeteoraWatchable[]> {
+    this.meanwhile();
     return Promise.resolve(this.answer);
   }
 }
@@ -101,26 +103,63 @@ const watching = (positions: MeteoraWatchable[]) => {
     watch: (accounts: string[]) => watched.push(accounts),
   } as unknown as PoolFeed;
   const scans = { recheck: (walletId: string) => asked.push(walletId) } as unknown as ScanRequests;
-  const watch = new Watch(positions, prisma, feed, scans, new MetricsService());
+  const watch = new Watch(prisma, feed, scans, new MetricsService());
+  watch.answer = positions;
   return { watch, watched, asked, moved: (bin: number) => push(POOL, account(bin)) };
 };
 
 describe('APriceLeavingItsBand', () => {
+  beforeEach(() => mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_000_000 }));
+  afterEach(() => mock.timers.reset());
+
   test('the pool is subscribed to, and what it is already doing is not news', async () => {
     const { watch, watched, asked, moved } = watching([position()]);
     await watch.tick();
 
     assert.deepEqual(watched.at(-1), [POOL], 'the pool a position is in is listened to');
     moved(-5390); // still inside the band, and a different bin
+    mock.timers.tick(HOLD_MS);
     assert.deepEqual(asked, [], 'a price moving within the band is not a crossing');
   });
 
-  test('a crossing asks for that wallet to be read at once', async () => {
+  test('a crossing that holds asks for the wallet to be read, once the hold is up', async () => {
     const { watch, asked, moved } = watching([position()]);
     await watch.tick();
 
     moved(-5401); // one bin below the lower end
+    assert.deepEqual(asked, [], 'not believed yet');
+    mock.timers.tick(HOLD_MS - 1);
+    assert.deepEqual(asked, [], 'still not');
+    mock.timers.tick(1);
     assert.deepEqual(asked, ['w-1']);
+  });
+
+  test('a crossing that reverses inside the hold was never news', async () => {
+    const { watch, asked, moved } = watching([position()]);
+    await watch.tick();
+
+    moved(-5401);
+    mock.timers.tick(20_000);
+    moved(-5390);
+    mock.timers.tick(HOLD_MS * 2);
+    assert.deepEqual(asked, []);
+  });
+
+  test('a price on the edge for fifteen minutes is one read, when it finally settles', async () => {
+    // The 2026-09-21 trace: -21454/-21453 and back, fourteen times
+    const { watch, asked, moved } = watching([position({ lowerBinId: -5400, upperBinId: -5380 })]);
+    await watch.tick();
+
+    for (let i = 0; i < 14; i++) {
+      moved(-5379); // out, above the upper end
+      mock.timers.tick(15_000);
+      moved(-5380); // back on the edge, inside
+      mock.timers.tick(15_000);
+    }
+    assert.deepEqual(asked, [], 'fourteen flickers, no reads');
+    moved(-5379);
+    mock.timers.tick(HOLD_MS);
+    assert.deepEqual(asked, ['w-1'], 'and then it stayed out');
   });
 
   test('the same bin arriving again says nothing — most pushes are fees, not price', async () => {
@@ -130,25 +169,34 @@ describe('APriceLeavingItsBand', () => {
     moved(-5401);
     moved(-5401);
     moved(-5401);
+    mock.timers.tick(HOLD_MS);
     assert.deepEqual(asked, ['w-1'], 'one crossing, one read');
   });
 
-  test('a price flickering across the line is one read, not one per flicker', async () => {
-    mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
-    try {
-      const { watch, asked, moved } = watching([position()]);
-      await watch.tick();
+  test('a socket that went quiet: Meteora\'s answer is the reading instead', async () => {
+    const { watch, asked } = watching([position()]);
+    await watch.tick();
 
-      moved(-5401); // out
-      moved(-5399); // back in, a second later
-      moved(-5402); // and out again
-      assert.deepEqual(asked, ['w-1'], 'the first went at once, the rest are waiting');
+    // No push arrives. By the next pass the pool has left the band
+    watch.answer = [position({ activeBinId: -5405, inRange: false })];
+    await watch.tick();
+    mock.timers.tick(HOLD_MS);
+    assert.deepEqual(asked, ['w-1']);
+  });
 
-      mock.timers.tick(45_000); // the cooldown, as the registry declares it
-      assert.deepEqual(asked, ['w-1', 'w-1'], 'everything that happened since is one read');
-    } finally {
-      mock.timers.reset();
-    }
+  test("Meteora's answer does not wind back a push that arrived while it was asked", async () => {
+    const { watch, asked, moved } = watching([position()]);
+    await watch.tick();
+
+    // Meteora answers "in", but a push saying "out" lands after the question
+    watch.meanwhile = () => {
+      mock.timers.tick(1_000);
+      moved(-5401);
+    };
+    await watch.tick();
+    watch.meanwhile = () => {};
+    mock.timers.tick(HOLD_MS);
+    assert.deepEqual(asked, ['w-1'], 'the push is newer, and it stands');
   });
 
   test('a position nobody holds any more is let go of', async () => {

@@ -133,12 +133,26 @@ export const REGISTRY = {
     live: true,
     note: 'One WebSocket to SOLANA_WS_URL (or the first SOLANA_RPC_URL, or Solana\'s public node), one subscription per pool held. Off is the pace everything ran at before it existed.',
   },
+  'live.holdSec': {
+    kind: 'number',
+    group: 'sync',
+    label: 'Live crossing must hold',
+    about:
+      'How long a position has to stay across its boundary before the watch believes it and reads the wallet. A price sitting on the edge crosses it on every other swap; a crossing that reverses inside this window is not news. 0 — act on the first crossing.',
+    unit: 'sec',
+    default: 60,
+    min: 0,
+    max: 3600,
+    env: 'LIVE_HOLD_SEC',
+    readBy: ['api'],
+    live: true,
+  },
   'live.cooldownSec': {
     kind: 'number',
     group: 'sync',
     label: 'Live re-read cooldown',
     about:
-      'The least time between two live-triggered reads of the same wallet. A price sitting on a boundary crosses it over and over; crossings inside the cooldown are collapsed into one later read rather than dropped.',
+      'The least time between two live-triggered reads of the same wallet — for a wallet with several positions confirming one after another. Crossings inside the cooldown are collapsed into one later read rather than dropped.',
     unit: 'sec',
     default: 45,
     min: 5,
