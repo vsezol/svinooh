@@ -47,12 +47,9 @@ export function DepositDialog({
             : { ok: false, reason: 'cancelled', at: 'cancelled' },
         )
       }
-      title="Deposit"
+      title={TITLE[request.action ?? 'deposit']}
     >
-      <Note>
-        {request.amount} {request.token} into {request.pool}. The money leaves your wallet for{' '}
-        {request.protocol} and never touches svinooh. You sign it; nothing happens until you do.
-      </Note>
+      <Note>{saying(request)} You sign it; nothing happens until you do.</Note>
       {stage === 'choosing' ? (
         <div style={{ marginTop: 'var(--sp-6)', display: 'grid', gap: 'var(--sp-4)' }}>
           {wallets.map((wallet) => (
@@ -73,4 +70,19 @@ export function DepositDialog({
       {failed ? <Note style={{ color: 'var(--down)' }}>{failed}</Note> : null}
     </Dialog>
   );
+}
+
+const TITLE = { deposit: 'Deposit', withdraw: 'Withdraw', move: 'Move' } as const;
+
+function saying(request: DepositRequest): string {
+  const how =
+    request.amount === 'all' ? `All of your ${request.token}` : `${request.amount} ${request.token}`;
+  switch (request.action) {
+    case 'withdraw':
+      return `${how} out of ${request.pool}, back to your wallet.`;
+    case 'move':
+      return `${how} out of ${request.fromPool ?? 'the pool it is in'} and into ${request.pool}, in one transaction.`;
+    default:
+      return `${how} into ${request.pool}. The money leaves your wallet for ${request.protocol} and never touches svinooh.`;
+  }
 }

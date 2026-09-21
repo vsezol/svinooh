@@ -13,7 +13,13 @@ export async function buildDeposit(
 ): Promise<DepositBuiltDto> {
   return api<DepositBuiltDto>('/deposits/build', {
     method: 'POST',
-    body: JSON.stringify({ poolId: request.poolId, amount: request.amount, owner }),
+    body: JSON.stringify({
+      poolId: request.poolId,
+      amount: request.amount,
+      owner,
+      action: request.action ?? 'deposit',
+      fromPoolId: request.fromPoolId,
+    }),
   });
 }
 

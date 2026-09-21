@@ -89,7 +89,35 @@ describe('ADepositFromTheButtonToTheChain', () => {
       poolId: REQUEST.poolId,
       amount: REQUEST.amount,
       owner: OWNER,
+      action: 'deposit',
     });
+  });
+
+  test('a withdrawal and a move ride the same path, saying which they are', async () => {
+    const asked = serving();
+    const fake = fakeWallet();
+    await runDeposit({
+      request: { ...REQUEST, action: 'withdraw', amount: 'all' },
+      wallet: depositWallet(fake.wallet),
+      wait: async () => {},
+    });
+    await runDeposit({
+      request: { ...REQUEST, action: 'move', amount: 'all', fromPoolId: 'sol:kamino:vault:PRIME' },
+      wallet: depositWallet(fake.wallet),
+      wait: async () => {},
+    });
+    const builds = asked.filter((one) => one.path.endsWith('/deposits/build')).map((one) => one.body);
+    assert.deepEqual(builds, [
+      { poolId: REQUEST.poolId, amount: 'all', owner: OWNER, action: 'withdraw' },
+      {
+        poolId: REQUEST.poolId,
+        amount: 'all',
+        owner: OWNER,
+        action: 'move',
+        fromPoolId: 'sol:kamino:vault:PRIME',
+      },
+    ]);
+    assert.equal(fake.handed.length, 2, 'each was handed to the wallet to sign');
   });
 
   test('what the server built is what the wallet is handed', async () => {

@@ -94,10 +94,21 @@ export interface PositionDto {
   tokens?: PositionTokenDto[] | null;
 }
 
+/** What a card asks the wallet to do with a pool. */
+export type DepositAction = 'deposit' | 'withdraw' | 'move';
+
+/**
+ * `poolId` is the pool the card is about: where money goes in a deposit and a
+ * move, where it comes out of in a withdrawal. A move also names where it
+ * leaves, `fromPoolId`. `amount` is a number of tokens, or "all" for taking
+ * out everything there is.
+ */
 export interface DepositBuildDto {
   poolId: string;
   amount: string;
   owner: string;
+  action?: DepositAction;
+  fromPoolId?: string;
 }
 
 export interface DepositBuiltDto {

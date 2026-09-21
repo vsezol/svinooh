@@ -5,7 +5,12 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '@svinooh/db';
-import type { DepositBuiltDto, DepositLandingDto, DepositLandingStatus } from '@svinooh/shared';
+import type {
+  DepositBuildDto,
+  DepositBuiltDto,
+  DepositLandingDto,
+  DepositLandingStatus,
+} from '@svinooh/shared';
 import { config } from '../config';
 import { ScanRequests } from '../wallet/scan-requests.service';
 
@@ -26,6 +31,9 @@ interface WireLanding {
 
 const THE_CALLER_CAN_FIX = new Set([400, 404, 422]);
 
+type Built = Required<Pick<DepositBuildDto, 'poolId' | 'amount' | 'owner' | 'action'>> &
+  Pick<DepositBuildDto, 'fromPoolId'>;
+
 const CHAINS: Record<string, string> = { sol: 'SOL' };
 
 @Injectable()
@@ -37,12 +45,18 @@ export class DepositsService {
     private readonly scans: ScanRequests,
   ) {}
 
-  async build(poolId: string, amount: string, owner: string): Promise<DepositBuiltDto> {
-    const data = await this.earn<WireDeposit>(
-      `/v1/lend/pools/${encodeURIComponent(poolId)}/deposit`,
-      { method: 'POST', body: JSON.stringify({ amount, owner }) },
-    );
-    this.log.log(`built ${amount} into ${poolId} for ${owner.slice(0, 6)}…`);
+  async build(asked: Built): Promise<DepositBuiltDto> {
+    const { poolId, amount, owner, action, fromPoolId } = asked;
+    const pool = encodeURIComponent(poolId);
+    const [path, body] =
+      action === 'withdraw'
+        ? [`/v1/lend/pools/${pool}/withdraw`, { amount, owner }]
+        : action === 'move'
+          ? ['/v1/lend/moves', { from: fromPoolId, to: poolId, amount, owner }]
+          : [`/v1/lend/pools/${pool}/deposit`, { amount, owner }];
+    const data = await this.earn<WireDeposit>(path, { method: 'POST', body: JSON.stringify(body) });
+    const route = action === 'move' ? `${fromPoolId} -> ${poolId}` : poolId;
+    this.log.log(`built ${action} ${amount} ${route} for ${owner.slice(0, 6)}…`);
     return {
       transaction: data.transaction,
       feePayer: data.fee_payer,
