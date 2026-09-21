@@ -26,6 +26,7 @@ export const pool = (over: Partial<Pool> & { address?: string } = {}): Pool => {
       sharesDecimals: null,
       tokenProgram: null,
       lendingMarket: null,
+      farm: null,
     },
     url: `https://kamino.com/earn/lend/${address}`,
     apyWindows: null,

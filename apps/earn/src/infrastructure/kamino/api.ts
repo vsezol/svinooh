@@ -16,6 +16,7 @@ export interface VaultStatePayload {
   managementFeeBps?: number;
   minDepositAmount?: string;
   vaultAllocationStrategy?: AllocationPayload[];
+  vaultFarm?: string;
 }
 
 export interface VaultPayload {

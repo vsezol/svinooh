@@ -1,11 +1,12 @@
 import { Decimal } from 'decimal.js';
-import type { BuiltDeposit } from '../application/deposits';
+import type { BuiltTransaction } from '../application/deposits';
 import type { Landing } from '../domain/deposit';
 import type { Catalog } from '../domain/catalog';
 import { isStale } from '../domain/catalog';
 import { net, type Pool } from '../domain/pool';
 import type { TokenYield } from '../domain/tokens';
 import { idOf } from '../domain/values';
+import type { Position } from '../domain/withdrawal';
 
 const RATE_PLACES = 6;
 const USD_PLACES = 2;
@@ -138,13 +139,21 @@ export function tokenYield(row: TokenYield) {
   };
 }
 
-export function builtDeposit(built: BuiltDeposit) {
+export function builtTransaction(built: BuiltTransaction) {
   return {
     transaction: built.transaction,
     fee_payer: built.feePayer,
     instructions: built.instructions,
     blockhash: built.blockhash,
     last_valid_block_height: built.lastValidBlockHeight,
+  };
+}
+
+export function position(held: Position) {
+  return {
+    pool: summary(held.pool),
+    shares: held.shares.toString(),
+    amount: held.amount.toDecimalPlaces(held.pool.token.decimals ?? 6, Decimal.ROUND_DOWN).toString(),
   };
 }
 

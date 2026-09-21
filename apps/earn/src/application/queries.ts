@@ -32,6 +32,11 @@ export interface PoolAnswer {
   catalog: Catalog;
 }
 
+export interface NetworkAnswer {
+  pools: Pool[];
+  catalog: Catalog;
+}
+
 export interface TokensAnswer {
   tokens: TokenYield[];
   catalog: Catalog;
@@ -73,6 +78,16 @@ export class LendQueries {
     const found = id !== null ? find(catalog, id) : null;
     if (found === null) throw new PoolNotFound(rawId);
     return { pool: found, catalog };
+  }
+
+  /**
+   * Every pool on a network, listed or not: somebody can hold money in a pool
+   * the listing policy has since hidden, and it is still theirs to take out.
+   */
+  onNetwork(network: string): NetworkAnswer {
+    const catalog = this.store.current();
+    const pools = [...catalog.byId.values()].filter((pool) => pool.id.network === network);
+    return { pools, catalog };
   }
 
   listTokens(filter: PoolFilter): TokensAnswer {
