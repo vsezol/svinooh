@@ -88,6 +88,7 @@ class AgentState(TypedDict, total=False):
     settled: Settled | None
     intent: str
     asked_to_place: bool
+    risk: str
     language: str
     deposits: tuple[Deposit, ...]
     choices: tuple[Choice, ...]
@@ -166,10 +167,11 @@ class LangGraphAgent:
             async with step("route", "Reading the question"):
                 label = await self._intents.classify(asked, state.get("history", ()))
             logger.info(
-                "intent: %s %s in %s (%s) q=%.80s",
+                "intent: %s %s in %s, risk %s (%s) q=%.80s",
                 label.intent,
                 label.stance,
                 label.language,
+                label.risk,
                 label.reason,
                 asked,
             )
@@ -177,6 +179,7 @@ class LangGraphAgent:
             return {
                 "intent": "settled" if state.get("settled") else label.intent,
                 "asked_to_place": label.stance == "placing",
+                "risk": label.risk,
                 "language": label.language,
             }
         except Exception as error:  # noqa: BLE001 — the fail-safe IS the handling
@@ -232,10 +235,11 @@ class LangGraphAgent:
         )
         prepared: list[Deposit] = []
         asked: list[Choice] = []
+        risk_known = state.get("risk", "unknown") != "unknown"
         tools = (
             earn_tools(self._catalog)
-            + deposit_tools(self._catalog, prepared)
-            + moving_tools(self._catalog, holdings.held, prepared)
+            + deposit_tools(self._catalog, prepared, risk_known)
+            + moving_tools(self._catalog, holdings.held, prepared, risk_known)
             + asking_tools(asked)
         )
         answered = await self._answer_with_tools(system, state, tools, waiting=lambda: bool(asked))
