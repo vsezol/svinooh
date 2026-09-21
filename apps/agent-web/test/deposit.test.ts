@@ -125,3 +125,32 @@ describe('WhatTheAgentIsToldAfterASignature', () => {
     assert.equal(settledOf(request, { ok: true }), null, 'a deposit with no signature is not news');
   });
 });
+
+describe('WhenTheDepositNeverReachedTheWallet', () => {
+  const request: DepositRequest = {
+    poolId: 'sol:kamino:vault:AAA',
+    pool: 'Elemental USDC Turbo',
+    protocol: 'kamino',
+    poolKind: 'vault',
+    network: 'sol',
+    token: 'USDC',
+    amount: '12.0014',
+  };
+
+  test('a build the server would not make is told, with its reason', () => {
+    const told = settledOf(request, {
+      ok: false,
+      at: 'build',
+      reason: 'this deposit needs 0.0053 SOL for rent and this wallet has 0.0015 SOL',
+    });
+    assert.equal(told?.status, 'refused');
+    assert.equal(told?.signature, null);
+    assert.match(told?.error ?? '', /0\.0053 SOL/);
+  });
+
+  test('a wallet somebody closed is not news', () => {
+    assert.equal(settledOf(request, { ok: false, at: 'wallet', reason: 'User rejected' }), null);
+    assert.equal(settledOf(request, { ok: false, at: 'cancelled', reason: 'cancelled' }), null);
+    assert.equal(settledOf(request, { ok: false, at: 'connect', reason: 'locked' }), null);
+  });
+});

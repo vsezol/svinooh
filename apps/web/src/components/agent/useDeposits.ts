@@ -25,7 +25,7 @@ export function useDeposits() {
       const [only] = wallets;
       if (wallets.length === 1) {
         const run = await runDeposit({ request, wallet: only });
-        return 'failed' in run ? { ok: false, reason: run.failed } : run.done;
+        return 'failed' in run ? { ok: false, reason: run.failed, at: run.at } : run.done;
       }
       return new Promise<DepositOutcome>((resolve) => {
         setAsked({

@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -p ${PORT:-4173}",
     "test": "tsx --test test/*.test.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "harness": "esbuild test/browser/harness.tsx --bundle --outfile=test/browser/dist/harness.js --loader:.tsx=tsx --jsx=automatic --banner:js=\"globalThis.process={env:{NODE_ENV:'development'}};\" && cp test/browser/index.html test/browser/dist/"
   },
   "dependencies": {
     "@module-federation/runtime": "^2.9.0",

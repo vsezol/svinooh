@@ -44,7 +44,7 @@ export function DepositDialog({
         settle(
           sent
             ? { ok: true, signature: sent, landed: 'pending' }
-            : { ok: false, reason: 'cancelled' },
+            : { ok: false, reason: 'cancelled', at: 'cancelled' },
         )
       }
       title="Deposit"

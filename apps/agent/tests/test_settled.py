@@ -19,6 +19,14 @@ LANDED = {
 
 FAILED = {**LANDED, "status": "failed", "error": "insufficient funds"}
 
+REFUSED = {
+    "amount": "12.0014",
+    "token": "USDC",
+    "pool": "Elemental USDC Turbo",
+    "status": "refused",
+    "error": "this deposit needs 0.00532384 SOL for rent and this wallet has 0.001480221 SOL",
+}
+
 SETTLED = Settled(**LANDED)
 
 
@@ -150,3 +158,21 @@ class TestWhoseWordsDecideTheTurn:
             Ask(question="where do I earn?", history=(turn("привет", "hi"),))
         )
         assert watching.asked == ["where do I earn?"]
+
+
+class TestADepositThatNeverReachedTheWallet:
+    async def test_nothing_was_signed_and_the_reason_is_carried(self):
+        said = Seen()
+        answered = agent(model=said, intents=Watching())
+        await answered.run(
+            Ask(
+                question="a deposit came back from the network",
+                history=(turn("закинь мои бабки", "готовлю"),),
+                settled=Settled(**REFUSED),
+            )
+        )
+        assert "never opened and nothing was signed" in said.system
+        assert "0.00532384 SOL" in said.system
+
+    async def test_it_needs_no_signature_to_be_told(self):
+        assert Settled(**REFUSED).signature is None
