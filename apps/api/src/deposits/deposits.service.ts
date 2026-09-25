@@ -13,7 +13,7 @@ import type {
   DepositStepDto,
 } from '@svinooh/shared';
 import { config } from '../config';
-import { ScanRequests } from '../wallet/scan-requests.service';
+import { ScanRequests, type WalletAfterLanding } from '../wallet/scan-requests.service';
 
 interface WireDeposit {
   transaction: string;
@@ -43,7 +43,81 @@ interface WireLanding {
   error: string | null;
 }
 
+interface WireEffects {
+  slot: number;
+  coins: Array<{ mint: string; symbol: string; amount: string; price_usd: string | null }>;
+  vaults: Array<{
+    address: string;
+    farm: string | null;
+    shares_mint: string | null;
+    name: string;
+    token: { symbol: string };
+    amount: string;
+    price_usd: string | null;
+    apy: string | null;
+  }>;
+  pairs: Array<{
+    pool: { id: string; x: { symbol: string }; y: { symbol: string }; base_fee_pct: string; price: string };
+    price_x_usd: string;
+    price_y_usd: string;
+    positions: Array<{
+      address: string;
+      amount_x: string;
+      amount_y: string;
+      lower_price: string;
+      upper_price: string;
+      in_range: boolean;
+      fees_usd: string;
+    }>;
+  }>;
+}
+
 const THE_CALLER_CAN_FIX = new Set([400, 404, 422]);
+
+const EFFECTS_WAIT_MS = 8_000;
+
+const numberOr = (value: string | null, fallback: number | null): number | null =>
+  value === null ? fallback : Number(value);
+
+function walletAfter(wire: WireEffects): WalletAfterLanding {
+  return {
+    slot: wire.slot,
+    coins: wire.coins.map((one) => ({
+      mint: one.mint,
+      symbol: one.symbol,
+      amount: Number(one.amount),
+      priceUsd: numberOr(one.price_usd, null),
+    })),
+    vaults: wire.vaults.map((one) => ({
+      address: one.address,
+      farm: one.farm,
+      sharesMint: one.shares_mint,
+      name: one.name,
+      token: one.token.symbol,
+      amount: Number(one.amount),
+      priceUsd: numberOr(one.price_usd, 0) ?? 0,
+      apy: numberOr(one.apy, null),
+    })),
+    pairs: wire.pairs.map((one) => ({
+      address: one.pool.id.split(':').pop() ?? '',
+      x: one.pool.x.symbol,
+      y: one.pool.y.symbol,
+      feePct: Number(one.pool.base_fee_pct),
+      price: Number(one.pool.price),
+      priceXUsd: Number(one.price_x_usd),
+      priceYUsd: Number(one.price_y_usd),
+      positions: one.positions.map((held) => ({
+        address: held.address,
+        amountX: Number(held.amount_x),
+        amountY: Number(held.amount_y),
+        lowerPrice: Number(held.lower_price),
+        upperPrice: Number(held.upper_price),
+        inRange: held.in_range,
+        feesUsd: Number(held.fees_usd),
+      })),
+    })),
+  };
+}
 
 type Built = DepositBuildDto & Required<Pick<DepositBuildDto, 'owner' | 'action'>>;
 
@@ -166,8 +240,10 @@ export class DepositsService {
       return { status: 'landed', slot: seen.slot, error: null, tracked: false, portfolio: null };
     }
 
-    this.scans.landed(tracked.walletId);
     this.log.log(`${signature.slice(0, 8)}… landed, rescanning ${owner.slice(0, 6)}…`);
+    void this.afterLanding(signature, owner, network).then((left) =>
+      this.scans.landed(tracked.walletId, left),
+    );
     return {
       status: 'landed',
       slot: seen.slot,
@@ -175,6 +251,27 @@ export class DepositsService {
       tracked: true,
       portfolio: tracked.portfolio.slug,
     };
+  }
+
+  private async afterLanding(
+    signature: string,
+    owner: string,
+    network: string,
+  ): Promise<WalletAfterLanding | null> {
+    const path =
+      `/v1/lend/deposits/${encodeURIComponent(signature)}/effects` +
+      `?network=${encodeURIComponent(network)}&owner=${encodeURIComponent(owner)}`;
+    try {
+      const answered = await fetch(`${config.earnApiUrl}${path}`, {
+        signal: AbortSignal.timeout(EFFECTS_WAIT_MS),
+      });
+      if (!answered.ok) throw new Error(`earn answered ${answered.status}`);
+      const body = (await answered.json()) as { data?: WireEffects | null };
+      return body.data ? walletAfter(body.data) : null;
+    } catch (unread) {
+      this.log.warn(`what ${signature.slice(0, 8)}… left could not be read: ${(unread as Error).message}`);
+      return null;
+    }
   }
 
   private async earn<T>(path: string, init: RequestInit = {}): Promise<T> {

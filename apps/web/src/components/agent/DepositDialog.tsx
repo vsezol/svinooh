@@ -19,9 +19,11 @@ const STAGE: Record<Stage, string> = {
 export function DepositDialog({
   request,
   settle,
+  onLanded,
 }: {
   request: DepositRequest;
   settle: (outcome: DepositOutcome) => void;
+  onLanded?: () => void;
 }) {
   const wallets = useDepositWallets();
   const [stage, setStage] = useState<Stage>('choosing');
@@ -30,7 +32,7 @@ export function DepositDialog({
 
   const deposit = async (wallet: DepositWallet) => {
     setFailed(null);
-    const run = await runDeposit({ request, wallet, onStage: setStage, onSent: setSent });
+    const run = await runDeposit({ request, wallet, onStage: setStage, onSent: setSent, onLanded });
     if ('failed' in run) {
       setStage('choosing');
       setFailed(run.failed);

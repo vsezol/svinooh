@@ -14,6 +14,7 @@ import { MetricsService, type RabbitService } from '@svinooh/common';
 import type { PrismaService } from '@svinooh/db';
 import type { ScanResult } from '@svinooh/shared';
 import { CATCHING_UP_MS, ScanRequests } from '../src/wallet/scan-requests.service';
+import { LandingOverlay } from '../src/wallet/sync/landing-overlay';
 import { ScanResultConsumerService } from '../src/wallet/sync/scan-result-consumer.service';
 import type { SyncService } from '../src/wallet/sync/sync.service';
 
@@ -58,7 +59,7 @@ describe('AJustAddedWalletIsScannedNow', () => {
         leased.push(...addresses.map((a) => a.address));
       },
     } as unknown as SyncService;
-    return { published, leased, scans: new ScanRequests(prisma, rabbit, sync) };
+    return { published, leased, scans: new ScanRequests(prisma, rabbit, sync, new LandingOverlay()) };
   };
 
   test('the address is claimed, then published to its own queue, ahead of the rest', async () => {
@@ -123,27 +124,32 @@ describe('AJustAddedWalletIsScannedNow', () => {
   });
 });
 
-describe('TheWriterDecidesWhatToBelieve', () => {
-  const writer = (wallet: Wallet) => {
-    const applied: number[] = [];
-    const unbelieved: number[] = [];
-    const prisma = {
-      wallet: { findUnique: async () => wallet },
-    } as unknown as PrismaService;
-    const sync = {
-      tierOf: async () => 'active' as const,
-      applyResult: async (_w: Wallet, r: { totalUsd: number }) => void applied.push(r.totalUsd),
-      noteUnbelievedReading: async (_id: string, n: number) => void unbelieved.push(n),
-      markFailed: async () => {},
-    } as unknown as SyncService;
-    const rabbit = { publish: async () => true } as unknown as RabbitService;
-    return {
-      applied,
-      unbelieved,
-      consumer: new ScanResultConsumerService(rabbit, prisma, sync, new MetricsService()),
-    };
+const writer = (wallet: Wallet, overlay = new LandingOverlay()) => {
+  const applied: number[] = [];
+  const stored: ScanResult[] = [];
+  const unbelieved: number[] = [];
+  const prisma = {
+    wallet: { findUnique: async () => wallet },
+  } as unknown as PrismaService;
+  const sync = {
+    tierOf: async () => 'active' as const,
+    applyResult: async (_w: Wallet, r: ScanResult) => {
+      applied.push(r.totalUsd);
+      stored.push(r);
+    },
+    noteUnbelievedReading: async (_id: string, n: number) => void unbelieved.push(n),
+    markFailed: async () => {},
+  } as unknown as SyncService;
+  const rabbit = { publish: async () => true } as unknown as RabbitService;
+  return {
+    applied,
+    unbelieved,
+    stored,
+    consumer: new ScanResultConsumerService(rabbit, prisma, sync, new MetricsService(), overlay),
   };
+};
 
+describe('TheWriterDecidesWhatToBelieve', () => {
   test('a first reading has nothing to be doubted against, and is stored', async () => {
     const { applied, consumer } = writer(walletRow());
     await consumer.apply({ chain: 'SOL', address: ADDRESS, ok: true, result: reading(1000), recheck: null });
@@ -167,5 +173,63 @@ describe('TheWriterDecidesWhatToBelieve', () => {
       recheck: reading(3_950),
     });
     assert.deepEqual(applied, [3_950]);
+  });
+});
+
+describe('AReadingTakenBeforeTheIndexersCaughtUp', () => {
+  const USDC = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+  const SOL = '11111111111111111111111111111111';
+  const FARM = '6XmZCys8MMyMZuUGcMJGSDjXRfTxHNkK6xHNn9RmwJK8';
+
+  const stale = (): ScanResult => ({
+    chain: 'SOL',
+    address: ADDRESS,
+    totalUsd: 24.41,
+    breakdown: { defi: 24.41, gmtrade: 0 },
+    positions: [
+      { symbol: 'Kamino', name: 'Farming', valueUsd: 12.01, category: 'defi', platform: 'kamino', pool: FARM },
+      { symbol: 'SOL', amount: 0.106, priceUsd: 117, valueUsd: 12.4, category: 'token', platform: 'wallet', ref: SOL },
+    ],
+  });
+
+  test('is stored with what the chain said right after the landing', async () => {
+    const overlay = new LandingOverlay();
+    overlay.hold('w-1', {
+      slot: 100,
+      coins: [
+        { mint: SOL, symbol: 'SOL', amount: 0.106297173, priceUsd: 117.16 },
+        { mint: USDC, symbol: 'USDC', amount: 12.00764, priceUsd: 0.9999 },
+      ],
+      vaults: [
+        {
+          address: '9E69U4GzWhryRaPe8DYpco6Z9vTZY6gg8w6W2QsBACEj',
+          farm: FARM,
+          sharesMint: '9YHNzyKwsdZ54GirTp6wSMweL9twT6sxF9RJPeE6aXem',
+          name: 'USDC Prime',
+          token: 'USDC',
+          amount: 0,
+          priceUsd: 0.9999,
+          apy: 0.049,
+        },
+      ],
+      pairs: [],
+    });
+    const { stored, consumer } = writer(walletRow({ lastTotalUsd: 24.41 }), overlay);
+    await consumer.apply({ chain: 'SOL', address: ADDRESS, ok: true, result: stale(), recheck: null });
+    const [written] = stored;
+    assert.deepEqual(
+      written.positions.map((one) => [one.symbol, one.ref ?? one.pool]),
+      [
+        ['SOL', SOL],
+        ['USDC', USDC],
+      ],
+    );
+    assert.ok(Math.abs(written.totalUsd - (0.106297173 * 117 + 12.00764 * 0.9999)) < 1e-9);
+  });
+
+  test('and a wallet nothing landed in is stored exactly as it was read', async () => {
+    const { stored, consumer } = writer(walletRow({ lastTotalUsd: 24.41 }));
+    await consumer.apply({ chain: 'SOL', address: ADDRESS, ok: true, result: stale(), recheck: null });
+    assert.deepEqual(stored, [stale()]);
   });
 });

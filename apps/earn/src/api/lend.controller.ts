@@ -26,6 +26,7 @@ import {
   chainMeta,
   coin,
   detail,
+  effects,
   holding,
   landing,
   meta,
@@ -134,6 +135,15 @@ export class LendController {
   ) {
     const seen = await this.deposits.landing(networkOf(query), signatureOf(signature));
     return { data: landing(seen), meta: chainMeta(this.clock()) };
+  }
+
+  @Get('deposits/:signature/effects')
+  async depositEffects(
+    @Param('signature') signature: string,
+    @Query() query: Record<string, string>,
+  ) {
+    const found = await this.deposits.after(networkOf(query), signatureOf(signature), ownerOf(query));
+    return { data: effects(found), meta: chainMeta(this.clock()) };
   }
 
   @Get('tokens')

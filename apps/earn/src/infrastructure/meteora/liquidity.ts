@@ -42,6 +42,9 @@ function sdk() {
     DLMM: (loaded.default ?? loaded) as unknown as Dlmm,
     StrategyType: loaded.StrategyType,
     autoFillYByStrategy: loaded.autoFillYByStrategy,
+    getPriceOfBinByBinId: loaded.getPriceOfBinByBinId,
+    getAccountDiscriminator: loaded.getAccountDiscriminator,
+    program: loaded.LBCLMM_PROGRAM_IDS['mainnet-beta'],
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     web3: require('@solana/web3.js') as Web3,
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -80,6 +83,72 @@ const tokens = (amount: string | { toString(): string }, token: PairToken): Deci
   new Decimal(amount.toString()).div(new Decimal(10).pow(token.decimals));
 
 const both = (pool: PairPool): string => `${pool.x.symbol} and ${pool.y.symbol}`;
+
+const ACCOUNTS_PER_READ = 100;
+
+export interface OwnedInPair {
+  address: string;
+  amountX: Decimal;
+  amountY: Decimal;
+  feeX: Decimal;
+  feeY: Decimal;
+  lowerPrice: Decimal;
+  upperPrice: Decimal;
+  inRange: boolean;
+}
+
+export interface PairReading {
+  price: Decimal;
+  positions: OwnedInPair[];
+}
+
+export async function pairsAmong(accounts: string[], rpcUrl: string): Promise<string[]> {
+  const kit = await import('@solana/kit');
+  const { getAccountDiscriminator, program } = sdk();
+  const discriminator = Buffer.from(getAccountDiscriminator('lbPair'));
+  const rpc = kit.createSolanaRpc(rpcUrl);
+  const pairs: string[] = [];
+  for (let at = 0; at < accounts.length; at += ACCOUNTS_PER_READ) {
+    const chunk = accounts.slice(at, at + ACCOUNTS_PER_READ);
+    const { value } = await rpc
+      .getMultipleAccounts(
+        chunk.map((one) => kit.address(one)),
+        { encoding: 'base64', dataSlice: { offset: 0, length: discriminator.length } },
+      )
+      .send();
+    value.forEach((account, index) => {
+      if (!account || String(account.owner) !== program) return;
+      if (Buffer.from(account.data[0], 'base64').equals(discriminator)) pairs.push(chunk[index]);
+    });
+  }
+  return pairs;
+}
+
+export async function ownedInPair(address: string, owner: string, rpcUrl: string): Promise<PairReading> {
+  const { web3, getPriceOfBinByBinId } = sdk();
+  const dlmm = await opened(rpcUrl, address);
+  const { activeBin, userPositions } = await dlmm.getPositionsByUserAndLbPair(new web3.PublicKey(owner));
+  const binStep = dlmm.lbPair.binStep;
+  const priceAt = (binId: number) =>
+    new Decimal(dlmm.fromPricePerLamport(Number(getPriceOfBinByBinId(binId, binStep))));
+  const inX = (base: { toString(): string }) =>
+    new Decimal(base.toString()).div(new Decimal(10).pow(dlmm.tokenX.mint.decimals));
+  const inY = (base: { toString(): string }) =>
+    new Decimal(base.toString()).div(new Decimal(10).pow(dlmm.tokenY.mint.decimals));
+  return {
+    price: new Decimal(activeBin.pricePerToken),
+    positions: userPositions.map(({ publicKey, positionData }) => ({
+      address: publicKey.toBase58(),
+      amountX: inX(positionData.totalXAmount),
+      amountY: inY(positionData.totalYAmount),
+      feeX: inX(positionData.feeX),
+      feeY: inY(positionData.feeY),
+      lowerPrice: priceAt(positionData.lowerBinId),
+      upperPrice: priceAt(positionData.upperBinId),
+      inRange: positionData.lowerBinId <= activeBin.binId && activeBin.binId <= positionData.upperBinId,
+    })),
+  };
+}
 
 /**
  * Liquidity placed across a range around the price, in one position.
