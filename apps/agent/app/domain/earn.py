@@ -193,6 +193,8 @@ class Placement:
     below_pct: Decimal | None = None
     above_pct: Decimal | None = None
     position: LiquidityPosition | None = None
+    source: YieldPool | None = None
+    everything: bool = False
 
 
 @dataclass(frozen=True, slots=True)

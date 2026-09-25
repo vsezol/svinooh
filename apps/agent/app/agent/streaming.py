@@ -6,11 +6,15 @@ from .llm import extract_text
 
 logger = logging.getLogger("svinooh-ai")
 
+BETWEEN_REPLIES = "\n\n"
+
 
 async def turn_events(
     graph: Any, state: dict, *, answering: Collection[str]
 ) -> AsyncIterator[tuple[str, dict]]:
     final: dict[str, Any] = {}
+    spoken = False
+    speaking: str | None = None
     try:
         async for mode, chunk in graph.astream(state, stream_mode=["custom", "messages", "values"]):
             if mode == "values":
@@ -24,8 +28,13 @@ async def turn_events(
             if meta.get("langgraph_node") not in answering:
                 continue
             text = extract_text(message)
-            if text:
-                yield "token", {"text": text}
+            if not text:
+                continue
+            if spoken and message.id is not None and message.id != speaking:
+                yield "token", {"text": BETWEEN_REPLIES}
+            speaking = message.id or speaking
+            spoken = True
+            yield "token", {"text": text}
     except Exception as error:  # noqa: BLE001 — the reader gets an ending either way
         logger.warning("turn failed mid-stream: %r", error)
         yield "error", {"message": "the answer could not be finished"}

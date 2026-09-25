@@ -242,6 +242,8 @@ def deposit_tools(
 
 WHISKER = Decimal("1.001")
 
+PAIR_POOLS = "sol:meteora:dlmm:"
+
 
 def moving_tools(
     catalog: YieldCatalog,
@@ -340,6 +342,12 @@ def moving_tools(
         if not risk_known:
             return RISK_FIRST
         target = await catalog.pool(to_pool_id.strip())
+        if target is None and to_pool_id.strip().startswith(PAIR_POOLS):
+            return (
+                f"{to_pool_id} is a pool for liquidity, not for lending. Place it with the "
+                f"liquidity tool instead, from_pool_id {source.pool.id}, with the range they "
+                "chose: one card takes it out and places it."
+            )
         if target is None:
             return (
                 f"No pool has the id {to_pool_id}. Use an id exactly as it was printed beside a "
@@ -423,23 +431,49 @@ def liquidity_tools(
     prepared: list[Card],
     range_known: bool = True,
     free: dict[str, Decimal] | None = None,
+    held: tuple[Held, ...] = (),
+    owners: tuple[str, ...] = (),
 ) -> list:
-    def short_of(symbol: str, size: Decimal) -> str | None:
-        """Why the wallets cannot pay this much of a token, when their last reading says so."""
+    async def held_now(mint: str) -> Decimal | None:
+        read = [await catalog.held_now(owner, mint) for owner in owners]
+        known = [one for one in read if one is not None]
+        return sum(known, Decimal(0)) if known else None
+
+    async def short_of(symbol: str, mint: str, size: Decimal) -> str | None:
         if free is None:
             return None
-        held = free.get(symbol.upper(), Decimal(0))
-        if size <= held * WHISKER:
+        loose = free.get(symbol.upper(), Decimal(0))
+        if size <= loose * WHISKER:
             return None
+        now = await held_now(mint)
+        if now is not None and size <= now * WHISKER:
+            return None
+        loose = now if now is not None else loose
+        lent = [one for one in held if one.pool.token.upper() == symbol.upper()]
+        if lent:
+            where = "; ".join(
+                f"{one.amount:f} {one.pool.token} in {one.pool.name}, id {one.pool.id}"
+                for one in lent
+            )
+            return (
+                f"Their wallets hold {loose:f} {symbol} free, and nothing is placed yet. The rest "
+                f"is in their pools: {where}. Call again with from_pool_id set to the pool it "
+                "comes out of: one card takes it out and places it, from one button."
+            )
         return (
-            f"Their wallets hold {held:f} {symbol} free right now — what sits in a pool is not "
+            f"Their wallets hold {loose:f} {symbol} free right now — what sits in a pool is not "
             "free, and SOL keeps a little back for fees. Nothing is placed. Say so, and offer "
-            "what can be done: placing what they hold free, or taking the money out of the pool "
-            "first — a withdrawal card of its own, signed before, and the liquidity prepared "
-            "once the money is in their wallet. Never promise the two as one card or one "
-            "signature. A reading can lag a top-up by a few minutes; if they say they just "
-            "added some, say a fresh reading takes a minute."
+            "placing what they hold free. A reading can lag a top-up by a few minutes; if they "
+            "say they just added some, say a fresh reading takes a minute."
         )
+
+    def lent_from(pool_id: str) -> Held | None:
+        asked = pool_id.strip()
+        exact = next((one for one in held if one.pool.id == asked), None)
+        if exact is not None:
+            return exact
+        near = [one for one in held if _distance(one.pool.id, asked) <= TYPOS]
+        return near[0] if len(near) == 1 else None
 
     seen: dict[str, PairPool] = {}
 
@@ -526,7 +560,12 @@ def liquidity_tools(
 
     @tool
     async def propose_liquidity(
-        pool_id: str, amount: str, token: str, below_pct: str, above_pct: str
+        pool_id: str,
+        amount: str,
+        token: str,
+        below_pct: str,
+        above_pct: str,
+        from_pool_id: str = "",
     ) -> str:
         """Put liquidity for a pair in front of the user to sign, once they chose amount and range.
 
@@ -535,11 +574,22 @@ def liquidity_tools(
         the range needs of the other is swapped into it on the way.
         `below_pct` and `above_pct` are how far under and over the current
         price the range reaches, in percent, exactly as they chose them — 10.3
-        and 5.5 for -10.3% / +5.5%. It moves nothing until they sign.
+        and 5.5 for -10.3% / +5.5%. When the money sits in one of their pools
+        rather than in their wallet, `from_pool_id` is that pool's id as printed
+        on the lines of what they have in pools, and `amount` may be "all": the
+        same card takes it out and places it, from one button. It moves nothing
+        until they sign.
         """
         if not range_known:
             return RANGE_FIRST
-        size = _amount(amount)
+        source = lent_from(from_pool_id) if from_pool_id.strip() else None
+        if from_pool_id.strip() and source is None:
+            return (
+                f"They have nothing in a pool with the id {from_pool_id}. Use an id exactly as it "
+                "is printed on the lines of what they have in pools."
+            )
+        everything = source is not None and str(amount).strip().lower() in ("all", "everything")
+        size = source.amount if source is not None and everything else _amount(amount)
         if size is None:
             return "That amount is not a number of tokens. Ask the user how much, and call again."
         wanted = _range(below_pct, above_pct)
@@ -553,14 +603,25 @@ def liquidity_tools(
             return (
                 f"No pool has the id {pool_id}. Use an id exactly as it was printed beside a pool."
             )
-        paid = pool.token(token)
+        paid = pool.token(source.pool.token if source is not None else token)
+        if paid is None and source is not None:
+            return (
+                f"{source.pool.name} pays out {source.pool.token}, and {pool.name} takes {pool.x} "
+                f"and {pool.y}. It has to come out as one of those first: a withdrawal as that "
+                "coin, and the liquidity once it is in their wallet."
+            )
         if paid is None:
             return f"{pool.name} takes {pool.x} and {pool.y}; ask which of those they pay with."
         why, holding = await fitting(pool, below, above)
         if why:
             return _held_elsewhere(why, holding)
         symbol, mint = paid
-        short = short_of(symbol, size)
+        if source is not None and size > source.amount * WHISKER:
+            return (
+                f"They have {source.amount:f} {symbol} in {source.pool.name}, less than that. "
+                "Tell them what is there and offer to place all of it."
+            )
+        short = await short_of(symbol, mint, size) if source is None else None
         if short:
             return short
         prepared.append(
@@ -571,16 +632,21 @@ def liquidity_tools(
                 pay_with=Coin(symbol=symbol, mint=mint, decimals=0),
                 below_pct=below,
                 above_pct=above,
+                source=source.pool if source is not None else None,
+                everything=everything,
             )
         )
         other = pool.y if symbol == pool.x else pool.x
+        out = f" out of {source.pool.name}," if source is not None else ""
         return (
-            f"Ready for the user to sign: {size:f} {symbol} into {pool.name} on Meteora across "
-            f"-{below:f}% / +{above:f}% around the price, {pool.price:f} {pool.y} per {pool.x} "
-            f"now. Part of it is swapped into {other} so both sides of the range fill, and their "
-            "wallet asks for a signature per step. Say what it is in two sentences: that it earns "
-            "fees only while the price stays in the range and sits in one token when it leaves, "
-            "and that opening it locks about 0.057 SOL of rent, returned when it closes. Nothing "
+            f"Ready for the user to sign: {size:f} {symbol}{out} into {pool.name} on Meteora "
+            f"across -{below:f}% / +{above:f}% around the price, {pool.price:f} {pool.y} per "
+            f"{pool.x} now. One button: "
+            + ("it comes out of the pool, " if source is not None else "")
+            + f"part is swapped into {other} so both sides of the range fill, and their wallet "
+            "asks for a signature per step. Say what it is in two sentences: that it earns fees "
+            "only while the price stays in the range and sits in one token when it leaves, and "
+            "that opening it locks about 0.057 SOL of rent, returned when it closes. Nothing "
             "happens until they sign. Do not say it is done."
         )
 

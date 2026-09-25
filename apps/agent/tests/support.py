@@ -1,4 +1,6 @@
 import itertools
+import json
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import replace
@@ -6,8 +8,10 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, AIMessageChunk
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 
 from app import create_app
 from app.adapters.memory import MemoryConversationStore, StaticPanel, rate_limit_storage
@@ -43,6 +47,48 @@ class FakeChatModel(GenericFakeChatModel):
 
 def fake_model(text: str) -> FakeChatModel:
     return FakeChatModel(messages=itertools.repeat(AIMessage(content=text)))
+
+
+class Talking(BaseChatModel):
+    replies: list[AIMessage]
+
+    @property
+    def _llm_type(self) -> str:
+        return "talking"
+
+    def bind_tools(self, _tools, **_kwargs):
+        return self
+
+    def _next(self) -> AIMessage:
+        return self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        return ChatResult(generations=[ChatGeneration(message=self._next())])
+
+    async def _astream(self, messages, stop=None, run_manager=None, **kwargs):
+        reply = self._next()
+        for piece in re.split(r"(\s)", str(reply.content)):
+            if not piece:
+                continue
+            chunk = ChatGenerationChunk(message=AIMessageChunk(content=piece))
+            if run_manager is not None:
+                await run_manager.on_llm_new_token(piece, chunk=chunk)
+            yield chunk
+        if reply.tool_calls:
+            yield ChatGenerationChunk(
+                message=AIMessageChunk(
+                    content="",
+                    tool_call_chunks=[
+                        {
+                            "name": call["name"],
+                            "args": json.dumps(call["args"]),
+                            "id": call["id"],
+                            "index": at,
+                        }
+                        for at, call in enumerate(reply.tool_calls)
+                    ],
+                )
+            )
 
 
 class Intents:
@@ -113,6 +159,7 @@ class Catalog:
         self.owners: list[str] = []
         self.coins: dict[str, Coin] = {}
         self.coins_asked: list[tuple[str, tuple[str, ...]]] = []
+        self.wallet: dict[str, Decimal] = {}
         self.terms = DepositTerms(
             program_id="KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
             address="AAAvaultAAA",
@@ -154,6 +201,9 @@ class Catalog:
 
     async def liquidity_positions(self, owner: str) -> tuple[LiquidityPosition, ...]:
         return self.placed
+
+    async def held_now(self, owner: str, coin: str) -> Decimal | None:
+        return self.wallet.get(coin)
 
 
 class NoHost:

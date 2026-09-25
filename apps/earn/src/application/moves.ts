@@ -16,6 +16,13 @@ export type BuildWithdrawal = (withdrawal: Withdrawal) => Promise<BuiltTransacti
 
 export type BuildMove = (move: Move) => Promise<BuiltTransaction>;
 
+export interface TakenOut {
+  built: BuiltTransaction;
+  arrived: Decimal;
+}
+
+export type BuildTakeOut = (withdrawal: Withdrawal) => Promise<TakenOut>;
+
 /** One end of a move as it is asked for: a pool by its id, or a coin by its mint or ticker. */
 export type Named = { pool: string } | { coin: string };
 
@@ -38,7 +45,24 @@ export class LendMoves {
     private readonly moves: Record<string, BuildMove>,
     private readonly coins: LendCoins = new LendCoins(queries),
     private readonly holdings: Record<string, ReadHoldings> = {},
+    private readonly takeOuts: Record<string, BuildTakeOut> = {},
   ) {}
+
+  tokenOf(poolId: string): { name: string; token: Pool['token'] } {
+    const { pool } = this.queries.getPool(poolId);
+    return { name: pool.name, token: pool.token };
+  }
+
+  async takeOut(poolId: string, take: Take, owner: string): Promise<TakenOut> {
+    const { pool } = this.queries.getPool(poolId);
+    const build = this.takeOuts[builderKey(pool)];
+    if (!build) {
+      throw new DepositNotSupported(
+        `${pool.id.protocol} on ${pool.id.network} is not wired for taking money out here yet`,
+      );
+    }
+    return build({ pool, owner, ...(await this.burning(pool, take, owner)) });
+  }
 
   async positions(network: string, owner: string): Promise<PositionsAnswer> {
     const read = this.readerFor(network);

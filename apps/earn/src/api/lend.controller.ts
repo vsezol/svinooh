@@ -27,6 +27,7 @@ import {
   coin,
   detail,
   effects,
+  holding,
   landing,
   meta,
   position,
@@ -119,6 +120,12 @@ export class LendController {
   async findCoin(@Query() query: Record<string, string | string[]>) {
     const found = await this.coins.find(networkOf(query), coinOf(query), ownersOf(query));
     return { data: coin(found), meta: chainMeta(this.clock()) };
+  }
+
+  @Get('holdings')
+  async holding(@Query() query: Record<string, string>) {
+    const found = await this.coins.held(networkOf(query), coinOf(query), ownerOf(query));
+    return { data: holding(found), meta: chainMeta(this.clock()) };
   }
 
   @Get('deposits/:signature')

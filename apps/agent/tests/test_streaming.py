@@ -1,6 +1,9 @@
-from app.agent.graph import ANSWERING_NODES
+from langchain_core.messages import AIMessage
+
+from app.agent.graph import ANSWERING_NODES, SPEAKING_NODES
 from app.agent.streaming import turn_events
-from tests.support import agent, fake_model
+from app.domain.earn import Settled
+from tests.support import Catalog, Talking, agent, fake_model
 
 ANSWER = "Impermanent loss is a drop against holding."
 
@@ -11,7 +14,7 @@ def watching(**overrides):
 
 async def collect(state: dict, bot=None) -> tuple[list[str], list[tuple[str, dict]]]:
     graph = (bot or watching()).graph
-    events = [event async for event in turn_events(graph, state, answering=ANSWERING_NODES)]
+    events = [event async for event in turn_events(graph, state, answering=SPEAKING_NODES)]
     return [data["text"] for name, data in events if name == "token"], events
 
 
@@ -97,3 +100,58 @@ class TestTheNodesThatSpeak:
         edges = watching().graph.get_graph().edges
         ends_a_turn = {edge.source for edge in edges if edge.target == "__end__"}
         assert ends_a_turn == set(ANSWERING_NODES)
+
+    def test_only_a_landing_is_not_typed_out(self):
+        assert set(ANSWERING_NODES) - set(SPEAKING_NODES) == {"settled"}
+
+
+LOOKED_UP = AIMessage(
+    content="Here is what USDC earns right now.",
+    tool_calls=[{"name": "earn_options", "args": {"token": "USDC"}, "id": "c1"}],
+)
+
+
+class TestWhatWasWrittenStays:
+    async def test_what_it_wrote_before_looking_something_up_is_still_there_at_the_end(self):
+        talking = Talking(replies=[LOOKED_UP, AIMessage(content="Pick one below.")])
+        bot = agent(model=talking, intent="earn", catalog=Catalog())
+        tokens, events = await collect({"question": "where do I earn on USDC?"}, bot)
+        final = events[-1][1]["answer"]
+        assert final == "Here is what USDC earns right now.\n\nPick one below."
+        assert "".join(tokens) == final, "what was watched being written is the answer"
+
+    async def test_a_reply_that_only_looks_something_up_adds_nothing_to_read(self):
+        silent = AIMessage(content="", tool_calls=LOOKED_UP.tool_calls)
+        talking = Talking(replies=[silent, AIMessage(content="Pick one below.")])
+        bot = agent(model=talking, intent="earn", catalog=Catalog())
+        tokens, events = await collect({"question": "where do I earn on USDC?"}, bot)
+        assert events[-1][1]["answer"] == "Pick one below."
+        assert "".join(tokens) == "Pick one below."
+
+    async def test_a_landing_is_answered_whole_rather_than_typed_out(self):
+        landed = Settled(amount="12", token="USDC", pool="USDC Prime", status="landed")
+        bot = agent(model=fake_model(ANSWER), catalog=Catalog())
+        tokens, events = await collect({"question": "", "settled": landed}, bot)
+        assert tokens == [], "it may be written again before it is shown"
+        assert events[-1][1]["answer"] == ANSWER
+
+
+class TestAProposalKeepsWhatCameBeforeIt:
+    async def test_the_words_before_a_proposal_stay_above_the_question_it_asks(self):
+        proposing = AIMessage(
+            content="Got it.",
+            tool_calls=[
+                {
+                    "name": "ProposePortfolio",
+                    "args": {"addresses": ["9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin"]},
+                    "id": "p1",
+                }
+            ],
+        )
+        asking = AIMessage(content="Track this wallet? Yes or no.")
+        bot = agent(model=Talking(replies=[proposing, asking]), intent="portfolio")
+        tokens, events = await collect({"question": "track 9xQeWvG8"}, bot)
+        final = events[-1][1]
+        assert final["answer"] == "Got it.\n\nTrack this wallet? Yes or no."
+        assert "".join(tokens) == final["answer"]
+        assert final["pending_set"] == ["9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin"]

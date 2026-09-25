@@ -73,6 +73,8 @@ export interface Range {
 /** The bins one position holds, and one transaction fills. */
 export const MAX_BINS = 70;
 
+export const percentOf = (fraction: Decimal): string => fraction.mul(100).toDecimalPlaces(4).toFixed();
+
 /** Where a range sits among a pool's bins: offsets from the active bin, and how many it spans. */
 export interface Span {
   lower: number;

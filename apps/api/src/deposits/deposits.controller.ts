@@ -28,8 +28,8 @@ function whatIsMissing(asked: DepositBuildDto & { action: string }): string | nu
     if (!asked.belowPct || !asked.abovePct) {
       return 'placing liquidity needs belowPct and abovePct, the range around the price';
     }
-    if (!(amount && payWith) && !asked.amountX && !asked.amountY) {
-      return 'placing liquidity needs amount of payWith, or amountX and amountY';
+    if (!(amount && (payWith || fromPoolId)) && !asked.amountX && !asked.amountY) {
+      return 'placing liquidity needs amount of payWith or out of fromPoolId, or amountX and amountY';
     }
   }
   return null;

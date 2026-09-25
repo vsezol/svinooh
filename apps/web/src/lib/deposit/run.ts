@@ -116,7 +116,7 @@ export function stepAfter(request: DepositRequest, then: DepositStepDto): Deposi
       poolId: then.poolId ?? request.poolId,
       amount: then.amount ?? '',
       fromPoolId: undefined,
-      payWith: undefined,
+      payWith: then.payWith ? { mint: then.payWith, symbol: then.holding } : undefined,
       receiveAs: undefined,
       position: then.position ?? request.position,
       amountX: then.amountX,

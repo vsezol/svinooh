@@ -169,8 +169,9 @@ export const rangeOf = (block: DepositBlock): string | null => {
 export const promiseOf = (block: DepositBlock): string => {
   const action = block.action ?? 'deposit';
   if (LIQUIDITY.has(action)) {
+    const out = action === 'provide' && block.fromPool ? `It comes out of ${block.fromPool} first. ` : '';
     const signatures = action === 'close' ? '' : ' Your wallet may ask you to sign more than once.';
-    return `${PROMISE[action]}${signatures} Nothing moves until you sign.`;
+    return `${out}${PROMISE[action]}${signatures} Nothing moves until you sign.`;
   }
   const { spent, ends } = coinsOf(block);
   const swapped =
@@ -215,6 +216,7 @@ export default function DepositBlockView({ block, onDeposit }: Props) {
   };
 
   const action = block.action ?? 'deposit';
+  const leaves = (action === 'move' || action === 'provide') && block.fromPool ? block.fromPool : null;
   const done = state === 'signed' || state === 'landed';
   const says = !onDeposit
     ? 'No wallet is connected here — open it on svinooh.com to sign.'
@@ -230,11 +232,11 @@ export default function DepositBlockView({ block, onDeposit }: Props) {
       <div className="sv-a-b-deposit-head">
         <span className="sv-a-b-deposit-size mono">{sizeOf(block)}</span>
         <span className="sv-a-b-deposit-rate mono">
-          {action === 'move' && block.fromApy ? `${block.fromApy} → ${block.apy}` : block.apy}
+          {leaves && block.fromApy ? `${block.fromApy} → ${block.apy}` : block.apy}
         </span>
       </div>
       <div className="sv-a-b-deposit-where">
-        {action === 'move' && block.fromPool ? <span>{block.fromPool} → </span> : null}
+        {leaves ? <span>{leaves} → </span> : null}
         <a href={block.url} target="_blank" rel="noopener noreferrer">
           {block.pool}
         </a>

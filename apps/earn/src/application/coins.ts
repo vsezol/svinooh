@@ -1,6 +1,7 @@
 import { Decimal } from 'decimal.js';
 import type { Coin } from '../domain/move';
 import type { Pool } from '../domain/pool';
+import type { ReadHoldings } from './deposits';
 import { CoinNotFound, DepositNotSupported } from './errors';
 import type { LendQueries } from './queries';
 
@@ -12,11 +13,24 @@ export type FindCoin = (query: string, owners: readonly string[]) => Promise<Coi
 
 const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 
+export interface Holding {
+  coin: Coin;
+  amount: Decimal | null;
+}
+
 export class LendCoins {
   constructor(
     private readonly queries: LendQueries,
     private readonly finders: Record<string, FindCoin> = {},
+    private readonly holdings: Record<string, ReadHoldings> = {},
   ) {}
+
+  async held(network: string, query: string, owner: string): Promise<Holding> {
+    const read = this.holdings[network];
+    if (!read) throw new DepositNotSupported(`${network} wallets are not read here yet`);
+    const coin = await this.find(network, query, [owner]);
+    return { coin, amount: await read(owner, coin) };
+  }
 
   /**
    * The coin somebody means by a ticker or a mint.

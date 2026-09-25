@@ -4,6 +4,7 @@ import {
   pairIdOf,
   pairs,
   parsePairId,
+  percentOf,
   spanOf,
   trusted,
   whyNotRange,
@@ -15,9 +16,11 @@ import {
   type Range,
   type Rebalance,
 } from '../domain/liquidity';
+import type { Token } from '../domain/pool';
 import type { Take } from '../domain/withdrawal';
 import type { BuiltTransaction, ReadHoldings } from './deposits';
 import { DepositNotSupported, NotEnoughHeld, NothingThere, PoolNotFound } from './errors';
+import type { TakenOut } from './moves';
 
 /** Pools pairing two tokens, named by ticker or mint in either order. */
 export type ReadPairPools = (first: string, second: string) => Promise<PairPool[]>;
@@ -39,7 +42,15 @@ export interface LiquidityBuilders {
 }
 
 /** What goes into a pool: an amount of one of its tokens, or "all" of it, or so much of each. */
-export type Spend = { coin: string; amount: Take } | { amountX: Decimal; amountY: Decimal };
+export type Spend =
+  | { coin: string; amount: Take }
+  | { amountX: Decimal; amountY: Decimal }
+  | { from: string; amount: Take };
+
+export interface Lending {
+  tokenOf(poolId: string): { name: string; token: Token };
+  takeOut(poolId: string, take: Take, owner: string): Promise<TakenOut>;
+}
 
 /**
  * SOL kept back from "all of it" on top of what any spend keeps: a position
@@ -65,6 +76,7 @@ export class LendLiquidity {
     private readonly minTvlUsd: Decimal,
     private readonly builders: Record<string, LiquidityBuilders> = {},
     private readonly holdings: Record<string, ReadHoldings> = {},
+    private readonly lending: Lending | null = null,
   ) {}
 
   /**
@@ -114,6 +126,7 @@ export class LendLiquidity {
     const pool = await this.pool(poolId);
     const why = whyNotRange(range, pool);
     if (why) throw new DepositNotSupported(why);
+    if ('from' in spend) return this.outOfLending(pool, owner, spend, range);
     const [amountX, amountY] = await this.amounts(pool, owner, spend);
     if (amountX.lte(0) && amountY.lte(0)) {
       throw new NothingThere(`nothing of ${pool.x.symbol} or ${pool.y.symbol} to put in`);
@@ -141,6 +154,36 @@ export class LendLiquidity {
     return this.builderFor(pool).rebalance({ position, owner, range }, pool, carried);
   }
 
+  private async outOfLending(
+    pool: PairPool,
+    owner: string,
+    spend: { from: string; amount: Take },
+    range: Range,
+  ): Promise<BuiltTransaction> {
+    if (!this.lending) throw new DepositNotSupported('taking money out of a pool is not wired here yet');
+    const { name, token } = this.lending.tokenOf(spend.from);
+    const paid = [pool.x, pool.y].find((one) => one.mint === token.mint);
+    if (!paid) {
+      throw new DepositNotSupported(
+        `${name} pays out ${token.symbol}, and ${pool.name} takes ${pool.x.symbol} and ` +
+          `${pool.y.symbol}: take it out as one of those first`,
+      );
+    }
+    const out = await this.lending.takeOut(spend.from, spend.amount, owner);
+    return {
+      ...out.built,
+      then: {
+        action: 'provide',
+        poolId: pairIdOf(pool.id),
+        amount: out.arrived.toDecimalPlaces(paid.decimals, Decimal.ROUND_DOWN).toFixed(),
+        payWith: paid.mint,
+        belowPct: percentOf(range.below),
+        abovePct: percentOf(range.above),
+        holding: paid.symbol,
+      },
+    };
+  }
+
   private builderFor(pool: PairPool): LiquidityBuilders {
     const build = this.builders[`${pool.id.network}:${pool.id.protocol}`];
     if (!build) {
@@ -149,7 +192,11 @@ export class LendLiquidity {
     return build;
   }
 
-  private async amounts(pool: PairPool, owner: string, spend: Spend): Promise<[Decimal, Decimal]> {
+  private async amounts(
+    pool: PairPool,
+    owner: string,
+    spend: Exclude<Spend, { from: string }>,
+  ): Promise<[Decimal, Decimal]> {
     if ('amountX' in spend) {
       return [
         await this.spendable(pool.id.network, owner, pool.x, spend.amountX),

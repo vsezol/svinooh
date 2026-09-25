@@ -1,9 +1,11 @@
 import { Decimal } from 'decimal.js';
 import type { BuiltTransaction } from '../../application/deposits';
+import type { TakenOut } from '../../application/moves';
 import { DepositNotSupported, DepositWouldFail } from '../../application/errors';
 import { decimalsOf, mintOf, symbolOf, type Move, type Place } from '../../domain/move';
 import type { Pool } from '../../domain/pool';
 import { idOf } from '../../domain/values';
+import type { Withdrawal } from '../../domain/withdrawal';
 import { assemble, attempts, budgeted, fits, measure, type Payer } from '../solana';
 import { intoLoaded, kamino, loadVault } from './deposits';
 import { kaminoRoutes, ROOMY, SLIPPAGE_BPS, TIGHT } from './swap';
@@ -57,6 +59,23 @@ export async function buildKaminoMove(move: Move, rpcUrl: string): Promise<Built
   return mintOf(from) === mintOf(move.to)
     ? sameToken(move, out, arrived, rpcUrl)
     : acrossTokens(move, out, arrived, rpcUrl);
+}
+
+export async function buildKaminoTakeOut(withdrawal: Withdrawal, rpcUrl: string): Promise<TakenOut> {
+  const { pool, owner } = withdrawal;
+  const out = await outOf(pool, owner, withdrawal.shares, withdrawal.all, rpcUrl);
+  const payer = { owner, token: pool.token.symbol, decimals: pool.token.decimals };
+  const arrived = await measure(
+    { ...payer, mint: pool.token.mint, tokenProgram: pool.deposit.tokenProgram },
+    out.instructions,
+    rpcUrl,
+    out.lookups,
+  );
+  if (arrived <= 0n) throw new DepositWouldFail(`there is no ${pool.token.symbol} to take out`);
+  const built = await assemble(payer, await budgeted([...out.instructions, ...out.unwrap]), rpcUrl, {
+    read: out.lookups,
+  });
+  return { built, arrived: inUnits(arrived, decimalsOf({ pool })) };
 }
 
 /**

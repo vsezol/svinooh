@@ -7,6 +7,7 @@ import {
   evenRange,
   MAX_BINS,
   pairIdOf,
+  percentOf,
   spanOf,
   whyNotRange,
   type Close,
@@ -80,8 +81,6 @@ const base = (amount: Decimal, token: PairToken): string =>
 
 const tokens = (amount: string | { toString(): string }, token: PairToken): Decimal =>
   new Decimal(amount.toString()).div(new Decimal(10).pow(token.decimals));
-
-const percent = (fraction: Decimal): string => fraction.mul(100).toDecimalPlaces(4).toFixed();
 
 const both = (pool: PairPool): string => `${pool.x.symbol} and ${pool.y.symbol}`;
 
@@ -267,8 +266,8 @@ const providing = (pool: PairPool, x: Decimal, y: Decimal, range: Range): Then =
   poolId: pairIdOf(pool.id),
   amountX: Decimal.max(x, 0).toDecimalPlaces(pool.x.decimals, Decimal.ROUND_DOWN).toFixed(),
   amountY: Decimal.max(y, 0).toDecimalPlaces(pool.y.decimals, Decimal.ROUND_DOWN).toFixed(),
-  belowPct: percent(range.below),
-  abovePct: percent(range.above),
+  belowPct: percentOf(range.below),
+  abovePct: percentOf(range.above),
   holding: both(pool),
 });
 

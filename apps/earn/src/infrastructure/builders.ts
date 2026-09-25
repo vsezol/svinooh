@@ -11,11 +11,16 @@ import type {
   ReadPairPool,
   ReadPairPools,
 } from '../application/liquidity';
-import type { BuildMove, BuildWithdrawal, ReadPositions } from '../application/moves';
+import type {
+  BuildMove,
+  BuildTakeOut,
+  BuildWithdrawal,
+  ReadPositions,
+} from '../application/moves';
 import { coinsVia } from './coins';
 import { effectsVia } from './effects';
 import { buildKaminoDeposit } from './kamino/deposits';
-import { buildKaminoMove } from './kamino/moves';
+import { buildKaminoMove, buildKaminoTakeOut } from './kamino/moves';
 import { kaminoPositions } from './kamino/positions';
 import { buildKaminoWithdrawal } from './kamino/withdrawals';
 import {
@@ -48,6 +53,10 @@ export const positionsWith = (rpcUrl: string): Record<string, ReadPositions> => 
 
 export const withdrawalsWith = (rpcUrl: string): Record<string, BuildWithdrawal> => ({
   'sol:kamino': (withdrawal) => buildKaminoWithdrawal(withdrawal, rpcUrl),
+});
+
+export const takeOutsWith = (rpcUrl: string): Record<string, BuildTakeOut> => ({
+  'sol:kamino': (withdrawal) => buildKaminoTakeOut(withdrawal, rpcUrl),
 });
 
 export const movesWith = (rpcUrl: string): Record<string, BuildMove> => ({

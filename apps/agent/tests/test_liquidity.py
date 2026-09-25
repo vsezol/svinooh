@@ -5,7 +5,7 @@ from app.agent.context import placed_lines, replayed
 from app.agent.tools import liquidity_tools
 from app.api.routes import _deposit_card
 from app.domain.conversation import Turn
-from app.domain.earn import LiquidityPosition, PairPool, Placement
+from app.domain.earn import Coin, Held, LiquidityPosition, PairPool, Placement, YieldPool
 from tests import fixtures as fx
 from tests.support import Catalog
 
@@ -52,15 +52,39 @@ def shelf(*pools: PairPool, placed: tuple[LiquidityPosition, ...] = ()) -> Catal
     return catalog
 
 
+PRIME = YieldPool(
+    id="sol:kamino:vault:9E69U4GzWhryRaPe8DYpco6Z9vTZY6gg8w6W2QsBACEj",
+    name="USDC Prime",
+    protocol="kamino",
+    kind="vault",
+    network="sol",
+    token="USDC",
+    apy_net=Decimal("0.042"),
+    apy_base=Decimal("0.042"),
+    apy_rewards=Decimal("0"),
+    apy_incentives=Decimal("0"),
+    tvl_usd=Decimal("9000000"),
+    url="https://kamino.com/earn/lend/9E69U4GzWhryRaPe8DYpco6Z9vTZY6gg8w6W2QsBACEj",
+)
+
+IN_PRIME = Held(pool=PRIME, amount=Decimal("12.008635"))
+
+OWNER = "5Hb8BfQVmvEhaKsoXBV2g3EExoqTCKsVNXrGsrbadHJS"
+
+
 def tools(
     catalog: Catalog,
     prepared: list,
     range_known: bool = True,
     free: dict[str, Decimal] | None = None,
+    held: tuple[Held, ...] = (),
+    owners: tuple[str, ...] = (),
 ) -> dict:
     return {
         one.name: one
-        for one in liquidity_tools(catalog, catalog.placed, prepared, range_known, free)
+        for one in liquidity_tools(
+            catalog, catalog.placed, prepared, range_known, free, held, owners
+        )
     }
 
 
@@ -159,8 +183,36 @@ class TestPayingWithWhatIsFree:
         ].ainvoke(CARD)
         assert prepared == []
         assert "Their wallets hold 0 USDC free right now" in said
-        assert "a withdrawal card of its own, signed before" in said
-        assert "Never promise the two as one card" in said
+        assert "offer placing what they hold free" in said
+
+    async def test_money_in_one_of_their_pools_is_named_with_the_id_to_place_it_from(self):
+        prepared: list = []
+        said = await tools(shelf(), prepared, free={"USDC": Decimal("0")}, held=(IN_PRIME,))[
+            "propose_liquidity"
+        ].ainvoke(CARD)
+        assert prepared == []
+        assert f"12.008635 USDC in USDC Prime, id {PRIME.id}" in said
+        assert "from_pool_id" in said
+        assert "one card takes it out and places it" in said
+
+    async def test_a_reading_behind_the_chain_is_checked_on_the_chain_before_a_no(self):
+        prepared: list = []
+        catalog = shelf()
+        catalog.wallet = {PAIR.y_mint: Decimal("12.00764")}
+        await tools(catalog, prepared, free={"USDC": Decimal("0")}, owners=(OWNER,))[
+            "propose_liquidity"
+        ].ainvoke(CARD)
+        assert len(prepared) == 1
+
+    async def test_and_the_chain_saying_the_same_keeps_the_no(self):
+        prepared: list = []
+        catalog = shelf()
+        catalog.wallet = {PAIR.y_mint: Decimal("1")}
+        said = await tools(catalog, prepared, free={"USDC": Decimal("0")}, owners=(OWNER,))[
+            "propose_liquidity"
+        ].ainvoke(CARD)
+        assert prepared == []
+        assert "Their wallets hold 1 USDC free right now" in said
 
     async def test_what_they_hold_is_placed(self):
         prepared: list = []
@@ -311,3 +363,78 @@ class TestForgivingTheModel:
         assert prepared == []
         assert "The pools of the pair that hold it: SOL-USDC with bins 0.8% apart" in said
         assert f"id {PAIR.id}" in said
+
+
+FROM_PRIME = {
+    "pool_id": PAIR.id,
+    "amount": "all",
+    "token": "",
+    "below_pct": "5",
+    "above_pct": "5",
+    "from_pool_id": PRIME.id,
+}
+
+
+class TestPlacingStraightOutOfALendingPool:
+    async def test_all_of_it_comes_out_and_goes_in_on_one_card(self):
+        prepared: list = []
+        said = await tools(shelf(), prepared, free={"USDC": Decimal("0")}, held=(IN_PRIME,))[
+            "propose_liquidity"
+        ].ainvoke(FROM_PRIME)
+        (card,) = prepared
+        assert card.action == "provide" and card.source == PRIME and card.everything
+        assert card.amount == Decimal("12.008635")
+        assert card.pay_with.symbol == "USDC" and card.pay_with.mint == PAIR.y_mint
+        assert "out of USDC Prime" in said
+        assert "One button: it comes out of the pool" in said
+
+    async def test_a_slip_in_copying_the_pool_id_is_forgiven(self):
+        prepared: list = []
+        slipped = {**FROM_PRIME, "from_pool_id": PRIME.id.replace("9E69", "9E96")}
+        await tools(shelf(), prepared, held=(IN_PRIME,))["propose_liquidity"].ainvoke(slipped)
+        assert prepared[0].source == PRIME
+
+    async def test_a_pool_they_are_not_in_is_not_taken_from(self):
+        prepared: list = []
+        said = await tools(shelf(), prepared, held=(IN_PRIME,))["propose_liquidity"].ainvoke(
+            {**FROM_PRIME, "from_pool_id": "sol:kamino:vault:SOMEWHERE"}
+        )
+        assert prepared == []
+        assert "They have nothing in a pool with the id" in said
+
+    async def test_more_than_is_in_the_pool_is_refused_with_what_is_there(self):
+        prepared: list = []
+        said = await tools(shelf(), prepared, held=(IN_PRIME,))["propose_liquidity"].ainvoke(
+            {**FROM_PRIME, "amount": "500"}
+        )
+        assert prepared == []
+        assert "They have 12.008635 USDC in USDC Prime" in said
+
+    async def test_a_pool_paying_out_another_token_comes_out_as_one_of_the_pair_first(self):
+        prepared: list = []
+        usds = replace(PRIME, id="sol:kamino:vault:KEEL", name="Keel USDS", token="USDS")
+        said = await tools(shelf(), prepared, held=(Held(pool=usds, amount=Decimal("5")),))[
+            "propose_liquidity"
+        ].ainvoke({**FROM_PRIME, "from_pool_id": usds.id})
+        assert prepared == []
+        assert "Keel USDS pays out USDS, and SOL-USDC takes SOL and USDC" in said
+
+    async def test_the_card_says_where_the_money_comes_out_of(self):
+        card = _deposit_card(
+            Placement(
+                action="provide",
+                pool=PAIR,
+                amount=Decimal("12.008635"),
+                pay_with=Coin(symbol="USDC", mint=PAIR.y_mint, decimals=0),
+                below_pct=Decimal("5"),
+                above_pct=Decimal("5"),
+                source=PRIME,
+                everything=True,
+            )
+        )
+        drawn = card.model_dump(by_alias=True)
+        assert drawn["fromPoolId"] == PRIME.id
+        assert drawn["fromPool"] == "USDC Prime"
+        assert drawn["fromApy"] == "4.20%"
+        assert drawn["amount"] == "all"
+        assert drawn["shown"] == "12.008635"

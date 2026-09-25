@@ -229,7 +229,10 @@ export function rangeOf(query: Query): { below: Decimal; above: Decimal } | null
 
 export interface ProvideBody {
   owner: string;
-  spend: { coin: string; amount: Decimal | 'all' } | { amountX: Decimal; amountY: Decimal };
+  spend:
+    | { coin: string; amount: Decimal | 'all' }
+    | { amountX: Decimal; amountY: Decimal }
+    | { from: string; amount: Decimal | 'all' };
   range: { below: Decimal; above: Decimal };
 }
 
@@ -252,6 +255,9 @@ export function provideBody(body: unknown): ProvideBody {
   const range = rangeOf(given as Query);
   if (!range) throw new InvalidParameter('below_pct and above_pct: Input should be given');
   const owner = ownerIn(given);
+  if (typeof given.from === 'string' && given.from) {
+    return { owner, range, spend: { from: given.from, amount: takeBody(given).take } };
+  }
   if (given.amount_x !== undefined || given.amount_y !== undefined) {
     return { owner, range, spend: { amountX: tokensIn(given, 'amount_x'), amountY: tokensIn(given, 'amount_y') } };
   }
