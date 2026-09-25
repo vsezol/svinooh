@@ -73,7 +73,7 @@ class Model:
         calls, self._tool_calls = self._tool_calls, None
 
         class Reply:
-            content = self.text
+            content = "" if calls else self.text
             tool_calls = calls or []
 
         return Reply()

@@ -38,6 +38,7 @@ from .onboarding import (
     sanitize_addresses,
 )
 from .prompts import (
+    WRITTEN_ONCE,
     cancelled_prompt,
     confirmation_request_prompt,
     created_prompt,
@@ -53,7 +54,7 @@ from .prompts import (
     system_prompt,
 )
 from .steps import said, step
-from .streaming import turn_events
+from .streaming import BETWEEN_REPLIES, turn_events
 from .tools import (
     asking_tools,
     deposit_tools,
@@ -141,6 +142,10 @@ ANSWERING_NODES = (
     "unavailable",
 )
 
+ANSWERED_WHOLE = ("settled",)
+
+SPEAKING_NODES = tuple(node for node in ANSWERING_NODES if node not in ANSWERED_WHOLE)
+
 
 class LangGraphAgent:
     def __init__(
@@ -164,7 +169,7 @@ class LangGraphAgent:
         return _reply(await self.graph.ainvoke(_state(ask)))
 
     async def watch(self, ask: Ask) -> AsyncIterator[Update]:
-        watched = turn_events(self.graph, dict(_state(ask)), answering=ANSWERING_NODES)
+        watched = turn_events(self.graph, dict(_state(ask)), answering=SPEAKING_NODES)
         async for kind, payload in watched:
             if kind == "done":
                 yield Finished(_reply(payload))
@@ -406,16 +411,21 @@ class LangGraphAgent:
                 )
             return {"answer": extract_text(reply)}
 
+        before = extract_text(reply)
         addresses = sanitize_addresses(calls[0].get("args", {}).get("addresses", []))
         if not addresses:
-            return await self._answer(system, state)
+            answered = await self._answer(system, state)
+            return {"answer": all_that_was_said([before, answered["answer"]])}
 
         logger.info("onboarding: proposing %d wallet(s)", len(addresses))
         confirmation = await self._answer(
             confirmation_request_prompt(system_prompt(self._config), addresses, not signed_in),
             state,
         )
-        return {**confirmation, "pending_set": addresses}
+        return {
+            "answer": all_that_was_said([before, confirmation["answer"]]),
+            "pending_set": addresses,
+        }
 
     async def _create_portfolio(self, state: AgentState) -> AgentState:
         addresses = state.get("pending_addresses") or []
@@ -490,20 +500,22 @@ class LangGraphAgent:
         if not tools:
             return await self._answer(system, state)
 
-        messages = self._messages(system, state)
+        messages = self._messages(f"{system}\n\n{WRITTEN_ONCE}", state)
         role = self._config.answering()
+        written: list[str] = []
         for hop in range(self._config.tool_hops()):
             async with step(f"think-{hop}", "Thinking" if hop == 0 else "Reading what came back"):
                 reply = await self._models.ask(
                     role, messages, prepare=lambda model: model.bind_tools(tools)
                 )
+            written.append(extract_text(reply))
             calls = getattr(reply, "tool_calls", None) or []
             if not calls:
-                return {"answer": extract_text(reply)}
+                return {"answer": all_that_was_said(written)}
             messages.append(reply)
             messages.extend(await run_tools(calls, tools))
             if waiting():
-                return {"answer": extract_text(reply)}
+                return {"answer": all_that_was_said(written)}
         logger.warning(
             "tool budget spent after %d hops — answering without another tool",
             self._config.tool_hops(),
@@ -512,15 +524,14 @@ class LangGraphAgent:
             said("the tool budget was spent")
             if nothing_ready():
                 messages.append(HumanMessage(content=NOTHING_READY))
-            final = await self._models.ask(role, messages)
-            answer = extract_text(final)
-            if not answer.strip():
+            written.append(extract_text(await self._models.ask(role, messages)))
+            if not all_that_was_said(written):
                 # A model that ends on a tool's result with no tools left to call
                 # can answer with nothing at all — on 2026-09-21 a turn went out
                 # empty that way. Told plainly what is wanted, it answers.
-                final = await self._models.ask(role, [*messages, HumanMessage(content=IN_WORDS)])
-                answer = extract_text(final)
-        return {"answer": answer}
+                again = await self._models.ask(role, [*messages, HumanMessage(content=IN_WORDS)])
+                written.append(extract_text(again))
+        return {"answer": all_that_was_said(written)}
 
     async def _without_a_card(
         self, system: str, state: AgentState, answered: AgentState
@@ -578,6 +589,10 @@ class LangGraphAgent:
         for leaf in ANSWERING_NODES:
             builder.add_edge(leaf, END)
         return builder.compile()
+
+
+def all_that_was_said(written: list[str]) -> str:
+    return BETWEEN_REPLIES.join(one.strip() for one in written if one.strip())
 
 
 def solana_wallets(portfolio: Portfolio) -> tuple[str, ...]:
