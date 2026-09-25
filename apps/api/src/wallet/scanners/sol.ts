@@ -69,6 +69,8 @@ interface JupElement {
   type?: string;
   value?: number;
   netApy?: number;
+  refAddress?: string;
+  sourceRefs?: Array<{ address?: string }>;
   data?: {
     assets?: JupPositionAsset[];
     suppliedAssets?: JupPositionAsset[];
@@ -130,6 +132,11 @@ function toHealthFactor(headroom: number | undefined): number | null {
 }
 
 const shortMint = (mint: string): string => `${mint.slice(0, 4)}…${mint.slice(-4)}`;
+
+const refOf = (element: JupElement): string | null =>
+  element.refAddress ? element.refAddress.replace(/^solana_/, '') : null;
+
+const poolOf = (element: JupElement): string | null => element.sourceRefs?.[0]?.address ?? null;
 
 /**
  * What the debt on a lending position costs, weighted by how much of it is
@@ -346,6 +353,8 @@ export async function scanSol(address: string): Promise<ScanResult> {
           valueUsd,
           platform: 'wallet',
           category: 'token',
+          ref: d.address,
+          pool: poolOf(element),
         });
       }
     } else {
@@ -371,6 +380,8 @@ export async function scanSol(address: string): Promise<ScanResult> {
         borrowApy: borrowApyOf(element),
         range: RANGED_POOLS.test(element.name || '') ? rangeFromLegs(tokens) : null,
         tokens,
+        ref: refOf(element),
+        pool: poolOf(element),
       });
     }
   }
@@ -386,6 +397,7 @@ export async function scanSol(address: string): Promise<ScanResult> {
         valueUsd: pool.usd,
         platform: 'gmtrade',
         category: 'defi',
+        ref: pool.mint,
       });
     } else {
       unpriced.push(`GM pool ${pool.name}`);
@@ -552,6 +564,7 @@ function splitMeteoraByPool(
       valueUsd,
       platform: 'meteora',
       category: 'defi',
+      pool: pool.poolAddress,
       range: pool.inRange ? 'in' : 'out',
       // Jupiter's own per-leg split is gone once it merges them, so these halves
       // are nominal — enrich re-attaches the real band from Meteora.

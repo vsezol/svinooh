@@ -17,6 +17,7 @@ import {
   LendDeposits,
   type BuildDeposit,
   type LookUpLanding,
+  type ReadEffects,
   type ReadHoldings,
 } from './application/deposits';
 import {
@@ -32,6 +33,7 @@ import type { ListingPolicy } from './domain/catalog';
 import {
   buildersWith,
   coinsWith,
+  effectsWith,
   holdingsWith,
   liquidityPositionsWith,
   liquidityWith,
@@ -57,6 +59,7 @@ export interface Built {
   clock?: Clock;
   builders?: Record<string, BuildDeposit>;
   landings?: Record<string, LookUpLanding>;
+  effects?: Record<string, ReadEffects>;
   holdings?: Record<string, ReadHoldings>;
   positions?: Record<string, ReadPositions>;
   withdrawals?: Record<string, BuildWithdrawal>;
@@ -115,6 +118,7 @@ function providersFor(built: Built) {
           built.builders ?? buildersWith(settings.solanaRpcUrl),
           built.landings ?? landingsWith(settings.solanaRpcUrl),
           built.holdings ?? holdingsWith(settings.solanaRpcUrl),
+          built.effects ?? effectsWith(settings.solanaRpcUrl),
         ),
       inject: [LendQueries, SETTINGS],
     },

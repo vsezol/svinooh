@@ -666,6 +666,7 @@ export interface ScanPosition {
    * the same pool, which the pair alone cannot distinguish. See PoolFact.ref.
    */
   ref?: string | null;
+  pool?: string | null;
   /**
    * The network this sits on, as the source names it: `eth`, `arb`, `base`,
    * `op`, `sol`, `tron`, `btc`.

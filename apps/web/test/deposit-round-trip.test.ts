@@ -501,3 +501,36 @@ describe('LiquidityForAPair', () => {
     assert.equal(fake.handed.length, 3);
   });
 });
+
+describe('ThePageHearsOfEachStepThatLanded', () => {
+  const heard = async (how: Server, request: DepositRequest = REQUEST) => {
+    serving(how);
+    let times = 0;
+    await runDeposit({
+      request,
+      wallet: depositWallet(fakeWallet().wallet),
+      onLanded: () => {
+        times += 1;
+      },
+      wait: async () => {},
+    });
+    return times;
+  };
+
+  test('each step of several, as it lands, not only the last', async () => {
+    const times = await heard(
+      {
+        steps: [
+          { poolId: 'sol:kamino:vault:ALLEZ', amount: '5.103185', payWith: 'USDS', holding: 'USDS' },
+          { poolId: 'sol:kamino:vault:ALLEZ', amount: '5.09', holding: 'USDC' },
+        ],
+      },
+      { ...REQUEST, action: 'move', amount: 'all', fromPoolId: 'sol:kamino:vault:KEEL' },
+    );
+    assert.equal(times, 3);
+  });
+
+  test('and nothing of one the network refused', async () => {
+    assert.equal(await heard({ status: 'failed' }), 0);
+  });
+});

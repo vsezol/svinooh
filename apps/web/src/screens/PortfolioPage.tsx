@@ -10,7 +10,6 @@ import { AccountMenu } from '../components/AccountMenu';
 import type { AgentControl, ConversationRef } from '../components/agent/AgentEmbed';
 import { DepositDialog } from '../components/agent/DepositDialog';
 import { useDeposits } from '../components/agent/useDeposits';
-import type { DepositRequest } from '../lib/deposit';
 import { AnimatedUsd } from '../components/AnimatedUsd';
 import { AlertSettings } from '../components/AlertSettings';
 import { AreaChart } from '../components/AreaChart';
@@ -261,16 +260,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
    */
   const [conversations, setConversations] = useState<ConversationRef[]>([]);
   const agent = useRef<AgentControl | null>(null);
-  const { onDeposit: askToDeposit, asked: askedToDeposit } = useDeposits();
-  // Money that reached the protocol is money this page is now wrong about.
-  const onDeposit = useCallback(
-    async (request: DepositRequest) => {
-      const outcome = await askToDeposit(request);
-      if (outcome.ok && outcome.landed === 'landed' && outcome.tracked) chase();
-      return outcome;
-    },
-    [askToDeposit, chase],
-  );
+  const { onDeposit, asked: askedToDeposit } = useDeposits(chase);
   const [scope, setScope] = useState<string>('all');
   const [period, setPeriod] = useState<HistoryRange>('24h');
   /** Whether pointing at a moment on one chart reads it on the others — see ChartSettings */
@@ -1078,7 +1068,11 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
         />
       ) : null}
       {askedToDeposit ? (
-        <DepositDialog request={askedToDeposit.request} settle={askedToDeposit.settle} />
+        <DepositDialog
+          request={askedToDeposit.request}
+          settle={askedToDeposit.settle}
+          onLanded={askedToDeposit.onLanded}
+        />
       ) : null}
     </div>
   );

@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import { Decimal } from 'decimal.js';
 import type { FindCoin } from '../application/coins';
 import type { Coin } from '../domain/move';
 
@@ -31,6 +32,12 @@ interface Listed {
   tokenProgram?: string;
   isVerified?: boolean;
   liquidity?: number;
+  usdPrice?: number;
+}
+
+export interface Listing {
+  symbol: string;
+  priceUsd: Decimal | null;
 }
 
 const known = new Map<string, { at: number; listed: Listed }>();
@@ -60,6 +67,21 @@ export const coinsVia =
     if (listed.length) return coinOf(deepest(listed));
     return held.length ? coinOf(deepest(held)) : null;
   };
+
+export async function listingsOf(mints: string[]): Promise<Map<string, Listing>> {
+  const asked = [...new Set(mints)];
+  const listings = new Map<string, Listing>();
+  for (let at = 0; at < asked.length; at += CHUNK) {
+    for (const listed of await directory(asked.slice(at, at + CHUNK).join(','))) {
+      known.set(listed.id, { at: Date.now(), listed });
+      listings.set(listed.id, {
+        symbol: listed.symbol || `${listed.id.slice(0, 4)}…`,
+        priceUsd: typeof listed.usdPrice === 'number' ? new Decimal(listed.usdPrice) : null,
+      });
+    }
+  }
+  return listings;
+}
 
 async function byMint(rpcUrl: string, mint: string): Promise<Coin | null> {
   const [listed] = await described([mint]);

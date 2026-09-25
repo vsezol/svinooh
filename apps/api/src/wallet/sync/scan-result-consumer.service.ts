@@ -11,6 +11,7 @@ import {
 import { PrismaService } from '@svinooh/db';
 import type { ScanResult } from '@svinooh/shared';
 import { config } from '../../config';
+import { LandingOverlay } from './landing-overlay';
 import { SyncService } from './sync.service';
 
 /**
@@ -37,6 +38,7 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
     private readonly prisma: PrismaService,
     private readonly sync: SyncService,
     private readonly metrics: MetricsService,
+    private readonly overlay: LandingOverlay,
   ) {}
 
   onApplicationBootstrap() {
@@ -80,7 +82,7 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
       return;
     }
 
-    const verdict = this.judge(key, outcome, wallet);
+    const verdict = this.judge(key, this.overLanding(wallet, outcome), wallet);
     if (!verdict.believe) {
       // Our own decision, not a broken source: leave the wallet's value exactly
       // as it was — status and all — so the page keeps showing the last good
@@ -96,6 +98,17 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
     await this.sync.applyResult(wallet, verdict.believe);
     this.metrics.scans.inc({ chain: outcome.chain, result: 'ok' });
     this.metrics.scanChecks.inc({ tier, result: 'ok' });
+  }
+
+  private overLanding(
+    wallet: Wallet,
+    outcome: Extract<ScanOutcome, { ok: true }>,
+  ): Extract<ScanOutcome, { ok: true }> {
+    return {
+      ...outcome,
+      result: this.overlay.over(wallet.id, outcome.result),
+      recheck: outcome.recheck ? this.overlay.over(wallet.id, outcome.recheck) : outcome.recheck,
+    };
   }
 
   /**

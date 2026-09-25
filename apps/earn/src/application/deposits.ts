@@ -7,6 +7,7 @@ import {
   type Deposit,
   type Landing,
 } from '../domain/deposit';
+import type { Effects } from '../domain/effects';
 import type { Pool, Token } from '../domain/pool';
 import { AmountBelowMinimum, DepositNotSupported, NotEnoughHeld } from './errors';
 import type { LendQueries } from './queries';
@@ -53,6 +54,8 @@ export type BuildDeposit = (deposit: Deposit) => Promise<BuiltTransaction>;
 
 export type LookUpLanding = (signature: string) => Promise<Landing>;
 
+export type ReadEffects = (signature: string, owner: string, pools: Pool[]) => Promise<Effects | null>;
+
 /** What the owner holds of a token, or null when nobody could look. */
 export type ReadHoldings = (owner: string, token: Token) => Promise<Decimal | null>;
 
@@ -69,6 +72,7 @@ export class LendDeposits {
     private readonly builders: Record<string, BuildDeposit>,
     private readonly landings: Record<string, LookUpLanding> = {},
     private readonly holdings: Record<string, ReadHoldings> = {},
+    private readonly effects: Record<string, ReadEffects> = {},
   ) {}
 
   landing(network: string, signature: string): Promise<Landing> {
@@ -77,6 +81,16 @@ export class LendDeposits {
       throw new DepositNotSupported(`${network} deposits are not followed here yet`);
     }
     return lookUp(signature);
+  }
+
+  async after(network: string, signature: string, owner: string): Promise<Effects | null> {
+    const read = this.effects[network];
+    if (!read) {
+      throw new DepositNotSupported(`what ${network} transactions leave behind is not read here yet`);
+    }
+    const landing = await this.landing(network, signature);
+    if (landing.status !== 'landed') return null;
+    return read(signature, owner, this.queries.onNetwork(network).pools);
   }
 
   async build(poolId: string, amount: Decimal, owner: string): Promise<DepositAnswer> {

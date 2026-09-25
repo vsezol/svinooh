@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { RabbitService, SCAN_MAX_PRIORITY, scanQueueName, type ScanJob } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import type { Chain } from '@svinooh/shared';
+import { LandingOverlay, type WalletAfterLanding } from './sync/landing-overlay';
 import { SyncService } from './sync/sync.service';
+
+export type { WalletAfterLanding } from './sync/landing-overlay';
 
 /**
  * "Scan this one now" — the whole of what the rest of the api may ask of the
@@ -30,6 +33,7 @@ export class ScanRequests {
     private readonly prisma: PrismaService,
     private readonly rabbit: RabbitService,
     private readonly sync: SyncService,
+    private readonly overlay: LandingOverlay,
   ) {}
 
   /** Fire and forget: the caller has an HTTP response to return */
@@ -70,7 +74,8 @@ export class ScanRequests {
    * reading comes through indexers that can trail the chain by seconds, and a
    * first read that beats them is a read of the old wallet.
    */
-  landed(walletId: string): void {
+  landed(walletId: string, left: WalletAfterLanding | null = null): void {
+    if (left) this.overlay.hold(walletId, left);
     this.recheck(walletId);
     for (const after of CATCHING_UP_MS) setTimeout(() => this.recheck(walletId), after).unref();
   }
