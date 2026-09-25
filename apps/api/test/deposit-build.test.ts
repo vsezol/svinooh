@@ -194,6 +194,31 @@ describe('WhatALiquidityCardAsksEarnToBuild', () => {
     ]);
   });
 
+  test('placing straight out of a lending pool names the pool it comes out of', async () => {
+    const { asked, controller } = building();
+    await controller.build({
+      poolId: PAIR,
+      amount: 'all',
+      fromPoolId: 'sol:kamino:vault:9E69U4GzWhryRaPe8DYpco6Z9vTZY6gg8w6W2QsBACEj',
+      owner: OWNER,
+      action: 'provide',
+      belowPct: '5',
+      abovePct: '5',
+    });
+    assert.deepEqual(asked, [
+      {
+        path: `/v1/liquidity/pools/${PAIR}/provide`,
+        body: {
+          owner: OWNER,
+          from: 'sol:kamino:vault:9E69U4GzWhryRaPe8DYpco6Z9vTZY6gg8w6W2QsBACEj',
+          amount: 'all',
+          below_pct: '5',
+          above_pct: '5',
+        },
+      },
+    ]);
+  });
+
   test('the step after a swap places both tokens', async () => {
     const { asked, controller } = building();
     await controller.build({

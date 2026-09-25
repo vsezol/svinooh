@@ -20,10 +20,13 @@ const REQUEST: DepositRequest = {
 };
 
 interface Step {
+  action?: 'provide';
   poolId?: string;
   amount: string;
   payWith?: string;
   receiveAs?: string;
+  belowPct?: string;
+  abovePct?: string;
   holding: string;
 }
 
@@ -499,5 +502,60 @@ describe('LiquidityForAPair', () => {
     );
     assert.equal((builds(asked)[1] as { position: string }).position, POSITION);
     assert.equal(fake.handed.length, 3);
+  });
+});
+
+describe('LiquidityOutOfALendingPool', () => {
+  test('out of the pool, then the position, from one button, the coin carried between', async () => {
+    const asked = serving({
+      steps: [
+        {
+          action: 'provide',
+          poolId: 'sol:meteora:dlmm:BVRbyL',
+          amount: '11.998998',
+          payWith: 'EPjF',
+          belowPct: '5',
+          abovePct: '5',
+          holding: 'USDC',
+        },
+      ],
+    });
+    const fake = fakeWallet();
+    const finished = await runDeposit({
+      request: {
+        ...REQUEST,
+        action: 'provide',
+        poolId: 'sol:meteora:dlmm:BVRbyL',
+        amount: 'all',
+        fromPoolId: 'sol:kamino:vault:PRIME',
+        belowPct: '5',
+        abovePct: '5',
+      },
+      wallet: depositWallet(fake.wallet),
+      wait: async () => {},
+    });
+    const builds = asked.filter((one) => one.path.endsWith('/deposits/build')).map((one) => one.body);
+    assert.deepEqual(builds, [
+      {
+        poolId: 'sol:meteora:dlmm:BVRbyL',
+        amount: 'all',
+        owner: OWNER,
+        action: 'provide',
+        fromPoolId: 'sol:kamino:vault:PRIME',
+        belowPct: '5',
+        abovePct: '5',
+      },
+      {
+        poolId: 'sol:meteora:dlmm:BVRbyL',
+        amount: '11.998998',
+        owner: OWNER,
+        action: 'provide',
+        payWith: 'EPjF',
+        belowPct: '5',
+        abovePct: '5',
+      },
+    ]);
+    assert.equal(fake.handed.length, 2);
+    assert.ok('done' in finished && finished.done.ok && finished.done.landed === 'landed');
   });
 });

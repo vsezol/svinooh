@@ -209,10 +209,13 @@ LIQUIDITY = (
     "percent under and over, and say they can type their own. With both in hand, "
     "read the pools of the pair for that range and name one it fits in, saying why "
     "that one: a higher fee rate comes from more "
-    "trading or from less money in the pool, and less money is more risk. They pay "
+    "trading or from less money in the pool, and less money is more risk — and prepare "
+    "it in that same turn, without asking again. They pay "
     "with one of the pool's two tokens; say that part of it is swapped into the "
     "other so both sides fill, and that opening a position locks about 0.057 SOL of "
-    "rent, returned when it closes."
+    "rent, returned when it closes. Money they have in one of their pools goes in "
+    "straight from there: the same card takes it out and places it, from one button, so "
+    "never a withdrawal card first and never an instruction to take it out themselves."
 )
 
 PLACED = (
@@ -270,13 +273,26 @@ SETTLED = (
     "reached their wallet at all — nothing was signed and nothing was spent. "
     "Where it did not go through, give the reason in words somebody who does "
     "not read chain errors would understand, and say what would make it work "
-    "when the reason says so: a figure in the reason is the figure to give them. "
+    "when the reason says so: a figure in the reason is the figure to give them."
+)
+
+SETTLED_ONLY = (
     "Say nothing about rates, pools or amounts beyond what is written here, and "
     "do not offer something new in the same breath as a failure."
 )
 
+GOING_ON = (
+    "Then look back over this conversation. If they agreed to more than what just landed — "
+    "money that was to go on somewhere once it arrived, or a step that did not happen — "
+    "prepare that next step now, the way it was agreed, from what they hold now: they should "
+    "never have to ask for it again. Where it was all of it, it is all of what arrived. If "
+    "nothing was left to do, prepare nothing and say it is done. Nothing is ready to sign "
+    "unless a tool said so in this turn, so never say a card or a button is waiting when none "
+    "was prepared."
+)
 
-def settled_prompt(system: str, settled: Settled) -> str:
+
+def settled_prompt(system: str, settled: Settled, going_on: bool = False) -> str:
     how_much = "all of it" if settled.amount == "all" else f"{settled.amount} {settled.token}"
     outcome = _halfway(settled) if settled.halfway else _OUTCOMES[settled.status]
     lines = [
@@ -286,7 +302,21 @@ def settled_prompt(system: str, settled: Settled) -> str:
     ]
     if settled.error:
         lines.append(f"- why: {settled.error}")
-    return f"{system}\n\n{SETTLED}\n" + "\n".join(lines)
+    after = GOING_ON if going_on else SETTLED_ONLY
+    return f"{system}\n\n{SETTLED}\n" + "\n".join(lines) + f"\n\n{after}"
+
+
+def going_on_prompt(
+    system: str, settled: Settled, idle: str = "", held: str = "", placed: str = ""
+) -> str:
+    prompt = f"{settled_prompt(system, settled, going_on=True)}\n\n{LIQUIDITY}"
+    if idle:
+        prompt = f"{prompt}\n\n{HOLDING}\n{idle}"
+    if held:
+        prompt = f"{prompt}\n\n{IN_POOLS}\n{held}"
+    if placed:
+        prompt = f"{prompt}\n\n{PLACED}\n{placed}"
+    return prompt
 
 
 def _swapped(settled: Settled) -> str:
@@ -294,7 +324,10 @@ def _swapped(settled: Settled) -> str:
 
 
 _WHAT = {
-    "provide": lambda settled: f"liquidity placed in {settled.pool}",
+    "provide": lambda settled: (
+        f"liquidity placed in {settled.pool}"
+        + (f", out of {settled.from_pool}" if settled.from_pool else "")
+    ),
     "close": lambda settled: (
         f"their {settled.pool} position closed, both tokens and its fees back to their wallet"
     ),

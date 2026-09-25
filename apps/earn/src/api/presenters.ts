@@ -1,4 +1,5 @@
 import { Decimal } from 'decimal.js';
+import type { Holding } from '../application/coins';
 import type { BuiltTransaction, Then } from '../application/deposits';
 import type { PoolFit } from '../application/liquidity';
 import type { Landing } from '../domain/deposit';
@@ -184,6 +185,16 @@ export function landing(seen: Landing) {
     status: seen.status,
     slot: seen.slot,
     error: seen.error,
+  };
+}
+
+export function holding(found: Holding) {
+  return {
+    coin: coin(found.coin),
+    amount:
+      found.amount === null
+        ? null
+        : found.amount.toDecimalPlaces(found.coin.decimals, Decimal.ROUND_DOWN).toFixed(),
   };
 }
 

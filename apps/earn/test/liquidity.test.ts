@@ -12,7 +12,7 @@ import {
   NotEnoughHeld,
   PoolNotFound,
 } from '../src/application/errors';
-import { LendLiquidity, type LiquidityBuilders } from '../src/application/liquidity';
+import { LendLiquidity, type Lending, type LiquidityBuilders } from '../src/application/liquidity';
 import {
   balance,
   evenRange,
@@ -140,7 +140,25 @@ describe('WhichPoolsPairTwoTokens', () => {
   });
 });
 
-const lending = (over: { pools?: PairPool[]; held?: Record<string, string | null> } = {}) => {
+const USDS = 'USDSwr9ApdHk5bvJKMjzff41FfuX8bSxdKcR81vTwcA';
+
+const PRIME = 'sol:kamino:vault:9E69U4GzWhryRaPe8DYpco6Z9vTZY6gg8w6W2QsBACEj';
+
+const outOf = (paysOut: { symbol: string; mint: string } = { symbol: 'USDC', mint: USDC }) => {
+  const taken: Array<{ from: string; take: string; owner: string }> = [];
+  const lent: Lending = {
+    tokenOf: () => ({ name: 'USDC Prime', token: { ...paysOut, decimals: 6 } }),
+    takeOut: async (from, take, owner) => {
+      taken.push({ from, take: String(take), owner });
+      return { built: BUILT, arrived: new Decimal('11.9989984') };
+    },
+  };
+  return { lent, taken };
+};
+
+const lending = (
+  over: { pools?: PairPool[]; held?: Record<string, string | null>; lent?: Lending } = {},
+) => {
   const provided: Provide[] = [];
   const closed: Close[] = [];
   const rebalanced: Rebalance[] = [];
@@ -162,6 +180,7 @@ const lending = (over: { pools?: PairPool[]; held?: Record<string, string | null
         return figure === undefined ? new Decimal(0) : figure === null ? null : new Decimal(figure);
       },
     },
+    over.lent ?? null,
   );
   return { liquidity, provided, closed, rebalanced };
 };
@@ -252,6 +271,35 @@ describe('PlacingLiquidity', () => {
     assert.deepEqual(provided, []);
   });
 
+  test('money in a lending pool comes out first, and what arrived is what is placed after', async () => {
+    const { lent, taken } = outOf();
+    const { liquidity, provided } = lending({ lent });
+    const built = await liquidity.provide(id, OWNER, { from: PRIME, amount: 'all' }, range('0.103', '0.055'));
+    assert.deepEqual(taken, [{ from: PRIME, take: 'all', owner: OWNER }]);
+    assert.equal(built.transaction, BUILT.transaction);
+    assert.deepEqual(built.then, {
+      action: 'provide',
+      poolId: id,
+      amount: '11.998998',
+      payWith: USDC,
+      belowPct: '10.3',
+      abovePct: '5.5',
+      holding: 'USDC',
+    });
+    assert.deepEqual(provided, [], 'the position is built only once the money is in the wallet');
+  });
+
+  test('a lending pool paying out a token the pair does not take is refused before anything comes out', async () => {
+    const { lent, taken } = outOf({ symbol: 'USDS', mint: USDS });
+    const { liquidity } = lending({ lent });
+    const failure = await refused(() =>
+      liquidity.provide(id, OWNER, { from: PRIME, amount: 'all' }, range('0.1', '0.1')),
+    );
+    assert.ok(failure instanceof DepositNotSupported);
+    assert.match(failure.message, /USDC Prime pays out USDS, and SOL-USDC takes SOL and USDC/);
+    assert.deepEqual(taken, []);
+  });
+
   test('closing and rebalancing go to the pool\'s builder with the position and whose it is', async () => {
     const { liquidity, closed, rebalanced } = lending();
     await liquidity.close(id, POSITION, OWNER);
@@ -266,6 +314,7 @@ describe('TheLiquidityEndpoints', () => {
   let app: INestApplication;
   let base = '';
   const provided: Provide[] = [];
+  const takenOut: string[] = [];
   const pool = pairPool();
 
   before(async () => {
@@ -291,6 +340,16 @@ describe('TheLiquidityEndpoints', () => {
           ],
         },
         holdings: { sol: async () => new Decimal('100') },
+        positions: {
+          sol: async (_owner, pools) =>
+            pools.map((one) => ({ pool: one, shares: new Decimal('11.5'), amount: new Decimal('12') })),
+        },
+        takeOuts: {
+          'sol:kamino': async (withdrawal) => (
+            takenOut.push(withdrawal.pool.id.address),
+            { built: BUILT, arrived: new Decimal('11.998998') }
+          ),
+        },
         liquidity: {
           'sol:meteora': {
             provide: async (provide) => (
@@ -386,6 +445,28 @@ describe('TheLiquidityEndpoints', () => {
       holding: 'SOL and USDC',
     });
     assert.equal(provided.at(-1)?.amountY.toString(), '5');
+  });
+
+  test('placing straight out of a lending pool takes the money out first', async () => {
+    const lent = 'sol:kamino:vault:CwptesNGAXj8S3aRsFHtUomb5zqAA1tMJBYkQVLJjXmd';
+    const { status, body } = await ask('POST', `/v1/liquidity/pools/${pairIdOf(pool.id)}/provide`, {
+      owner: OWNER,
+      from: lent,
+      amount: 'all',
+      below_pct: '5',
+      above_pct: '5',
+    });
+    assert.equal(status, 200);
+    assert.deepEqual(takenOut, ['CwptesNGAXj8S3aRsFHtUomb5zqAA1tMJBYkQVLJjXmd']);
+    assert.deepEqual(body.data.then, {
+      action: 'provide',
+      pool_id: 'sol:meteora:dlmm:CgqwPL',
+      amount: '11.998998',
+      pay_with: USDC,
+      below_pct: '5',
+      above_pct: '5',
+      holding: 'USDC',
+    });
   });
 
   test('placing needs a range', async () => {

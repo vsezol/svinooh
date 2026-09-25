@@ -113,6 +113,7 @@ class Catalog:
         self.owners: list[str] = []
         self.coins: dict[str, Coin] = {}
         self.coins_asked: list[tuple[str, tuple[str, ...]]] = []
+        self.wallet: dict[str, Decimal] = {}
         self.terms = DepositTerms(
             program_id="KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD",
             address="AAAvaultAAA",
@@ -154,6 +155,9 @@ class Catalog:
 
     async def liquidity_positions(self, owner: str) -> tuple[LiquidityPosition, ...]:
         return self.placed
+
+    async def held_now(self, owner: str, coin: str) -> Decimal | None:
+        return self.wallet.get(coin)
 
 
 class NoHost:

@@ -37,6 +37,8 @@ class YieldCatalog(Protocol):
 
     async def liquidity_positions(self, owner: str) -> tuple[LiquidityPosition, ...]: ...
 
+    async def held_now(self, owner: str, coin: str) -> Decimal | None: ...
+
 
 class EarnApiSource:
     def __init__(self, base_url: str, client: httpx.AsyncClient) -> None:
@@ -104,6 +106,17 @@ class EarnApiSource:
             return None
         response.raise_for_status()
         return _CoinAnswer.model_validate(response.json()).domain()
+
+    async def held_now(self, owner: str, coin: str) -> Decimal | None:
+        response = await self._client.get(
+            f"{self._base}/v1/lend/holdings",
+            params={"network": "sol", "q": coin, "owner": owner},
+        )
+        if response.status_code in (404, 422):
+            return None
+        response.raise_for_status()
+        amount = _HoldingAnswer.model_validate(response.json()).data.amount
+        return None if amount is None else _number(amount)
 
 
 def _number(raw: str | None) -> Decimal:
@@ -244,6 +257,14 @@ class _CoinAnswer(_WirePart):
 
     def domain(self) -> Coin:
         return Coin(symbol=self.data.symbol, mint=self.data.mint, decimals=self.data.decimals)
+
+
+class _WireHolding(_WirePart):
+    amount: str | None
+
+
+class _HoldingAnswer(_WirePart):
+    data: _WireHolding
 
 
 class _WirePairToken(_WirePart):

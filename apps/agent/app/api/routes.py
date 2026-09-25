@@ -163,6 +163,9 @@ def _liquidity_card(card: Placement) -> DepositBlock:
     if held is not None:
         shown = f"${held.value_usd:.2f}"
     amount = f"{card.amount:f}" if card.amount is not None else "all"
+    source = card.source
+    if card.everything:
+        shown, amount = amount, "all"
     return DepositBlock(
         action=card.action,
         pool_id=pool.id,
@@ -177,6 +180,10 @@ def _liquidity_card(card: Placement) -> DepositBlock:
         risk=pool.risk,
         url=pool.url,
         pay_with=_coin(card.pay_with),
+        from_pool_id=source.id if source else None,
+        from_pool=source.name if source else None,
+        from_apy=_rate(source.apy_net) if source else None,
+        from_token=source.token if source else None,
         below_pct=f"{below:f}" if below is not None else None,
         above_pct=f"{above:f}" if above is not None else None,
         lower_price=lower if above is not None else None,

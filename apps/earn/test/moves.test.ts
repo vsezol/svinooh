@@ -451,6 +451,19 @@ describe('TheEndpointsForTakingMoneyOut', () => {
     assert.equal(body.data.program, 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb', 'the program its pool keeps it with');
   });
 
+  test('what a wallet holds of a coin right now, read from the chain', async () => {
+    const { status, body } = await ask('GET', `/v1/lend/holdings?network=sol&q=pyusd&owner=${OWNER}`);
+    assert.equal(status, 200);
+    assert.equal(body.data.coin.mint, PYUSD);
+    assert.equal(body.data.amount, '100');
+  });
+
+  test('whose wallet has to be said to read it', async () => {
+    const { status, body } = await ask('GET', '/v1/lend/holdings?network=sol&q=pyusd');
+    assert.equal(status, 422);
+    assert.match(body.detail, /^owner:/);
+  });
+
   test('a coin nobody trades is a 404 that says so', async () => {
     const { status, body } = await ask('GET', `/v1/lend/coins?network=sol&q=NOPE&owner=${OWNER}`);
     assert.equal(status, 404);

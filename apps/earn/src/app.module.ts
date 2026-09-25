@@ -22,6 +22,7 @@ import {
 import {
   LendMoves,
   type BuildMove,
+  type BuildTakeOut,
   type BuildWithdrawal,
   type ReadPositions,
 } from './application/moves';
@@ -40,6 +41,7 @@ import {
   landingsWith,
   movesWith,
   positionsWith,
+  takeOutsWith,
   withdrawalsWith,
 } from './infrastructure/builders';
 import { JsonApi } from './infrastructure/http';
@@ -61,6 +63,7 @@ export interface Built {
   positions?: Record<string, ReadPositions>;
   withdrawals?: Record<string, BuildWithdrawal>;
   moves?: Record<string, BuildMove>;
+  takeOuts?: Record<string, BuildTakeOut>;
   coins?: Record<string, FindCoin>;
   pairPools?: Record<string, ReadPairPools>;
   pairPool?: Record<string, ReadPairPool>;
@@ -121,7 +124,11 @@ function providersFor(built: Built) {
     {
       provide: LendCoins,
       useFactory: (queries: LendQueries, settings: Settings) =>
-        new LendCoins(queries, built.coins ?? coinsWith(settings.solanaRpcUrl)),
+        new LendCoins(
+          queries,
+          built.coins ?? coinsWith(settings.solanaRpcUrl),
+          built.holdings ?? holdingsWith(settings.solanaRpcUrl),
+        ),
       inject: [LendQueries, SETTINGS],
     },
     {
@@ -134,12 +141,13 @@ function providersFor(built: Built) {
           built.moves ?? movesWith(settings.solanaRpcUrl),
           coins,
           built.holdings ?? holdingsWith(settings.solanaRpcUrl),
+          built.takeOuts ?? takeOutsWith(settings.solanaRpcUrl),
         ),
       inject: [LendQueries, LendCoins, SETTINGS],
     },
     {
       provide: LendLiquidity,
-      useFactory: (settings: Settings) =>
+      useFactory: (settings: Settings, moves: LendMoves) =>
         new LendLiquidity(
           built.pairPools ?? pairPoolsWith(),
           built.pairPool ?? pairPoolWith(),
@@ -147,8 +155,9 @@ function providersFor(built: Built) {
           settings.minTvlUsd,
           built.liquidity ?? liquidityWith(settings.solanaRpcUrl),
           built.holdings ?? holdingsWith(settings.solanaRpcUrl),
+          moves,
         ),
-      inject: [SETTINGS],
+      inject: [SETTINGS, LendMoves],
     },
     {
       provide: SOURCES,

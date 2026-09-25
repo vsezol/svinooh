@@ -829,6 +829,23 @@ class TestMovingMoney:
         assert "swapped from USDC to JitoSOL" in said and "sign more than once" in said
         assert "12.001555 USDC out of USDC Prime" in said, "the amount is in the token it leaves"
 
+    async def test_into_a_pair_pool_it_says_to_place_it_from_the_pool_instead(self):
+        out, model = await moving(
+            in_pools(TWELVE_IN_PRIME),
+            {
+                "name": "propose_move",
+                "args": {
+                    "from_pool_id": PRIME.id,
+                    "to_pool_id": "sol:meteora:dlmm:BVRbyLjjfSBcoyiYFuxbgKYnWuiFaF9CSXEa5vdSZ9Hh",
+                },
+                "id": "m1",
+            },
+        )
+        assert out["deposits"] == ()
+        said = str(model.seen[-1].content)
+        assert "a pool for liquidity, not for lending" in said
+        assert f"from_pool_id {PRIME.id}" in said
+
     async def test_into_the_pool_it_is_already_in_prepares_nothing(self):
         out, _ = await moving(
             in_pools(TWELVE_IN_PRIME),

@@ -65,10 +65,8 @@ function earnRequestFor(asked: Built): [string, Record<string, string | undefine
     above_pct: asked.abovePct,
   };
   if (action === 'provide') {
-    return [
-      `/v1/liquidity/pools/${pool}/provide`,
-      { owner, ...(payWith ? { coin: payWith, amount } : {}), ...liquidity },
-    ];
+    const spend = fromPoolId ? { from: fromPoolId, amount } : payWith ? { coin: payWith, amount } : {};
+    return [`/v1/liquidity/pools/${pool}/provide`, { owner, ...spend, ...liquidity }];
   }
   if (action === 'close' || action === 'rebalance') {
     const position = encodeURIComponent(asked.position ?? '');

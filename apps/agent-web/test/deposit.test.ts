@@ -299,6 +299,22 @@ describe('ALiquidityCard', () => {
     assert.deepEqual(request.payWith, { mint: 'EPjF', symbol: 'USDC' });
   });
 
+  test('out of a lending pool, it says where the money comes out of and hands that over', () => {
+    const fromPrime = {
+      ...lp,
+      amount: 'all',
+      shown: '12.008636',
+      fromPoolId: 'sol:kamino:vault:9E69',
+      fromPool: 'USDC Prime',
+      fromApy: '4.20%',
+    };
+    assert.equal(sizeOf(fromPrime), '12.008636 USDC → SOL-USDC');
+    assert.match(promiseOf(fromPrime), /^It comes out of USDC Prime first\./);
+    const request = requestOf(fromPrime);
+    assert.equal(request.fromPoolId, 'sol:kamino:vault:9E69');
+    assert.equal(request.amount, 'all');
+  });
+
   test('a rebalance names the position and what it holds', () => {
     const rebalance = {
       ...lp,

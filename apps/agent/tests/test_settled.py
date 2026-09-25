@@ -332,3 +332,69 @@ class TestLiquidityThatCameBack:
             },
         )
         assert "the rest is still in the position" in model.system
+
+
+class Saying:
+    """Answers each turn's calls in order, and keeps what it was shown and given."""
+
+    def __init__(self, *said: str):
+        self._said = list(said)
+        self.systems: list[str] = []
+        self.tools: list[str] = []
+
+    def bind_tools(self, tools):
+        self.tools = [one.name for one in tools]
+        return self
+
+    async def ainvoke(self, messages, **_kwargs):
+        self.systems.append(str(messages[0].content))
+        said = self._said.pop(0) if self._said else "done"
+
+        class Reply:
+            content = said
+            tool_calls: ClassVar[list] = []
+
+        return Reply()
+
+    async def astream(self, messages, **kwargs):
+        yield await self.ainvoke(messages, **kwargs)
+
+
+def came_back(settled: Settled) -> Ask:
+    return Ask(
+        question="a deposit came back from the network",
+        history=(turn("move it all into SOL-USDC, -5% / +5%", "the first step is ready"),),
+        settled=settled,
+    )
+
+
+class TestWhatComesAfterALanding:
+    async def test_a_landed_step_is_carried_on_with_what_was_agreed(self):
+        said = Saying("Your USDC is back in your wallet.")
+        await agent(model=said, intents=Watching()).run(came_back(SETTLED))
+        assert "prepare that next step now, the way it was agreed" in said.systems[0]
+        assert "propose_liquidity" in said.tools
+        assert "Recommend only" not in said.systems[0]
+
+    async def test_one_that_failed_is_only_told(self):
+        said = Saying("It did not go through.")
+        await agent(model=said, intents=Watching()).run(came_back(Settled(**FAILED)))
+        assert "prepare that next step now" not in said.systems[0]
+        assert "Say nothing about rates, pools or amounts" in said.systems[0]
+        assert said.tools == []
+
+    async def test_a_card_it_names_but_never_prepared_is_written_again_without_it(self):
+        said = Saying(
+            "The withdrawal went through. Now the deposit card is ready below.",
+            "The withdrawal went through: your USDC is back in your wallet.",
+        )
+        reply = await agent(model=said, intents=Watching()).run(came_back(SETTLED))
+        assert reply.answer == "The withdrawal went through: your USDC is back in your wallet."
+        assert "no card and no button is on their screen" in said.systems[-1]
+        assert reply.deposits == ()
+
+    async def test_an_answer_that_names_no_card_is_kept_as_it_is(self):
+        said = Saying("Your USDC is back in your wallet.", "never asked")
+        reply = await agent(model=said, intents=Watching()).run(came_back(SETTLED))
+        assert reply.answer == "Your USDC is back in your wallet."
+        assert len(said.systems) == 1
