@@ -8,6 +8,7 @@ import { useDepositWallets } from '../../lib/deposit/wallet';
 interface Asked {
   request: DepositRequest;
   settle: (outcome: DepositOutcome) => void;
+  onLanded?: () => void;
 }
 
 /**
@@ -16,7 +17,7 @@ interface Asked {
  * where there is nothing to pick the deposit goes straight to the wallet and
  * the card carries the waiting and whatever comes back.
  */
-export function useDeposits() {
+export function useDeposits(onLanded?: () => void) {
   const wallets = useDepositWallets();
   const [asked, setAsked] = useState<Asked | null>(null);
 
@@ -24,12 +25,13 @@ export function useDeposits() {
     async (request: DepositRequest): Promise<DepositOutcome> => {
       const [only] = wallets;
       if (wallets.length === 1) {
-        const run = await runDeposit({ request, wallet: only });
+        const run = await runDeposit({ request, wallet: only, onLanded });
         return 'failed' in run ? { ok: false, reason: run.failed, at: run.at } : run.done;
       }
       return new Promise<DepositOutcome>((resolve) => {
         setAsked({
           request,
+          onLanded,
           settle: (outcome) => {
             setAsked(null);
             resolve(outcome);
@@ -37,7 +39,7 @@ export function useDeposits() {
         });
       });
     },
-    [wallets],
+    [wallets, onLanded],
   );
 
   return { onDeposit, asked };

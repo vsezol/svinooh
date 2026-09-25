@@ -12,6 +12,7 @@ interface Asked {
   wallet: DepositWallet;
   onStage?: (stage: DepositStage) => void;
   onSent?: (signature: string) => void;
+  onLanded?: () => void;
   wait?: (ms: number) => Promise<void>;
 }
 
@@ -20,6 +21,7 @@ export async function runDeposit({
   wallet,
   onStage,
   onSent,
+  onLanded,
   wait,
 }: Asked): Promise<DepositRun> {
   let signer;
@@ -83,6 +85,7 @@ export async function runDeposit({
     const seen = await followDeposit(signature, signer!.address, request.network, wait).catch(
       () => null,
     );
+    if (seen?.status === 'landed' && seen.tracked) onLanded?.();
     return {
       ok: true,
       signature,

@@ -2,6 +2,7 @@ import { Decimal } from 'decimal.js';
 import type { BuiltTransaction, Then } from '../application/deposits';
 import type { PoolFit } from '../application/liquidity';
 import type { Landing } from '../domain/deposit';
+import type { Effects } from '../domain/effects';
 import type { Coin } from '../domain/move';
 import type { Catalog } from '../domain/catalog';
 import { feeApr, pairIdOf, type LiquidityPosition, type PairPool } from '../domain/liquidity';
@@ -184,6 +185,39 @@ export function landing(seen: Landing) {
     status: seen.status,
     slot: seen.slot,
     error: seen.error,
+  };
+}
+
+export function effects(found: Effects | null) {
+  if (!found) return null;
+  return {
+    slot: found.slot,
+    coins: found.coins.map((one) => ({
+      mint: one.mint,
+      symbol: one.symbol,
+      amount: one.amount.toFixed(),
+      price_usd: one.priceUsd === null ? null : price(one.priceUsd),
+    })),
+    vaults: found.vaults.map((one) => ({
+      pool_id: idOf(one.pool.id),
+      address: one.pool.deposit.address,
+      farm: one.pool.deposit.farm,
+      shares_mint: one.pool.deposit.sharesMint,
+      name: one.pool.name,
+      token: { symbol: one.pool.token.symbol, mint: one.pool.token.mint },
+      amount: one.amount.toDecimalPlaces(one.pool.token.decimals ?? 6, Decimal.ROUND_DOWN).toFixed(),
+      price_usd: one.priceUsd === null ? null : price(one.priceUsd),
+      apy: rate(net(one.pool.apy)),
+    })),
+    pairs: found.pairs.map((one) => ({
+      pool: pairPool(one.pool),
+      price_x_usd: price(one.priceX),
+      price_y_usd: price(one.priceY),
+      positions: one.positions.map((held) => {
+        const { pool, ...position } = liquidityPosition(held);
+        return position;
+      }),
+    })),
   };
 }
 
