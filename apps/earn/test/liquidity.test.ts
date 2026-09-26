@@ -250,6 +250,41 @@ describe('PoolsWorthOffering', () => {
     assert.deepEqual(near, [['CgqwPL', '0.01']]);
   });
 
+  test('only the deepest pools that hold the range are read near the price, one at a time', async () => {
+    const deep = ['A', 'B', 'C', 'D', 'E', 'F'].map((address, index) =>
+      pairPool({ address, tvlUsd: new Decimal(1_000_000 - index * 100_000), yUsd: new Decimal(1) }),
+    );
+    const read: string[] = [];
+    let reading = 0;
+    let most = 0;
+    const liquidity = new LendLiquidity(
+      { sol: async () => [...deep].reverse() },
+      { sol: async () => null },
+      { sol: async () => [] },
+      new Decimal('100000'),
+      {},
+      {},
+      null,
+      {
+        sol: async (address) => {
+          reading += 1;
+          most = Math.max(most, reading);
+          await new Promise((settle) => setImmediate(settle));
+          reading -= 1;
+          read.push(address);
+          return new Decimal('20000');
+        },
+      },
+    );
+    const fits = await liquidity.pools('sol', 'SOL', 'USDC', range('0.01', '0'), new Decimal('0.01'));
+    assert.deepEqual(read.sort(), ['A', 'B', 'C', 'D']);
+    assert.equal(most, 1, 'a node asked many things at once refuses some of them');
+    assert.deepEqual(
+      fits.filter((fit) => fit.activeUsd === null).map((fit) => fit.pool.id.address),
+      ['F', 'E'],
+    );
+  });
+
   test('a pool is found by its id, and an id that is not one is not found', async () => {
     const { liquidity } = lending();
     assert.equal((await liquidity.pool('sol:meteora:dlmm:CgqwPL')).name, 'SOL-USDC');
