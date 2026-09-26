@@ -11,35 +11,23 @@ import type { ScanPosition, WalletPositionState } from '@svinooh/shared';
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f]/g;
 
-/**
- * A key that recognises this position on the next scan.
- *
- * `Position.id` cannot do it: every scan deletes the wallet's positions and
- * writes them again, so the ids are new each time and anything comparing them
- * would see a wallet where everything had been closed and reopened.
- *
- * What is stable is what the position is: the protocol, the kind of position,
- * the assets it is made of — and for concentrated liquidity, the band it was
- * opened at. The band matters because one wallet can hold two Uniswap V3
- * positions on the same pair, differing only in their price ranges: without
- * the band in the key they collide, the remembered state is whichever of them
- * was written last, and while one is in range and the other out, every scan
- * reads as a fresh crossing — an "entered range" message every five minutes,
- * and the real exit swallowed. A protocol that renames a position breaks the
- * key, and the position then reads as a new one — which re-baselines quietly
- * rather than announcing a change nobody made; re-ranging a position does the
- * same, which is honest, since it IS a new range.
- */
 export function positionKey(position: ScanPosition): string {
+  return [position.platform ?? '?', position.symbol, position.name ?? '', ...identityOf(position)]
+    .map((part) => part.replace(CONTROL, '').trim())
+    .join(':');
+}
+
+function identityOf(position: ScanPosition): string[] {
   const legs = (position.tokens ?? [])
     .filter((t) => t.role === 'supply' || t.role === 'borrow')
     .map((t) => t.symbol.trim().toUpperCase())
     .sort()
     .join('+');
-  const band = position.band ? `${position.band.lower}-${position.band.upper}` : '';
-  return [position.platform ?? '?', position.symbol, position.name ?? '', legs, band]
-    .map((part) => part.replace(CONTROL, '').trim())
-    .join(':');
+  if (position.range == null && position.band == null) return [legs, ''];
+  const ref = position.ref?.trim();
+  if (ref) return ['ref', ref];
+  if (position.band) return ['band', `${position.band.lower}-${position.band.upper}`];
+  return ['pool', position.pool?.trim() || position.note?.trim() || legs];
 }
 
 /**

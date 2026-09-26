@@ -62,7 +62,7 @@ function standing(band: PositionBand): string | null {
   if (!Number.isFinite(width) || width <= 0) return null;
   const at = (band.current - band.lower) / width;
   if (!Number.isFinite(at)) return null;
-  return at >= 1 ? `+${at.toFixed(2)}` : at.toFixed(2);
+  return at > 1 ? `+${at.toFixed(2)}` : at.toFixed(2);
 }
 
 /**
