@@ -23,7 +23,8 @@ CLASSIFIER_PROMPT = (
     "deposit, lend or earn, what rates are on offer, what to do with idle "
     "funds — and when they want money taken OUT of a pool or moved from one "
     "pool to another, and liquidity for a pair: providing it, its price range, "
-    "closing or rebalancing a liquidity position. `earn` wins even when they "
+    "closing or rebalancing a liquidity position — and when they want a coin "
+    "they hold swapped, exchanged or sold for another. `earn` wins even when they "
     "say 'my' — 'put my USDC to work' is asking where to put it, and 'move my "
     "USDC somewhere that pays "
     "more' is asking where to move it, not what it is worth. Label `general` for "
@@ -60,9 +61,9 @@ class IntentLabel(BaseModel):
     stance: Literal["asking", "placing"] = Field(
         description=(
             "What they want done with money, for `earn`. `placing` when they "
-            "tell you to put it somewhere, take it out or move it — 'put my "
+            "tell you to put it somewhere, take it out, move it or swap it — 'put my "
             "USDC to work', 'invest 500 for me', 'закинь', 'выведи', 'переложи "
-            "повыгоднее', 'do it', 'all of it' — and also when they only name "
+            "повыгоднее', 'свапни', 'do it', 'all of it' — and also when they only name "
             "an amount or a pool after you asked which. `asking` when they "
             "want to know what the options are or what a rate is. For "
             "`portfolio` and `general` say `asking`. Say one of the two words "

@@ -334,6 +334,31 @@ class TestLiquidityThatCameBack:
         assert "the rest is still in the position" in model.system
 
 
+class TestASwapThatCameBack:
+    SWAPPED: ClassVar[dict] = {
+        **LANDED,
+        "action": "swap",
+        "pool": "xBTC to USDC",
+        "amount": "all",
+        "token": "xBTC",
+        "into": "USDC",
+    }
+
+    async def test_a_swap_is_told_as_one(self, client, model):
+        await client.post("/chat", json={"message": "signed", "settled": self.SWAPPED})
+        assert "a swap of xBTC to USDC, in their own wallet" in model.system
+
+    async def test_a_swap_that_stopped_halfway_says_it_did_not_become_the_coin(self, client, model):
+        await client.post(
+            "/chat",
+            json={
+                "message": "signed",
+                "settled": {**self.SWAPPED, "halfway": True, "holding": "SOL"},
+            },
+        )
+        assert "in their wallet as SOL, and it did not become USDC" in model.system
+
+
 class TestHalfwayIsNotLanded:
     async def test_a_placement_that_stopped_after_its_swap_is_told_and_not_carried_on(
         self, client, model

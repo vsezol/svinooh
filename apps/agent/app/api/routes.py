@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from ..application.turns import Admitted, Answered, Question
 from ..container import Container
 from ..domain.asking import Choice
-from ..domain.earn import Card, Coin, Placement, Settled
+from ..domain.earn import Card, Coin, Placement, Settled, Swap
 from ..domain.identity import ANON_HEADER, Caller
 from ..observability import metrics
 from ..panel import NOTHING_DECIDED
@@ -130,6 +130,8 @@ def _choice_card(choice: Choice) -> ChoiceBlock:
 def _deposit_card(card: Card) -> DepositBlock:
     if isinstance(card, Placement):
         return _liquidity_card(card)
+    if isinstance(card, Swap):
+        return _swap_card(card)
     deposit = card
     pool, source = deposit.pool, deposit.source
     return DepositBlock(
@@ -191,6 +193,26 @@ def _liquidity_card(card: Placement) -> DepositBlock:
         price=_price(pool.price),
         position=held.address if held else None,
         strategy=card.strategy,
+    )
+
+
+def _swap_card(card: Swap) -> DepositBlock:
+    given, wanted = card.pay_with, card.receive_as
+    return DepositBlock(
+        action="swap",
+        pool_id="",
+        pool=f"{given.symbol} to {wanted.symbol}",
+        protocol="kamino",
+        pool_kind="swap",
+        network="sol",
+        token=given.symbol,
+        amount="all" if card.everything else f"{card.amount:f}",
+        shown=f"{card.amount:f}" if card.everything else None,
+        apy="",
+        risk="",
+        url="",
+        pay_with=_coin(given),
+        receive_as=_coin(wanted),
     )
 
 

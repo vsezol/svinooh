@@ -138,7 +138,7 @@ def earn_prompt(
         "plainly that a deposit goes into a third-party protocol — the money is "
         "at risk there, not with svinooh."
     )
-    rules = f"{rules}\n\n{PLACING if asked_to_place else ASKING}\n\n{LIQUIDITY}"
+    rules = f"{rules}\n\n{PLACING if asked_to_place else ASKING}\n\n{LIQUIDITY}\n\n{SWAPPING}"
     if lpdown:
         rules = f"{rules}\n\n{LPDOWN}"
     if idle:
@@ -228,6 +228,12 @@ LIQUIDITY = (
     "never a withdrawal card first and never an instruction to take it out themselves."
 )
 
+SWAPPING = (
+    "A swap of one coin they hold for another is neither a deposit nor liquidity: there is no "
+    "pool and no risk to choose. Once you know the two coins and how much — all of it unless "
+    "they said a figure — prepare it in that same turn, and say that it is a trade."
+)
+
 PLACED = (
     "Their liquidity positions, read just now, each with the address to act on it "
     "by. One that is out of range earns nothing until the price comes back or it is "
@@ -275,9 +281,9 @@ PLACING = (
 
 
 SETTLED = (
-    "Something they pressed the button for — a deposit, a withdrawal or a move "
-    "— has come back. Tell them what happened, in two sentences at most, and "
-    "tell them the truth: money moved only where the network confirmed it; one "
+    "Something they pressed a button for has come back. Tell them what happened, "
+    "in two sentences at most, and tell them the truth: money moved only where "
+    "the network confirmed it; one "
     "the network rejected moved nothing and cost them only the network fee; one "
     "that has not confirmed yet is not done; and one that was never built never "
     "reached their wallet at all — nothing was signed and nothing was spent. "
@@ -352,6 +358,9 @@ _WHAT = {
         f"a move out of {settled.from_pool or 'the pool it was in'} and into {settled.pool}"
         f"{_swapped(settled)}"
     ),
+    "swap": lambda settled: (
+        f"a swap of {settled.token} to {settled.into or 'another coin'}, in their own wallet"
+    ),
 }
 
 
@@ -372,6 +381,11 @@ def _halfway(settled: Settled) -> str:
         return (
             f"only the first part went through: the money is out of {settled.pool} and in "
             f"their wallet{waits}, but it was not swapped to {settled.into or 'the coin asked for'}"
+        )
+    if settled.action == "swap":
+        return (
+            f"only the first part went through: the money is in their wallet{waits}, and it did "
+            f"not become {settled.into or 'the coin asked for'}"
         )
     return (
         "only the first part went through: the money left where it was and is in their wallet "

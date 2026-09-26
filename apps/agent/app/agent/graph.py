@@ -17,7 +17,7 @@ from ..config import Config
 from ..domain import lpdown
 from ..domain.asking import Choice
 from ..domain.conversation import Turn
-from ..domain.earn import Card, Held, LiquidityPosition, Placement, Settled
+from ..domain.earn import Card, Held, LiquidityPosition, Placement, Settled, Swap
 from ..domain.portfolio import Portfolio
 from ..observability import metrics
 from ..ports import Ask, Failed, Finished, Progress, Reply, Strategies, Update
@@ -66,6 +66,7 @@ from .tools import (
     moving_tools,
     portfolio_tools,
     run_tools,
+    swap_tools,
 )
 
 logger = logging.getLogger("svinooh-ai")
@@ -88,12 +89,16 @@ def each_once(prepared: list[Card]) -> tuple[Card, ...]:
     """Every card the turn prepared, one per thing to sign: a later one for the same wins."""
     latest: dict[tuple[str, str, str | None], Card] = {}
     for card in prepared:
-        if isinstance(card, Placement):
-            which = card.position.address if card.position else None
-        else:
-            which = card.source.id if card.source else None
-        latest[(card.action, card.pool.id, which)] = card
+        latest[_which(card)] = card
     return tuple(latest.values())
+
+
+def _which(card: Card) -> tuple[str, str, str | None]:
+    if isinstance(card, Swap):
+        return (card.action, card.pay_with.mint, card.receive_as.mint)
+    if isinstance(card, Placement):
+        return (card.action, card.pool.id, card.position.address if card.position else None)
+    return (card.action, card.pool.id, card.source.id if card.source else None)
 
 
 @dataclass(frozen=True)
@@ -307,6 +312,7 @@ class LangGraphAgent:
             earn_tools(self._catalog)
             + deposit_tools(self._catalog, prepared, risk_known, holdings.owners)
             + moving_tools(self._catalog, holdings.held, prepared, risk_known, holdings.owners)
+            + swap_tools(self._catalog, prepared, holdings.owners)
             + liquidity_tools(
                 self._catalog,
                 holdings.placed,
