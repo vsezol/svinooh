@@ -17,7 +17,7 @@ from ..config import Config
 from ..domain import lpdown
 from ..domain.asking import Choice
 from ..domain.conversation import Turn
-from ..domain.earn import Card, Coin, Held, LiquidityPosition, PairPool, Placement, Settled
+from ..domain.earn import Card, Held, LiquidityPosition, Placement, Settled
 from ..domain.portfolio import Portfolio
 from ..observability import metrics
 from ..ports import Ask, Failed, Finished, Progress, Reply, Strategies, Update
@@ -50,7 +50,6 @@ from .prompts import (
     going_on_prompt,
     grounded_prompt,
     in_language,
-    lpdown_prompt,
     nothing_proposed_prompt,
     onboarding_prompt,
     settled_prompt,
@@ -59,11 +58,11 @@ from .prompts import (
 from .steps import said, step
 from .streaming import BETWEEN_REPLIES, turn_events
 from .tools import (
-    WHISKER,
     asking_tools,
     deposit_tools,
     earn_tools,
     liquidity_tools,
+    lpdown_tools,
     moving_tools,
     portfolio_tools,
     run_tools,
@@ -139,7 +138,6 @@ class AgentState(TypedDict, total=False):
 ANSWERING_NODES = (
     "general",
     "earn",
-    "lpdown",
     "settled",
     "grounded",
     "onboard",
@@ -206,7 +204,8 @@ class LangGraphAgent:
         # A deposit coming back is not something the user typed, so its wording
         # decides neither the branch nor the language: what they last wrote does.
         asked = _last_question(state) if state.get("settled") else state["question"]
-        commanded = not state.get("settled") and lpdown.command(asked) is not None
+        commanded = not state.get("settled") and lpdown.is_command(asked)
+        going_on = not state.get("settled") and lpdown.started(asked, state.get("history", ()))
         try:
             async with step("route", "Reading the question"):
                 label = await self._intents.classify(asked, state.get("history", ()))
@@ -220,8 +219,9 @@ class LangGraphAgent:
                 asked,
             )
             metrics.counted(metrics.intents, intent=label.intent)
+            placing = commanded or (going_on and label.intent == "general")
             return {
-                "intent": "lpdown" if commanded else _branch(state, label.intent),
+                "intent": "earn" if placing else _branch(state, label.intent),
                 "asked_to_place": label.stance == "placing",
                 "risk": label.risk,
                 "lp_range": label.lp_range,
@@ -231,7 +231,7 @@ class LangGraphAgent:
             logger.warning("intent classifier failed (%r) — routing to portfolio", error)
             metrics.counted(metrics.intents, intent="unreadable")
             metrics.counted(metrics.errors, type="classifier")
-            return {"intent": "lpdown" if commanded else _branch(state, "portfolio")}
+            return {"intent": "earn" if commanded else _branch(state, "portfolio")}
 
     async def _identity(self, state: AgentState) -> AgentState:
         hint = state.get("portfolio")
@@ -273,6 +273,9 @@ class LangGraphAgent:
     async def _earn(self, state: AgentState, settled: Settled | None = None) -> AgentState:
         asked_to_place = bool(state.get("asked_to_place"))
         holdings = await self._what_they_hold(state)
+        if settled is not None and settled.status == "landed":
+            await self._remember(settled, holdings)
+        started = lpdown.started(state["question"], state.get("history", ()))
         if settled is None:
             system = earn_prompt(
                 system_prompt(self._config),
@@ -281,6 +284,7 @@ class LangGraphAgent:
                 asked_to_place=asked_to_place,
                 held=held_lines(holdings.held),
                 placed=placed_lines(holdings.placed),
+                lpdown=started,
             )
         else:
             system = going_on_prompt(
@@ -292,8 +296,10 @@ class LangGraphAgent:
             )
         prepared: list[Card] = []
         asked: list[Choice] = []
-        running = holdings.portfolio is not None and await self._strategies.running(
-            holdings.portfolio
+        running = (
+            await self._strategies.lpdown(holdings.portfolio)
+            if holdings.portfolio is not None
+            else frozenset()
         )
         risk_known = state.get("risk", "unknown") != "unknown"
         range_known = state.get("lp_range", "unknown") != "unknown"
@@ -310,6 +316,11 @@ class LangGraphAgent:
                 holdings.held,
                 holdings.owners,
                 lpdown=running,
+            )
+            + (
+                lpdown_tools(self._catalog, prepared, holdings.owners, holdings.free)
+                if started
+                else []
             )
             + asking_tools(asked)
         )
@@ -328,82 +339,28 @@ class LangGraphAgent:
             "choices": tuple(asked),
         }
 
-    async def _lpdown(self, state: AgentState) -> AgentState:
-        asked = lpdown.command(state["question"]) or lpdown.Command()
-        system = system_prompt(self._config)
-        holdings = await self._what_they_hold(state)
-        if not holdings.portfolio or not holdings.owners:
-            return await self._answer(lpdown_prompt(system, LPDOWN_NOWHERE), state)
-        if asked.off:
-            await self._strategies.run(holdings.portfolio, False)
-            return await self._answer(lpdown_prompt(system, LPDOWN_OFF), state)
-        await self._strategies.run(holdings.portfolio, True)
-        mine = tuple(one for one in holdings.placed if lpdown.runs_on(one.pool))
-        if mine:
-            cards, facts = lpdown_moves(mine)
-        else:
-            cards, facts = await self._lpdown_opening(asked, holdings)
-        answered = await self._answer(lpdown_prompt(system, facts), state)
-        return {**answered, "deposits": each_once(cards), "choices": ()}
-
-    async def _lpdown_opening(
-        self, asked: lpdown.Command, holdings: Holdings
-    ) -> tuple[list[Card], str]:
-        pool = await self._lpdown_pool()
-        if pool is None:
-            return [], (
-                "- No SOL-USDC pool could take a range from 1% under the price up to it in one "
-                "position just now. Nothing is placed."
-            )
-        free = await self._usdc_free(holdings)
-        size = free if asked.everything else asked.amount
-        have = "" if free is None else f" They hold {free:f} USDC free."
-        if size is None or size <= 0:
-            return [], (
-                f"- Nothing is placed yet.{have} Ask how much USDC to place: they answer with "
-                "/lpdown and the amount, like /lpdown 100, or /lpdown all."
-            )
-        if free is not None and size > free * WHISKER:
-            return [], (
-                f"- They hold {free:f} USDC free, less than {size:f}. Nothing is placed: they can "
-                "run /lpdown with what they hold, or /lpdown all."
-            )
-        card = Placement(
-            action="provide",
-            pool=pool,
-            amount=size,
-            pay_with=Coin(symbol="USDC", mint=lpdown.USDC, decimals=0),
-            below_pct=lpdown.BELOW_PCT,
-            above_pct=lpdown.ABOVE_PCT,
-        )
-        return [card], (
-            f"- A card is ready: {size:f} USDC into {pool.name} on Meteora, from 1% under the "
-            f"price, {pool.price:f} {pool.y} per {pool.x} now, up to it. It earns fees only "
-            "while the price is inside it, and opening it locks about 0.057 SOL of rent, "
-            "returned when it closes."
-        )
-
-    async def _lpdown_pool(self) -> PairPool | None:
+    async def _remember(self, settled: Settled, holdings: Holdings) -> None:
+        """Which positions /lpdown moves: the one its card opened, and no longer one it closed."""
+        portfolio = holdings.portfolio
+        if portfolio is None:
+            return
         try:
-            pools = await self._catalog.pair_pools(
-                "SOL", "USDC", lpdown.BELOW_PCT, lpdown.ABOVE_PCT
+            if settled.position and settled.action in ("close", "rebalance"):
+                await self._strategies.drop(portfolio, settled.position)
+            if settled.strategy != lpdown.STRATEGY or not settled.signature:
+                return
+            for owner in holdings.owners:
+                opened = await self._catalog.opened_by(settled.signature, owner)
+                for address in opened:
+                    await self._strategies.adopt(portfolio, address)
+                if opened:
+                    logger.info("lpdown: %s opened %s", settled.signature[:8], opened)
+                    return
+            logger.warning(
+                "lpdown: %s landed and no position it opened was found", settled.signature[:8]
             )
-        except Exception as error:  # noqa: BLE001 — no pool is an answer the user can read
-            logger.warning("lpdown: pools unavailable (%r)", error)
-            return None
-        fitting = [one for one in pools if lpdown.runs_on(one) and one.why_not is None]
-        return max(fitting, key=lambda one: one.tvl_usd, default=None)
-
-    async def _usdc_free(self, holdings: Holdings) -> Decimal | None:
-        try:
-            read = [await self._catalog.held_now(owner, lpdown.USDC) for owner in holdings.owners]
-        except Exception as error:  # noqa: BLE001 — the portfolio's reading stands in
-            logger.warning("lpdown: live USDC unavailable (%r)", error)
-            read = []
-        known = [one for one in read if one is not None]
-        if known:
-            return sum(known, Decimal(0))
-        return (holdings.free or {}).get("USDC")
+        except Exception as error:  # noqa: BLE001 — the answer about the landing still goes out
+            logger.warning("lpdown: what %s opened could not be kept (%r)", settled.action, error)
 
     async def _what_they_hold(self, state: AgentState) -> Holdings:
         target = state.get("portfolio")
@@ -646,7 +603,6 @@ class LangGraphAgent:
         builder.add_node("general", self._general)
         builder.add_node("settled", self._settled)
         builder.add_node("earn", self._earn)
-        builder.add_node("lpdown", self._lpdown)
         builder.add_node("grounded", self._grounded)
         builder.add_node("onboard", self._onboard)
         builder.add_node("create_portfolio", self._create_portfolio)
@@ -671,7 +627,6 @@ class LangGraphAgent:
                 "earn": "earn",
                 "general": "general",
                 "settled": "settled",
-                "lpdown": "lpdown",
             },
         )
         builder.add_conditional_edges(
@@ -682,59 +637,6 @@ class LangGraphAgent:
         for leaf in ANSWERING_NODES:
             builder.add_edge(leaf, END)
         return builder.compile()
-
-
-LPDOWN_NOWHERE = (
-    "- It runs on a portfolio with a Solana wallet, and there is none here it can read. Nothing "
-    "is placed; signing in and adding the wallet is the way."
-)
-
-LPDOWN_OFF = (
-    "- It is off for this portfolio now: its positions stay where they are, and a rebalance "
-    "goes back to keeping a position's width around the price."
-)
-
-
-def lpdown_moves(positions: tuple[LiquidityPosition, ...]) -> tuple[list[Card], str]:
-    cards: list[Card] = []
-    lines: list[str] = []
-    for position in positions:
-        read = lpdown.reading(position)
-        pool = position.pool
-        where = (
-            f"The {pool.name} position, {position.lower_price:f} - {position.upper_price:f}, "
-            f"with the price at {pool.price:f} {pool.y} per {pool.x}"
-        )
-        if read.where == "move":
-            cards.append(
-                Placement(
-                    action="rebalance",
-                    pool=pool,
-                    position=position,
-                    below_pct=lpdown.BELOW_PCT,
-                    above_pct=lpdown.ABOVE_PCT,
-                )
-            )
-            lines.append(
-                f"- {where}, {read.over_pct:.2f}% over its top: a card is ready that closes it "
-                "and places what it holds from 1% under the price up to it."
-            )
-        elif read.where == "below":
-            lines.append(
-                f"- {where}, under its range: it holds the SOL it bought on the way down, and the "
-                "strategy waits for the price to come back. Nothing is placed."
-            )
-        else:
-            lines.append(
-                f"- {where}: "
-                + (
-                    "in its range"
-                    if read.over_pct <= 0
-                    else f"{read.over_pct:.2f}% over its top, not yet 0.25%"
-                )
-                + ". Nothing to do yet."
-            )
-    return cards, "\n".join(lines)
 
 
 def all_that_was_said(written: list[str]) -> str:

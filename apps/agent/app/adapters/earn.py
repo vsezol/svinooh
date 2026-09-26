@@ -29,7 +29,12 @@ class YieldCatalog(Protocol):
         """The coin a ticker or a mint names, looked for first among what these wallets hold."""
 
     async def pair_pools(
-        self, first: str, second: str, below_pct: Decimal | None, above_pct: Decimal | None
+        self,
+        first: str,
+        second: str,
+        below_pct: Decimal | None,
+        above_pct: Decimal | None,
+        near_pct: Decimal | None = None,
     ) -> tuple[PairPool, ...]:
         """Pools pairing two tokens, most money first; with a range, whether each holds it."""
 
@@ -38,6 +43,9 @@ class YieldCatalog(Protocol):
     async def liquidity_positions(self, owner: str) -> tuple[LiquidityPosition, ...]: ...
 
     async def held_now(self, owner: str, coin: str) -> Decimal | None: ...
+
+    async def opened_by(self, signature: str, owner: str) -> tuple[str, ...]:
+        """The liquidity positions a landed transaction of this owner's named: the one it opened."""
 
 
 class EarnApiSource:
@@ -68,11 +76,18 @@ class EarnApiSource:
         return _PositionsAnswer.model_validate(response.json()).domain()
 
     async def pair_pools(
-        self, first: str, second: str, below_pct: Decimal | None, above_pct: Decimal | None
+        self,
+        first: str,
+        second: str,
+        below_pct: Decimal | None,
+        above_pct: Decimal | None,
+        near_pct: Decimal | None = None,
     ) -> tuple[PairPool, ...]:
         params: dict[str, str] = {"network": "sol", "pair": f"{first}-{second}"}
         if below_pct is not None and above_pct is not None:
             params |= {"below_pct": f"{below_pct:f}", "above_pct": f"{above_pct:f}"}
+        if near_pct is not None:
+            params |= {"active_pct": f"{near_pct:f}"}
         response = await self._client.get(f"{self._base}/v1/liquidity/pools", params=params)
         if response.status_code == 422:
             return ()
@@ -117,6 +132,19 @@ class EarnApiSource:
         response.raise_for_status()
         amount = _HoldingAnswer.model_validate(response.json()).data.amount
         return None if amount is None else _number(amount)
+
+    async def opened_by(self, signature: str, owner: str) -> tuple[str, ...]:
+        response = await self._client.get(
+            f"{self._base}/v1/lend/deposits/{signature}/effects",
+            params={"network": "sol", "owner": owner},
+        )
+        if response.status_code in (404, 422):
+            return ()
+        response.raise_for_status()
+        found = _EffectsAnswer.model_validate(response.json()).data
+        if found is None:
+            return ()
+        return tuple(one.address for pair in found.pairs for one in pair.positions if one.touched)
 
 
 def _number(raw: str | None) -> Decimal:
@@ -284,6 +312,8 @@ class _WirePairPool(_WirePart):
     url: str
     range_bins: int | None = None
     why_not: str | None = None
+    active_usd: str | None = None
+    fee_active: str | None = None
 
     def domain(self) -> PairPool:
         return PairPool(
@@ -300,6 +330,8 @@ class _WirePairPool(_WirePart):
             url=self.url,
             range_bins=self.range_bins,
             why_not=self.why_not,
+            active_usd=None if self.active_usd is None else _number(self.active_usd),
+            fee_active=None if self.fee_active is None else _number(self.fee_active),
         )
 
 
@@ -338,3 +370,20 @@ class _WireLiquidityPosition(_WirePart):
 
 class _LiquidityPositionsAnswer(_WirePart):
     data: list[_WireLiquidityPosition]
+
+
+class _WireTouched(_WirePart):
+    address: str
+    touched: bool = False
+
+
+class _WirePairAfter(_WirePart):
+    positions: list[_WireTouched] = []
+
+
+class _WireEffects(_WirePart):
+    pairs: list[_WirePairAfter] = []
+
+
+class _EffectsAnswer(_WirePart):
+    data: _WireEffects | None = None

@@ -28,10 +28,12 @@ class ConversationStore(Protocol):
 
 
 class Strategies(Protocol):
-    async def running(self, portfolio: str) -> bool:
-        """Whether lpdown runs on this portfolio's SOL-USDC liquidity."""
+    async def lpdown(self, portfolio: str) -> frozenset[str]:
+        """The liquidity positions of this portfolio that /lpdown opened, and so moves."""
 
-    async def run(self, portfolio: str, on: bool) -> None: ...
+    async def adopt(self, portfolio: str, position: str) -> None: ...
+
+    async def drop(self, portfolio: str, position: str) -> None: ...
 
 
 class RateLimiter(Protocol):

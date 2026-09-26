@@ -143,6 +143,8 @@ class PairPool:
     url: str
     range_bins: int | None = None
     why_not: str | None = None
+    active_usd: Decimal | None = None
+    fee_active: Decimal | None = None
 
     @property
     def risk(self) -> RiskBand:
@@ -195,6 +197,7 @@ class Placement:
     position: LiquidityPosition | None = None
     source: YieldPool | None = None
     everything: bool = False
+    strategy: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,6 +242,8 @@ class Settled:
     into: str | None = None
     halfway: bool = False
     holding: str | None = None
+    strategy: str | None = None
+    position: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

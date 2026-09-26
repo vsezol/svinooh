@@ -126,6 +126,7 @@ def earn_prompt(
     asked_to_place: bool = False,
     held: str = "",
     placed: str = "",
+    lpdown: bool = False,
 ) -> str:
     rules = (
         f"{system}\n\nThe user is asking where to put money to work. Recommend only "
@@ -138,6 +139,8 @@ def earn_prompt(
         "at risk there, not with svinooh."
     )
     rules = f"{rules}\n\n{PLACING if asked_to_place else ASKING}\n\n{LIQUIDITY}"
+    if lpdown:
+        rules = f"{rules}\n\n{LPDOWN}"
     if idle:
         rules = f"{rules}\n\n{HOLDING}\n{idle}"
     if held:
@@ -386,20 +389,14 @@ _OUTCOMES = {
 
 
 LPDOWN = (
-    "The user ran /lpdown, an experimental strategy for SOL-USDC liquidity on Meteora. It keeps "
-    "USDC in a range from 1% under the SOL price up to the price, so it buys SOL only on a dip. "
-    "When the price climbs more than 0.25% over the range, the position is moved up to the same "
-    "place under the new price; when the price falls under the range, it waits. What stands now:"
+    "The user started /lpdown in this conversation, an experimental way to earn on Meteora: USDC "
+    "placed from 1% under the price of SOL or of BTC up to the price, so it buys only on a dip. "
+    "When the price climbs more than 0.25% over the position, it is moved up behind the price; "
+    "when the price falls under it, it waits. Take them through it one step at a time: the pools "
+    "it can go in, best paying first, as buttons; then how much USDC, as buttons from what they "
+    "hold; then the card. It is placed only through the tools made for it, never as ordinary "
+    "liquidity."
 )
-
-LPDOWN_TELL = (
-    "Tell them in two or three sentences. A card is on their screen only where the lines above "
-    "say one is ready, and nothing moves until they sign it: never say anything is done."
-)
-
-
-def lpdown_prompt(system: str, facts: str) -> str:
-    return f"{system}\n\n{LPDOWN}\n{facts}\n\n{LPDOWN_TELL}"
 
 
 def degraded_prompt(system: str) -> str:

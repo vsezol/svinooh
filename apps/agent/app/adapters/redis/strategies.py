@@ -7,11 +7,12 @@ class RedisStrategies:
     def __init__(self, pool: ConnectionPool) -> None:
         self._redis = Redis(connection_pool=pool)
 
-    async def running(self, portfolio: str) -> bool:
-        return bool(await self._redis.exists(f"{_LPDOWN}{portfolio}"))
+    async def lpdown(self, portfolio: str) -> frozenset[str]:
+        members = await self._redis.smembers(f"{_LPDOWN}{portfolio}")
+        return frozenset(one.decode() if isinstance(one, bytes) else str(one) for one in members)
 
-    async def run(self, portfolio: str, on: bool) -> None:
-        if on:
-            await self._redis.set(f"{_LPDOWN}{portfolio}", "1")
-        else:
-            await self._redis.delete(f"{_LPDOWN}{portfolio}")
+    async def adopt(self, portfolio: str, position: str) -> None:
+        await self._redis.sadd(f"{_LPDOWN}{portfolio}", position)
+
+    async def drop(self, portfolio: str, position: str) -> None:
+        await self._redis.srem(f"{_LPDOWN}{portfolio}", position)

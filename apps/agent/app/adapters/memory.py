@@ -101,13 +101,13 @@ class StaticPanel:
 
 class MemoryStrategies:
     def __init__(self) -> None:
-        self._running: set[str] = set()
+        self._positions: dict[str, set[str]] = {}
 
-    async def running(self, portfolio: str) -> bool:
-        return portfolio in self._running
+    async def lpdown(self, portfolio: str) -> frozenset[str]:
+        return frozenset(self._positions.get(portfolio, ()))
 
-    async def run(self, portfolio: str, on: bool) -> None:
-        if on:
-            self._running.add(portfolio)
-        else:
-            self._running.discard(portfolio)
+    async def adopt(self, portfolio: str, position: str) -> None:
+        self._positions.setdefault(portfolio, set()).add(position)
+
+    async def drop(self, portfolio: str, position: str) -> None:
+        self._positions.get(portfolio, set()).discard(position)

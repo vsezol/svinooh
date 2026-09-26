@@ -291,6 +291,25 @@ describe('ALiquidityCard', () => {
     assert.match(promiseOf(lp), /0\.057 SOL as rent, returned/);
   });
 
+  test('a card a strategy put up is told back as its, with the position it acted on', () => {
+    const request = requestOf({ ...lp, action: 'rebalance', position: 'Def4KL', strategy: 'lpdown' });
+    assert.deepEqual(
+      settledOf(request, { ok: true, signature: '5xy', landed: 'landed' }),
+      {
+        amount: '5',
+        token: 'USDC',
+        pool: 'SOL-USDC',
+        action: 'rebalance',
+        from_pool: null,
+        strategy: 'lpdown',
+        position: 'Def4KL',
+        status: 'landed',
+        signature: '5xy',
+        error: null,
+      },
+    );
+  });
+
   test('hands the host the range and the coin to build it with', () => {
     const request = requestOf(lp);
     assert.equal(request.action, 'provide');

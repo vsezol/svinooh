@@ -1,47 +1,36 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Literal
 
+from .conversation import Turn
 from .earn import LiquidityPosition, PairPool
 
-SOL = "So11111111111111111111111111111111111111112"
 USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+ASSETS = ("SOL", "cbBTC", "WBTC", "xBTC", "zBTC")
 
 BELOW_PCT = Decimal("1")
 ABOVE_PCT = Decimal("0")
 MOVE_OVER_PCT = Decimal("0.25")
+NEAR_PCT = Decimal("1")
+NEAR_AT_LEAST_USD = Decimal("1000")
 
 COMMAND = "/lpdown"
+STRATEGY = "lpdown"
 EVERYTHING = ("all", "everything", "всё", "все")
 
 
-@dataclass(frozen=True, slots=True)
-class Command:
-    off: bool = False
-    amount: Decimal | None = None
-    everything: bool = False
-
-
-def command(text: str) -> Command | None:
+def is_command(text: str) -> bool:
     words = text.strip().split()
-    if not words or words[0].lower() != COMMAND:
-        return None
-    if len(words) == 1:
-        return Command()
-    said = words[1].lower()
-    if said == "off":
-        return Command(off=True)
-    if said in EVERYTHING:
-        return Command(everything=True)
-    try:
-        amount = Decimal(said.replace(",", "."))
-    except InvalidOperation:
-        return Command()
-    return Command(amount=amount) if amount > 0 else Command()
+    return bool(words) and words[0].lower() == COMMAND
 
 
-def runs_on(pool: PairPool) -> bool:
-    return pool.x_mint == SOL and pool.y_mint == USDC
+def started(question: str, history: Iterable[Turn]) -> bool:
+    return is_command(question) or any(is_command(turn.q) for turn in history if turn.q)
+
+
+def takes(pool: PairPool) -> bool:
+    return pool.y_mint == USDC and pool.x.upper() in {asset.upper() for asset in ASSETS}
 
 
 Where = Literal["move", "below", "waiting"]
@@ -61,3 +50,10 @@ def reading(position: LiquidityPosition) -> Reading:
     if over > MOVE_OVER_PCT:
         return Reading("move", over)
     return Reading("waiting", over)
+
+
+def rate_a_day(pool: PairPool) -> Decimal | None:
+    """A day of fees on the liquidity near the price, where there is enough of it to mean much."""
+    if pool.fee_active is None or pool.active_usd is None or pool.active_usd < NEAR_AT_LEAST_USD:
+        return None
+    return pool.fee_active
