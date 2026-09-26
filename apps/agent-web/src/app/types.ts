@@ -90,7 +90,14 @@ export interface SignInBlock {
   pendingQuestion?: string;
 }
 
-export type DepositAction = 'deposit' | 'withdraw' | 'move' | 'provide' | 'close' | 'rebalance';
+export type DepositAction =
+  | 'deposit'
+  | 'withdraw'
+  | 'move'
+  | 'swap'
+  | 'provide'
+  | 'close'
+  | 'rebalance';
 
 /** A coin by its mint, and what to call it. */
 export interface Coin {
@@ -103,7 +110,8 @@ export interface Coin {
  * where the money goes in a deposit and a move, where it comes out of in a
  * withdrawal; a move also names where it leaves. `payWith` is the coin a
  * deposit spends when that is not the pool's own token, and `receiveAs` the
- * coin a withdrawal ends as — each swapped on the way. `amount` is tokens of
+ * coin a withdrawal ends as — each swapped on the way. A swap has no pool: it
+ * trades `payWith` for `receiveAs` inside the wallet. `amount` is tokens of
  * what is spent, or "all", in which case `shown` is what all of it was worth
  * when it was read.
  */
@@ -113,7 +121,7 @@ export interface DepositBlock {
   poolId: string;
   pool: string;
   protocol: string;
-  poolKind: 'vault' | 'reserve' | 'dlmm';
+  poolKind: 'vault' | 'reserve' | 'dlmm' | 'swap';
   network: string;
   token: string;
   amount: string;
@@ -146,7 +154,7 @@ export interface DepositRequest {
   poolId: string;
   pool: string;
   protocol: string;
-  poolKind: 'vault' | 'reserve' | 'dlmm';
+  poolKind: 'vault' | 'reserve' | 'dlmm' | 'swap';
   network: string;
   token: string;
   amount: string;

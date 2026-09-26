@@ -42,6 +42,8 @@ interface Server {
   steps?: Step[];
   /** The build that comes after the first is refused, with this. */
   secondFails?: string;
+  /** The build that comes after the first is refused once, with this, and made when asked again. */
+  secondFailsOnce?: string;
 }
 
 const serving = (how: Server = {}) => {
@@ -53,7 +55,8 @@ const serving = (how: Server = {}) => {
     asked.push({ path, body: JSON.parse(String(init.body)) });
     if (path.includes('/deposits/build')) {
       builds += 1;
-      const refusal = builds === 1 ? how.buildFails : how.secondFails;
+      const refusal =
+        builds === 1 ? how.buildFails : builds === 2 && how.secondFailsOnce ? how.secondFailsOnce : how.secondFails;
       const next = how.steps ? how.steps[builds - 1] : builds === 1 ? how.then : undefined;
       return refusal
         ? ({ ok: false, status: 422, json: async () => ({ message: refusal }) } as Response)
@@ -266,6 +269,25 @@ describe('AMoveInTwoTransactions', () => {
       'signing',
       'landing',
     ]);
+  });
+
+  test('a second half refused by a node that has not seen the first land yet is asked for again', async () => {
+    const { asked, fake, done } = moving({
+      secondFailsOnce: 'Attempt to debit an account but found no record of a prior credit.',
+    });
+    const finished = await done;
+    assert.equal(builds(asked).length, 3);
+    assert.equal(fake.handed.length, 2);
+    assert.ok('done' in finished && finished.done.ok);
+    assert.equal(finished.done.ok && finished.done.halfway, undefined);
+    assert.equal(finished.done.ok && finished.done.landed, 'landed');
+  });
+
+  test('a second half that cannot be built is asked for three times, then given up on', async () => {
+    const { asked, fake, done } = moving({ secondFails: 'the pool is full' });
+    await done;
+    assert.equal(builds(asked).length, 4, 'the first, then the second three times');
+    assert.equal(fake.handed.length, 1, 'nothing more was signed');
   });
 
   test('a first half the chain did not take is not followed by a second', async () => {

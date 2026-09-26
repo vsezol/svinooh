@@ -18,6 +18,7 @@ from ..domain.earn import (
     LiquidityPosition,
     PairPool,
     Placement,
+    Swap,
     YieldPool,
 )
 from ..domain.house import plain
@@ -396,6 +397,73 @@ def moving_tools(
         )
 
     return [propose_withdraw, propose_move]
+
+
+ALL_OF_IT = ("", "all", "everything", "max")
+
+
+def swap_tools(catalog: YieldCatalog, prepared: list[Card], owners: tuple[str, ...] = ()) -> list:
+    async def held_now(mint: str) -> Decimal | None:
+        read = [await catalog.held_now(owner, mint) for owner in owners]
+        known = [one for one in read if one is not None]
+        return sum(known, Decimal(0)) if known else None
+
+    def not_found(named: str) -> str:
+        return (
+            f"No coin called {named} could be found that trades. Say so, and name what they "
+            "do hold."
+        )
+
+    @tool
+    async def propose_swap(from_token: str, to_token: str, amount: str = "all") -> str:
+        """Put a swap in front of the user to sign: one coin in their wallet traded for another.
+
+        Call it when they ask to swap, exchange, convert or sell a coin they
+        hold for another; never send them to an exchange or another app for
+        it. `from_token` is the coin they give and `to_token` the one they
+        get, each by its ticker or its mint. `amount` is "all" for everything
+        they hold of `from_token`, or a plain number of it. Both coins stay in
+        their own wallet. It moves nothing: they sign it there, and until they
+        do, nothing has happened.
+        """
+        given = await catalog.coin(from_token.strip(), owners)
+        if given is None:
+            return not_found(from_token)
+        wanted = await catalog.coin(to_token.strip(), owners)
+        if wanted is None:
+            return not_found(to_token)
+        if given.mint == wanted.mint:
+            return f"That is {given.symbol} already, with nothing to swap. Say so."
+        held = await held_now(given.mint)
+        everything = str(amount).strip().lower() in ALL_OF_IT
+        size = held if everything else _amount(amount)
+        if size is None:
+            if everything:
+                return (
+                    f"What they hold of {given.symbol} could not be read just now. Say so, and "
+                    "ask how much to swap."
+                )
+            return 'That amount is not a number of tokens. Pass "all", or ask how much.'
+        if held is not None and held <= 0:
+            return (
+                f"They hold no {given.symbol} free right now. Say so, and name what they do hold."
+            )
+        if held is not None and size > held * WHISKER:
+            return (
+                f"They hold {held:f} {given.symbol} free, less than that. Tell them what is there "
+                "and offer to swap all of it."
+            )
+        prepared.append(Swap(pay_with=given, receive_as=wanted, amount=size, everything=everything))
+        what = f"all of it, about {size:f}" if everything else f"{size:f}"
+        return (
+            f"Ready for the user to sign: {what} {given.symbol} swapped to {wanted.symbol} in "
+            "their own wallet, through Kamino Swap. They see it as a card with a button. Say what "
+            f"it is in one or two sentences: a swap is a trade, so from then on that money is "
+            f"worth what {wanted.symbol} is worth, and their wallet may ask them to sign more than "
+            "once. Nothing happens until they sign. Do not say it is done."
+        )
+
+    return [propose_swap]
 
 
 RANGE_FIRST = (
@@ -1114,6 +1182,10 @@ def tool_phrase(name: str, args: dict) -> str | None:
     if name == "propose_move":
         pool = str(args.get("to_pool_id", "")).strip()
         return f"Preparing a move · {pool}" if pool else "Preparing a move"
+    if name == "propose_swap":
+        given = str(args.get("from_token", "")).strip().upper()
+        wanted = str(args.get("to_token", "")).strip().upper()
+        return f"Preparing a swap · {given} → {wanted}" if given and wanted else "Preparing a swap"
     if name == "liquidity_pools":
         pair = str(args.get("pair", "")).strip().upper()
         return f"Reading liquidity pools · {pair}" if pair else "Reading liquidity pools"

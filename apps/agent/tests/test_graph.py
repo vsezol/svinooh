@@ -357,6 +357,7 @@ class TestWhereToPutMoney:
             "propose_deposit",
             "propose_withdraw",
             "propose_move",
+            "propose_swap",
             "liquidity_pools",
             "propose_liquidity",
             "propose_close_liquidity",

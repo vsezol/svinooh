@@ -214,7 +214,26 @@ class Held:
     shares: Decimal | None = None
 
 
-Card = Deposit | Placement
+SwapAction = Literal["swap"]
+
+
+@dataclass(frozen=True, slots=True)
+class Swap:
+    """One coin in the wallet traded for another, both staying in the wallet.
+
+    `amount` is counted in `pay_with`. `everything` swaps all there is of it
+    by the time it is signed; `amount` is then the figure it was when it was
+    read, for showing.
+    """
+
+    pay_with: Coin
+    receive_as: Coin
+    amount: Decimal
+    everything: bool = False
+    action: SwapAction = "swap"
+
+
+Card = Deposit | Placement | Swap
 """Anything a card asks the wallet to sign."""
 
 
@@ -237,7 +256,7 @@ class Settled:
     status: SettledStatus
     signature: str | None = None
     error: str | None = None
-    action: "Action | PlacementAction" = "deposit"
+    action: "Action | PlacementAction | SwapAction" = "deposit"
     from_pool: str | None = None
     into: str | None = None
     halfway: bool = False

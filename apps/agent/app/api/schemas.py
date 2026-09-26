@@ -10,7 +10,9 @@ class SettledIn(BaseModel):
     status: Literal["landed", "failed", "sent", "refused"]
     signature: str | None = Field(default=None, max_length=128)
     error: str | None = Field(default=None, max_length=512)
-    action: Literal["deposit", "withdraw", "move", "provide", "close", "rebalance"] = "deposit"
+    action: Literal["deposit", "withdraw", "move", "swap", "provide", "close", "rebalance"] = (
+        "deposit"
+    )
     from_pool: str | None = Field(default=None, max_length=128)
     into: str | None = Field(default=None, max_length=32)
     halfway: bool = False
@@ -58,7 +60,9 @@ class CoinBlock(BaseModel):
 
 class DepositBlock(BaseModel):
     kind: Literal["deposit"] = "deposit"
-    action: Literal["deposit", "withdraw", "move", "provide", "close", "rebalance"] = "deposit"
+    action: Literal["deposit", "withdraw", "move", "swap", "provide", "close", "rebalance"] = (
+        "deposit"
+    )
     pool_id: str = Field(serialization_alias="poolId")
     pool: str
     protocol: str

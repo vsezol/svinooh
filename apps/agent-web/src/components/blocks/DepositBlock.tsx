@@ -7,7 +7,7 @@ import type {
   Settled,
 } from '../../app/types';
 
-type State = 'idle' | 'working' | 'signed' | 'landed' | 'refused';
+type State = 'idle' | 'working' | 'signed' | 'landed' | 'halfway' | 'refused';
 
 interface Shown {
   state: State;
@@ -30,6 +30,14 @@ export function afterDeposit(outcome: DepositOutcome | void): Shown {
   const signature = outcome.signature ?? null;
   if (outcome.landed === 'failed') {
     return { state: 'refused', note: outcome.error ?? REJECTED, signature };
+  }
+  if (outcome.halfway) {
+    const waits = outcome.holding ? ` as ${outcome.holding}` : '';
+    return {
+      state: 'halfway',
+      note: `the next step did not go through${outcome.error ? ` (${outcome.error})` : ''}; the money is in your wallet${waits}`,
+      signature,
+    };
   }
   if (outcome.landed === 'landed') {
     return {
@@ -125,6 +133,7 @@ const EYEBROW = {
   deposit: 'PROPOSED DEPOSIT',
   withdraw: 'PROPOSED WITHDRAWAL',
   move: 'PROPOSED MOVE',
+  swap: 'PROPOSED SWAP',
   provide: 'PROPOSED LIQUIDITY',
   close: 'PROPOSED CLOSE',
   rebalance: 'PROPOSED REBALANCE',
@@ -134,6 +143,7 @@ const PRESS = {
   deposit: 'Deposit from my wallet',
   withdraw: 'Withdraw to my wallet',
   move: 'Move it',
+  swap: 'Swap in my wallet',
   provide: 'Add liquidity',
   close: 'Close the position',
   rebalance: 'Rebalance it',
@@ -143,6 +153,7 @@ const PROMISE = {
   deposit: 'Your money goes straight to the protocol.',
   withdraw: 'The money comes back to your wallet.',
   move: 'Out of one pool and into the other.',
+  swap: 'It is a trade, and the money stays in your wallet.',
   provide:
     'It earns fees only while the price stays in the range. Opening it locks about 0.057 SOL as rent, returned when it closes.',
   close: 'Both tokens and the fees come back to your wallet, and the rent with them.',
@@ -177,11 +188,10 @@ export const promiseOf = (block: DepositBlock): string => {
     return `${out}${PROMISE[action]}${signatures} Nothing moves until you sign.`;
   }
   const { spent, ends } = coinsOf(block);
+  const becomes = action === 'swap' ? `${spent} becomes ${ends}` : `${spent} becomes ${ends} on the way`;
   const swapped =
-    spent !== ends
-      ? ` ${spent} becomes ${ends} on the way, and your wallet may ask you to sign more than once.`
-      : '';
-  return `${PROMISE[block.action ?? 'deposit']}${swapped} Nothing moves until you sign.`;
+    spent !== ends ? ` ${becomes}, and your wallet may ask you to sign more than once.` : '';
+  return `${PROMISE[action]}${swapped} Nothing moves until you sign.`;
 };
 
 /**
@@ -220,7 +230,7 @@ export default function DepositBlockView({ block, onDeposit }: Props) {
 
   const action = block.action ?? 'deposit';
   const leaves = (action === 'move' || action === 'provide') && block.fromPool ? block.fromPool : null;
-  const done = state === 'signed' || state === 'landed';
+  const done = state === 'signed' || state === 'landed' || state === 'halfway';
   const says = !onDeposit
     ? 'No wallet is connected here — open it on svinooh.com to sign.'
     : state === 'refused'
@@ -240,11 +250,15 @@ export default function DepositBlockView({ block, onDeposit }: Props) {
       </div>
       <div className="sv-a-b-deposit-where">
         {leaves ? <span>{leaves} → </span> : null}
-        <a href={block.url} target="_blank" rel="noopener noreferrer">
-          {block.pool}
-        </a>
+        {action === 'swap' ? null : (
+          <a href={block.url} target="_blank" rel="noopener noreferrer">
+            {block.pool}
+          </a>
+        )}
         <span className="sv-a-b-deposit-meta mono">
-          {block.protocol} · {block.network} · risk {block.risk}
+          {action === 'swap'
+            ? `${block.protocol} swap · ${block.network}`
+            : `${block.protocol} · ${block.network} · risk ${block.risk}`}
         </span>
         {rangeOf(block) ? (
           <span className="sv-a-b-deposit-meta mono">
@@ -256,7 +270,7 @@ export default function DepositBlockView({ block, onDeposit }: Props) {
       <div className="sv-a-b-deposit-foot">
         {done ? (
           <span className="sv-a-b-deposit-done mono">
-            {state === 'landed' ? 'Landed' : 'Signed'}
+            {state === 'landed' ? 'Landed' : state === 'halfway' ? 'Stopped halfway' : 'Signed'}
             {note ? ` · ${note}` : ''}
           </span>
         ) : (

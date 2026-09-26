@@ -7,7 +7,11 @@ from .conversation import Turn
 from .earn import LiquidityPosition, PairPool
 
 USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
-ASSETS = ("SOL", "cbBTC", "WBTC", "xBTC", "zBTC")
+ASSETS = {
+    "SOL": "So11111111111111111111111111111111111111112",
+    "cbBTC": "cbbtcf3aa214zXHbiAZQwf4122FBYbraNdFqgw4iMij",
+    "WBTC": "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh",
+}
 
 BELOW_PCT = Decimal("1")
 ABOVE_PCT = Decimal("0")
@@ -30,7 +34,7 @@ def started(question: str, history: Iterable[Turn]) -> bool:
 
 
 def takes(pool: PairPool) -> bool:
-    return pool.y_mint == USDC and pool.x.upper() in {asset.upper() for asset in ASSETS}
+    return pool.y_mint == USDC and pool.x_mint in ASSETS.values()
 
 
 Where = Literal["move", "below", "waiting"]

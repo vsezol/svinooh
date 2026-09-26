@@ -334,6 +334,57 @@ class TestLiquidityThatCameBack:
         assert "the rest is still in the position" in model.system
 
 
+class TestASwapThatCameBack:
+    SWAPPED: ClassVar[dict] = {
+        **LANDED,
+        "action": "swap",
+        "pool": "xBTC to USDC",
+        "amount": "all",
+        "token": "xBTC",
+        "into": "USDC",
+    }
+
+    async def test_a_swap_is_told_as_one(self, client, model):
+        await client.post("/chat", json={"message": "signed", "settled": self.SWAPPED})
+        assert "a swap of xBTC to USDC, in their own wallet" in model.system
+
+    async def test_a_swap_that_stopped_halfway_says_it_did_not_become_the_coin(self, client, model):
+        await client.post(
+            "/chat",
+            json={
+                "message": "signed",
+                "settled": {**self.SWAPPED, "halfway": True, "holding": "SOL"},
+            },
+        )
+        assert "in their wallet as SOL, and it did not become USDC" in model.system
+
+
+class TestHalfwayIsNotLanded:
+    async def test_a_placement_that_stopped_after_its_swap_is_told_and_not_carried_on(
+        self, client, model
+    ):
+        await client.post(
+            "/chat",
+            json={
+                "message": "signed",
+                "settled": {
+                    **LANDED,
+                    "action": "provide",
+                    "pool": "SOL-USDC",
+                    "amount": "100",
+                    "halfway": True,
+                    "holding": "USDC and SOL",
+                    "error": "the next step could not be prepared",
+                },
+            },
+        )
+        assert "the new position in SOL-USDC was not opened" in model.system
+        assert "Then look back over this conversation" not in model.system, (
+            "a flow that stopped halfway was answered as one that landed"
+        )
+        assert "do not offer something new in the same breath" in model.system
+
+
 class Saying:
     """Answers each turn's calls in order, and keeps what it was shown and given."""
 

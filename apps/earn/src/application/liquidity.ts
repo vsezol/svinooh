@@ -75,6 +75,9 @@ export interface PoolFit {
   activeUsd?: Decimal | null;
 }
 
+/** How many pools of one pair are read near their price: each is several calls to a node. */
+const NEAR_READ_AT_MOST = 4;
+
 async function activeUsdOf(pool: PairPool, share: Decimal, near: ReadNearThePrice): Promise<Decimal | null> {
   if (!pool.yUsd) return null;
   const inY = await near(pool.id.address, share);
@@ -121,12 +124,21 @@ export class LendLiquidity {
       }));
     const near = this.near[network];
     if (!activeShare || !near) return fits;
-    return Promise.all(
-      fits.map(async (fit) => ({
-        ...fit,
-        activeUsd: fit.why ? null : await activeUsdOf(fit.pool, activeShare, near),
-      })),
+    const deepest = new Set(
+      fits
+        .filter((fit) => fit.why === null)
+        .sort((a, b) => b.pool.tvlUsd.comparedTo(a.pool.tvlUsd))
+        .slice(0, NEAR_READ_AT_MOST)
+        .map((fit) => fit.pool.id.address),
     );
+    const answered: PoolFit[] = [];
+    for (const fit of fits) {
+      const activeUsd = deepest.has(fit.pool.id.address)
+        ? await activeUsdOf(fit.pool, activeShare, near)
+        : null;
+      answered.push({ ...fit, activeUsd });
+    }
+    return answered;
   }
 
   async pool(id: string): Promise<PairPool> {

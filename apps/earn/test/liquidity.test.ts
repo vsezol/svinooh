@@ -16,6 +16,7 @@ import { LendLiquidity, type Lending, type LiquidityBuilders } from '../src/appl
 import {
   balance,
   evenRange,
+  oneSided,
   pairIdOf,
   pairs,
   spanOf,
@@ -128,6 +129,21 @@ describe('BringingWhatGoesInToTheMixTheRangeTakes', () => {
   test('nothing in, nothing to swap', () => {
     assert.deepEqual(balance(new Decimal(0), new Decimal(0), price, ratio), { swap: null });
   });
+
+  test('a range up to the price paid in y, or down to it paid in x, goes in as it is', () => {
+    const zero = new Decimal(0);
+    const some = new Decimal(100);
+    assert.equal(oneSided({ range: range('0.01', '0'), amountX: zero, amountY: some }), true);
+    assert.equal(oneSided({ range: range('0', '0.01'), amountX: some, amountY: zero }), true);
+  });
+
+  test('a range on both sides of the price, or paid in the other token, is brought to its mix', () => {
+    const zero = new Decimal(0);
+    const some = new Decimal(100);
+    assert.equal(oneSided({ range: range('0.01', '0.01'), amountX: zero, amountY: some }), false);
+    assert.equal(oneSided({ range: range('0.01', '0'), amountX: some, amountY: zero }), false);
+    assert.equal(oneSided({ range: range('0.01', '0'), amountX: some, amountY: some }), false);
+  });
 });
 
 describe('WhichPoolsPairTwoTokens', () => {
@@ -232,6 +248,41 @@ describe('PoolsWorthOffering', () => {
       ],
     );
     assert.deepEqual(near, [['CgqwPL', '0.01']]);
+  });
+
+  test('only the deepest pools that hold the range are read near the price, one at a time', async () => {
+    const deep = ['A', 'B', 'C', 'D', 'E', 'F'].map((address, index) =>
+      pairPool({ address, tvlUsd: new Decimal(1_000_000 - index * 100_000), yUsd: new Decimal(1) }),
+    );
+    const read: string[] = [];
+    let reading = 0;
+    let most = 0;
+    const liquidity = new LendLiquidity(
+      { sol: async () => [...deep].reverse() },
+      { sol: async () => null },
+      { sol: async () => [] },
+      new Decimal('100000'),
+      {},
+      {},
+      null,
+      {
+        sol: async (address) => {
+          reading += 1;
+          most = Math.max(most, reading);
+          await new Promise((settle) => setImmediate(settle));
+          reading -= 1;
+          read.push(address);
+          return new Decimal('20000');
+        },
+      },
+    );
+    const fits = await liquidity.pools('sol', 'SOL', 'USDC', range('0.01', '0'), new Decimal('0.01'));
+    assert.deepEqual(read.sort(), ['A', 'B', 'C', 'D']);
+    assert.equal(most, 1, 'a node asked many things at once refuses some of them');
+    assert.deepEqual(
+      fits.filter((fit) => fit.activeUsd === null).map((fit) => fit.pool.id.address),
+      ['F', 'E'],
+    );
   });
 
   test('a pool is found by its id, and an id that is not one is not found', async () => {

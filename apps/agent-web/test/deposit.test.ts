@@ -347,3 +347,63 @@ describe('ALiquidityCard', () => {
     assert.equal(requestOf(rebalance).position, '8PBf2k');
   });
 });
+
+describe('ASwapCard', () => {
+  const swap: DepositBlock = {
+    kind: 'deposit',
+    action: 'swap',
+    poolId: '',
+    pool: 'xBTC to USDC',
+    protocol: 'kamino',
+    poolKind: 'swap',
+    network: 'sol',
+    token: 'xBTC',
+    amount: 'all',
+    shown: '5.311297',
+    apy: '',
+    risk: '',
+    url: '',
+    payWith: { mint: 'CtzP', symbol: 'xBTC' },
+    receiveAs: { mint: 'EPjF', symbol: 'USDC' },
+  };
+
+  test('says what it gives and what it gets', () => {
+    assert.equal(sizeOf(swap), '5.311297 xBTC → USDC');
+    assert.equal(
+      promiseOf(swap),
+      'It is a trade, and the money stays in your wallet. xBTC becomes USDC, and your wallet may ask you to sign more than once. Nothing moves until you sign.',
+    );
+  });
+
+  test('hands the host both coins, which is all a swap is built from', () => {
+    const request = requestOf(swap);
+    assert.equal(request.action, 'swap');
+    assert.equal(request.amount, 'all');
+    assert.deepEqual(request.payWith, { mint: 'CtzP', symbol: 'xBTC' });
+    assert.deepEqual(request.receiveAs, { mint: 'EPjF', symbol: 'USDC' });
+  });
+
+  test('is told back as a swap, in what left and what it became', () => {
+    const told = settledOf(requestOf(swap), { ok: true, signature: '5xy', landed: 'landed' });
+    assert.deepEqual([told?.action, told?.token, told?.into], ['swap', 'xBTC', 'USDC']);
+  });
+});
+
+describe('AFlowThatStoppedHalfway', () => {
+  test('is not called landed, and says where the money is', () => {
+    const shown = afterDeposit({
+      ok: true,
+      signature: '5xy',
+      landed: 'landed',
+      halfway: true,
+      holding: 'xBTC',
+      error: 'the next step could not be prepared',
+    });
+    assert.equal(shown.state, 'halfway');
+    assert.equal(
+      shown.note,
+      'the next step did not go through (the next step could not be prepared); the money is in your wallet as xBTC',
+    );
+    assert.equal(shown.signature, '5xy');
+  });
+});
