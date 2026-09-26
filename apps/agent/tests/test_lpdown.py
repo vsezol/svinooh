@@ -121,11 +121,17 @@ class TestThePoolsItOffers:
         catalog = shelf()
         said = await its_tools(catalog, [])["lpdown_pools"].ainvoke({})
         order = [line.split(" id ")[-1] for line in said.splitlines() if line.startswith("- ")]
-        assert order == [XBTC_POOL.id, POOL.id, BTC.id, UNREAD.id, EMPTY.id]
+        assert order == [POOL.id, BTC.id, UNREAD.id, EMPTY.id]
         assert "1.90% a day in fees on the $645k within 1% of the price" in said
         assert "id sol:meteora:dlmm:5rCf1D" in said
         assert "FINE" not in said and "BACK" not in said
         assert catalog.near_asked == lpdown.NEAR_PCT
+
+    async def test_a_coin_named_like_btc_is_not_btc(self):
+        said = await its_tools(shelf(), [])["lpdown_pools"].ainvoke({})
+        assert "xBTC" not in said
+        assert not lpdown.takes(XBTC_POOL)
+        assert lpdown.takes(BTC)
 
     async def test_a_pool_with_next_to_nothing_near_the_price_is_not_ranked_on_it(self):
         said = await its_tools(shelf(), [])["lpdown_pools"].ainvoke({})
