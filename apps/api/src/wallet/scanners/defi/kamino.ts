@@ -19,6 +19,7 @@ interface ReserveMetric {
 }
 
 interface Obligation {
+  obligationAddress?: string;
   refreshedStats?: {
     userTotalBorrow?: number | string;
     loanToValue?: number | string;
@@ -79,11 +80,20 @@ function supplyRates(obligation: Obligation, byReserve: Map<string, Reserve>): R
   return rates;
 }
 
-function supplied(obligation: Obligation, market: string, byReserve: Map<string, Reserve>): SupplyFact | null {
+function supplied(obligation: Obligation, market: KaminoMarket, byReserve: Map<string, Reserve>): SupplyFact | null {
   const rates = supplyRates(obligation, byReserve);
   if (!Object.keys(rates).length) return null;
-  return { id: `kamino:${market}:supply`, platform: 'kamino', market, rates };
+  return {
+    id: `kamino:${obligation.obligationAddress ?? market.lendingMarket}:supply`,
+    ref: obligation.obligationAddress ?? null,
+    pool: market.lendingMarket,
+    platform: 'kamino',
+    market: marketName(market),
+    rates,
+  };
 }
+
+const marketName = (market: KaminoMarket): string => market.name ?? market.lendingMarket.slice(0, 8);
 
 /**
  * A loan's health and what it costs, per borrowed asset.
@@ -92,7 +102,7 @@ function supplied(obligation: Obligation, market: string, byReserve: Map<string,
  * sits: at 1 the position is being liquidated. An obligation with nothing
  * borrowed is skipped — it cannot be liquidated and has no rate to climb.
  */
-function parse(obligation: Obligation, market: string, byReserve: Map<string, Reserve>): LendingFact[] {
+function parse(obligation: Obligation, market: KaminoMarket, byReserve: Map<string, Reserve>): LendingFact[] {
   const stats = obligation.refreshedStats;
   if (!stats || Number(stats.userTotalBorrow) <= 0) return [];
 
@@ -109,9 +119,11 @@ function parse(obligation: Obligation, market: string, byReserve: Map<string, Re
     const reserve = byReserve.get(borrow.borrowReserve);
     if (!reserve || !Number.isFinite(reserve.borrowApy)) continue;
     facts.push({
-      id: `kamino:${market}:${borrow.borrowReserve}`,
+      id: `kamino:${obligation.obligationAddress ?? market.lendingMarket}:${borrow.borrowReserve}`,
+      ref: obligation.obligationAddress ?? null,
+      pool: market.lendingMarket,
       platform: 'kamino',
-      market,
+      market: marketName(market),
       token: reserve.token.toUpperCase(),
       healthFactor,
       borrowRate: Math.round(reserve.borrowApy * 100 * 100) / 100,
@@ -164,11 +176,10 @@ export async function kaminoLending(
             },
           ]),
         );
-        const name = market.name ?? market.lendingMarket.slice(0, 8);
         return {
-          lending: obligations.flatMap((o) => parse(o, name, byReserve)),
+          lending: obligations.flatMap((o) => parse(o, market, byReserve)),
           supply: obligations
-            .map((o) => supplied(o, name, byReserve))
+            .map((o) => supplied(o, market, byReserve))
             .filter((fact): fact is SupplyFact => fact !== null),
         };
       } catch {

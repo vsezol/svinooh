@@ -69,28 +69,20 @@ describe('APositionInABandIsOnePositionWhereverThePriceIs', () => {
     assert.equal(positionKey(meteora('in', BOTH)), positionKey(meteora('in', BOTH, { band: rounded })));
   });
 
-  test('not named by the source, its band is what it is known by', () => {
+  test('not named by the source, it is known by its pool', () => {
     const unnamed = (legs: ScanPositionToken[]) => meteora('in', legs, { ref: null });
     assert.equal(positionKey(unnamed(BOTH)), positionKey(unnamed(USDC_ONLY)));
+  });
+
+  test('with no pool either, it is known by its band', () => {
+    const bare = (legs: ScanPositionToken[], band = BAND) => meteora('in', legs, { ref: null, pool: null, band });
+    assert.equal(positionKey(bare(BOTH)), positionKey(bare(USDC_ONLY)));
+    assert.notEqual(positionKey(bare(BOTH)), positionKey(bare(BOTH, { ...BAND, lower: 100 })));
   });
 
   test('two positions in one pool are two', () => {
     const other = meteora('in', BOTH, { ref: '99stbBgutZf1DsT6YeYJWpaE2b9gMJuKzwrUwPch1yXu' });
     assert.notEqual(positionKey(meteora('in', BOTH)), positionKey(other));
-  });
-
-  test('a loan is still told apart by what it is made of', () => {
-    const loan = (legs: ScanPositionToken[]): ScanPosition => ({
-      symbol: 'Kamino',
-      name: 'Lending',
-      valueUsd: 100,
-      platform: 'kamino',
-      category: 'defi',
-      healthRate: 3.2,
-      ref: 'obligation',
-      tokens: legs,
-    });
-    assert.notEqual(positionKey(loan([leg('SOL', 1)])), positionKey(loan([leg('SOL', 1), leg('CBBTC', 1)])));
   });
 
   test('out over the top holding one token, and back in holding two, are both told', () => {
@@ -103,5 +95,48 @@ describe('APositionInABandIsOnePositionWhereverThePriceIs', () => {
       ]),
       [[], ['entered'], [], ['recovered']],
     );
+  });
+});
+
+const loan = (legs: ScanPositionToken[], over: Partial<ScanPosition> = {}): ScanPosition => ({
+  symbol: 'Kamino',
+  name: 'Lending',
+  valueUsd: 100,
+  platform: 'kamino',
+  category: 'defi',
+  healthRate: 3.2,
+  ref: '9VEDddaT87eu6s47ooju6GZZkRZHJGJVJneuk57YMhzp',
+  pool: '7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF',
+  tokens: legs,
+  ...over,
+});
+
+describe('ALoanIsTheLoanTheSourceNames', () => {
+  test('two loans in one market are two, however alike they are', () => {
+    const other = loan([leg('SOL', 1)], { ref: 'AtpdTmZdBGnZAxfBhpYReTJX2nn4sArcJyyfzPjZBsu9' });
+    assert.notEqual(positionKey(loan([leg('SOL', 1)])), positionKey(other));
+  });
+
+  test('a loan keeps its key when collateral is added to it', () => {
+    assert.equal(positionKey(loan([leg('SOL', 1)])), positionKey(loan([leg('SOL', 1), leg('CBBTC', 1)])));
+  });
+
+  test('with no id from the source, a loan is its market whatever it holds', () => {
+    const unnamed = (legs: ScanPositionToken[], pool: string) => loan(legs, { ref: null, pool });
+    assert.equal(
+      positionKey(unnamed([leg('SOL', 1)], 'MARKET')),
+      positionKey(unnamed([leg('SOL', 1), leg('WBTC', 1)], 'MARKET')),
+    );
+    assert.notEqual(positionKey(unnamed([leg('SOL', 1)], 'MARKET')), positionKey(unnamed([leg('SOL', 1)], 'OTHER')));
+  });
+
+  test('one id on two networks is two positions', () => {
+    const on = (network: string) => positionKey(loan([leg('SOL', 1)], { network }));
+    assert.notEqual(on('op'), on('base'));
+  });
+
+  test('tokens are never what tells two positions apart', () => {
+    const bare = (legs: ScanPositionToken[]) => loan(legs, { ref: null, pool: null });
+    assert.equal(positionKey(bare([leg('SOL', 1)])), positionKey(bare([leg('WBTC', 1), leg('USDC', 1)])));
   });
 });

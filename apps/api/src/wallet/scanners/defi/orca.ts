@@ -91,6 +91,8 @@ export async function orcaPools(address: string): Promise<PoolFact[]> {
           : p.meta.currentPrice >= p.meta.lowerPrice && p.meta.currentPrice <= p.meta.upperPrice;
       return {
         id: `orca:${p.address}`,
+        ref: p.address,
+        pool: p.whirlpoolAddress,
         platform: 'orca' as const,
         pair: pairKey(sym(p.tokenA), sym(p.tokenB)),
         pairLabel: `${sym(p.tokenA)}/${sym(p.tokenB)}`,

@@ -77,12 +77,6 @@ export interface MeteoraWatchable {
   /** As Meteora saw it when it answered — the baseline until the chain says otherwise */
   activeBinId: number;
   inRange: boolean;
-  /**
-   * The same two ends as prices — exactly the numbers the scan stores as this
-   * position's band, which is how a stored row is recognised as this position.
-   */
-  lowerPrice: number;
-  upperPrice: number;
 }
 
 async function paged<T>(path: string, key: 'pools' | 'positions'): Promise<T[]> {
@@ -117,6 +111,8 @@ export async function meteoraPools(address: string): Promise<PoolFact[]> {
         .filter((p) => !p.isClosed)
         .map((p) => ({
           id: `meteora:${p.positionAddress}`,
+          ref: p.positionAddress,
+          pool: pool.poolAddress,
           platform: 'meteora' as const,
           pair: pairKey(symX, symY),
           pairLabel: `${symX}/${symY}`,
@@ -206,8 +202,6 @@ export async function meteoraWatchables(address: string): Promise<MeteoraWatchab
           upperBinId: p.upperBinId as number,
           activeBinId: p.poolActiveBinId as number,
           inRange: !p.isOutOfRange,
-          lowerPrice: Number(p.minPrice),
-          upperPrice: Number(p.maxPrice),
         }))
         .filter(
           (w) => w.inRange === (w.activeBinId >= w.lowerBinId && w.activeBinId <= w.upperBinId),

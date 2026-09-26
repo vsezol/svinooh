@@ -448,12 +448,13 @@ export async function scanSol(address: string): Promise<ScanResult> {
  * for. Splitting unconditionally is what broke the fees: two good positions were
  * thrown away and rebuilt as nominal halves with no reward legs at all, which
  * read as Meteora having stopped paying. So the split now runs only when Jupiter
- * really did return fewer positions than there are pools.
+ * really did merge them: fewer positions than pools, and not every one of them
+ * naming its pool. A position that names its pool is its own, and a pool no
+ * position names yet is one Jupiter has not caught up with.
  *
- * Pools are matched to positions by value. It is the one number both sources
- * agree on to within a fraction of a percent, where the symbols do not always
- * agree at all (cbBTC against CBBTC) and neither side reports the pool address
- * in the other's terms.
+ * Pools are matched to positions by the pool address Jupiter gives each
+ * element. By value only for an element that names no pool — the one number
+ * both sources agree on to within a fraction of a percent.
  */
 export function reconcileMeteora(
   positions: ScanPosition[],
@@ -463,9 +464,10 @@ export function reconcileMeteora(
   const mine = positions.filter((p) => p.platform === 'meteora');
   if (!mine.length) return positions;
 
-  return mine.length >= meteoraByPool.length
-    ? labelMeteora(positions, mine, meteoraByPool)
-    : splitMeteoraByPool(positions, mine, meteoraByPool);
+  const merged = mine.length < meteoraByPool.length && mine.some((p) => !p.pool);
+  return merged
+    ? splitMeteoraByPool(positions, mine, meteoraByPool)
+    : labelMeteora(positions, mine, meteoraByPool);
 }
 
 /** The pool whose value is nearest this position's, taken out of the running */
@@ -483,25 +485,31 @@ function claimNearest(
 }
 
 /**
- * Jupiter already answered per pool: keep every leg it gave — the amounts and
- * the accrued fees are real and ours are not — and take from Meteora only what
- * Jupiter does not have, which is which pair this is and whether it is in range.
+ * Jupiter already answered per position: keep every leg it gave — the amounts
+ * and the accrued fees are real and ours are not — and take from Meteora only
+ * what Jupiter does not have, which is which pair this is and, where the pool
+ * holds this one position alone, whether it is in range. Meteora says that per
+ * pool, and of a pool holding two positions it cannot say it of either.
  */
 function labelMeteora(
   positions: ScanPosition[],
   mine: ScanPosition[],
   meteoraByPool: MeteoraPoolPosition[],
 ): ScanPosition[] {
-  const unclaimed = [...meteoraByPool];
+  const byAddress = new Map(meteoraByPool.map((pool) => [pool.poolAddress, pool]));
+  const held = new Map<string, number>();
+  for (const position of mine) if (position.pool) held.set(position.pool, (held.get(position.pool) ?? 0) + 1);
+  const unclaimed = meteoraByPool.filter((pool) => !held.has(pool.poolAddress));
   const labelled = new Map<ScanPosition, ScanPosition>();
-  // Biggest first, so the clearest match is made while every pool is still free
+  // Biggest first, so the clearest match by value is made while every pool is still free
   for (const position of [...mine].sort((a, b) => b.valueUsd - a.valueUsd)) {
-    const pool = claimNearest(position.valueUsd, unclaimed);
+    const pool = position.pool ? byAddress.get(position.pool) : claimNearest(position.valueUsd, unclaimed);
     if (!pool) continue;
+    const alone = (held.get(pool.poolAddress) ?? 1) === 1;
     labelled.set(position, {
       ...position,
       note: pool.pairLabel,
-      range: pool.inRange ? 'in' : 'out',
+      ...(alone ? { range: pool.inRange ? ('in' as const) : ('out' as const) } : {}),
     });
   }
   return positions.map((p) => labelled.get(p) ?? p);

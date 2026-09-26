@@ -152,6 +152,8 @@ export class SyncService {
           symbol: p.symbol.slice(0, 120),
           name: p.name?.slice(0, 200) ?? null,
           note: p.note?.slice(0, 300) ?? null,
+          ref: p.ref?.slice(0, 200) ?? null,
+          pool: p.pool?.slice(0, 200) ?? null,
           network: p.network?.slice(0, 40) ?? null,
           amount: p.amount ?? null,
           priceUsd: p.priceUsd ?? null,

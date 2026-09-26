@@ -7,10 +7,6 @@ import { ScanRequests } from '../scan-requests.service';
 import { activeBinId, holds } from './lb-pair';
 import { PoolFeed } from './pool-feed.service';
 
-/** Two prices parsed from the same string, compared without trusting the last bit */
-const same = (a: number, b: number): boolean =>
-  Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
-
 /** One position, and whose wallet it hangs off */
 interface Watched extends MeteoraWatchable {
   walletId: string;
@@ -204,13 +200,8 @@ export class RangeWatch implements OnApplicationBootstrap, OnApplicationShutdown
   }
 
   /**
-   * What the last scan stored about each of these positions: in range or not.
-   *
-   * A stored row is recognised by its band — the scan writes Meteora's own
-   * min and max price there, and those are the same numbers this position
-   * carries. Only a row that is the ONE match counts: a wallet holding two
-   * positions in a pool can have them folded into one row with no band, and a
-   * guess about which of them it describes is worse than no answer.
+   * What the last scan stored about each of these positions: in range or not,
+   * found by the position's own address, which the scan stores beside it.
    */
   private async lastStored(positions: Watched[]): Promise<Map<string, boolean>> {
     const stored = new Map<string, boolean>();
@@ -219,22 +210,14 @@ export class RangeWatch implements OnApplicationBootstrap, OnApplicationShutdown
       where: {
         walletId: { in: [...new Set(positions.map((position) => position.walletId))] },
         platform: 'meteora',
+        ref: { in: positions.map((position) => position.positionAddress) },
         range: { not: null },
       },
-      select: { walletId: true, range: true, band: true },
+      select: { walletId: true, ref: true, range: true },
     });
     for (const position of positions) {
-      const matches = rows.filter((row) => {
-        const band = row.band as { lower?: unknown; upper?: unknown } | null;
-        return (
-          row.walletId === position.walletId &&
-          typeof band?.lower === 'number' &&
-          typeof band?.upper === 'number' &&
-          same(band.lower, position.lowerPrice) &&
-          same(band.upper, position.upperPrice)
-        );
-      });
-      if (matches.length === 1) stored.set(position.positionAddress, matches[0].range === 'in');
+      const row = rows.find((one) => one.walletId === position.walletId && one.ref === position.positionAddress);
+      if (row) stored.set(position.positionAddress, row.range === 'in');
     }
     return stored;
   }

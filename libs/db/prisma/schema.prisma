@@ -450,6 +450,8 @@ model Position {
   name       String?
   // Extra detail: pool/market name, the protocol's own description
   note       String?
+  ref        String?
+  pool       String?
   /// The network this position sits on, as the source names it: eth, arb, base,
   /// op, sol, tron, btc. Distinct from Wallet.chain, which is the family — one
   /// EVM wallet holds positions on a dozen networks and "EVM" cannot say which.
