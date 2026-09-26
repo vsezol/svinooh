@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { describe, test } from 'node:test';
-import { itemPositions } from '../src/scanners/debank-portfolio';
+import { itemPositions, tokenPosition } from '../src/scanners/debank-portfolio';
 
 /**
  * The range badge, and the one thing that decides it.
@@ -57,5 +57,41 @@ describe('a range is only asked of a position that has one', () => {
   test('an id on something that is not a pool still gets no range', () => {
     const [position] = itemPositions(project([item({ name: 'Lending', position_index: '42' })]));
     assert.equal(position.range, null);
+  });
+});
+
+describe('which position it is', () => {
+  test('the pool or market DeBank names it by comes with it', () => {
+    const [position] = itemPositions(
+      project([item({ name: 'Lending', pool: { id: '0x794a61358d6845594f94dc1db02a252b5b4814ad', chain: 'arb' } })]),
+    );
+    assert.equal(position.pool, '0x794a61358d6845594f94dc1db02a252b5b4814ad');
+  });
+
+  test('and nothing is made up where DeBank names none', () => {
+    const [position] = itemPositions(project([item({})]));
+    assert.equal(position.pool, null);
+  });
+
+  test('a pool DeBank splits by index is one pool per index', () => {
+    const [first, second] = itemPositions(
+      project([
+        item({ name: 'Farming', pool: { id: '0xfarm', chain: 'arb', index: 3 } }),
+        item({ name: 'Farming', pool: { id: '0xfarm', chain: 'arb', index: 7 } }),
+      ]),
+    );
+    assert.equal(first.pool, '0xfarm:3');
+    assert.equal(second.pool, '0xfarm:7');
+  });
+
+  test('a held token is named by its contract', () => {
+    const held = tokenPosition({
+      id: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+      chain: 'arb',
+      symbol: 'USDC',
+      amount: 5,
+      price: 1,
+    });
+    assert.equal(held?.ref, '0xaf88d065e77c8cc2239327c5edb3a432268e5831');
   });
 });

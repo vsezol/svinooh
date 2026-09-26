@@ -660,10 +660,10 @@ export interface ScanPosition {
   /** Extra detail: pool/market name, the protocol's own description */
   note?: string | null;
   /**
-   * What the source calls THIS position, where it calls it anything — DeBank's
-   * `position_index`. Never shown; it exists so a fact read straight from the
-   * protocol can be matched to the right position when a wallet holds two in
-   * the same pool, which the pair alone cannot distinguish. See PoolFact.ref.
+   * What the source calls THIS position: the address of a position or a loan
+   * account, an NFT's number, a token's contract. Never shown; it is what the
+   * position is known by from one scan to the next, and what a fact read
+   * straight from the protocol is matched on. See PoolFact.ref.
    */
   ref?: string | null;
   pool?: string | null;
@@ -927,11 +927,10 @@ export interface DefiFacts {
  *
  * The key has to survive a sync, and a `Position` row does not: every scan
  * deletes the wallet's positions and writes them again, so their ids are new
- * each time. Where a protocol answered for itself the key is its own address
- * for the position, which is as stable as identity gets. Where only the
- * aggregator saw it, the key is built from the platform and what it is called —
- * stable while the protocol keeps calling it the same thing, and a renamed
- * position simply reads as a new one and re-baselines quietly.
+ * each time. The key is the id the source gives the position — its address, an
+ * NFT's number, a loan's account — and where the source gives none, the pool or
+ * market it sits in. What the position holds never enters into it: a position
+ * whose band has turned one token into the other is the same position.
  */
 export interface WalletPositionState {
   key: string;

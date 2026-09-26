@@ -12,22 +12,24 @@ import type { ScanPosition, WalletPositionState } from '@svinooh/shared';
 const CONTROL = /[\u0000-\u001f\u007f]/g;
 
 export function positionKey(position: ScanPosition): string {
-  return [position.platform ?? '?', position.symbol, position.name ?? '', ...identityOf(position)]
+  return [
+    position.platform ?? '?',
+    position.network ?? '',
+    position.symbol,
+    position.name ?? '',
+    ...identityOf(position),
+  ]
     .map((part) => part.replace(CONTROL, '').trim())
     .join(':');
 }
 
 function identityOf(position: ScanPosition): string[] {
-  const legs = (position.tokens ?? [])
-    .filter((t) => t.role === 'supply' || t.role === 'borrow')
-    .map((t) => t.symbol.trim().toUpperCase())
-    .sort()
-    .join('+');
-  if (position.range == null && position.band == null) return [legs, ''];
   const ref = position.ref?.trim();
   if (ref) return ['ref', ref];
+  const pool = position.pool?.trim();
+  if (pool) return ['pool', pool];
   if (position.band) return ['band', `${position.band.lower}-${position.band.upper}`];
-  return ['pool', position.pool?.trim() || position.note?.trim() || legs];
+  return ['', ''];
 }
 
 /**

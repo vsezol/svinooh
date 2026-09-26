@@ -15,6 +15,7 @@ import type { ScanPosition, ScanPositionToken } from '@svinooh/shared';
  */
 
 export interface DebankToken {
+  id?: string;
   chain?: string;
   symbol?: string;
   optimized_symbol?: string;
@@ -30,7 +31,7 @@ export interface PortfolioItem {
   detail_types?: string[];
   stats?: { asset_usd_value?: number; debt_usd_value?: number; net_usd_value?: number };
   detail?: Record<string, unknown>;
-  pool?: { id?: string; chain?: string };
+  pool?: { id?: string; chain?: string; index?: string | number | null };
   /**
    * Present only on NFT-based concentrated-liquidity positions (Uniswap V3 and
    * its forks) — DeBank's own marker for "this position has a price range".
@@ -117,6 +118,13 @@ function itemNote(item: PortfolioItem): string | null {
   return parts.length ? parts.join(' · ') : null;
 }
 
+function poolOf(item: PortfolioItem): string | null {
+  const id = item.pool?.id;
+  if (!id) return null;
+  const index = item.pool?.index;
+  return index === null || index === undefined || index === '' ? id : `${id}:${index}`;
+}
+
 /** One position per portfolio item — a protocol is usually several of them */
 export function itemPositions(project: DebankProject): ScanPosition[] {
   const positions: ScanPosition[] = [];
@@ -141,6 +149,7 @@ export function itemPositions(project: DebankProject): ScanPosition[] {
       // what the on-chain reader knows its facts by. DeBank puts it on plenty
       // of things that are not pools, so it identifies and nothing more.
       ref: ref,
+      pool: poolOf(item),
       /**
        * A range is a question only a concentrated position can be asked, and
        * the kind alone cannot tell you which those are.
@@ -179,6 +188,7 @@ export function tokenPosition(token: DebankToken): ScanPosition | null {
     // A held token names its own network; nothing else is worth a note here
     note: null,
     network: token.chain ?? null,
+    ref: token.id ?? null,
     amount,
     priceUsd: price,
     valueUsd: usd,

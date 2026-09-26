@@ -165,6 +165,7 @@ export async function scanTron(address: string, resourcesAt: string | null = nul
       valueUsd: amount * coin.price,
       platform: 'wallet',
       category: 'token',
+      ref: contract,
     });
   }
   // Legacy TRC10 — only a numeric ID, no contract address: there's no free
