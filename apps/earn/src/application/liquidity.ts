@@ -31,6 +31,9 @@ export type ReadPairPool = (address: string) => Promise<PairPool | null>;
 /** The positions this owner holds in pair pools. */
 export type ReadLiquidityPositions = (owner: string) => Promise<LiquidityPosition[]>;
 
+/** What a pool holds within `share` of its price either way, in its y token, or null when it cannot be read. */
+export type ReadNearThePrice = (address: string, share: Decimal) => Promise<Decimal | null>;
+
 export interface LiquidityBuilders {
   provide: (provide: Provide) => Promise<BuiltTransaction>;
   close: (close: Close, pool: PairPool) => Promise<BuiltTransaction>;
@@ -60,11 +63,22 @@ const OPENING_SOL = new Decimal('0.06');
 
 const NATIVE = 'So11111111111111111111111111111111111111112';
 
-/** A pool, and — when a range was asked about — how many bins it spans there and why it will not fit. */
+/**
+ * A pool, and — when a range was asked about — how many bins it spans there
+ * and why it will not fit; and, when asked, the dollars it holds near its
+ * price, which is the liquidity a day's fees were shared among.
+ */
 export interface PoolFit {
   pool: PairPool;
   bins: number | null;
   why: string | null;
+  activeUsd?: Decimal | null;
+}
+
+async function activeUsdOf(pool: PairPool, share: Decimal, near: ReadNearThePrice): Promise<Decimal | null> {
+  if (!pool.yUsd) return null;
+  const inY = await near(pool.id.address, share);
+  return inY === null ? null : inY.mul(pool.yUsd);
 }
 
 /** Where liquidity for a pair can go, and what an owner already has placed. */
@@ -77,6 +91,7 @@ export class LendLiquidity {
     private readonly builders: Record<string, LiquidityBuilders> = {},
     private readonly holdings: Record<string, ReadHoldings> = {},
     private readonly lending: Lending | null = null,
+    private readonly near: Record<string, ReadNearThePrice> = {},
   ) {}
 
   /**
@@ -86,11 +101,17 @@ export class LendLiquidity {
    * too fine for the range in one position is kept, with why, rather than
    * dropped, since it may be the pair's deepest.
    */
-  async pools(network: string, first: string, second: string, range?: Range): Promise<PoolFit[]> {
+  async pools(
+    network: string,
+    first: string,
+    second: string,
+    range?: Range,
+    activeShare?: Decimal,
+  ): Promise<PoolFit[]> {
     const read = this.pools_[network];
     if (!read) throw new DepositNotSupported(`${network} pair pools are not read here yet`);
     const found = await read(first, second);
-    return found
+    const fits = found
       .filter((pool) => trusted(pool) && pairs(pool, first, second))
       .filter((pool) => pool.tvlUsd.gte(this.minTvlUsd))
       .map((pool) => ({
@@ -98,6 +119,14 @@ export class LendLiquidity {
         bins: range ? spanOf(range, pool.binStep).bins : null,
         why: range ? whyNotRange(range, pool) : null,
       }));
+    const near = this.near[network];
+    if (!activeShare || !near) return fits;
+    return Promise.all(
+      fits.map(async (fit) => ({
+        ...fit,
+        activeUsd: fit.why ? null : await activeUsdOf(fit.pool, activeShare, near),
+      })),
+    );
   }
 
   async pool(id: string): Promise<PairPool> {

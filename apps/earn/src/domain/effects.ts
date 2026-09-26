@@ -22,6 +22,8 @@ export interface PairAfter {
   priceX: Decimal;
   priceY: Decimal;
   positions: LiquidityPosition[];
+  /** The positions the transaction itself named: the one it opened, where it opened one */
+  touched: string[];
 }
 
 export interface Effects {

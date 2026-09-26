@@ -205,6 +205,35 @@ describe('PoolsWorthOffering', () => {
     ]);
   });
 
+  test('asked, a pool that holds the range says the dollars near its price', async () => {
+    const near: Array<[string, string]> = [];
+    const narrow = pairPool({ address: 'NARROW', binStep: 1, yUsd: new Decimal('1') });
+    const fitting = pairPool({ yUsd: new Decimal('0.9999') });
+    const unpriced = pairPool({ address: 'UNPRICED', yUsd: null });
+    const liquidity = new LendLiquidity(
+      { sol: async () => [narrow, fitting, unpriced] },
+      { sol: async () => null },
+      { sol: async () => [] },
+      new Decimal('100000'),
+      {},
+      {},
+      null,
+      {
+        sol: async (address, share) => (near.push([address, share.toString()]), new Decimal('20000')),
+      },
+    );
+    const fits = await liquidity.pools('sol', 'SOL', 'USDC', range('0.01', '0'), new Decimal('0.01'));
+    assert.deepEqual(
+      fits.map((fit) => [fit.pool.id.address, fit.activeUsd?.toString() ?? null]),
+      [
+        ['NARROW', null],
+        ['CgqwPL', '19998'],
+        ['UNPRICED', null],
+      ],
+    );
+    assert.deepEqual(near, [['CgqwPL', '0.01']]);
+  });
+
   test('a pool is found by its id, and an id that is not one is not found', async () => {
     const { liquidity } = lending();
     assert.equal((await liquidity.pool('sol:meteora:dlmm:CgqwPL')).name, 'SOL-USDC');
@@ -315,7 +344,7 @@ describe('TheLiquidityEndpoints', () => {
   let base = '';
   const provided: Provide[] = [];
   const takenOut: string[] = [];
-  const pool = pairPool();
+  const pool = pairPool({ yUsd: new Decimal('1') });
 
   before(async () => {
     app = await NestFactory.create(
@@ -323,6 +352,7 @@ describe('TheLiquidityEndpoints', () => {
         settings: { ...settingsFromEnv(), startupGraceMs: 5000, refreshIntervalMs: 600_000 },
         sources: [new KaminoSource(new KaminoApi(new RecordedKamino()))],
         pairPools: { sol: async () => [pool] },
+        near: { sol: async () => new Decimal('3739.3') },
         pairPool: { sol: async (address) => (address === pool.id.address ? pool : null) },
         liquidityPositions: {
           sol: async () => [
@@ -405,6 +435,21 @@ describe('TheLiquidityEndpoints', () => {
     assert.equal(one.range_fits, true);
     assert.equal(one.fee_apr, '0.199639');
     assert.equal(one.x.symbol, 'SOL');
+  });
+
+  test('asked, a day of fees on the dollars near the price', async () => {
+    const { body } = await ask(
+      'GET',
+      '/v1/liquidity/pools?network=sol&pair=SOL-USDC&below_pct=1&above_pct=0&active_pct=1',
+    );
+    const [one] = body.data;
+    assert.equal(one.active_usd, '3739.30');
+    assert.equal(one.fee_active, '0.100000');
+  });
+
+  test('not asked, nothing is read near the price', async () => {
+    const { body } = await ask('GET', '/v1/liquidity/pools?network=sol&pair=SOL-USDC');
+    assert.equal('active_usd' in body.data[0], false);
   });
 
   test('a pair that is not two tokens is a problem, not a search', async () => {

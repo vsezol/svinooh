@@ -102,6 +102,22 @@ export interface PairReading {
   positions: OwnedInPair[];
 }
 
+/** What a pool holds within `share` of its price either way, counted in its y token. */
+export async function nearThePrice(address: string, share: Decimal, rpcUrl: string): Promise<Decimal> {
+  const pool = await opened(rpcUrl, address);
+  const each = Math.ceil(Math.log(1 + share.toNumber()) / Math.log(1 + pool.lbPair.binStep / 10_000));
+  const { bins } = await pool.getBinsAroundActiveBin(each, each);
+  const inX = new Decimal(10).pow(pool.tokenX.mint.decimals);
+  const inY = new Decimal(10).pow(pool.tokenY.mint.decimals);
+  return bins.reduce(
+    (sum, bin) =>
+      sum
+        .plus(new Decimal(bin.xAmount.toString()).div(inX).mul(bin.pricePerToken))
+        .plus(new Decimal(bin.yAmount.toString()).div(inY)),
+    new Decimal(0),
+  );
+}
+
 export async function pairsAmong(accounts: string[], rpcUrl: string): Promise<string[]> {
   const kit = await import('@solana/kit');
   const { getAccountDiscriminator, program } = sdk();

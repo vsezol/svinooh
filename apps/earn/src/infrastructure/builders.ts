@@ -5,9 +5,12 @@ import type {
   ReadEffects,
   ReadHoldings,
 } from '../application/deposits';
+import { Logger } from '@nestjs/common';
+import type { Decimal } from 'decimal.js';
 import type {
   LiquidityBuilders,
   ReadLiquidityPositions,
+  ReadNearThePrice,
   ReadPairPool,
   ReadPairPools,
 } from '../application/liquidity';
@@ -27,6 +30,7 @@ import {
   buildMeteoraClose,
   buildMeteoraProvide,
   buildMeteoraRebalance,
+  nearThePrice,
 } from './meteora/liquidity';
 import { liquidityPositionsVia, pairPoolsVia, pairPoolVia } from './meteora/pools';
 import { holdingsVia, landingsVia } from './solana';
@@ -75,6 +79,30 @@ export const pairPoolWith = (): Record<string, ReadPairPool> => ({ sol: pairPool
 export const liquidityPositionsWith = (): Record<string, ReadLiquidityPositions> => ({
   sol: liquidityPositionsVia(pairPoolVia()),
 });
+
+/** How long what a pool holds near its price is taken as still true. */
+const NEAR_KEPT_MS = 60_000;
+
+export const nearThePriceWith = (rpcUrl: string): Record<string, ReadNearThePrice> => {
+  const kept = new Map<string, { at: number; value: Decimal }>();
+  return {
+    sol: async (address, share) => {
+      const key = `${address}:${share.toString()}`;
+      const known = kept.get(key);
+      if (known && known.at > Date.now() - NEAR_KEPT_MS) return known.value;
+      try {
+        const value = await nearThePrice(address, share, rpcUrl);
+        kept.set(key, { at: Date.now(), value });
+        return value;
+      } catch (failure) {
+        new Logger('Liquidity').warn(
+          `${address.slice(0, 6)}… near its price could not be read: ${String(failure)}`,
+        );
+        return null;
+      }
+    },
+  };
+};
 
 export const liquidityWith = (rpcUrl: string): Record<string, LiquidityBuilders> => ({
   'sol:meteora': {

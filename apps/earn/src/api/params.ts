@@ -227,6 +227,14 @@ export function rangeOf(query: Query): { below: Decimal; above: Decimal } | null
   return { below: below.div(100), above: above.div(100) };
 }
 
+/** How far either way of the price counts as near it, when asked: `active_pct=1` is 1%. */
+export function activeShareOf(query: Query): Decimal | null {
+  const share = decimalAtLeast(query, 'active_pct', 0);
+  if (share === null || share.isZero()) return null;
+  if (share.gte(100)) throw new InvalidParameter('active_pct: Input should be less than 100');
+  return share.div(100);
+}
+
 export interface ProvideBody {
   owner: string;
   spend:

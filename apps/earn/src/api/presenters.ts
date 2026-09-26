@@ -216,7 +216,7 @@ export function effects(found: Effects | null) {
       price_y_usd: price(one.priceY),
       positions: one.positions.map((held) => {
         const { pool, ...position } = liquidityPosition(held);
-        return position;
+        return { ...position, touched: one.touched.includes(held.address) };
       }),
     })),
   };
@@ -270,6 +270,15 @@ export const pairFit = (fit: PoolFit) => ({
   range_bins: fit.bins,
   range_fits: fit.bins === null ? null : fit.why === null,
   why_not: fit.why,
+  ...(fit.activeUsd === undefined
+    ? {}
+    : {
+        active_usd: usd(fit.activeUsd),
+        fee_active:
+          fit.activeUsd === null || fit.activeUsd.lte(0)
+            ? null
+            : rate(fit.pool.fees24hUsd.div(fit.activeUsd)),
+      }),
 });
 
 export function liquidityPosition(held: LiquidityPosition) {

@@ -3,6 +3,7 @@ import { LendLiquidity } from '../application/liquidity';
 import type { Clock } from '../application/refresher';
 import { CLOCK } from '../tokens';
 import {
+  activeShareOf,
   addressOf,
   networkOf,
   ownerOf,
@@ -29,7 +30,13 @@ export class LiquidityController {
   @Get('pools')
   async listPools(@Query() query: Record<string, string>) {
     const [first, second] = pairOf(query);
-    const fits = await this.liquidity.pools(networkOf(query), first, second, rangeOf(query) ?? undefined);
+    const fits = await this.liquidity.pools(
+      networkOf(query),
+      first,
+      second,
+      rangeOf(query) ?? undefined,
+      activeShareOf(query) ?? undefined,
+    );
     const meta = chainMeta(this.clock());
     return { data: fits.map(pairFit), meta: { ...meta, count: fits.length, total: fits.length } };
   }

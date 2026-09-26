@@ -10,6 +10,7 @@ import {
   LendLiquidity,
   type LiquidityBuilders,
   type ReadLiquidityPositions,
+  type ReadNearThePrice,
   type ReadPairPool,
   type ReadPairPools,
 } from './application/liquidity';
@@ -38,6 +39,7 @@ import {
   holdingsWith,
   liquidityPositionsWith,
   liquidityWith,
+  nearThePriceWith,
   pairPoolsWith,
   pairPoolWith,
   landingsWith,
@@ -72,6 +74,7 @@ export interface Built {
   pairPool?: Record<string, ReadPairPool>;
   liquidityPositions?: Record<string, ReadLiquidityPositions>;
   liquidity?: Record<string, LiquidityBuilders>;
+  near?: Record<string, ReadNearThePrice>;
 }
 
 @Module({})
@@ -160,6 +163,7 @@ function providersFor(built: Built) {
           built.liquidity ?? liquidityWith(settings.solanaRpcUrl),
           built.holdings ?? holdingsWith(settings.solanaRpcUrl),
           moves,
+          built.near ?? nearThePriceWith(settings.solanaRpcUrl),
         ),
       inject: [SETTINGS, LendMoves],
     },

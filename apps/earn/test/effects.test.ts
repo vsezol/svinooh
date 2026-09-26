@@ -193,6 +193,7 @@ describe('WhatALandingLeftBehind', () => {
                       feesUsd: new Decimal('0.0008'),
                     },
                   ],
+                  touched: ['955Jz'],
                 },
               ],
             };
@@ -245,6 +246,7 @@ describe('WhatALandingLeftBehind', () => {
       amount_y: '6.541655',
       value_usd: '12.00',
       fees_usd: '0.00',
+      touched: true,
     });
   });
 
