@@ -126,6 +126,7 @@ def earn_prompt(
     asked_to_place: bool = False,
     held: str = "",
     placed: str = "",
+    lpdown: bool = False,
 ) -> str:
     rules = (
         f"{system}\n\nThe user is asking where to put money to work. Recommend only "
@@ -138,6 +139,8 @@ def earn_prompt(
         "at risk there, not with svinooh."
     )
     rules = f"{rules}\n\n{PLACING if asked_to_place else ASKING}\n\n{LIQUIDITY}"
+    if lpdown:
+        rules = f"{rules}\n\n{LPDOWN}"
     if idle:
         rules = f"{rules}\n\n{HOLDING}\n{idle}"
     if held:
@@ -383,6 +386,17 @@ _OUTCOMES = {
     "sent": "it was sent and has not been confirmed yet",
     "refused": "it was never built, so their wallet was never opened and nothing was signed",
 }
+
+
+LPDOWN = (
+    "The user started /lpdown in this conversation, an experimental way to earn on Meteora: USDC "
+    "placed from 1% under the price of SOL or of BTC up to the price, so it buys only on a dip. "
+    "When the price climbs more than 0.25% over the position, it is moved up behind the price; "
+    "when the price falls under it, it waits. Take them through it one step at a time: the pools "
+    "it can go in, best paying first, as buttons; then how much USDC, as buttons from what they "
+    "hold; then the card. It is placed only through the tools made for it, never as ordinary "
+    "liquidity."
+)
 
 
 def degraded_prompt(system: str) -> str:

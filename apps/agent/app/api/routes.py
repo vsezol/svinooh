@@ -190,6 +190,7 @@ def _liquidity_card(card: Placement) -> DepositBlock:
         upper_price=upper if below is not None else None,
         price=_price(pool.price),
         position=held.address if held else None,
+        strategy=card.strategy,
     )
 
 

@@ -101,6 +101,7 @@ async function effectsOf(
     ...touched.vaults.map((pool) => pool.token.mint),
     ...pairs.flatMap(({ pool }) => [pool.x.mint, pool.y.mint]),
   ]);
+  const named = new Set(keys.map((key) => String(key.pubkey)));
   const priceOf: PriceOf = (mint) =>
     listed.get(mint === NATIVE_SOL ? WRAPPED_SOL : mint)?.priceUsd ?? null;
 
@@ -113,7 +114,7 @@ async function effectsOf(
     slot: Number(found.slot),
     coins: moved.map((one) => coinAfter(one, listed)),
     vaults,
-    pairs: pairs.map((pair) => pairAfter(pair, priceOf)),
+    pairs: pairs.map((pair) => pairAfter(pair, priceOf, named)),
   };
 }
 
@@ -165,7 +166,7 @@ async function pairsRead(
   return read.flat();
 }
 
-function pairAfter({ pool, reading }: PairRead, priceOf: PriceOf): PairAfter {
+function pairAfter({ pool, reading }: PairRead, priceOf: PriceOf, named: Set<string>): PairAfter {
   const priceX = priceOf(pool.x.mint) ?? new Decimal(0);
   const priceY = priceOf(pool.y.mint) ?? new Decimal(0);
   const usdOf = (x: Decimal, y: Decimal) => x.mul(priceX).plus(y.mul(priceY));
@@ -184,5 +185,6 @@ function pairAfter({ pool, reading }: PairRead, priceOf: PriceOf): PairAfter {
       valueUsd: usdOf(one.amountX, one.amountY),
       feesUsd: usdOf(one.feeX, one.feeY),
     })),
+    touched: reading.positions.filter((one) => named.has(one.address)).map((one) => one.address),
   };
 }

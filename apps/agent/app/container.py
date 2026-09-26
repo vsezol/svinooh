@@ -20,7 +20,7 @@ from .application.limits import WindowAllowance, WindowRateLimiter
 from .application.sessions import SessionStore
 from .application.turns import Turns
 from .config import Config
-from .ports import Agent, Allowance, ConversationStore, Panel, RateLimiter
+from .ports import Agent, Allowance, ConversationStore, Panel, RateLimiter, Strategies
 from .settings import Settings
 
 logger = logging.getLogger("svinooh-ai")
@@ -70,12 +70,15 @@ def build(settings: Settings) -> Container:
     if redis is None:
         store: ConversationStore = memory.MemoryConversationStore()
         counters: Storage = memory.rate_limit_storage()
+        strategies: Strategies = memory.MemoryStrategies()
     else:
         from .adapters.redis import rate_limit
         from .adapters.redis.conversations import RedisConversationStore
+        from .adapters.redis.strategies import RedisStrategies
 
         store = RedisConversationStore(redis)
         counters = rate_limit.storage(settings.redis_url, redis)
+        strategies = RedisStrategies(redis)
 
     http = _http(settings)
     panel = RemotePanel(settings.portfolio_api_url, http)
@@ -98,6 +101,7 @@ def build(settings: Settings) -> Container:
         models,
         IntentClassifier(models, config),
         ConfirmationClassifier(models, config),
+        strategies,
     )
     return Container(
         settings=settings,

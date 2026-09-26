@@ -176,3 +176,24 @@ class TestSigningIn:
         assert await store.owns_any(anon) is True
         await store.reassign(anon, target)
         assert await store.owns_any(anon) is False
+
+
+async def test_lpdown_keeps_the_positions_it_opened_per_portfolio():
+    if not await _reachable():
+        pytest.skip(f"no Redis at {URL}")
+    from app.adapters.redis.strategies import RedisStrategies
+
+    pool = client.pool(URL)
+    strategies = RedisStrategies(pool)
+    slug = f"pf-{uuid.uuid4().hex[:8]}"
+    try:
+        assert await strategies.lpdown(slug) == frozenset()
+        await strategies.adopt(slug, "POSITION_A")
+        await strategies.adopt(slug, "POSITION_B")
+        assert await strategies.lpdown(slug) == frozenset({"POSITION_A", "POSITION_B"})
+        assert await strategies.lpdown(f"{slug}-other") == frozenset()
+        await strategies.drop(slug, "POSITION_A")
+        assert await strategies.lpdown(slug) == frozenset({"POSITION_B"})
+    finally:
+        await strategies.drop(slug, "POSITION_B")
+        await pool.disconnect()

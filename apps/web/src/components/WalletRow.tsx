@@ -3,7 +3,8 @@ import type { KeyboardEvent, MouseEvent } from 'react';
 import type { PositionTokenRole, WalletDto } from '@svinooh/shared';
 import { buildBlocks, withoutDust, type BlockSection } from '../lib/blocks';
 import { chainMeta, fmtAmount, fmtPrice, fmtUsd, shortAddress, walletName } from '../lib/format';
-import { Card, Chevron, Spinner, Tag, Tooltip } from '../ui';
+import { rebalanceable, rebalanceQuestion } from '../lib/rebalance';
+import { Button, Card, Chevron, Spinner, Tag, Tooltip } from '../ui';
 import { badgedText, ChainBadge } from './ChainBadge';
 import { RangeBar } from './RangeBar';
 import { WalletMenu } from './WalletMenu';
@@ -66,9 +67,20 @@ interface Props {
   onRename: (label: string) => void;
   /** Pressing a locked action */
   onRequireAuth: () => void;
+  /** Asks the assistant to put a position that left its range back; only where there is one to ask */
+  onRebalance?: (question: string) => void;
 }
 
-export function WalletRow({ wallet, actions, total, hideSmall, onRemove, onRename, onRequireAuth }: Props) {
+export function WalletRow({
+  wallet,
+  actions,
+  total,
+  hideSmall,
+  onRemove,
+  onRename,
+  onRequireAuth,
+  onRebalance,
+}: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -331,6 +343,11 @@ export function WalletRow({ wallet, actions, total, hideSmall, onRemove, onRenam
                       {b.range === 'in' ? 'IN RANGE' : 'OUT OF RANGE'}
                     </span>
                   </Tooltip>
+                ) : null}
+                {onRebalance && actions === 'edit' && rebalanceable(b) ? (
+                  <Button variant="soft" size="xs" onClick={() => onRebalance(rebalanceQuestion(b.band))}>
+                    Rebalance
+                  </Button>
                 ) : null}
                 <div style={{ flex: 1 }} />
                 <span

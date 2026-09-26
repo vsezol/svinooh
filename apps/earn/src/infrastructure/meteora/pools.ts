@@ -27,6 +27,7 @@ interface WireToken {
   symbol: string;
   decimals: number;
   is_verified?: boolean;
+  price?: number;
 }
 
 interface WirePool {
@@ -85,6 +86,7 @@ function poolOf(wire: WirePool): PairPool {
     fees24hUsd: Decimal.max(dec(wire.fees?.['24h']).minus(dec(wire.protocol_fees?.['24h'])), 0),
     price: dec(wire.current_price),
     url: `https://app.meteora.ag/dlmm/${wire.address}`,
+    yUsd: typeof wire.token_y.price === 'number' ? dec(wire.token_y.price) : null,
   };
 }
 

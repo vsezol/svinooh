@@ -65,6 +65,8 @@ export function settledOf(
     action: request.action ?? 'deposit',
     from_pool: request.fromPool ?? null,
     ...(ends !== spent ? { into: ends } : {}),
+    ...(request.strategy ? { strategy: request.strategy } : {}),
+    ...(request.position ? { position: request.position } : {}),
   };
   if (!outcome) return null;
   if (outcome.ok === false) {
@@ -116,6 +118,7 @@ export const requestOf = (block: DepositBlock): DepositRequest => ({
   ...(block.belowPct ? { belowPct: block.belowPct } : {}),
   ...(block.abovePct ? { abovePct: block.abovePct } : {}),
   ...(block.position ? { position: block.position } : {}),
+  ...(block.strategy ? { strategy: block.strategy } : {}),
 });
 
 const EYEBROW = {

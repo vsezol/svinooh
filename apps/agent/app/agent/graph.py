@@ -11,14 +11,16 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from ..adapters.earn import YieldCatalog
+from ..adapters.memory import MemoryStrategies
 from ..adapters.portfolio import PortfolioApiSource
 from ..config import Config
+from ..domain import lpdown
 from ..domain.asking import Choice
 from ..domain.conversation import Turn
 from ..domain.earn import Card, Held, LiquidityPosition, Placement, Settled
 from ..domain.portfolio import Portfolio
 from ..observability import metrics
-from ..ports import Ask, Failed, Finished, Progress, Reply, Update
+from ..ports import Ask, Failed, Finished, Progress, Reply, Strategies, Update
 from .context import (
     earning_lines,
     free_on_solana,
@@ -60,6 +62,7 @@ from .tools import (
     deposit_tools,
     earn_tools,
     liquidity_tools,
+    lpdown_tools,
     moving_tools,
     portfolio_tools,
     run_tools,
@@ -107,6 +110,7 @@ class Holdings:
     owners: tuple[str, ...] = ()
     placed: tuple[LiquidityPosition, ...] = ()
     free: dict[str, Decimal] | None = None
+    portfolio: str | None = None
 
 
 class AgentState(TypedDict, total=False):
@@ -156,6 +160,7 @@ class LangGraphAgent:
         models: Models,
         intents: IntentClassifier,
         confirmations: ConfirmationClassifier,
+        strategies: Strategies | None = None,
     ) -> None:
         self._config = config
         self._portfolio = portfolio
@@ -163,6 +168,7 @@ class LangGraphAgent:
         self._models = models
         self._intents = intents
         self._confirmations = confirmations
+        self._strategies = strategies if strategies is not None else MemoryStrategies()
         self.graph = self._build()
 
     async def run(self, ask: Ask) -> Reply:
@@ -198,6 +204,8 @@ class LangGraphAgent:
         # A deposit coming back is not something the user typed, so its wording
         # decides neither the branch nor the language: what they last wrote does.
         asked = _last_question(state) if state.get("settled") else state["question"]
+        commanded = not state.get("settled") and lpdown.is_command(asked)
+        going_on = not state.get("settled") and lpdown.started(asked, state.get("history", ()))
         try:
             async with step("route", "Reading the question"):
                 label = await self._intents.classify(asked, state.get("history", ()))
@@ -211,8 +219,9 @@ class LangGraphAgent:
                 asked,
             )
             metrics.counted(metrics.intents, intent=label.intent)
+            placing = commanded or (going_on and label.intent == "general")
             return {
-                "intent": "settled" if state.get("settled") else label.intent,
+                "intent": "earn" if placing else _branch(state, label.intent),
                 "asked_to_place": label.stance == "placing",
                 "risk": label.risk,
                 "lp_range": label.lp_range,
@@ -222,7 +231,7 @@ class LangGraphAgent:
             logger.warning("intent classifier failed (%r) — routing to portfolio", error)
             metrics.counted(metrics.intents, intent="unreadable")
             metrics.counted(metrics.errors, type="classifier")
-            return {"intent": "settled" if state.get("settled") else "portfolio"}
+            return {"intent": "earn" if commanded else _branch(state, "portfolio")}
 
     async def _identity(self, state: AgentState) -> AgentState:
         hint = state.get("portfolio")
@@ -264,6 +273,9 @@ class LangGraphAgent:
     async def _earn(self, state: AgentState, settled: Settled | None = None) -> AgentState:
         asked_to_place = bool(state.get("asked_to_place"))
         holdings = await self._what_they_hold(state)
+        if settled is not None and settled.status == "landed":
+            await self._remember(settled, holdings)
+        started = lpdown.started(state["question"], state.get("history", ()))
         if settled is None:
             system = earn_prompt(
                 system_prompt(self._config),
@@ -272,6 +284,7 @@ class LangGraphAgent:
                 asked_to_place=asked_to_place,
                 held=held_lines(holdings.held),
                 placed=placed_lines(holdings.placed),
+                lpdown=started,
             )
         else:
             system = going_on_prompt(
@@ -283,6 +296,11 @@ class LangGraphAgent:
             )
         prepared: list[Card] = []
         asked: list[Choice] = []
+        running = (
+            await self._strategies.lpdown(holdings.portfolio)
+            if holdings.portfolio is not None
+            else frozenset()
+        )
         risk_known = state.get("risk", "unknown") != "unknown"
         range_known = state.get("lp_range", "unknown") != "unknown"
         tools = (
@@ -297,6 +315,12 @@ class LangGraphAgent:
                 holdings.free,
                 holdings.held,
                 holdings.owners,
+                lpdown=running,
+            )
+            + (
+                lpdown_tools(self._catalog, prepared, holdings.owners, holdings.free)
+                if started
+                else []
             )
             + asking_tools(asked)
         )
@@ -314,6 +338,29 @@ class LangGraphAgent:
             "deposits": () if asked else each_once(prepared),
             "choices": tuple(asked),
         }
+
+    async def _remember(self, settled: Settled, holdings: Holdings) -> None:
+        """Which positions /lpdown moves: the one its card opened, and no longer one it closed."""
+        portfolio = holdings.portfolio
+        if portfolio is None:
+            return
+        try:
+            if settled.position and settled.action in ("close", "rebalance"):
+                await self._strategies.drop(portfolio, settled.position)
+            if settled.strategy != lpdown.STRATEGY or not settled.signature:
+                return
+            for owner in holdings.owners:
+                opened = await self._catalog.opened_by(settled.signature, owner)
+                for address in opened:
+                    await self._strategies.adopt(portfolio, address)
+                if opened:
+                    logger.info("lpdown: %s opened %s", settled.signature[:8], opened)
+                    return
+            logger.warning(
+                "lpdown: %s landed and no position it opened was found", settled.signature[:8]
+            )
+        except Exception as error:  # noqa: BLE001 — the answer about the landing still goes out
+            logger.warning("lpdown: what %s opened could not be kept (%r)", settled.action, error)
 
     async def _what_they_hold(self, state: AgentState) -> Holdings:
         target = state.get("portfolio")
@@ -337,6 +384,7 @@ class LangGraphAgent:
                 owners=solana_wallets(portfolio),
                 placed=placed,
                 free=free_on_solana(portfolio),
+                portfolio=target,
             )
         except Exception as error:  # noqa: BLE001 — advice without it beats no advice
             logger.warning("earn: holdings unavailable (%r)", error)
@@ -597,6 +645,10 @@ def all_that_was_said(written: list[str]) -> str:
 
 def solana_wallets(portfolio: Portfolio) -> tuple[str, ...]:
     return tuple(wallet.address for wallet in portfolio.wallets if wallet.chain == "SOL")
+
+
+def _branch(state: AgentState, intent: str) -> str:
+    return "settled" if state.get("settled") else intent
 
 
 def _last_question(state: AgentState) -> str:

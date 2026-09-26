@@ -27,6 +27,15 @@ class ConversationStore(Protocol):
         """Move every conversation from one owner to another; returns how many."""
 
 
+class Strategies(Protocol):
+    async def lpdown(self, portfolio: str) -> frozenset[str]:
+        """The liquidity positions of this portfolio that /lpdown opened, and so moves."""
+
+    async def adopt(self, portfolio: str, position: str) -> None: ...
+
+    async def drop(self, portfolio: str, position: str) -> None: ...
+
+
 class RateLimiter(Protocol):
     async def retry_after(self, key: str) -> int | None:
         """Charge one attempt; None means allowed, a number is seconds to wait."""

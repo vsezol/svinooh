@@ -51,6 +51,7 @@ export interface PairPool {
   fees24hUsd: Decimal;
   price: Decimal;
   url: string;
+  yUsd?: Decimal | null;
 }
 
 /**

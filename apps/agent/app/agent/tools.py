@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from decimal import Decimal, InvalidOperation
 
@@ -6,6 +7,7 @@ from langchain_core.tools import tool
 
 from ..adapters.earn import YieldCatalog
 from ..adapters.portfolio import DataSource
+from ..domain import lpdown as down
 from ..domain.asking import MAX_ANSWERS, MIN_ANSWERS, Choice
 from ..domain.earn import (
     Card,
@@ -399,8 +401,8 @@ def moving_tools(
 RANGE_FIRST = (
     "Nobody has said the range yet, so nothing is placed. Ask it with buttons — a "
     "narrow range, a middle one and a wide one, each as how far under and over the "
-    "price it reaches, like -5% / +5% — and say they can type their own; prepare "
-    "nothing until they answer."
+    "price it reaches, like -5% / +5% — and say they can type their own, as that or as "
+    "the lower and upper price; prepare nothing until they answer."
 )
 
 
@@ -425,6 +427,51 @@ def _range(below_pct: str, above_pct: str) -> tuple[Decimal, Decimal] | str | No
     return below, above
 
 
+EDGE_PCT = Decimal("0.05")
+
+
+def _price_of(raw: str) -> Decimal | None:
+    try:
+        value = Decimal(str(raw).strip().replace(" ", "").replace(",", "."))
+    except InvalidOperation:
+        return None
+    return value if value > 0 else None
+
+
+def _bounds(
+    lower_price: str, upper_price: str, price: Decimal
+) -> tuple[Decimal, Decimal] | str | None:
+    """Two prices as the range they make around `price`; None when neither is given."""
+    if not str(lower_price).strip() and not str(upper_price).strip():
+        return None
+    lower, upper = _price_of(lower_price), _price_of(upper_price)
+    if lower is None or upper is None:
+        return (
+            "Bounds are two plain prices in the pool's own terms, its y per its x: the lower one "
+            "and the upper one. Call again with both."
+        )
+    lower, upper = min(lower, upper), max(lower, upper)
+    below = (1 - lower / price) * 100
+    above = (upper / price - 1) * 100
+    below = Decimal(0) if -EDGE_PCT < below < 0 else below
+    above = Decimal(0) if -EDGE_PCT < above < 0 else above
+    if below < 0 or above < 0 or below + above == 0:
+        return (
+            f"A range reaches from under the price to over it, or up to it, and {lower:f} - "
+            f"{upper:f} does not hold the price, {price:f} now. Nothing is placed. Ask for bounds "
+            "on either side of it."
+        )
+    step = Decimal("0.0001")
+    return below.quantize(step), above.quantize(step)
+
+
+def _wanted(
+    below_pct: str, above_pct: str, lower_price: str, upper_price: str, price: Decimal
+) -> tuple[Decimal, Decimal] | str | None:
+    bounds = _bounds(lower_price, upper_price, price)
+    return bounds if bounds is not None else _range(below_pct, above_pct)
+
+
 def liquidity_tools(
     catalog: YieldCatalog,
     placed: tuple[LiquidityPosition, ...],
@@ -433,6 +480,7 @@ def liquidity_tools(
     free: dict[str, Decimal] | None = None,
     held: tuple[Held, ...] = (),
     owners: tuple[str, ...] = (),
+    lpdown: frozenset[str] = frozenset(),
 ) -> list:
     async def held_now(mint: str) -> Decimal | None:
         read = [await catalog.held_now(owner, mint) for owner in owners]
@@ -512,21 +560,32 @@ def liquidity_tools(
         )
 
     @tool
-    async def liquidity_pools(pair: str, below_pct: str = "", above_pct: str = "") -> str:
+    async def liquidity_pools(
+        pair: str,
+        below_pct: str = "",
+        above_pct: str = "",
+        lower_price: str = "",
+        upper_price: str = "",
+    ) -> str:
         """Pools that pair two tokens for liquidity, most money first.
 
         Call when the user wants to provide liquidity to a pair, or asks where
         to. `pair` is two tickers joined by a dash — SOL-USDC. With the range
         they chose — `below_pct` and `above_pct`, how far under and over the
-        current price it reaches, in percent — each pool says whether one
-        position holds that range there; only one that does can take it.
+        current price it reaches, in percent, or `lower_price` and
+        `upper_price` when they named the two prices — each pool says whether
+        one position holds that range there; only one that does can take it.
         Returns each pool's fee rate, the money in it, how wide its bins are,
         and its price.
         """
         sides = [side.strip() for side in str(pair).replace("/", "-").split("-") if side.strip()]
         if len(sides) != 2:
             return "A pair is two tickers joined by a dash, like SOL-USDC. Call again with one."
-        wanted = _range(below_pct, above_pct)
+        wanted: tuple[Decimal, Decimal] | str | None = _range(below_pct, above_pct)
+        if str(lower_price).strip() or str(upper_price).strip():
+            priced = await catalog.pair_pools(sides[0], sides[1], None, None)
+            if priced:
+                wanted = _bounds(lower_price, upper_price, priced[0].price)
         if isinstance(wanted, str):
             return wanted
         below, above = wanted if wanted else (None, None)
@@ -563,9 +622,11 @@ def liquidity_tools(
         pool_id: str,
         amount: str,
         token: str,
-        below_pct: str,
-        above_pct: str,
+        below_pct: str = "",
+        above_pct: str = "",
         from_pool_id: str = "",
+        lower_price: str = "",
+        upper_price: str = "",
     ) -> str:
         """Put liquidity for a pair in front of the user to sign, once they chose amount and range.
 
@@ -574,7 +635,9 @@ def liquidity_tools(
         the range needs of the other is swapped into it on the way.
         `below_pct` and `above_pct` are how far under and over the current
         price the range reaches, in percent, exactly as they chose them — 10.3
-        and 5.5 for -10.3% / +5.5%. When the money sits in one of their pools
+        and 5.5 for -10.3% / +5.5%. When they named the two prices instead,
+        give those as `lower_price` and `upper_price`, in the pool's own terms,
+        and leave the percentages empty. When the money sits in one of their pools
         rather than in their wallet, `from_pool_id` is that pool's id as printed
         on the lines of what they have in pools, and `amount` may be "all": the
         same card takes it out and places it, from one button. It moves nothing
@@ -592,17 +655,17 @@ def liquidity_tools(
         size = source.amount if source is not None and everything else _amount(amount)
         if size is None:
             return "That amount is not a number of tokens. Ask the user how much, and call again."
-        wanted = _range(below_pct, above_pct)
-        if wanted is None:
-            return RANGE_FIRST
-        if isinstance(wanted, str):
-            return wanted
-        below, above = wanted
         pool = await resolve(pool_id)
         if pool is None:
             return (
                 f"No pool has the id {pool_id}. Use an id exactly as it was printed beside a pool."
             )
+        wanted = _wanted(below_pct, above_pct, lower_price, upper_price, pool.price)
+        if wanted is None:
+            return RANGE_FIRST
+        if isinstance(wanted, str):
+            return wanted
+        below, above = wanted
         paid = pool.token(source.pool.token if source is not None else token)
         if paid is None and source is not None:
             return (
@@ -670,22 +733,31 @@ def liquidity_tools(
         )
 
     @tool
-    async def propose_rebalance(position: str, below_pct: str = "", above_pct: str = "") -> str:
+    async def propose_rebalance(
+        position: str,
+        below_pct: str = "",
+        above_pct: str = "",
+        lower_price: str = "",
+        upper_price: str = "",
+    ) -> str:
         """Close a liquidity position and place what it held around the price again, one button.
 
         For a position that has left its range, or one they want re-centred.
         `position` is the address printed on the lines of their liquidity
         positions. `below_pct` and `above_pct` are the new range in percent,
-        when they chose one; leave both empty to keep its width, as far down
-        as up. What it held is swapped to fit the new range on the way, and
-        their wallet asks for a signature per step.
+        when they chose one, or `lower_price` and `upper_price` when they named
+        the two prices; leave all empty to keep its width, as far down as up.
+        What it held is swapped to fit the new range on the way, and their
+        wallet asks for a signature per step.
         """
         held = at(position)
         if held is None:
             return not_theirs(position)
-        wanted = _range(below_pct, above_pct)
+        wanted = _wanted(below_pct, above_pct, lower_price, upper_price, held.pool.price)
         if isinstance(wanted, str):
             return wanted
+        if wanted is None and held.address in lpdown:
+            return by_lpdown(held)
         if wanted:
             why, _ = await fitting(held.pool, *wanted)
             if why:
@@ -701,14 +773,189 @@ def liquidity_tools(
             )
         )
         where = f"-{below:f}% / +{above:f}%" if wanted else "as wide as it was, as far down as up"
+        other = (
+            ""
+            if wanted
+            else " Say too that they can name other bounds, as two prices or as percentages."
+        )
         return (
             f"Ready for the user to sign: the {held.pool.name} position closed and what it holds "
             f"— {held.amount_x:f} {held.pool.x} and {held.amount_y:f} {held.pool.y} — placed again "
             f"around the price, {where}, swapped to fit. Their wallet asks for a signature per "
+            f"step. Say it in two sentences; nothing happens until they sign.{other}"
+        )
+
+    def by_lpdown(held: LiquidityPosition) -> str:
+        read = down.reading(held)
+        if read.where == "below":
+            return (
+                f"This position runs /lpdown and the price is under its range: it holds the "
+                f"{held.pool.x} it bought on the way down, and the strategy waits for the price to "
+                "come back rather than selling it low. Nothing is placed. Say so."
+            )
+        if read.where == "waiting":
+            return (
+                "This position runs /lpdown, which moves it only once the price is more than 0.25% "
+                f"over its top; it is {max(read.over_pct, Decimal(0)):.2f}% over now. Nothing is "
+                "placed. Say so."
+            )
+        prepared.append(
+            Placement(
+                action="rebalance",
+                pool=held.pool,
+                position=held,
+                below_pct=down.BELOW_PCT,
+                above_pct=down.ABOVE_PCT,
+                strategy=down.STRATEGY,
+            )
+        )
+        return (
+            f"Ready for the user to sign, by the /lpdown rules: the {held.pool.name} position "
+            f"closed and what it holds — {held.amount_x:f} {held.pool.x} and {held.amount_y:f} "
+            f"{held.pool.y} — placed again from 1% under the price, {held.pool.price:f} "
+            f"{held.pool.y} per {held.pool.x} now, up to it. Their wallet asks for a signature per "
             "step. Say it in two sentences; nothing happens until they sign."
         )
 
     return [liquidity_pools, propose_liquidity, propose_close_liquidity, propose_rebalance]
+
+
+MAX_LPDOWN = 6
+
+
+def lpdown_tools(
+    catalog: YieldCatalog,
+    prepared: list[Card],
+    owners: tuple[str, ...] = (),
+    free: dict[str, Decimal] | None = None,
+) -> list:
+    shown: dict[str, PairPool] = {}
+
+    async def usdc_free() -> Decimal | None:
+        read = [await catalog.held_now(owner, down.USDC) for owner in owners]
+        known = [one for one in read if one is not None]
+        return sum(known, Decimal(0)) if known else (free or {}).get("USDC")
+
+    async def ranked() -> list[PairPool]:
+        found = await asyncio.gather(
+            *(
+                catalog.pair_pools(asset, "USDC", down.BELOW_PCT, down.ABOVE_PCT, down.NEAR_PCT)
+                for asset in down.ASSETS
+            )
+        )
+        fitting = {
+            pool.id: pool
+            for pools in found
+            for pool in pools
+            if down.takes(pool) and pool.why_not is None
+        }
+        return sorted(
+            fitting.values(),
+            key=lambda pool: down.rate_a_day(pool) or Decimal(-1),
+            reverse=True,
+        )
+
+    @tool
+    async def lpdown_pools() -> str:
+        """The pools /lpdown can place in, the best paying first.
+
+        Pools of SOL and of BTC against USDC that hold a range from 1% under
+        the price up to it in one position, ranked by a day of fees on the
+        liquidity within 1% of the price — what a narrow position shares
+        those fees with. Call it when the user starts /lpdown.
+        """
+        pools = await ranked()
+        shown.update({pool.id: pool for pool in pools})
+        said(f"{len(pools)} pools" if pools else "no pools")
+        if not pools:
+            return (
+                "No pool of SOL or of BTC against USDC can take a range from 1% under the price up "
+                "to it just now. Nothing is placed. Say so."
+            )
+        lines = [
+            f"- {pool.name}, bins {pool.bin_step / 100:g}% apart: {near(pool)}; "
+            f"{as_money(pool.tvl_usd)} in it. id {pool.id}"
+            for pool in pools[:MAX_LPDOWN]
+        ]
+        have = await usdc_free()
+        lines.append(
+            "Offer them as buttons, best first, each naming the pool and its rate a day. Then ask "
+            "how much USDC"
+            + (f", out of the {have:f} they hold free." if have is not None else ".")
+        )
+        return "\n".join(lines)
+
+    def near(pool: PairPool) -> str:
+        rate = down.rate_a_day(pool)
+        if rate is not None:
+            return (
+                f"{rate * 100:.2f}% a day in fees on the {as_money(pool.active_usd or Decimal(0))} "
+                "within 1% of the price"
+            )
+        if pool.active_usd is None:
+            return "what it holds near the price could not be read"
+        return (
+            f"only {as_money(pool.active_usd)} within 1% of the price, too little for its fees to "
+            "say what a position there would earn"
+        )
+
+    @tool
+    async def propose_lpdown(pool_id: str, amount: str) -> str:
+        """Put the /lpdown position in front of the user to sign.
+
+        Once they chose the pool and how much USDC. `pool_id` is the id
+        printed beside a pool; `amount` is a plain number of USDC, or "all".
+        It places the USDC from 1% under the price up to it, and moves
+        nothing until they sign.
+        """
+        asked = pool_id.strip()
+        pool = shown.get(asked) or await catalog.pair_pool(asked)
+        if pool is None or not down.takes(pool):
+            return (
+                f"No pool /lpdown can use has the id {pool_id}. Use an id exactly as it was "
+                "printed beside a pool."
+            )
+        fit = next(
+            (
+                one
+                for one in await catalog.pair_pools(pool.x, pool.y, down.BELOW_PCT, down.ABOVE_PCT)
+                if one.id == pool.id
+            ),
+            None,
+        )
+        if fit is not None and fit.why_not:
+            return f"{fit.why_not}. Offer another of the pools."
+        have = await usdc_free()
+        everything = str(amount).strip().lower() in down.EVERYTHING
+        size = have if everything else _amount(amount)
+        if size is None or size <= 0:
+            return "That is not a number of USDC. Ask how much, and call again."
+        if have is not None and size > have * WHISKER:
+            return (
+                f"They hold {have:f} USDC free, less than {size:f}. Nothing is placed; offer what "
+                "they hold."
+            )
+        prepared.append(
+            Placement(
+                action="provide",
+                pool=pool,
+                amount=size,
+                pay_with=Coin(symbol="USDC", mint=down.USDC, decimals=0),
+                below_pct=down.BELOW_PCT,
+                above_pct=down.ABOVE_PCT,
+                strategy=down.STRATEGY,
+            )
+        )
+        return (
+            f"Ready for the user to sign: {size:f} USDC into {pool.name} on Meteora, from 1% under "
+            f"the price, {pool.price:f} {pool.y} per {pool.x} now, up to it. Say what it is in two "
+            f"sentences: it buys {pool.x} only if the price dips into it and earns fees only while "
+            "the price is inside it; when the price is more than 0.25% over it, the Rebalance "
+            "button moves it up, and under it, it waits. Opening it locks about 0.057 SOL of rent, "
+            "returned when it closes. Nothing happens until they sign."
+        )
+
+    return [lpdown_pools, propose_lpdown]
 
 
 def _held_elsewhere(why: str, holding: list[PairPool]) -> str:

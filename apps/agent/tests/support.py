@@ -191,9 +191,13 @@ class Catalog:
 
     pairs: tuple[PairPool, ...] = ()
     placed: tuple[LiquidityPosition, ...] = ()
+    opened: dict[tuple[str, str], tuple[str, ...]] = {}  # noqa: RUF012 — replaced per test, never mutated
 
-    async def pair_pools(self, first, second, below_pct, above_pct) -> tuple[PairPool, ...]:
+    async def pair_pools(
+        self, first, second, below_pct, above_pct, near_pct=None
+    ) -> tuple[PairPool, ...]:
         self.pairs_asked = (first, second, below_pct, above_pct)
+        self.near_asked = near_pct
         return self.pairs
 
     async def pair_pool(self, pool_id: str) -> PairPool | None:
@@ -204,6 +208,9 @@ class Catalog:
 
     async def held_now(self, owner: str, coin: str) -> Decimal | None:
         return self.wallet.get(coin)
+
+    async def opened_by(self, signature: str, owner: str) -> tuple[str, ...]:
+        return self.opened.get((signature, owner), ())
 
 
 class NoHost:
@@ -273,6 +280,7 @@ def agent(
     catalog=None,
     settings: Settings | None = None,
     panel: PanelValues = NOTHING_DECIDED,
+    strategies=None,
 ) -> LangGraphAgent:
     settings = settings or Settings()
     config = Config(settings, StaticPanel(panel))
@@ -283,6 +291,7 @@ def agent(
         models_of(model if model is not None else fake_model("answered"), settings),
         intents if intents is not None else Intents(intent),
         confirmations if confirmations is not None else Confirmations(confirmation),
+        strategies,
     )
 
 

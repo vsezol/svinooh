@@ -15,6 +15,8 @@ class SettledIn(BaseModel):
     into: str | None = Field(default=None, max_length=32)
     halfway: bool = False
     holding: str | None = Field(default=None, max_length=32)
+    strategy: str | None = Field(default=None, max_length=32)
+    position: str | None = Field(default=None, max_length=64)
 
 
 class ChatRequest(BaseModel):
@@ -80,6 +82,7 @@ class DepositBlock(BaseModel):
     upper_price: str | None = Field(default=None, serialization_alias="upperPrice")
     price: str | None = None
     position: str | None = None
+    strategy: str | None = None
 
 
 class ChoiceBlock(BaseModel):

@@ -227,6 +227,12 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   const { data, error, reload, patch, chase } = usePortfolio(slug, me?.id ?? null);
 
   const [tab, setTabState] = useState<Tab>(homeTab);
+  /**
+   * What the assistant is to be asked when its tab opens: a question a link
+   * brought (an alert's Rebalance button) or one a position's Rebalance button
+   * put here. Dropped when the tab is left, so coming back does not ask again.
+   */
+  const [asking, setAsking] = useState(questionInLink);
 
   /**
    * The open tab, in the address bar.
@@ -244,6 +250,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   const setTab = useCallback(
     (next: Tab) => {
       setTabState(next);
+      if (next !== 'agent') setAsking(undefined);
       const url = new URL(window.location.href);
       if (next === homeTab()) url.searchParams.delete(TAB_PARAM);
       else url.searchParams.set(TAB_PARAM, next);
@@ -415,13 +422,17 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
     if (asked) setTabState(asked);
   }, [tabs]);
 
-  /**
-   * The question a link brought for the assistant — an alert's "rebalance"
-   * button — asked once the chat is up on this portfolio, and taken out of the
-   * address bar at once. See lib/handoff.
-   */
-  const [linked] = useState(questionInLink);
+  /** The question a link brought is taken out of the address bar at once. See lib/handoff. */
   useEffect(forgetQuestionInLink, []);
+
+  /** A position's Rebalance button: the same question the alert's button asks, asked here. */
+  const rebalance = useCallback(
+    (question: string) => {
+      setAsking(question);
+      setTab('agent');
+    },
+    [setTab],
+  );
 
   /**
    * Which page is open.
@@ -834,7 +845,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
                     slug={slug}
                     token={tokenStore.get() ?? undefined}
                     portfolios={me?.portfolios}
-                    initialQuestion={linked}
+                    initialQuestion={asking}
                     onConversations={setConversations}
                     onDeposit={onDeposit}
                     control={agent}
@@ -1024,6 +1035,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
                     onRemove={() => void removeWallet(w.id)}
                     onRename={(label) => void renameWallet(w.id, label)}
                     onRequireAuth={startClaim}
+                    onRebalance={isOwner && AGENT_ENABLED ? rebalance : undefined}
                   />
                 ))}
               </div>

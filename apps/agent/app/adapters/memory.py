@@ -97,3 +97,17 @@ class StaticPanel:
 
     async def stop(self) -> None:
         return None
+
+
+class MemoryStrategies:
+    def __init__(self) -> None:
+        self._positions: dict[str, set[str]] = {}
+
+    async def lpdown(self, portfolio: str) -> frozenset[str]:
+        return frozenset(self._positions.get(portfolio, ()))
+
+    async def adopt(self, portfolio: str, position: str) -> None:
+        self._positions.setdefault(portfolio, set()).add(position)
+
+    async def drop(self, portfolio: str, position: str) -> None:
+        self._positions.get(portfolio, set()).discard(position)

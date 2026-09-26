@@ -138,6 +138,8 @@ export interface DepositBlock {
   upperPrice?: string | null;
   price?: string | null;
   position?: string | null;
+  /** The strategy that put this card up, which the agent is told back once it lands */
+  strategy?: string | null;
 }
 
 export interface DepositRequest {
@@ -157,6 +159,7 @@ export interface DepositRequest {
   belowPct?: string;
   abovePct?: string;
   position?: string;
+  strategy?: string;
 }
 
 export type DepositLanding = 'pending' | 'landed' | 'failed';
@@ -191,6 +194,8 @@ export interface Settled {
   into?: string | null;
   halfway?: boolean;
   holding?: string | null;
+  strategy?: string | null;
+  position?: string | null;
 }
 
 export interface ChoiceBlock {
