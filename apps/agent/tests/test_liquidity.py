@@ -438,3 +438,80 @@ class TestPlacingStraightOutOfALendingPool:
         assert drawn["fromApy"] == "4.20%"
         assert drawn["amount"] == "all"
         assert drawn["shown"] == "12.008635"
+
+
+class TestARangeGivenAsTwoPrices:
+    async def test_the_two_prices_are_the_range_around_the_price(self):
+        prepared: list = []
+        await tools(shelf(), prepared)["propose_liquidity"].ainvoke(
+            {
+                "pool_id": PAIR.id,
+                "amount": "5",
+                "token": "USDC",
+                "lower_price": "111.3875",
+                "upper_price": "123.1125",
+            }
+        )
+        [card] = prepared
+        assert (card.below_pct, card.above_pct) == (Decimal("5.0000"), Decimal("5.0000"))
+
+    async def test_in_whichever_order_they_come(self):
+        prepared: list = []
+        await tools(shelf(), prepared)["propose_liquidity"].ainvoke(
+            {
+                "pool_id": PAIR.id,
+                "amount": "5",
+                "token": "USDC",
+                "lower_price": "123,1125",
+                "upper_price": "111.3875",
+            }
+        )
+        [card] = prepared
+        assert (card.below_pct, card.above_pct) == (Decimal("5.0000"), Decimal("5.0000"))
+
+    async def test_up_to_the_price_is_all_under_it(self):
+        prepared: list = []
+        await tools(shelf(), prepared)["propose_liquidity"].ainvoke(
+            {
+                "pool_id": PAIR.id,
+                "amount": "5",
+                "token": "USDC",
+                "lower_price": "116.0775",
+                "upper_price": "117.22",
+            }
+        )
+        [card] = prepared
+        assert (card.below_pct, card.above_pct) == (Decimal("1.0000"), Decimal(0))
+
+    async def test_bounds_that_miss_the_price_place_nothing(self):
+        prepared: list = []
+        said = await tools(shelf(), prepared)["propose_liquidity"].ainvoke(
+            {
+                "pool_id": PAIR.id,
+                "amount": "5",
+                "token": "USDC",
+                "lower_price": "100",
+                "upper_price": "110",
+            }
+        )
+        assert prepared == []
+        assert "does not hold the price, 117.25 now" in said
+
+    async def test_a_rebalance_takes_them_too(self):
+        prepared: list = []
+        await tools(shelf(placed=(OUT,)), prepared)["propose_rebalance"].ainvoke(
+            {"position": OUT.address, "lower_price": "111.3875", "upper_price": "117.25"}
+        )
+        [card] = prepared
+        assert (card.action, card.below_pct, card.above_pct) == (
+            "rebalance",
+            Decimal("5.0000"),
+            Decimal(0),
+        )
+
+    async def test_the_pools_are_asked_about_the_range_the_prices_make(self):
+        catalog = shelf()
+        await tools(catalog, [])["liquidity_pools"].ainvoke(
+            {"pair": "SOL-USDC", "lower_price": "111.3875", "upper_price": "123.1125"}
+        )
+        assert catalog.pairs_asked == ("SOL", "USDC", Decimal("5.0000"), Decimal("5.0000"))

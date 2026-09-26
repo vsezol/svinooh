@@ -85,9 +85,10 @@ class IntentLabel(BaseModel):
         description=(
             "For liquidity for a pair: `said` when the user has said, anywhere in "
             "this conversation, the price range they want — how far under and over "
-            "the price, like '-10.3% +5.5%', '±5%', 'от -10 до +5', or a range "
-            "button they pressed. `unknown` when they have not, and for anything "
-            "that is not liquidity."
+            "the price, like '-10.3% +5.5%', '±5%', 'от -10 до +5', the two prices, "
+            "like 'from 118 to 121' or 'от 118 до 121', or a range button they "
+            "pressed. `unknown` when they have not, and for anything that is not "
+            "liquidity."
         )
     )
 
