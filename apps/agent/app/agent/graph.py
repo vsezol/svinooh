@@ -266,7 +266,7 @@ class LangGraphAgent:
         if settled is None:
             return await self._general(state)
         logger.info("deposit %s: %s", settled.status, (settled.signature or "-")[:8])
-        if settled.status == "landed":
+        if settled.status == "landed" and not settled.halfway:
             return await self._earn(state, settled)
         return await self._answer(settled_prompt(system_prompt(self._config), settled), state)
 

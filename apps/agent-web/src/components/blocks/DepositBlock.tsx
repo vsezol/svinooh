@@ -7,7 +7,7 @@ import type {
   Settled,
 } from '../../app/types';
 
-type State = 'idle' | 'working' | 'signed' | 'landed' | 'refused';
+type State = 'idle' | 'working' | 'signed' | 'landed' | 'halfway' | 'refused';
 
 interface Shown {
   state: State;
@@ -30,6 +30,14 @@ export function afterDeposit(outcome: DepositOutcome | void): Shown {
   const signature = outcome.signature ?? null;
   if (outcome.landed === 'failed') {
     return { state: 'refused', note: outcome.error ?? REJECTED, signature };
+  }
+  if (outcome.halfway) {
+    const waits = outcome.holding ? ` as ${outcome.holding}` : '';
+    return {
+      state: 'halfway',
+      note: `the next step did not go through${outcome.error ? ` (${outcome.error})` : ''}; the money is in your wallet${waits}`,
+      signature,
+    };
   }
   if (outcome.landed === 'landed') {
     return {
@@ -220,7 +228,7 @@ export default function DepositBlockView({ block, onDeposit }: Props) {
 
   const action = block.action ?? 'deposit';
   const leaves = (action === 'move' || action === 'provide') && block.fromPool ? block.fromPool : null;
-  const done = state === 'signed' || state === 'landed';
+  const done = state === 'signed' || state === 'landed' || state === 'halfway';
   const says = !onDeposit
     ? 'No wallet is connected here — open it on svinooh.com to sign.'
     : state === 'refused'
@@ -256,7 +264,7 @@ export default function DepositBlockView({ block, onDeposit }: Props) {
       <div className="sv-a-b-deposit-foot">
         {done ? (
           <span className="sv-a-b-deposit-done mono">
-            {state === 'landed' ? 'Landed' : 'Signed'}
+            {state === 'landed' ? 'Landed' : state === 'halfway' ? 'Stopped halfway' : 'Signed'}
             {note ? ` · ${note}` : ''}
           </span>
         ) : (

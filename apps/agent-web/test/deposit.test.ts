@@ -347,3 +347,22 @@ describe('ALiquidityCard', () => {
     assert.equal(requestOf(rebalance).position, '8PBf2k');
   });
 });
+
+describe('AFlowThatStoppedHalfway', () => {
+  test('is not called landed, and says where the money is', () => {
+    const shown = afterDeposit({
+      ok: true,
+      signature: '5xy',
+      landed: 'landed',
+      halfway: true,
+      holding: 'xBTC',
+      error: 'the next step could not be prepared',
+    });
+    assert.equal(shown.state, 'halfway');
+    assert.equal(
+      shown.note,
+      'the next step did not go through (the next step could not be prepared); the money is in your wallet as xBTC',
+    );
+    assert.equal(shown.signature, '5xy');
+  });
+});
