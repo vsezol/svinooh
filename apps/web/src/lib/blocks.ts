@@ -160,11 +160,17 @@ function legSignature(block: RawBlock): string {
  * differ from its neighbour's is a different position and keeps its own block;
  * two that differ only in size still fold, since summing them says the same
  * thing in one line.
+ *
+ * A position with a range or a loan is never folded, however alike it looks:
+ * where its price stands and how healthy it is are what its card is read for,
+ * and one card cannot show two of either.
  */
 function foldDuplicates(blocks: RawBlock[]): RawBlock[] {
   const folded = new Map<string, RawBlock & { weightedApy: number; weightedBorrowApy: number }>();
-  for (const block of blocks) {
-    const key = `${block.proto}|${block.typeLabel}|${block.pair}|${block.meta}|${legSignature(block)}`;
+  for (const [index, block] of blocks.entries()) {
+    const key = standsAlone(block)
+      ? `#${index}`
+      : `${block.proto}|${block.typeLabel}|${block.pair}|${block.meta}|${legSignature(block)}`;
     const existing = folded.get(key);
     if (!existing) {
       folded.set(key, {
@@ -179,16 +185,6 @@ function foldDuplicates(blocks: RawBlock[]): RawBlock[] {
     existing.rows = existing.rows.concat(block.rows);
     existing.weightedApy += (block.apy ?? 0) * block.value;
     existing.weightedBorrowApy += (block.borrowApy ?? 0) * block.value;
-    // The worst health factor is the one worth showing; a range badge only
-    // survives while every folded position agrees with it
-    if (block.healthRate != null) {
-      existing.healthRate =
-        existing.healthRate == null ? block.healthRate : Math.min(existing.healthRate, block.healthRate);
-    }
-    if (existing.range !== block.range) existing.range = null;
-    // Two positions folded together are one card, and one card cannot show two
-    // bands — the one it kept would be a claim about the other as well
-    if (existing.band && block.band && existing.band.lower !== block.band.lower) existing.band = null;
   }
   return [...folded.values()].map(({ weightedApy, weightedBorrowApy, ...block }) => ({
     ...block,
@@ -198,6 +194,9 @@ function foldDuplicates(blocks: RawBlock[]): RawBlock[] {
     rows: mergeRows(block.rows),
   }));
 }
+
+const standsAlone = (block: RawBlock): boolean =>
+  block.range != null || block.band != null || block.healthRate != null;
 
 /**
  * Split a block's legs into the sections it is read as.

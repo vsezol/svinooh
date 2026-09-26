@@ -100,3 +100,59 @@ describe('WhatAPoolSaysItIsMadeOf', () => {
     assert.equal(block.pair, null);
   });
 });
+
+describe('APositionWithARangeOrALoanIsItsOwnCard', () => {
+  const legs = [
+    { symbol: 'cbBTC', role: 'supply' as const, valueUsd: 2400, amount: 0.02 },
+    { symbol: 'USDC', role: 'supply' as const, valueUsd: 2500, amount: 2500 },
+  ];
+
+  test('two ranges in one pool are two cards, each with its own badge', () => {
+    const blocks = buildBlocks([
+      lp({ id: 'a', note: null, band, range: 'in', tokens: legs }),
+      lp({ id: 'b', note: null, band: { ...band, lower: 0.5 }, range: 'out', tokens: legs }),
+    ]);
+    assert.deepEqual(
+      blocks.map((block) => [block.count, block.range]),
+      [
+        [1, 'in'],
+        [1, 'out'],
+      ],
+    );
+  });
+
+  test('two loans alike in every leg are two cards, each with its own health', () => {
+    const loan = (id: string, healthRate: number) =>
+      lp({
+        id,
+        symbol: 'Kamino',
+        name: 'Lending',
+        note: 'Main Market',
+        healthRate,
+        tokens: [
+          { symbol: 'SOL', role: 'supply', valueUsd: 900, amount: 5 },
+          { symbol: 'USDC', role: 'borrow', valueUsd: -300, amount: -300 },
+        ],
+      });
+    const blocks = buildBlocks([loan('a', 1.2), loan('b', 3.4)]);
+    assert.deepEqual(
+      blocks.map((block) => block.healthRate),
+      [1.2, 3.4],
+    );
+  });
+
+  test('positions with nothing of the kind still fold into one', () => {
+    const farm = (id: string) =>
+      lp({
+        id,
+        symbol: 'Kamino',
+        name: 'Farming',
+        note: null,
+        valueUsd: 3,
+        tokens: [{ symbol: 'KMNO', role: 'reward', valueUsd: 3, amount: 80 }],
+      });
+    const blocks = buildBlocks([farm('a'), farm('b')]);
+    assert.equal(blocks.length, 1);
+    assert.equal(blocks[0].count, 2);
+  });
+});
