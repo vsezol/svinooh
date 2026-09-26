@@ -76,3 +76,22 @@ describe('APositionThatLeftItsRange', () => {
     assert.equal(rows[1][0].text, 'Rebalance JUP/SOL with AI →');
   });
 });
+
+describe('WhereThePriceStandsInItsBand', () => {
+  const at = (current: number, direction: AlertItem['direction']) =>
+    formatAlert(event({ ...out, direction, band: { ...band, lower: 113.53, upper: 122.1, current } }), WEB).text;
+
+  test('at the very top of its band it is in the band, not above it', () => {
+    const text = at(122.1, 'recovered');
+    assert.match(text, /IN RANGE 1\.00 /);
+    assert.doesNotMatch(text, /\+1\.00/);
+  });
+
+  test('over the top it says how far, with the sign', () => {
+    assert.match(at(122.2, 'entered'), /OUT OF RANGE \+1\.01 /);
+  });
+
+  test('inside it says where', () => {
+    assert.match(at(120.3, 'recovered'), /IN RANGE 0\.79 /);
+  });
+});
