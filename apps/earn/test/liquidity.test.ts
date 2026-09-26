@@ -16,6 +16,7 @@ import { LendLiquidity, type Lending, type LiquidityBuilders } from '../src/appl
 import {
   balance,
   evenRange,
+  oneSided,
   pairIdOf,
   pairs,
   spanOf,
@@ -127,6 +128,21 @@ describe('BringingWhatGoesInToTheMixTheRangeTakes', () => {
 
   test('nothing in, nothing to swap', () => {
     assert.deepEqual(balance(new Decimal(0), new Decimal(0), price, ratio), { swap: null });
+  });
+
+  test('a range up to the price paid in y, or down to it paid in x, goes in as it is', () => {
+    const zero = new Decimal(0);
+    const some = new Decimal(100);
+    assert.equal(oneSided({ range: range('0.01', '0'), amountX: zero, amountY: some }), true);
+    assert.equal(oneSided({ range: range('0', '0.01'), amountX: some, amountY: zero }), true);
+  });
+
+  test('a range on both sides of the price, or paid in the other token, is brought to its mix', () => {
+    const zero = new Decimal(0);
+    const some = new Decimal(100);
+    assert.equal(oneSided({ range: range('0.01', '0.01'), amountX: zero, amountY: some }), false);
+    assert.equal(oneSided({ range: range('0.01', '0'), amountX: some, amountY: zero }), false);
+    assert.equal(oneSided({ range: range('0.01', '0'), amountX: some, amountY: some }), false);
   });
 });
 

@@ -6,6 +6,7 @@ import {
   balance,
   evenRange,
   MAX_BINS,
+  oneSided,
   pairIdOf,
   percentOf,
   spanOf,
@@ -187,6 +188,7 @@ export async function buildMeteoraProvide(provide: Provide, rpcUrl: string): Pro
   const span = spanOf(range, binStep);
   const minBinId = active.binId + span.lower;
   const maxBinId = active.binId + span.upper;
+  if (oneSided(provide)) return place(provide, dlmm, minBinId, maxBinId, rpcUrl);
   const unit = new BN(10).pow(new BN(pool.x.decimals));
   const perUnit = autoFillYByStrategy(
     active.binId,

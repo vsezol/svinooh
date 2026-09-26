@@ -201,6 +201,14 @@ export function balance(amountX: Decimal, amountY: Decimal, price: Decimal, rati
   return { swap: null };
 }
 
+/**
+ * Whether a range that ends at the price is paid in the one token it holds:
+ * the side under the price holds only y and the side over it only x, so that
+ * is placed as it is, and nothing is swapped into a token it has no room for.
+ */
+export const oneSided = ({ range, amountX, amountY }: Pick<Provide, 'range' | 'amountX' | 'amountY'>): boolean =>
+  (range.above.isZero() && amountX.isZero()) || (range.below.isZero() && amountY.isZero());
+
 /** A range as far down as up, the width of so many bins of a pool. */
 export function evenRange(bins: number, binStep: number): Range {
   const each = Math.floor((bins - 1) / 2);
