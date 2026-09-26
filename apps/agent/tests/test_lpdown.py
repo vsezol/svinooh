@@ -14,7 +14,7 @@ from tests.test_graph import Api, Model
 
 SOL = "So11111111111111111111111111111111111111112"
 CBBTC = "cbbtcf3aa214zXHbiAZQwf4122FBYbraNdFqgw4iMij"
-XBTC = "CtzPWv73Sn1dMGVU3ZtLv9yWSyUAanBni19YWDaznnkn"
+XBTC = "2zCo6bUowJMvr89ajxuWsPadAqJ2F9akCkxumNsSdgsL"
 
 POOL = PairPool(
     id="sol:meteora:dlmm:5rCf1D",
