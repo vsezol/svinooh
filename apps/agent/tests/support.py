@@ -273,6 +273,7 @@ def agent(
     catalog=None,
     settings: Settings | None = None,
     panel: PanelValues = NOTHING_DECIDED,
+    strategies=None,
 ) -> LangGraphAgent:
     settings = settings or Settings()
     config = Config(settings, StaticPanel(panel))
@@ -283,6 +284,7 @@ def agent(
         models_of(model if model is not None else fake_model("answered"), settings),
         intents if intents is not None else Intents(intent),
         confirmations if confirmations is not None else Confirmations(confirmation),
+        strategies,
     )
 
 

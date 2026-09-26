@@ -27,6 +27,13 @@ class ConversationStore(Protocol):
         """Move every conversation from one owner to another; returns how many."""
 
 
+class Strategies(Protocol):
+    async def running(self, portfolio: str) -> bool:
+        """Whether lpdown runs on this portfolio's SOL-USDC liquidity."""
+
+    async def run(self, portfolio: str, on: bool) -> None: ...
+
+
 class RateLimiter(Protocol):
     async def retry_after(self, key: str) -> int | None:
         """Charge one attempt; None means allowed, a number is seconds to wait."""

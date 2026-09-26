@@ -385,6 +385,23 @@ _OUTCOMES = {
 }
 
 
+LPDOWN = (
+    "The user ran /lpdown, an experimental strategy for SOL-USDC liquidity on Meteora. It keeps "
+    "USDC in a range from 1% under the SOL price up to the price, so it buys SOL only on a dip. "
+    "When the price climbs more than 0.25% over the range, the position is moved up to the same "
+    "place under the new price; when the price falls under the range, it waits. What stands now:"
+)
+
+LPDOWN_TELL = (
+    "Tell them in two or three sentences. A card is on their screen only where the lines above "
+    "say one is ready, and nothing moves until they sign it: never say anything is done."
+)
+
+
+def lpdown_prompt(system: str, facts: str) -> str:
+    return f"{system}\n\n{LPDOWN}\n{facts}\n\n{LPDOWN_TELL}"
+
+
 def degraded_prompt(system: str) -> str:
     return (
         f"{system}\n\n(Live portfolio data could not be fetched for this turn — "

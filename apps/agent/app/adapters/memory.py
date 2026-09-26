@@ -97,3 +97,17 @@ class StaticPanel:
 
     async def stop(self) -> None:
         return None
+
+
+class MemoryStrategies:
+    def __init__(self) -> None:
+        self._running: set[str] = set()
+
+    async def running(self, portfolio: str) -> bool:
+        return portfolio in self._running
+
+    async def run(self, portfolio: str, on: bool) -> None:
+        if on:
+            self._running.add(portfolio)
+        else:
+            self._running.discard(portfolio)

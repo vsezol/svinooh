@@ -19,6 +19,9 @@ from ..domain.earn import (
     YieldPool,
 )
 from ..domain.house import plain
+from ..domain.lpdown import ABOVE_PCT as LPDOWN_ABOVE_PCT
+from ..domain.lpdown import BELOW_PCT as LPDOWN_BELOW_PCT
+from ..domain.lpdown import reading, runs_on
 from ..domain.portfolio import History, Period, Portfolio, total_of
 from ..observability import metrics
 from .context import position_line, short_address, usd
@@ -478,6 +481,7 @@ def liquidity_tools(
     free: dict[str, Decimal] | None = None,
     held: tuple[Held, ...] = (),
     owners: tuple[str, ...] = (),
+    lpdown: bool = False,
 ) -> list:
     async def held_now(mint: str) -> Decimal | None:
         read = [await catalog.held_now(owner, mint) for owner in owners]
@@ -753,6 +757,8 @@ def liquidity_tools(
         wanted = _wanted(below_pct, above_pct, lower_price, upper_price, held.pool.price)
         if isinstance(wanted, str):
             return wanted
+        if lpdown and wanted is None and runs_on(held.pool):
+            return by_lpdown(held)
         if wanted:
             why, _ = await fitting(held.pool, *wanted)
             if why:
@@ -778,6 +784,37 @@ def liquidity_tools(
             f"— {held.amount_x:f} {held.pool.x} and {held.amount_y:f} {held.pool.y} — placed again "
             f"around the price, {where}, swapped to fit. Their wallet asks for a signature per "
             f"step. Say it in two sentences; nothing happens until they sign.{other}"
+        )
+
+    def by_lpdown(held: LiquidityPosition) -> str:
+        read = reading(held)
+        if read.where == "below":
+            return (
+                "This position runs /lpdown and the price is under its range: it holds the SOL it "
+                "bought on the way down, and the strategy waits for the price to come back rather "
+                "than selling it low. Nothing is placed. Say so."
+            )
+        if read.where == "waiting":
+            return (
+                "This position runs /lpdown, which moves it only once the price is more than 0.25% "
+                f"over its top; it is {max(read.over_pct, Decimal(0)):.2f}% over now. Nothing is "
+                "placed. Say so."
+            )
+        prepared.append(
+            Placement(
+                action="rebalance",
+                pool=held.pool,
+                position=held,
+                below_pct=LPDOWN_BELOW_PCT,
+                above_pct=LPDOWN_ABOVE_PCT,
+            )
+        )
+        return (
+            f"Ready for the user to sign, by the /lpdown rules: the {held.pool.name} position "
+            f"closed and what it holds — {held.amount_x:f} {held.pool.x} and {held.amount_y:f} "
+            f"{held.pool.y} — placed again from 1% under the price, {held.pool.price:f} "
+            f"{held.pool.y} per {held.pool.x} now, up to it. Their wallet asks for a signature per "
+            "step. Say it in two sentences; nothing happens until they sign."
         )
 
     return [liquidity_pools, propose_liquidity, propose_close_liquidity, propose_rebalance]

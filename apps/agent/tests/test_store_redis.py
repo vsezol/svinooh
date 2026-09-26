@@ -176,3 +176,23 @@ class TestSigningIn:
         assert await store.owns_any(anon) is True
         await store.reassign(anon, target)
         assert await store.owns_any(anon) is False
+
+
+async def test_lpdown_is_remembered_per_portfolio_until_it_is_switched_off():
+    if not await _reachable():
+        pytest.skip(f"no Redis at {URL}")
+    from app.adapters.redis.strategies import RedisStrategies
+
+    pool = client.pool(URL)
+    strategies = RedisStrategies(pool)
+    slug = f"pf-{uuid.uuid4().hex[:8]}"
+    try:
+        assert not await strategies.running(slug)
+        await strategies.run(slug, True)
+        assert await strategies.running(slug)
+        assert not await strategies.running(f"{slug}-other")
+        await strategies.run(slug, False)
+        assert not await strategies.running(slug)
+    finally:
+        await strategies.run(slug, False)
+        await pool.disconnect()
