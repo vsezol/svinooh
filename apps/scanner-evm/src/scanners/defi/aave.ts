@@ -107,6 +107,8 @@ async function loansOn(key: NetworkKey, address: string): Promise<LendingFact[]>
           const data = await pool.getReserveData(reserve.asset);
           return {
             id: `aave:${key}:${reserve.asset.toLowerCase()}`,
+            pool: poolAddress.toLowerCase(),
+            network: key,
             platform: 'aave',
             market: `Aave V3 ${label}`,
             token: reserve.symbol,

@@ -117,6 +117,8 @@ export async function meteoraPools(address: string): Promise<PoolFact[]> {
         .filter((p) => !p.isClosed)
         .map((p) => ({
           id: `meteora:${p.positionAddress}`,
+          ref: p.positionAddress,
+          pool: pool.poolAddress,
           platform: 'meteora' as const,
           pair: pairKey(symX, symY),
           pairLabel: `${symX}/${symY}`,

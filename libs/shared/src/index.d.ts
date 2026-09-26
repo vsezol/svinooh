@@ -867,6 +867,8 @@ export interface PoolFact {
    * matched against when one pair holds two positions.
    */
   ref?: string | null;
+  pool?: string | null;
+  network?: string | null;
   platform: 'orca' | 'meteora' | 'uniswap';
   /** The pair, upper-cased and ordered, e.g. "CBBTC|USDC" — how a fact finds its position */
   pair: string;
@@ -888,6 +890,9 @@ export interface PoolFact {
 /** What a lending market says about a loan, per borrowed asset */
 export interface LendingFact {
   id: string;
+  ref?: string | null;
+  pool?: string | null;
+  network?: string | null;
   platform: 'kamino' | 'aave';
   market: string;
   /** Upper-cased symbol of the borrowed asset — how a fact finds its position */
@@ -900,6 +905,9 @@ export interface LendingFact {
 
 export interface SupplyFact {
   id: string;
+  ref?: string | null;
+  pool?: string | null;
+  network?: string | null;
   platform: 'kamino' | 'aave';
   market: string;
   rates: Record<string, number>;

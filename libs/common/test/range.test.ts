@@ -155,9 +155,8 @@ describe('enrich — finding the pool a position belongs to', () => {
   });
 
   /**
-   * Not every protocol has an id to give: neither Orca nor Meteora reports one
-   * the aggregator would also know, so their pools are found by pair — the
-   * protocol's own pair.
+   * A fact with no id to give, and a position with no id or pool to meet it
+   * by, still find each other by the pair — the protocol's own pair.
    */
   test('a protocol with no id to give still finds its pool by pair', () => {
     const [p] = enrich(
@@ -386,5 +385,187 @@ describe('enrich — what a loan costs is the lending protocol\'s own number', (
     );
     assert.equal(p.borrowApy, 0.0807);
     assert.equal(p.loan, undefined);
+  });
+});
+
+describe('enrich — a fact belongs to the position it names', () => {
+  const pools = (list: PoolFact[]): DefiFacts => ({ pools: list, lending: [], failed: [] });
+  const meteora = (over: Partial<ScanPosition>): ScanPosition =>
+    position({
+      symbol: 'Meteora',
+      platform: 'meteora',
+      tokens: [leg('SOL', 'supply', 500), leg('USDC', 'supply', 500)],
+      ...over,
+    });
+  const fact = (over: Partial<PoolFact>): PoolFact =>
+    pool({ platform: 'meteora', pair: 'SOL|USDC', pairLabel: 'SOL/USDC', chainLabel: 'Solana', ...over });
+
+  test('two positions of one pool, each named by the source, each get their own band', () => {
+    const enriched = enrich(
+      [meteora({ ref: 'POSITION_A', pool: 'PAIR' }), meteora({ ref: 'POSITION_B', pool: 'PAIR' })],
+      pools([
+        fact({ ref: 'POSITION_A', pool: 'PAIR', lowerPrice: 110, upperPrice: 120, inRange: false }),
+        fact({ ref: 'POSITION_B', pool: 'PAIR', lowerPrice: 100, upperPrice: 130, inRange: true }),
+      ]),
+    );
+    assert.deepEqual(
+      enriched.map((p) => [p.band?.lower, p.range]),
+      [
+        [110, 'out'],
+        [100, 'in'],
+      ],
+    );
+  });
+
+  test('a position named only by its pool takes the one fact read from that pool', () => {
+    const [p] = enrich([meteora({ pool: 'PAIR' })], pools([fact({ ref: 'POSITION_A', pool: 'PAIR' })]));
+    assert.equal(p.band?.lower, 2000);
+  });
+
+  test('the pool cannot choose between two positions in it', () => {
+    const [p] = enrich(
+      [meteora({ pool: 'PAIR' })],
+      pools([fact({ ref: 'POSITION_A', pool: 'PAIR' }), fact({ ref: 'POSITION_B', pool: 'PAIR' })]),
+    );
+    assert.equal(p.band, undefined);
+  });
+
+  test('a fact about another position in the same pool is not this one', () => {
+    const [p] = enrich(
+      [meteora({ ref: 'POSITION_A', pool: 'PAIR' })],
+      pools([fact({ ref: 'POSITION_B', pool: 'PAIR' })]),
+    );
+    assert.equal(p.band, undefined);
+  });
+
+  test('a fact read on another network is not about this position', () => {
+    const [p] = enrich(
+      [position({ platform: 'arb_uniswap3', network: 'arb', ref: '5854873' })],
+      pools([pool({ ref: '5854873', network: 'base' })]),
+    );
+    assert.equal(p.band, undefined);
+  });
+
+  test('one network is one network however it is spelled', () => {
+    const [p] = enrich(
+      [position({ platform: 'matic_uniswap3', network: 'matic', ref: '5854873' })],
+      pools([pool({ ref: '5854873', network: 'polygon' })]),
+    );
+    assert.equal(p.band?.lower, 2000);
+  });
+});
+
+describe('enrich — a loan takes the facts of its own account', () => {
+  const loanFact = (over: Partial<LendingFact>): LendingFact =>
+    ({
+      id: 'kamino:obligation:reserve',
+      platform: 'kamino',
+      market: 'Main Market',
+      token: 'USDC',
+      healthFactor: 2,
+      borrowRate: 5,
+      ...over,
+    }) as LendingFact;
+  const facts = (lending: LendingFact[]): DefiFacts => ({ pools: [], lending, failed: [] });
+  const kamino = (over: Partial<ScanPosition>): ScanPosition =>
+    position({ symbol: 'Kamino', platform: 'kamino', name: 'Lending', pool: 'MARKET', ...over });
+
+  test('two loans in one market each read their own health and rate', () => {
+    const enriched = enrich(
+      [
+        kamino({ ref: 'OBLIGATION_A', tokens: [leg('SOL', 'supply', 900), leg('USDC', 'borrow', -300)] }),
+        kamino({ ref: 'OBLIGATION_B', tokens: [leg('SOL', 'supply', 900), leg('USDC', 'borrow', -300)] }),
+      ],
+      facts([
+        loanFact({ ref: 'OBLIGATION_A', pool: 'MARKET', healthFactor: 1.2, borrowRate: 7 }),
+        loanFact({ ref: 'OBLIGATION_B', pool: 'MARKET', healthFactor: 3.4, borrowRate: 7 }),
+      ]),
+    );
+    assert.deepEqual(
+      enriched.map((p) => p.healthRate),
+      [1.2, 3.4],
+    );
+  });
+
+  test('a loan in two assets takes both rates, and the bigger debt names it', () => {
+    const [p] = enrich(
+      [
+        kamino({
+          ref: 'OBLIGATION_A',
+          tokens: [leg('SOL', 'supply', 2000), leg('USDC', 'borrow', -300), leg('USDT', 'borrow', -100)],
+        }),
+      ],
+      facts([
+        loanFact({ ref: 'OBLIGATION_A', pool: 'MARKET', token: 'USDC', borrowRate: 5 }),
+        loanFact({ ref: 'OBLIGATION_A', pool: 'MARKET', token: 'USDT', borrowRate: 9 }),
+      ]),
+    );
+    assert.equal(p.loan?.token, 'USDC');
+    assert.equal(p.borrowApy, 0.06);
+    assert.deepEqual(
+      (p.tokens ?? []).filter((t) => t.role === 'borrow').map((t) => t.apy),
+      [0.05, 0.09],
+    );
+  });
+
+  test('a market with one account per wallet answers for it without an id', () => {
+    const [p] = enrich(
+      [
+        position({
+          symbol: 'Aave V3',
+          platform: 'arb_aave3',
+          name: 'Lending',
+          network: 'arb',
+          pool: '0xpool',
+          tokens: [leg('WETH', 'supply', 900), leg('USDC', 'borrow', -300), leg('USDT', 'borrow', -300)],
+        }),
+      ],
+      facts([
+        loanFact({ platform: 'aave', pool: '0xpool', network: 'arb', token: 'USDC', borrowRate: 4 }),
+        loanFact({ platform: 'aave', pool: '0xpool', network: 'arb', token: 'USDT', borrowRate: 6 }),
+      ]),
+    );
+    assert.equal(p.borrowApy, 0.05);
+  });
+
+  test('the same asset owed on another network is another loan', () => {
+    const [p] = enrich(
+      [
+        position({
+          symbol: 'Aave V3',
+          platform: 'arb_aave3',
+          name: 'Lending',
+          network: 'arb',
+          borrowApy: 0.08,
+          tokens: [leg('USDC', 'borrow', -300)],
+        }),
+      ],
+      facts([loanFact({ platform: 'aave', network: 'base', market: 'Aave V3 Base', borrowRate: 4 })]),
+    );
+    assert.equal(p.borrowApy, 0.08);
+    assert.equal(p.loan, undefined);
+  });
+
+  test('a farm is not the loan beside it', () => {
+    const [p] = enrich(
+      [kamino({ name: 'Farming', ref: 'FARM_STATE', pool: 'FARM', tokens: [leg('USDC', 'supply', 900)] })],
+      {
+        pools: [],
+        lending: [],
+        supply: [
+          {
+            id: 'kamino:A:supply',
+            ref: 'OBLIGATION_A',
+            pool: 'MARKET',
+            platform: 'kamino',
+            market: 'Main Market',
+            rates: { USDC: 6 },
+          },
+        ],
+        failed: [],
+      },
+    );
+    assert.equal(p.apy, undefined);
+    assert.equal(p.tokens?.[0].apy, undefined);
   });
 });

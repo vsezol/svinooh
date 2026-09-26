@@ -101,6 +101,8 @@ async function positionsOn(key: NetworkKey, address: string): Promise<PoolFact[]
           id: `uniswap:${key}:${tokenId.toString()}`,
           // What DeBank would also call this position — see PoolFact.ref
           ref: tokenId.toString(),
+          pool: poolAddress.toLowerCase(),
+          network: key,
           platform: 'uniswap',
           pair: pairKey(token0.symbol, token1.symbol),
           pairLabel: `${token0.symbol}/${token1.symbol}`,

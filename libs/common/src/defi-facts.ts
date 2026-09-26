@@ -1,4 +1,4 @@
-import type { DefiFacts, PoolFact, ScanPosition } from '@svinooh/shared';
+import type { DefiFacts, LendingFact, PoolFact, ScanPosition, ScanPositionToken, SupplyFact } from '@svinooh/shared';
 import { hasRange } from './range';
 
 /** Nothing was asked, or nothing answered — either way there is nothing to fill in */
@@ -69,31 +69,39 @@ function pairOf(position: ScanPosition): string | null {
 }
 
 /**
- * The fact that names itself the way this position does.
+ * The facts that name themselves the way this position does.
  *
- * Tried before the pair, because it is the only one of the two that is an
- * identity. Two positions in one pool are two rows with the same pair, and the
- * pair was all a fact was ever matched by — so a wallet holding two ranges in
- * USDC/WETH got a band for neither. It also does not care what the position is
- * currently holding, which is what makes it work for a position that has been
- * converted to one token and has no fees to name the other side with.
- *
- * Returns nothing when the ids do not line up, and the pair is tried next — so
- * this can only ever resolve an ambiguity, never create one.
+ * Tried before anything else, because it is the only identity there is. Two
+ * positions in one pool are two rows with the same pair, and the pair was all a
+ * fact was ever matched by — so a wallet holding two ranges in USDC/WETH got a
+ * band for neither. It also does not care what the position is currently
+ * holding, which is what makes it work for a position that has been converted
+ * to one token and has no fees to name the other side with.
  */
-function byRef(pools: PoolFact[], position: ScanPosition): PoolFact | null {
+function byRef<T extends { ref?: string | null }>(facts: T[], position: ScanPosition): T[] {
   const ref = position.ref?.trim();
-  if (!ref) return null;
-  return only(pools.filter((p) => p.ref && p.ref.trim() === ref));
+  if (!ref) return [];
+  return facts.filter((fact) => fact.ref?.trim() === ref);
+}
+
+/**
+ * The facts read from the pool or market this position sits in, except those
+ * that name some other position in it.
+ */
+function byPool<T extends { ref?: string | null; pool?: string | null }>(facts: T[], position: ScanPosition): T[] {
+  const pool = position.pool?.trim();
+  if (!pool) return [];
+  const named = !!position.ref?.trim();
+  return facts.filter((fact) => fact.pool?.trim() === pool && !(named && fact.ref));
 }
 
 /**
  * The one fact of this pair that does not name a position of its own.
  *
- * Asked after the id and never for a fact that carries one: a fact that says
- * which position it is has already been offered to the position that says the
- * same, and reaching here means that was not this one. Where neither side has
- * an id — the protocols that have none to give — the pair is all there is.
+ * Asked last and never for a fact that carries an id: a fact that says which
+ * position it is has already been offered to the position that says the same,
+ * and reaching here means that was not this one. Where neither side has an id
+ * or a pool, the pair is all there is.
  *
  * Even then it answers only where exactly one fact can be meant. A pair is not
  * an identity: two positions in one pool are two rows with the same pair, and a
@@ -101,6 +109,72 @@ function byRef(pools: PoolFact[], position: ScanPosition): PoolFact | null {
  */
 function byPair(pools: PoolFact[], pair: string): PoolFact | null {
   return only(pools.filter((p) => !p.ref && p.pair === pair));
+}
+
+function poolFactOf(pools: PoolFact[], position: ScanPosition): PoolFact | null {
+  const named = byRef(pools, position);
+  if (named.length) return only(named);
+  const inPool = byPool(pools, position);
+  if (inPool.length) return only(inPool);
+  const pair = pairOf(position);
+  return pair ? byPair(pools, pair) : null;
+}
+
+/**
+ * The loan facts about this position. A market holds one account per wallet on
+ * some protocols and several on others, so a pool answers only when every fact
+ * in it is about the same account.
+ */
+function loansOf(loans: LendingFact[], position: ScanPosition, borrowed: ScanPositionToken[]): LendingFact[] {
+  const named = byRef(loans, position);
+  if (named.length) return named;
+  const inPool = byPool(loans, position);
+  if (inPool.length) return new Set(inPool.map((loan) => loan.ref?.trim() ?? '')).size === 1 ? inPool : [];
+  const owed = new Set(borrowed.map((leg) => symbolOf(leg)));
+  const loan = only(loans.filter((one) => !one.ref && owed.has(one.token)));
+  return loan ? [loan] : [];
+}
+
+function supplyOf(facts: SupplyFact[], position: ScanPosition): SupplyFact | null {
+  const named = byRef(facts, position);
+  if (named.length) return only(named);
+  const inPool = byPool(facts, position);
+  if (inPool.length) return only(inPool);
+  return only(inMarketOf(facts.filter((fact) => !fact.ref), position));
+}
+
+/** The loan a message names: the one behind the biggest debt */
+function mainLoan(loans: LendingFact[], borrowed: ScanPositionToken[]): LendingFact | null {
+  const biggestFirst = [...borrowed].sort((a, b) => Math.abs(b.valueUsd) - Math.abs(a.valueUsd));
+  for (const leg of biggestFirst) {
+    const loan = loans.find((one) => one.token === symbolOf(leg));
+    if (loan) return loan;
+  }
+  return loans[0] ?? null;
+}
+
+const symbolOf = (leg: ScanPositionToken): string => leg.symbol.trim().toUpperCase();
+
+const NETWORK_NAMES: Record<string, string> = {
+  ethereum: 'eth',
+  arbitrum: 'arb',
+  matic: 'polygon',
+  optimism: 'op',
+};
+
+function networkOf(name: string | null | undefined): string | null {
+  const said = name?.trim().toLowerCase();
+  return said ? (NETWORK_NAMES[said] ?? said) : null;
+}
+
+/** A fact read on another network is never about this position */
+function onNetworkOf<T extends { network?: string | null }>(facts: T[], position: ScanPosition): T[] {
+  const here = networkOf(position.network);
+  if (!here) return facts;
+  return facts.filter((fact) => {
+    const there = networkOf(fact.network);
+    return !there || there === here;
+  });
 }
 
 /**
@@ -151,14 +225,15 @@ function only<T>(candidates: T[]): T | null {
  * and are there to be read: they are what lets an alert say how far out of
  * range a position went and which way, instead of only that it went.
  *
- * A fact is only ever matched to a position of the protocol it came from. Among
- * those, a pool position is matched by its own id where the fact has one and by
- * its pair where the protocol has none to give; a loan by the asset it borrowed.
- * Only the id is an identity, so where the pair is all there is, a match is used
- * only when exactly one fact can be about this position — a wallet with two
- * positions in the same pool and no ids to tell them apart gets the inference it
- * had before rather than a coin-flip between two bands, because a confidently
- * wrong range on somebody's money is worse than an approximate one.
+ * A fact is only ever matched to a position of the protocol it came from, on
+ * the network it came from. Among those it is matched by the position's own id
+ * first, then by the pool or market it sits in, and only where neither side has
+ * either by its pair or the asset it borrowed. Only the id is an identity, so
+ * past it a match is used only when exactly one fact can be about this position
+ * — a wallet with two positions in the same pool and no ids to tell them apart
+ * gets the inference it had before rather than a coin-flip between two bands,
+ * because a confidently wrong range on somebody's money is worse than an
+ * approximate one.
  */
 export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPosition[] {
   if (!facts.pools.length && !facts.lending.length && !facts.supply?.length) return positions;
@@ -166,11 +241,7 @@ export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPositio
   return positions.map((position) => {
     const patch: Partial<ScanPosition> = {};
 
-    // Its own protocol first; then its own id where the fact has one, its pair
-    // where the protocol has no id to give
-    const pair = pairOf(position);
-    const pools = ofProtocol(facts.pools, position);
-    const pool = byRef(pools, position) ?? (pair ? byPair(pools, pair) : null);
+    const pool = poolFactOf(onNetworkOf(ofProtocol(facts.pools, position), position), position);
 
     // A full-range position has no band to be outside of, and saying "in
     // range" of a pool that spans every price is a badge that means nothing
@@ -189,10 +260,8 @@ export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPositio
 
     const borrowed = (position.tokens ?? []).filter((t) => t.role === 'borrow');
     if (borrowed.length) {
-      const loans = ofProtocol(facts.lending, position).filter((l) =>
-        borrowed.some((leg) => leg.symbol.trim().toUpperCase() === l.token),
-      );
-      const loan = only(loans);
+      const loans = loansOf(onNetworkOf(ofProtocol(facts.lending, position), position), position, borrowed);
+      const loan = mainLoan(loans, borrowed);
       if (loan) {
         // Named whatever the aggregator already knew about health and rate: the
         // market and the asset are the same market and asset either way, and a
@@ -207,21 +276,26 @@ export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPositio
         // protocol's own number, and the one time the two were compared the
         // aggregator was 2.7 points high on it. The protocols quote a
         // percentage; a position stores the fraction.
-        if (loan.borrowRate !== null) {
-          const rate = loan.borrowRate / 100;
-          patch.borrowApy = rate;
-          // The borrowed LEG carries its own rate too — it is what the row's
-          // "USDT · 8.1%" label is printed from — so it takes the same truth
+        const rates = new Map<string, number>();
+        for (const one of loans) if (one.borrowRate !== null) rates.set(one.token, one.borrowRate / 100);
+        const priced = borrowed.filter((leg) => rates.has(symbolOf(leg)));
+        if (priced.length) {
+          const owed = priced.reduce((sum, leg) => sum + Math.abs(leg.valueUsd), 0);
+          const distinct = new Set(priced.map((leg) => rates.get(symbolOf(leg))!));
+          patch.borrowApy =
+            distinct.size === 1 || owed === 0
+              ? rates.get(symbolOf(priced[0]))!
+              : priced.reduce((sum, leg) => sum + Math.abs(leg.valueUsd) * rates.get(symbolOf(leg))!, 0) / owed;
+          // The borrowed LEGS carry their own rates too — they are what a row's
+          // "USDT · 8.1%" label is printed from — so they take the same truth
           tokens = tokens.map((t) =>
-            t.role === 'borrow' && t.symbol.trim().toUpperCase() === loan.token
-              ? { ...t, apy: rate }
-              : t,
+            t.role === 'borrow' && rates.has(symbolOf(t)) ? { ...t, apy: rates.get(symbolOf(t))! } : t,
           );
         }
         const supplied = loan.supplyRates;
         if (supplied) {
           tokens = tokens.map((t) => {
-            const rate = supplied[t.symbol.trim().toUpperCase()];
+            const rate = supplied[symbolOf(t)];
             return t.role === 'supply' && typeof rate === 'number' ? { ...t, apy: rate / 100 } : t;
           });
         }
@@ -231,7 +305,7 @@ export function enrich(positions: ScanPosition[], facts: DefiFacts): ScanPositio
 
     const supplied = (position.tokens ?? []).filter((t) => t.role === 'supply');
     if (!borrowed.length && supplied.length) {
-      const supplying = only(inMarketOf(ofProtocol(facts.supply ?? [], position), position));
+      const supplying = supplyOf(onNetworkOf(ofProtocol(facts.supply ?? [], position), position), position);
       if (supplying) {
         const before = position.tokens ?? [];
         let changed = false;
