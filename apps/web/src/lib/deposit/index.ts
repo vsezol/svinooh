@@ -50,4 +50,4 @@ const askTheChain = (signature: string, owner: string, network: string) =>
     body: JSON.stringify({ signature, owner, network }),
   });
 
-const sleep = (ms: number) => new Promise<void>((wake) => setTimeout(wake, ms));
+export const sleep = (ms: number) => new Promise<void>((wake) => setTimeout(wake, ms));

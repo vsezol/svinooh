@@ -1,5 +1,5 @@
 import type { DepositStepDto } from '@svinooh/shared';
-import { buildDeposit, followDeposit } from './index';
+import { buildDeposit, followDeposit, sleep } from './index';
 import type { DepositOutcome, DepositRequest, DepositStopped } from './types';
 import type { DepositWallet } from './wallet';
 
@@ -62,7 +62,7 @@ export async function runDeposit({
     asked = stepAfter(asked, after);
     try {
       onStage?.('continuing');
-      built = await buildDeposit(asked, signer.address);
+      built = await buildAfterLanding(asked, signer.address, wait ?? sleep);
     } catch (error) {
       return halfway(why(error, 'the next step could not be prepared'));
     }
@@ -101,6 +101,29 @@ export async function runDeposit({
  * position emptied over two transactions, a swap and a new one opened.
  */
 const MOST_STEPS = 5;
+
+/**
+ * A step built right after the one before it landed can be simulated against
+ * a node that has not seen that landing yet, so it is asked for again before
+ * it is given up on.
+ */
+const BUILD_TRIES = 3;
+const BUILD_GAP_MS = 2500;
+
+async function buildAfterLanding(
+  request: DepositRequest,
+  owner: string,
+  wait: (ms: number) => Promise<void>,
+) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await buildDeposit(request, owner);
+    } catch (error) {
+      if (attempt >= BUILD_TRIES) throw error;
+      await wait(BUILD_GAP_MS);
+    }
+  }
+}
 
 /**
  * What to ask for after a step that landed: what it left in the wallet, and
