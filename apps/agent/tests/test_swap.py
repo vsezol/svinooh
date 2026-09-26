@@ -15,7 +15,7 @@ from tests.test_graph import (
     with_coins,
 )
 
-XBTC = Coin(symbol="xBTC", mint="CtzPWv73Sn1dMGVU3ZtLv9yWSyUAanBni19YWDaznnkn", decimals=6)
+XBTC = Coin(symbol="xBTC", mint="2zCo6bUowJMvr89ajxuWsPadAqJ2F9akCkxumNsSdgsL", decimals=6)
 
 
 def swap(**args: str) -> dict:
