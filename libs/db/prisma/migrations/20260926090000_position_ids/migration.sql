@@ -1,0 +1,2 @@
+ALTER TABLE "Position" ADD COLUMN "ref" TEXT,
+  ADD COLUMN "pool" TEXT;

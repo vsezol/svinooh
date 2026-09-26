@@ -72,16 +72,14 @@ const position = (over: Partial<MeteoraWatchable> = {}): MeteoraWatchable => ({
   upperBinId: -5340,
   activeBinId: -5380,
   inRange: true,
-  lowerPrice: 115.8,
-  upperPrice: 116.5,
   ...over,
 });
 
-/** A row the last scan stored for this position — its band is Meteora's own prices */
-const row = (range: 'in' | 'out', over: { lower?: number; upper?: number } = {}) => ({
+/** A row the last scan stored for a position, under the position's own address */
+const row = (range: 'in' | 'out', ref: string | null = position().positionAddress) => ({
   walletId: 'w-1',
+  ref,
   range,
-  band: { lower: 115.8, upper: 116.5, ...over },
 });
 
 /** As the registry declares it */
@@ -230,14 +228,28 @@ describe('APriceLeavingItsBand', () => {
     assert.deepEqual(asked, []);
   });
 
-  test('a stored row that cannot be pinned to one position is not guessed at', async () => {
+  test('a stored row of another position is not this one', async () => {
     const { watch, asked } = watching(
       [position({ activeBinId: -5405, inRange: false })],
-      [row('in'), row('in'), row('in', { lower: 100, upper: 101 })],
+      [row('in', 'AnotherPositionInTheSamePool1111111111111111'), row('in', null)],
     );
     await watch.tick();
     mock.timers.tick(HOLD_MS * 2);
-    assert.deepEqual(asked, [], 'two rows fit, so neither says anything; the scan on the clock covers it');
+    assert.deepEqual(asked, [], 'nothing stored under its address, so it starts from the chain');
+  });
+
+  test('two positions with one band each start from their own row', async () => {
+    const twin = 'TwinPositionWithTheSameBand11111111111111111';
+    const { watch, asked } = watching(
+      [
+        position({ activeBinId: -5405, inRange: false }),
+        position({ positionAddress: twin, activeBinId: -5405, inRange: false }),
+      ],
+      [row('out'), row('in', twin)],
+    );
+    await watch.tick();
+    mock.timers.tick(HOLD_MS);
+    assert.deepEqual(asked, ['w-1'], 'the twin was stored in range, and it is not any more');
   });
 
   test('a position nobody holds any more is let go of', async () => {
