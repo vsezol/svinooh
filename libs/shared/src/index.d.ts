@@ -530,7 +530,7 @@ export interface TelegramAuthPayload {
 export interface ApiErrorDto {
   statusCode: number;
   message: string;
-  /** Machine-readable code: UNSUPPORTED_NETWORK, WALLET_EXISTS, PRO_REQUIRED, ... */
+  /** Machine-readable code: UNSUPPORTED_NETWORK, PRO_REQUIRED, ... */
   code?: string;
   /** PRO_REQUIRED only: which limit was hit — what the paywall dialog is about */
   feature?: ProFeature;

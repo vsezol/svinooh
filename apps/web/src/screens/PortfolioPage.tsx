@@ -527,6 +527,12 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
         method: 'POST',
         body: JSON.stringify({ address }),
       });
+      // Adding one twice answers with the same wallet rather than an error, so
+      // its id is what says it was on the page already
+      if (wallets.some((w) => w.id === added.id)) {
+        setAddErr('This wallet is already in the portfolio');
+        return;
+      }
       track('wallet_added', { chain: added.chain });
       setInput('');
       await reload();
