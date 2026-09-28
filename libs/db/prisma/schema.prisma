@@ -92,6 +92,13 @@ model Payment {
   provider String
   /// Our id for the order, handed to the gateway and echoed back by its webhook
   orderId String @unique
+  /// The client's name for one attempt to pay, from the Idempotency-Key
+  /// header. Asked again under the same key while its invoice can still be
+  /// paid, checkout answers with that invoice instead of opening a second one.
+  /// Unique per user rather than globally: a key is only ever looked up inside
+  /// the account that sent it, so nobody reaches another person's invoice by
+  /// guessing one, nor hands them theirs to pay.
+  idempotencyKey String?
   /// The gateway's own ids, once it has answered: the invoice a person was
   /// sent to, and the payment they made against it.
   invoiceId         String?
@@ -115,6 +122,7 @@ model Payment {
   updatedAt DateTime  @updatedAt
   paidAt    DateTime?
 
+  @@unique([userId, idempotencyKey])
   @@index([userId, createdAt])
 }
 

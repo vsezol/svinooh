@@ -1,10 +1,12 @@
 import {
+  ConflictException,
   Injectable,
   Logger,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { Payment, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { Payment } from '@prisma/client';
 import { BILLING_QUEUE, option, RabbitService, setting } from '@svinooh/common';
 import type { BillingMeDto, BillingNotice, CheckoutDto } from '@svinooh/shared';
 import { PrismaService } from '@svinooh/db';
@@ -13,6 +15,23 @@ import { config } from '../config';
 import { NowPaymentsClient, paymentStatusOf } from './nowpayments.client';
 import { addMonths, coinLock, utcDay } from './premium';
 import { PremiumService } from './premium.service';
+
+/** Statuses whose invoice can still be paid, or is being paid right now */
+const OPEN = new Set(['waiting', 'confirming']);
+
+/**
+ * How long an attempt with no invoice yet counts as still talking to the
+ * gateway. Past it, the request that made it is gone — a crash, a timeout —
+ * and holding its key any longer would wedge every retry under it.
+ */
+const IN_FLIGHT_MS = 60_000;
+
+const inProgress = (): ConflictException =>
+  new ConflictException({
+    statusCode: 409,
+    code: 'CHECKOUT_IN_PROGRESS',
+    message: 'This checkout is still opening. Try again in a moment.',
+  });
 
 /**
  * The money itself: opening a checkout, believing a webhook, moving paidUntil.
@@ -123,28 +142,49 @@ export class BillingService {
    * locks the invoice to it — checked against its live network minimum first,
    * because a lock below the minimum is a dead invoice (USDT-TRC20 sits above
    * 11 USD as of 2026-09), and falling back to the open page is never wrong.
+   *
+   * `key` is the Idempotency-Key the client sent, naming one attempt to pay.
+   * Asked again under it — a retry after a lost response, a second click, the
+   * page brought back from the invoice tab — checkout answers with the invoice
+   * that attempt opened instead of a second one, for as long as it can still
+   * be paid. Without a key every call is a new attempt, as before.
    */
-  async checkout(userId: string): Promise<CheckoutDto> {
+  async checkout(userId: string, key: string | null = null): Promise<CheckoutDto> {
     if (!this.nowpayments.enabled) {
       throw new ServiceUnavailableException('Payments are not configured yet');
+    }
+    if (key !== null) {
+      const answered = await this.answeredBefore(userId, key);
+      if (answered) return answered;
     }
     const { priceUsd, firstMonth } = await this.nextPriceUsd(userId);
     const lock = await this.lockFor(priceUsd);
 
-    const payment = await this.prisma.payment.create({
-      data: {
-        userId,
-        provider: 'nowpayments',
-        // Opaque on purpose: an order id leaks into gateway dashboards and
-        // webhook logs, and portfolio slugs went wordy — money stays boring
-        orderId: `pro_${randomUUID()}`,
-        months: 1,
-        priceUsd,
-        // What the invoice is locked to; the webhook overwrites it with what
-        // was actually paid
-        payCurrency: lock,
-      },
-    });
+    let payment: Payment;
+    try {
+      payment = await this.prisma.payment.create({
+        data: {
+          userId,
+          provider: 'nowpayments',
+          // Opaque on purpose: an order id leaks into gateway dashboards and
+          // webhook logs, and portfolio slugs went wordy — money stays boring
+          orderId: `pro_${randomUUID()}`,
+          months: 1,
+          priceUsd,
+          // What the invoice is locked to; the webhook overwrites it with what
+          // was actually paid
+          payCurrency: lock,
+          idempotencyKey: key,
+        },
+      });
+    } catch (err) {
+      // The same key a moment ago, from a request still at the gateway: the
+      // unique index let one row in, and this is the other request
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw inProgress();
+      }
+      throw err;
+    }
 
     try {
       const invoice = await this.nowpayments.createInvoice({
@@ -174,6 +214,28 @@ export class BillingService {
         'Could not reach the payment provider. Try again in a minute.',
       );
     }
+  }
+
+  /**
+   * What an earlier checkout under this key already answered, while that
+   * answer still holds.
+   *
+   * An invoice that can still be paid is the answer, again. An attempt with no
+   * invoice yet is another request still at the gateway: a 409 to try again
+   * shortly, never a second invoice. Anything else is over — paid, expired,
+   * failed at the gateway — and lets go of the key, so the same page can buy
+   * another month, or try again after a failure, under it.
+   */
+  private async answeredBefore(userId: string, key: string): Promise<CheckoutDto | null> {
+    const earlier = await this.prisma.payment.findUnique({
+      where: { userId_idempotencyKey: { userId, idempotencyKey: key } },
+    });
+    if (earlier === null) return null;
+    if (earlier.invoiceUrl !== null && OPEN.has(earlier.status)) return { url: earlier.invoiceUrl };
+    const young = Date.now() - earlier.createdAt.getTime() < IN_FLIGHT_MS;
+    if (earlier.invoiceUrl === null && earlier.status !== 'failed' && young) throw inProgress();
+    await this.prisma.payment.update({ where: { id: earlier.id }, data: { idempotencyKey: null } });
+    return null;
   }
 
   /**

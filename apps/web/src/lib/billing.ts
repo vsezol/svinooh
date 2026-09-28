@@ -21,8 +21,15 @@ export const getBillingMe = (): Promise<BillingMeDto> => api<BillingMeDto>('/bil
  * decides which tab it goes into. Which coins the page offers is the
  * gateway's business, curated in its dashboard; it hides by itself the ones
  * whose network minimum does not fit the amount.
+ *
+ * `key` names one attempt to pay. Asked again under the same key while its
+ * invoice can still be paid, the server answers with that invoice rather than
+ * opening a second one.
  */
-export async function openCheckout(): Promise<string> {
-  const { url } = await api<CheckoutDto>('/billing/checkout', { method: 'POST' });
+export async function openCheckout(key: string): Promise<string> {
+  const { url } = await api<CheckoutDto>('/billing/checkout', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': key },
+  });
   return url;
 }

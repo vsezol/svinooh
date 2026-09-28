@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { BillingMeDto, ProOfferDto, ProPaymentDto } from '@svinooh/shared';
 import { AuthModal } from '../components/AuthModal';
@@ -83,6 +83,10 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
   // Arrived back from the gateway's success page — Pro switches on when the
   // network confirms, so the page checks back until it has
   const [awaitingPayment, setAwaitingPayment] = useState(false);
+  // One attempt to pay per visit to this page: pressing again, or coming back
+  // from the invoice tab, reopens the invoice it opened while that can still
+  // be paid. Once it cannot, the server lets the key go and opens a new one.
+  const checkoutKey = useRef<string | null>(null);
 
   useEffect(() => {
     track('pro_opened', {});
@@ -144,7 +148,8 @@ export function ProPage({ preloaded }: { preloaded: ProOfferDto | null }) {
     // invoice takes over this tab instead, the way it always did.
     const tab = window.open('', '_blank');
     try {
-      const url = await openCheckout();
+      checkoutKey.current ??= crypto.randomUUID();
+      const url = await openCheckout(checkoutKey.current);
       if (tab && !tab.closed) {
         tab.location.href = url;
         // The page stays under the payer and starts watching for the payment
