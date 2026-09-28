@@ -320,6 +320,10 @@ function visitIsFresh(slug: string, now: number): boolean {
   return false;
 }
 
+/** A write the unique index refused: another request's row got there first */
+const uniqueViolation = (err: unknown): boolean =>
+  err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
+
 function unsupportedNetwork(): BadRequestException {
   return new BadRequestException({
     statusCode: 400,
@@ -640,9 +644,7 @@ export class PortfolioService {
       try {
         return await this.prisma.portfolio.create({ data: { ...data, slug: wordSlug(attempt) } });
       } catch (err) {
-        const collision =
-          err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
-        if (!collision || attempt >= 5) throw err;
+        if (!uniqueViolation(err) || attempt >= 5) throw err;
       }
     }
   }
@@ -825,7 +827,7 @@ export class PortfolioService {
       });
     } catch (err) {
       // Somebody grabbed the slug between the check and the write
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      if (uniqueViolation(err)) {
         throw new ConflictException('That name is taken — try another');
       }
       throw err;
@@ -857,8 +859,19 @@ export class PortfolioService {
    * one and share the link before deciding whether you want an account.
    * Renaming and removing stay owner-only: building something up is safe to
    * leave open, taking it apart is not.
+   *
+   * Asking twice is asking once. The address is this operation's natural key —
+   * a portfolio holds an address at most once, and the unique index on
+   * (portfolioId, walletId) is what says so — so a repeat answers with the
+   * wallet already there rather than an error: a retry after a lost response,
+   * a double click, two tabs at once. `created` tells the first answer from
+   * the repeats, and the controller turns it into 201 or 200.
    */
-  async addWallet(slug: string, userId: string | null, addressRaw: string): Promise<WalletDto> {
+  async addWallet(
+    slug: string,
+    userId: string | null,
+    addressRaw: string,
+  ): Promise<{ wallet: WalletDto; created: boolean }> {
     const portfolio = await this.requireWritable(slug, userId);
     const raw = String(addressRaw || '').trim();
     if (!raw) throw new BadRequestException('Empty address');
@@ -868,6 +881,11 @@ export class PortfolioService {
     // Same spelling as the landing stores, or the same wallet enters this
     // portfolio twice and is counted twice in its total — see normalizeAddress
     const address = normalizeAddress(chain, raw);
+
+    // Before the cap: a wallet that is already in is not one more, so a repeat
+    // at the limit gets its wallet back and not the paywall
+    const already = await this.heldIn(portfolio.id, chain, address);
+    if (already) return { wallet: this.toWalletDto(already, 0), created: false };
 
     // Every wallet is rescanned for as long as it exists, so growth is capped:
     // the free plan's cap on portfolios its members add to, and a hard ceiling
@@ -892,25 +910,31 @@ export class PortfolioService {
     }
 
     const wallet = await this.upsertAddress(chain, address);
-    const existing = await this.prisma.portfolioWallet.findUnique({
-      where: { portfolioId_walletId: { portfolioId: portfolio.id, walletId: wallet.id } },
-    });
-    if (existing) {
-      throw new ConflictException({
-        statusCode: 409,
-        code: 'WALLET_EXISTS',
-        message: 'This wallet is already in the portfolio',
+    let held: HeldWallet;
+    try {
+      held = await this.prisma.portfolioWallet.create({
+        data: { portfolioId: portfolio.id, walletId: wallet.id },
+        include: { wallet: { include: { positions: true } } },
       });
+    } catch (err) {
+      // Another request added it between the look above and this write. The
+      // unique index refused the second row, and the first one is the answer.
+      const raced = uniqueViolation(err) ? await this.heldIn(portfolio.id, chain, address) : null;
+      if (!raced) throw err;
+      return { wallet: this.toWalletDto(raced, 0), created: false };
     }
-
-    const held = await this.prisma.portfolioWallet.create({
-      data: { portfolioId: portfolio.id, walletId: wallet.id },
-      include: { wallet: { include: { positions: true } } },
-    });
     // An address somebody else already tracks arrives with its readings and its
     // positions; only one nobody has scanned yet needs to jump the queue
     if (wallet.lastSyncedAt === null) this.scans.now(wallet.id);
-    return this.toWalletDto(held, 0);
+    return { wallet: this.toWalletDto(held, 0), created: true };
+  }
+
+  /** This portfolio's hold on an address, with what the address holds */
+  private heldIn(portfolioId: string, chain: Chain, address: string): Promise<HeldWallet | null> {
+    return this.prisma.portfolioWallet.findFirst({
+      where: { portfolioId, wallet: { chain, address } },
+      include: { wallet: { include: { positions: true } } },
+    });
   }
 
   async renameWallet(

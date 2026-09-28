@@ -3,14 +3,17 @@ import {
   Controller,
   Delete,
   Get,
+  HttpStatus,
   Param,
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUserId, OptionalAuthGuard, RequiredAuthGuard } from '@svinooh/common';
 import type { UpdateWalletAlertsDto } from '@svinooh/shared';
+import type { Response } from 'express';
 import { normalizeRange, PortfolioService } from './portfolio.service';
 
 @Controller('portfolios')
@@ -152,15 +155,19 @@ export class PortfolioController {
   }
 
   // Optional auth: an anonymous portfolio accepts wallets from anyone, an owned
-  // one only from its owner — the service decides which applies
+  // one only from its owner — the service decides which applies. 201 when the
+  // wallet went in, 200 when it was already there; the same body either way.
   @Post(':slug/wallets')
   @UseGuards(OptionalAuthGuard)
-  addWallet(
+  async addWallet(
     @Param('slug') slug: string,
     @CurrentUserId() userId: string | null,
     @Body() body: { address?: string },
+    @Res({ passthrough: true }) res: Response,
   ) {
-    return this.portfolios.addWallet(slug, userId, body?.address ?? '');
+    const { wallet, created } = await this.portfolios.addWallet(slug, userId, body?.address ?? '');
+    res.status(created ? HttpStatus.CREATED : HttpStatus.OK);
+    return wallet;
   }
 
   @Patch(':slug/wallets/:walletId')
