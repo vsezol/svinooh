@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import json
 import math
 import os
@@ -7,13 +8,14 @@ import subprocess
 import sys
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import yaml
 from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.messages import BaseMessage
 from langchain_core.outputs import LLMResult
 from langfuse import Evaluation, Langfuse
 from langfuse.api import DatasetStatus
@@ -36,6 +38,7 @@ from app.ports import Ask
 from app.settings import Settings
 
 from .checks import judged
+from .judges import CRITERIA, JUDGE, Shown, data_of, judges_for, record_of
 from .world import ADDRESS, World
 
 HERE = Path(__file__).parent
@@ -81,6 +84,7 @@ class Row:
     slice: dict[str, str]
     output: dict[str, Any]
     verdicts: dict[str, tuple[bool, str]]
+    judgments: dict[str, tuple[str, str]] = field(default_factory=dict)
 
     @property
     def passed(self) -> bool:
@@ -92,6 +96,7 @@ class Seen(BaseCallbackHandler):
 
     def __init__(self) -> None:
         self.tools: list[dict[str, Any]] = []
+        self.prompts: list[list[BaseMessage]] = []
         self.model_calls = 0
         self.tokens_in = 0
         self.tokens_out = 0
@@ -102,6 +107,11 @@ class Seen(BaseCallbackHandler):
     ) -> None:
         self.tools.append({"name": (serialized or {}).get("name", ""), "args": inputs or input_str})
 
+    def on_chat_model_start(
+        self, serialized: dict[str, Any], messages: list[list[BaseMessage]], **_: Any
+    ) -> None:
+        self.prompts.extend(messages)
+
     def on_llm_end(self, response: LLMResult, **_: Any) -> None:
         self.model_calls += 1
         usage = (response.llm_output or {}).get("token_usage") or {}
@@ -111,24 +121,52 @@ class Seen(BaseCallbackHandler):
 
 
 class Golden:
-    def __init__(self, settings: Settings, panel: PanelValues, langfuse: Langfuse) -> None:
+    def __init__(
+        self, settings: Settings, panel: PanelValues, langfuse: Langfuse, judge: str = JUDGE
+    ) -> None:
         self._settings = settings
         self._panel = panel
         self._langfuse = langfuse
+        self._judge = judge
         self._traced = bool(settings.langfuse_public_key and settings.langfuse_secret_key)
 
-    def run(self, cases: Sequence[Case], name: str, concurrency: int) -> list[Row]:
+    def run(
+        self, cases: Sequence[Case], name: str, concurrency: int, judging: bool = False
+    ) -> list[Row]:
         by_id = {case.id: case for case in cases}
         models = Models(self._settings)
+        judges = judges_for(self._settings, self._judge) if judging else None
 
         async def task(*, item: Any, **_: Any) -> dict[str, Any]:
             return await self.answer(by_id[case_id(item)], models)
+
+        async def judged_by_model(
+            *, input: dict[str, Any], output: dict[str, Any], **_: Any
+        ) -> list[Evaluation]:
+            if judges is None:
+                return []
+            shown = Shown(
+                question=input.get("question", ""),
+                answer=output["answer"],
+                data=output["data"],
+                record=record_of(output, input.get("settled")),
+            )
+            verdicts = await asyncio.gather(*(judges.judge(name, shown) for name in CRITERIA))
+            return [
+                Evaluation(
+                    name=f"judge.{name}",
+                    value=verdict.verdict,
+                    comment=verdict.reasoning,
+                    data_type="CATEGORICAL",
+                )
+                for name, verdict in zip(CRITERIA, verdicts, strict=True)
+            ]
 
         experiment: dict[str, Any] = {
             "name": DATASET,
             "run_name": name,
             "task": task,
-            "evaluators": [checked],
+            "evaluators": [checked, judged_by_model],
             "run_evaluators": [aggregated],
             "max_concurrency": concurrency,
             "metadata": self.described(),
@@ -194,6 +232,7 @@ class Golden:
         return {
             "model": answering.model,
             "reasoning_effort": answering.reasoning_effort or "none",
+            "judge": self._judge,
             "commit": commit(),
         }
 
@@ -206,13 +245,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         panel = replace(panel, model=args.model)
     everything = load()
     cases = [case for case in everything if not args.only or case.id in args.only]
-    golden = Golden(settings, panel, langfuse_for(settings))
+    golden = Golden(settings, panel, langfuse_for(settings), args.judge or JUDGE)
     golden.sync(everything)
     started = time.strftime("%Y-%m-%d %H:%M")
     rows: list[Row] = []
     for repetition in range(1, args.repeat + 1):
         named = f"{args.name} {started} #{repetition}".strip()
-        rows += golden.run(cases, named, args.concurrency)
+        judging = repetition == 1 and not args.no_judge
+        rows += golden.run(cases, named, args.concurrency, judging)
     report = scorecard(rows, cases, args.repeat, golden.described())
     sys.stdout.write(report + "\n")
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
@@ -254,6 +294,7 @@ def outcome(state: dict[str, Any], seen: Seen, world: World, seconds: float) -> 
             for choice in state.get("choices") or ()
         ],
         "proposes": list(state.get("pending_set") or []),
+        "created": state.get("portfolio_created"),
         "writes": world.writes,
         "fetched": world.asked,
         "seconds": round(seconds, 2),
@@ -261,12 +302,18 @@ def outcome(state: dict[str, Any], seen: Seen, world: World, seconds: float) -> 
         "tokens_in": seen.tokens_in,
         "tokens_out": seen.tokens_out,
         "cost_usd": float(seen.cost),
+        "data": data_of(max(seen.prompts, key=size)) if seen.prompts else "",
     }
+
+
+def size(prompt: list[BaseMessage]) -> int:
+    return sum(len(str(message.content)) for message in prompt)
 
 
 def card_facts(card: Card) -> dict[str, Any]:
     if isinstance(card, Swap):
         return {
+            "what": card_said(card),
             "action": card.action,
             "pay_with": card.pay_with.mint,
             "receive_as": card.receive_as.mint,
@@ -274,6 +321,7 @@ def card_facts(card: Card) -> dict[str, Any]:
             "everything": card.everything,
         }
     facts: dict[str, Any] = {
+        "what": card_said(card),
         "action": card.action,
         "pool": card.pool.id,
         "amount": None if card.amount is None else str(card.amount),
@@ -288,6 +336,24 @@ def card_facts(card: Card) -> dict[str, Any]:
         facts["pay_with"] = card.pay_with.mint if card.pay_with else None
         facts["receive_as"] = card.receive_as.mint if card.receive_as else None
     return facts
+
+
+def card_said(card: Card) -> str:
+    if isinstance(card, Swap):
+        how_much = f"all, about {card.amount}" if card.everything else f"{card.amount}"
+        return f"swap {how_much} {card.pay_with.symbol} to {card.receive_as.symbol}"
+    if isinstance(card, Placement):
+        if card.action != "provide":
+            return f"{card.action} their {card.pool.name} liquidity position"
+        coin = card.pay_with.symbol if card.pay_with else card.pool.x
+        span = f" from -{card.below_pct}% to +{card.above_pct}%" if card.below_pct else ""
+        return f"provide {card.amount} {coin} as liquidity to {card.pool.name}{span}"
+    how_much = f"all, about {card.amount}" if card.everything else f"{card.amount}"
+    if card.action == "move" and card.source is not None:
+        return f"move {how_much} {card.source.token} from {card.source.name} into {card.pool.name}"
+    if card.action == "withdraw":
+        return f"withdraw {how_much} {card.pool.token} from {card.pool.name}"
+    return f"deposit {how_much} {card.pool.token} into {card.pool.name}"
 
 
 def checked(*, output: dict[str, Any], expected_output: Any, **_: Any) -> list[Evaluation]:
@@ -337,7 +403,16 @@ def case_id(item: Any) -> str:
 def row_of(result: ExperimentItemResult, cases: dict[str, Case]) -> Row:
     case = cases[case_id(result.item)]
     output = result.output if isinstance(result.output, dict) else {}
-    return Row(case.id, case.slice, output, judged(case.expect, output) if output else {})
+    judgments = {
+        str(evaluation.name).removeprefix("judge."): (
+            str(evaluation.value),
+            evaluation.comment or "",
+        )
+        for evaluation in result.evaluations
+        if str(evaluation.name).startswith("judge.")
+    }
+    verdicts = judged(case.expect, output) if output else {}
+    return Row(case.id, case.slice, output, verdicts, judgments)
 
 
 def wilson(passed: int, total: int, z: float = 1.96) -> tuple[float, float]:
@@ -390,6 +465,7 @@ def scorecard(rows: list[Row], cases: list[Case], repeat: int, described: dict[s
             f"{statistics.fmean(r.output['tokens_out'] for r in finished):,.0f} out, "
             f"${statistics.fmean(r.output['cost_usd'] for r in finished):.5f}.",
         ]
+    lines += judgments(rows)
     failed = [row for row in rows if not row.passed]
     if failed:
         lines += ["", "### Failed", ""]
@@ -399,6 +475,29 @@ def scorecard(rows: list[Row], cases: list[Case], repeat: int, described: dict[s
             )
             lines.append(f"- `{row.case}`: {why or 'never finished'}")
     return "\n".join(lines)
+
+
+def judgments(rows: list[Row]) -> list[str]:
+    judged_rows = [row for row in rows if row.judgments]
+    if not judged_rows:
+        return []
+    lines = [
+        "",
+        "### Judges, in shadow: reported, not gated",
+        "",
+        "| judge | pass | fail | unknown |",
+        "| --- | --- | --- | --- |",
+    ]
+    for name in CRITERIA:
+        said = [row.judgments[name][0] for row in judged_rows if name in row.judgments]
+        lines.append(
+            f"| {name} | {said.count('pass')} | {said.count('fail')} | {said.count('unknown')} |"
+        )
+    for row in judged_rows:
+        for name, (verdict, reasoning) in row.judgments.items():
+            if verdict == "fail":
+                lines.append(f"- `{row.case}` {name}: {reasoning.strip()[:300]}")
+    return lines
 
 
 def gate(rows: list[Row], cases: list[Case], repeat: int, approved: dict[str, bool]) -> list[str]:
@@ -454,6 +553,8 @@ def arguments(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--only", nargs="*", default=[])
     parser.add_argument("--model", default="")
     parser.add_argument("--name", default="")
+    parser.add_argument("--judge", default=JUDGE)
+    parser.add_argument("--no-judge", action="store_true")
     parser.add_argument("--gate", action="store_true")
     parser.add_argument("--approve", action="store_true")
     return parser.parse_args(argv)

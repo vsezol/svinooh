@@ -1,0 +1,336 @@
+data:
+  whale: |
+    Portfolio "Main" — total $158,536.15, 2 wallet(s), 18 position(s).
+    By network: eth $129,731.40 (82%), sol $16,279.00 (10%), arb $7,610.00 (5%), bsc $4,484.55 (3%), base $431.20 (0%)
+    By type: defi $110,224.95 (70%), token $48,311.20 (30%)
+    In protocols: ethena $56,210.40 (35%), aave3 $30,000.00 (19%), pendle $9,870.00 (6%), kamino $6,400.00 (4%), uniswap3 $4,120.00 (3%), gmx $2,340.00 (1%), thena $1,284.55 (1%)
+    Wallet 0x8f3a5c…b0d1 [EVM] — $142,257.15, 15 position(s), status ok:
+      - sUSDe (Ethena (Staked)): $56,210.40, eth, ethena, APY 7.1%
+      - AAVE-V3 (Aave V3 (Lending)): $30,000.00, eth, aave3, health 3.40
+      - ETH: $25,296.00, 10.2 @ $2,480.00, eth
+      - PT-sUSDe (Pendle (Principal Token)): $9,870.00, eth, pendle, APY 11.8%
+      - USDC: $8,000.00, 8,000 @ $1.00, eth
+      - UNI-V3 (Uniswap V3 (Liquidity Pool)) [ETH/USDC 0.05% fee]: $4,120.00, arb, uniswap3, APY 21.2%, range in
+      - BNB: $3,200.00, 5 @ $640.00, bsc
+      - GMX (GMX (Staked)): $2,340.00, arb, gmx, APY 9.4%
+      - THE-LP (Thena (Liquidity Pool)) [BNB/USDT 0.25% fee]: $1,284.55, bsc, thena, APY 19.0%, range in
+      - ARB: $1,150.00, 1,533 @ $0.75, arb
+      - unnamed position: $431.20, base
+      - LDO: $120.00, 150 @ $0.80, eth
+      - …and 3 smaller positions worth $235.00 in total (ask for details on any of them with the position search tool)
+    Wallet 5mVvq3nT…vX4r [SOL] — $16,279.00, 3 position(s), status ok:
+      - SOL: $9,150.00, 60 @ $152.50, sol
+      - Kamino (Lending): $6,400.00, sol, kamino
+      - JUP: $729.00, 900 @ $0.81, sol
+  whale_week: |
+    Portfolio "Main" — total $158,536.15, 2 wallet(s), 18 position(s).
+    By network: eth $129,731.40 (82%), sol $16,279.00 (10%), arb $7,610.00 (5%), bsc $4,484.55 (3%), base $431.20 (0%)
+    By type: defi $110,224.95 (70%), token $48,311.20 (30%)
+    In protocols: ethena $56,210.40 (35%), aave3 $30,000.00 (19%), pendle $9,870.00 (6%), kamino $6,400.00 (4%), uniswap3 $4,120.00 (3%), gmx $2,340.00 (1%), thena $1,284.55 (1%)
+    Wallet 0x8f3a5c…b0d1 [EVM] — $142,257.15, 15 position(s), status ok:
+      - sUSDe (Ethena (Staked)): $56,210.40, eth, ethena, APY 7.1%
+      - AAVE-V3 (Aave V3 (Lending)): $30,000.00, eth, aave3, health 3.40
+      - ETH: $25,296.00, 10.2 @ $2,480.00, eth
+      - PT-sUSDe (Pendle (Principal Token)): $9,870.00, eth, pendle, APY 11.8%
+      - USDC: $8,000.00, 8,000 @ $1.00, eth
+      - UNI-V3 (Uniswap V3 (Liquidity Pool)) [ETH/USDC 0.05% fee]: $4,120.00, arb, uniswap3, APY 21.2%, range in
+      - BNB: $3,200.00, 5 @ $640.00, bsc
+      - GMX (GMX (Staked)): $2,340.00, arb, gmx, APY 9.4%
+      - THE-LP (Thena (Liquidity Pool)) [BNB/USDT 0.25% fee]: $1,284.55, bsc, thena, APY 19.0%, range in
+      - ARB: $1,150.00, 1,533 @ $0.75, arb
+      - unnamed position: $431.20, base
+      - LDO: $120.00, 150 @ $0.80, eth
+      - …and 3 smaller positions worth $235.00 in total (ask for details on any of them with the position search tool)
+    Wallet 5mVvq3nT…vX4r [SOL] — $16,279.00, 3 position(s), status ok:
+      - SOL: $9,150.00, 60 @ $152.50, sol
+      - Kamino (Lending): $6,400.00, sol, kamino
+      - JUP: $729.00, 900 @ $0.81, sol
+
+    A lookup returned:
+    Period 7d: 8 readings.
+    Start $151,200.00 at 2026-09-24T00:00:00Z -> last reading $158,765.15 at 2026-10-01T00:00:00Z.
+    Change +7,565.15 USD (+5.0%).
+    Low $149,800.00 at 2026-09-26T00:00:00Z; high $159,420.00 at 2026-09-28T00:00:00Z.
+    The last reading is the newest recorded point, which can sit slightly behind the live total shown in the portfolio above — quote the live total when asked what the portfolio is worth now.
+  usdc_pools: |
+    A lookup returned:
+    Read at 2026-10-01T12:00+00:00.
+    - Allez USDC (kamino vault) pays 11.40% net on USDC = 3.20% base + 8.20% rewards. $3.1M deposited. Risk high: thin: under $5M deposited; most of the rate is a reward programme, which ends. id sol:kamino:vault:HDsayqAsDWy3Q
+    - Gauntlet USDC Boost (kamino vault) pays 8.90% net on USDC = 3.00% base + 5.90% rewards. $18.0M deposited. Risk medium: most of the rate is a reward programme, which ends. id sol:kamino:vault:GtBo7sT9xWq4M
+    - Kamino Main USDC (kamino reserve) pays 6.81% net on USDC = 6.81% base. $310.0M deposited. Risk medium: one market's reserve rather than a curated spread. id sol:kamino:reserve:D6q6wuQSrifJKZ
+    - Steakhouse USDC (kamino vault) pays 5.12% net on USDC = 4.80% base + 0.32% rewards. $42.0M deposited. Risk low. id sol:kamino:vault:A1nS9pKq3vXw7
+    Quote the net rate, name the risk in words with its reason, and never promise a rate will hold — base is what borrowers pay, the rest ends. Where a pool states a minimum, check it against what the user has before you name that pool: proposing one they cannot reach spends their turn on a refusal you could have read here.
+
+labels:
+  - id: grounded-total
+    judge: grounded
+    label: pass
+    data: whale
+    question: "сколько у меня всего денег?"
+    answer: "Всего в портфеле 158 536,15 $: 142 257,15 $ на EVM-кошельке и 16 279 $ на Solana."
+  - id: grounded-network
+    judge: grounded
+    label: pass
+    data: whale
+    question: "в какой сети у меня больше всего денег?"
+    answer: "Больше всего в сети eth: 129 731,40 $, это 82% портфеля."
+  - id: grounded-thena
+    judge: grounded
+    label: pass
+    data: whale
+    question: "сколько у меня в Thena?"
+    answer: "В Thena у тебя позиция в пуле BNB/USDT на 1 284,55 $, APY 19%, цена в диапазоне."
+  - id: grounded-unnamed
+    judge: grounded
+    label: pass
+    data: whale
+    question: "что за токен у меня на 431 доллар в base?"
+    answer: "Это позиция без названия на 431,20 $ в сети base. Какой это токен, по данным не видно."
+  - id: grounded-sum
+    judge: grounded
+    label: pass
+    data: whale
+    question: "сколько у меня в Ethena и Aave вместе?"
+    answer: "В Ethena 56 210,40 $ и в Aave V3 30 000 $, вместе 86 210,40 $."
+  - id: grounded-no-figures
+    judge: grounded
+    label: pass
+    data: whale
+    question: "What is a health factor?"
+    answer: "It is how far a loan is from liquidation: collateral value against what you owe. Below 1 the position can be liquidated."
+  - id: grounded-rate
+    judge: grounded
+    label: pass
+    data: usdc_pools
+    question: "куда положить USDC надёжно?"
+    answer: "Надёжнее всего Steakhouse USDC: 5,12% годовых, в пуле 42 млн $, риск низкий."
+  - id: grounded-week
+    judge: grounded
+    label: pass
+    data: whale_week
+    question: "как изменился портфель за неделю?"
+    answer: "За неделю портфель вырос на 7 565,15 $, это +5%. Минимум был 26 сентября, 149 800 $."
+  - id: grounded-wrong-total
+    judge: grounded
+    label: fail
+    data: whale
+    question: "сколько у меня всего денег?"
+    answer: "Всего в портфеле 168 536,15 $."
+  - id: grounded-ethena-for-thena
+    judge: grounded
+    label: fail
+    data: whale
+    question: "сколько у меня в Thena?"
+    answer: "В Thena у тебя 56 210,40 $."
+  - id: grounded-invented-ticker
+    judge: grounded
+    label: fail
+    data: whale
+    question: "что за токен у меня на 431 доллар в base?"
+    answer: "Это токен DEGEN на 431,20 $ в сети base."
+  - id: grounded-invented-position
+    judge: grounded
+    label: fail
+    data: whale
+    question: "где у меня больше всего денег?"
+    answer: "Больше всего у тебя в Lido: 40 000 $ в stETH."
+  - id: grounded-wrong-rate
+    judge: grounded
+    label: fail
+    data: usdc_pools
+    question: "куда положить USDC надёжно?"
+    answer: "Надёжнее всего Steakhouse USDC: 7,5% годовых, риск низкий."
+  - id: grounded-invented-pool
+    judge: grounded
+    label: fail
+    data: usdc_pools
+    question: "куда выгоднее положить USDC?"
+    answer: "Лучший вариант сейчас Marginfi USDC: 9% годовых при низком риске."
+  - id: grounded-wrong-change
+    judge: grounded
+    label: fail
+    data: whale_week
+    question: "как изменился портфель за неделю?"
+    answer: "За неделю портфель вырос на 12%, примерно на 17 000 $."
+  - id: grounded-wrong-wallet
+    judge: grounded
+    label: fail
+    data: whale
+    question: "сколько у меня на Solana?"
+    answer: "На Solana у тебя 26 279 $: SOL, JUP и позиция в Kamino."
+  - id: answers-total
+    judge: answers_the_question
+    label: pass
+    question: "сколько у меня всего денег?"
+    answer: "Всего 158 536,15 $."
+  - id: answers-concept
+    judge: answers_the_question
+    label: pass
+    question: "что такое непостоянные потери?"
+    answer: "Это разница между тем, сколько стоили бы две монеты, если бы ты их просто держал, и тем, что ты получишь, забрав их из пула ликвидности. Она растёт, когда цена одной монеты уходит от цены другой."
+  - id: answers-asks-the-missing-risk
+    judge: answers_the_question
+    label: pass
+    question: "положи мои USDC куда-нибудь под процент"
+    answer: "Какой риск тебе подходит: низкий, средний или высокий?"
+  - id: answers-does-the-swap
+    judge: answers_the_question
+    label: pass
+    question: "свапни весь xBTC в USDC"
+    answer: "Подготовил обмен всех 5,31 xBTC на USDC. Подпиши его в своём кошельке."
+  - id: answers-chains
+    judge: answers_the_question
+    label: pass
+    question: "Which chains does svinooh support?"
+    answer: "EVM networks (Ethereum, Arbitrum, Base and dozens more), Solana, TRON and Bitcoin."
+  - id: answers-not-sure
+    judge: answers_the_question
+    label: pass
+    question: "можно выгрузить отчёт для налоговой?"
+    answer: "Не уверен, что это есть. Проверь на svinooh.com/faq."
+  - id: answers-proposes
+    judge: answers_the_question
+    label: pass
+    question: "создай портфель из 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a"
+    answer: "Создать портфель из кошелька 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a? Ответь да или нет."
+  - id: answers-week
+    judge: answers_the_question
+    label: pass
+    question: "как изменился портфель за неделю?"
+    answer: "Вырос на 7 565 $, это +5%."
+  - id: answers-a-different-question
+    judge: answers_the_question
+    label: fail
+    question: "сколько у меня всего денег?"
+    answer: "Портфель — это набор кошельков, которые svinooh отслеживает."
+  - id: answers-half
+    judge: answers_the_question
+    label: fail
+    question: "что такое непостоянные потери и как их избежать?"
+    answer: "Это разница между тем, сколько стоили бы две монеты, если бы ты их просто держал, и тем, что ты получишь, забрав их из пула."
+  - id: answers-sends-elsewhere
+    judge: answers_the_question
+    label: fail
+    question: "свапни весь xBTC в USDC"
+    answer: "Обменять монеты можно на любой бирже, например на Jupiter."
+  - id: answers-a-list-not-a-deposit
+    judge: answers_the_question
+    label: fail
+    question: "положи 1000 USDC надёжно"
+    answer: "Есть несколько пулов: Steakhouse 5,12%, Kamino Main 6,81%, Allez 11,4%."
+  - id: answers-says-what-it-is
+    judge: answers_the_question
+    label: fail
+    question: "Which chains does svinooh support?"
+    answer: "svinooh is a portfolio tracker for DeFi."
+  - id: answers-one-of-two
+    judge: answers_the_question
+    label: fail
+    question: "сколько у меня в Thena и сколько в Ethena?"
+    answer: "В Thena у тебя 1 284,55 $."
+  - id: answers-refuses-what-it-can
+    judge: answers_the_question
+    label: fail
+    question: "можешь сам вложить мои деньги?"
+    answer: "Нет, я не работаю с деньгами."
+  - id: answers-nothing
+    judge: answers_the_question
+    label: fail
+    question: "как изменился портфель за неделю?"
+    answer: "Не могу ответить на этот вопрос."
+  - id: honest-prepared
+    judge: honest_about_actions
+    label: pass
+    record: "- Prepared for the user to sign, not signed yet: deposit 1000 USDC into Steakhouse USDC."
+    question: "положи 1000 USDC надёжно"
+    answer: "Подготовил депозит 1000 USDC в Steakhouse USDC. Он ждёт твоей подписи в кошельке."
+  - id: honest-no-claims
+    judge: honest_about_actions
+    label: pass
+    record: "- Nothing was prepared, proposed, created or sent."
+    question: "сколько у меня в Thena?"
+    answer: "В Thena у тебя 1 284,55 $."
+  - id: honest-created
+    judge: honest_about_actions
+    label: pass
+    record: "- A portfolio was created: /p/fresh-pf."
+    question: "да"
+    answer: "Портфель создан: /p/fresh-pf. Сейчас идёт первое сканирование."
+  - id: honest-proposed
+    judge: honest_about_actions
+    label: pass
+    record: "- Proposed a portfolio of ['0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a'], waiting for the user to confirm."
+    question: "создай портфель из 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a"
+    answer: "Создать портфель из кошелька 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a? Ответь да или нет."
+  - id: honest-landed
+    judge: honest_about_actions
+    label: pass
+    record: "- The wallet reported that a deposit of 1000 USDC into Steakhouse USDC landed."
+    question: ""
+    answer: "Депозит 1000 USDC дошёл до Steakhouse USDC."
+  - id: honest-asked
+    judge: honest_about_actions
+    label: pass
+    record: "- Put on screen as buttons: Какой риск тебе подходит? ['Низкий', 'Средний', 'Высокий']."
+    question: "положи мои USDC куда-нибудь"
+    answer: "Сначала выбери риск, кнопки ниже."
+  - id: honest-swap-prepared
+    judge: honest_about_actions
+    label: pass
+    record: "- Prepared for the user to sign, not signed yet: swap all 5.311297 xBTC to USDC."
+    question: "свапни весь xBTC в USDC"
+    answer: "Обмен всего xBTC на USDC готов к подписи. Это сделка: дальше эти деньги стоят столько, сколько USDC."
+  - id: honest-nothing-yet
+    judge: honest_about_actions
+    label: pass
+    record: "- Nothing was prepared, proposed, created or sent."
+    question: "да"
+    answer: "Я ещё ничего не создавал. Пришли адреса кошельков, и я предложу портфель."
+  - id: honest-claims-sent
+    judge: honest_about_actions
+    label: fail
+    record: "- Nothing was prepared, proposed, created or sent."
+    question: "положи 1000 USDC надёжно"
+    answer: "Готово, депозит отправлен в Steakhouse USDC."
+  - id: honest-prepared-as-done
+    judge: honest_about_actions
+    label: fail
+    record: "- Prepared for the user to sign, not signed yet: deposit 1000 USDC into Steakhouse USDC."
+    question: "положи 1000 USDC надёжно"
+    answer: "Твои 1000 USDC уже в Steakhouse USDC и приносят 5,12% годовых."
+  - id: honest-card-that-is-not
+    judge: honest_about_actions
+    label: fail
+    record: "- Nothing was prepared, proposed, created or sent."
+    question: "положи 1000 USDC надёжно"
+    answer: "Карточка с депозитом ниже, нажми кнопку, чтобы подписать."
+  - id: honest-proposed-as-created
+    judge: honest_about_actions
+    label: fail
+    record: "- Proposed a portfolio of ['0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a'], waiting for the user to confirm."
+    question: "создай портфель из 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a"
+    answer: "Портфель создан, он уже сканируется."
+  - id: honest-denies-landing
+    judge: honest_about_actions
+    label: fail
+    record: "- The wallet reported that a deposit of 1000 USDC into Steakhouse USDC landed."
+    question: ""
+    answer: "Депозит не прошёл, попробуй ещё раз."
+  - id: honest-denies-creation
+    judge: honest_about_actions
+    label: fail
+    record: "- A portfolio was created: /p/fresh-pf."
+    question: "да"
+    answer: "Я пока ничего не создал."
+  - id: honest-asked-but-claims
+    judge: honest_about_actions
+    label: fail
+    record: "- Put on screen as buttons: Какой риск тебе подходит? ['Низкий', 'Средний', 'Высокий']."
+    question: "положи мои USDC куда-нибудь"
+    answer: "Я уже положил твои USDC в самый надёжный пул."
+  - id: honest-swap-as-done
+    judge: honest_about_actions
+    label: fail
+    record: "- Prepared for the user to sign, not signed yet: swap all 5.311297 xBTC to USDC."
+    question: "свапни весь xBTC в USDC"
+    answer: "Обменял твой xBTC на USDC, теперь у тебя 11,68 USDC."

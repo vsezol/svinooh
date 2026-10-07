@@ -2,10 +2,11 @@ import json
 
 import httpx
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from app.agent.graph import ANSWERING_NODES
 from app.agent.llm import Models
+from app.agent.prompts import DEFAULT_SYSTEM_PROMPT
 from app.agent.tools import (
     asking_tools,
     deposit_tools,
@@ -17,7 +18,10 @@ from app.agent.tools import (
     swap_tools,
 )
 from app.settings import Settings
+from evals.calibrate import Label, agreement, kappa
+from evals.calibrate import load as calibration_set
 from evals.checks import judged, language_of, mentions
+from evals.judges import CRITERIA, Judges, Shown, Verdict, data_of, presented, record_of
 from evals.run import Case, Golden, gate, langfuse_for, load, parse, wilson
 from evals.world import WORLDS, World
 from tests import fixtures as fx
@@ -229,3 +233,90 @@ class TestOneCaseOffline:
         assert [tool["name"] for tool in answered["tools"]] == ["earn_options"]
         assert "GET /v1/lend/pools" in answered["fetched"]
         assert all(ok for ok, _ in judged(case.expect, answered).values())
+
+
+class TestTheJudges:
+    def test_a_judge_sees_only_what_its_criterion_needs(self):
+        shown = Shown(question="q", answer="a", data="THE DATA", record="- THE RECORD")
+        assert "THE DATA" in presented("grounded", shown)
+        assert "THE RECORD" not in presented("grounded", shown)
+        assert "THE RECORD" in presented("honest_about_actions", shown)
+        assert "THE DATA" not in presented("answers_the_question", shown)
+
+    def test_the_data_leaves_the_rules_out_and_keeps_what_was_looked_up(self):
+        shown = data_of(
+            [
+                SystemMessage(content=f"{DEFAULT_SYSTEM_PROMPT}\n\nPortfolio total $158,536.15"),
+                HumanMessage(content="how much?"),
+                ToolMessage(content="Change +7,565.15 USD", tool_call_id="t"),
+            ]
+        )
+        assert "Every figure you state" not in shown
+        assert "Portfolio total $158,536.15" in shown and "Change +7,565.15 USD" in shown
+
+    def test_the_record_says_what_happened_and_nothing_else(self):
+        nothing = outcome()
+        assert "Nothing was prepared" in record_of(nothing, None)
+        prepared = outcome(cards=[{"what": "deposit 1000 USDC into Steakhouse USDC"}])
+        assert "not signed yet: deposit 1000 USDC into Steakhouse USDC" in record_of(prepared, None)
+        landed = record_of(
+            nothing,
+            {
+                "action": "deposit",
+                "amount": "1000",
+                "token": "USDC",
+                "pool": "Steakhouse USDC",
+                "status": "landed",
+            },
+        )
+        assert "landed" in landed
+
+    async def test_a_verdict_comes_back_typed(self):
+        verdict = {"reasoning": "the total is in the data", "verdict": "pass"}
+        model = Talking(
+            replies=[
+                AIMessage(content="", tool_calls=[{"name": "Verdict", "args": verdict, "id": "v"}])
+            ]
+        )
+        decided = await Judges(model).judge("grounded", Shown("q", "a", "d", "r"))
+        assert decided.verdict == "pass"
+
+
+class TestTheCalibrationSet:
+    def test_every_judge_has_failures_and_passes_to_be_measured_on(self):
+        labelled = calibration_set()
+        for name in CRITERIA:
+            mine = [label.label for label in labelled if label.judge == name]
+            assert mine.count("pass") >= 5 and mine.count("fail") >= 5
+
+    def test_every_label_names_data_that_exists_and_a_judge_that_does(self):
+        labelled = calibration_set()
+        assert len({label.id for label in labelled}) == len(labelled)
+        for label in labelled:
+            assert label.judge in CRITERIA and label.label in ("pass", "fail")
+            assert label.judge != "grounded" or label.shown.data
+            assert label.judge != "honest_about_actions" or label.shown.record
+
+    def test_agreement_is_counted_against_failures_and_passes_apart(self):
+        labelled = [
+            Label("a", "grounded", "fail", Shown("q", "a", "d", "")),
+            Label("b", "grounded", "fail", Shown("q", "a", "d", "")),
+            Label("c", "grounded", "pass", Shown("q", "a", "d", "")),
+            Label("d", "grounded", "pass", Shown("q", "a", "d", "")),
+        ]
+        said = {
+            "a": Verdict(reasoning="", verdict="fail"),
+            "b": Verdict(reasoning="", verdict="pass"),
+            "c": Verdict(reasoning="", verdict="pass"),
+            "d": Verdict(reasoning="", verdict="unknown"),
+        }
+        seen = agreement(labelled, said, "grounded")
+        assert (seen.caught, seen.missed, seen.cleared, seen.flagged, seen.unsure) == (
+            1,
+            1,
+            1,
+            1,
+            1,
+        )
+        assert not seen.trusted
+        assert kappa(labelled, said, "grounded") == pytest.approx(0.2)
