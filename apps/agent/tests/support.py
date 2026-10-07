@@ -281,6 +281,7 @@ def agent(
     settings: Settings | None = None,
     panel: PanelValues = NOTHING_DECIDED,
     strategies=None,
+    tracing=None,
 ) -> LangGraphAgent:
     settings = settings or Settings()
     config = Config(settings, StaticPanel(panel))
@@ -292,6 +293,7 @@ def agent(
         intents if intents is not None else Intents(intent),
         confirmations if confirmations is not None else Confirmations(confirmation),
         strategies,
+        tracing,
     )
 
 

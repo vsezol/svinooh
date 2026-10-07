@@ -65,6 +65,8 @@ class Ask:
     authorization: str | None = None
     pending_addresses: tuple[str, ...] | None = None
     settled: Settled | None = None
+    session_id: str = ""
+    owner: str = ""
 
 
 @dataclass(frozen=True)

@@ -20,6 +20,7 @@ from ..domain.conversation import Turn
 from ..domain.earn import Card, Held, LiquidityPosition, Placement, Settled, Swap
 from ..domain.portfolio import Portfolio
 from ..observability import metrics
+from ..observability.tracing import Tracing
 from ..ports import Ask, Failed, Finished, Progress, Reply, Strategies, Update
 from .context import (
     earning_lines,
@@ -166,6 +167,7 @@ class LangGraphAgent:
         intents: IntentClassifier,
         confirmations: ConfirmationClassifier,
         strategies: Strategies | None = None,
+        tracing: Tracing | None = None,
     ) -> None:
         self._config = config
         self._portfolio = portfolio
@@ -174,20 +176,31 @@ class LangGraphAgent:
         self._intents = intents
         self._confirmations = confirmations
         self._strategies = strategies if strategies is not None else MemoryStrategies()
+        self._tracing = tracing if tracing is not None else Tracing()
         self.graph = self._build()
 
     async def run(self, ask: Ask) -> Reply:
-        return _reply(await self.graph.ainvoke(_state(ask)))
+        with self._tracing.turn(ask) as traced:
+            state = await self.graph.ainvoke(_state(ask), config=traced.config)
+            reply = _reply(state)
+            traced.answered(reply, _decided(state))
+        return reply
 
     async def watch(self, ask: Ask) -> AsyncIterator[Update]:
-        watched = turn_events(self.graph, dict(_state(ask)), answering=SPEAKING_NODES)
-        async for kind, payload in watched:
-            if kind == "done":
-                yield Finished(_reply(payload))
-            elif kind == "error":
-                yield Failed(str(payload.get("message", "")))
-            else:
-                yield Progress(kind="step" if kind == "step" else "token", payload=payload)
+        with self._tracing.turn(ask) as traced:
+            watched = turn_events(
+                self.graph, dict(_state(ask)), answering=SPEAKING_NODES, config=traced.config
+            )
+            async for kind, payload in watched:
+                if kind == "done":
+                    reply = _reply(payload)
+                    traced.answered(reply, _decided(payload))
+                    yield Finished(reply)
+                elif kind == "error":
+                    traced.failed(str(payload.get("message", "")))
+                    yield Failed(str(payload.get("message", "")))
+                else:
+                    yield Progress(kind="step" if kind == "step" else "token", payload=payload)
 
     async def _pending_gate(self, state: AgentState) -> AgentState:
         if not state.get("pending_addresses"):
@@ -618,7 +631,7 @@ class LangGraphAgent:
         builder.add_edge(START, "pending_gate")
         builder.add_conditional_edges(
             "pending_gate",
-            lambda state: state["route"],
+            branch_by_route,
             {
                 "classify_intent": "classify_intent",
                 "create_portfolio": "create_portfolio",
@@ -627,7 +640,7 @@ class LangGraphAgent:
         )
         builder.add_conditional_edges(
             "classify_intent",
-            lambda state: state["intent"],
+            branch_by_intent,
             {
                 "portfolio": "identity",
                 "earn": "earn",
@@ -637,12 +650,25 @@ class LangGraphAgent:
         )
         builder.add_conditional_edges(
             "identity",
-            lambda state: state["route"],
+            branch_by_route,
             {"grounded": "grounded", "onboard": "onboard", "unavailable": "unavailable"},
         )
         for leaf in ANSWERING_NODES:
             builder.add_edge(leaf, END)
         return builder.compile()
+
+
+def answered_by(state: dict[str, Any]) -> str:
+    route = state.get("route", "")
+    return route if route in ANSWERING_NODES else state.get("intent", "")
+
+
+def branch_by_route(state: AgentState) -> str:
+    return state["route"]
+
+
+def branch_by_intent(state: AgentState) -> str:
+    return state["intent"]
 
 
 def all_that_was_said(written: list[str]) -> str:
@@ -671,6 +697,15 @@ def _state(ask: Ask) -> AgentState:
         "pending_addresses": list(ask.pending_addresses) if ask.pending_addresses else None,
         "settled": ask.settled,
     }
+
+
+def _decided(state: dict[str, Any]) -> dict[str, str]:
+    decided = {
+        "answered_by": answered_by(state),
+        "intent": state.get("intent", ""),
+        "language": state.get("language", ""),
+    }
+    return {key: value for key, value in decided.items() if value}
 
 
 def _reply(state: dict[str, Any]) -> Reply:

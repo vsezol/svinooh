@@ -41,6 +41,14 @@ the HTTP series are the same ones the api and the wallet emit, and the
 agent's own are underneath — `svinooh_agent_turns_total`,
 `svinooh_agent_model_duration_seconds`, `svinooh_agent_tool_calls_total`.
 
+## What it traces
+
+With `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` set, every turn is one
+Langfuse trace named `answer-turn`: the question in, the reply out, the nodes
+of the graph under it, every model call with its tokens and every tool with
+its arguments. The chat is the session; the user is a hash of the owner, never
+the id. A bearer token is cut out of every span before it leaves the process.
+
 ## Push on it
 
 `load/` holds a fake model, a fake host API and a locustfile, so a run
