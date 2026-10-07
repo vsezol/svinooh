@@ -44,10 +44,10 @@ agent's own are underneath — `svinooh_agent_turns_total`,
 ## What it traces
 
 With `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` set, every turn is one
-Langfuse trace named `answer-turn`: the question in, the reply out, the nodes
-of the graph under it, every model call with its tokens and every tool with
-its arguments. The chat is the session; the user is a hash of the owner, never
-the id. A bearer token is cut out of every span before it leaves the process.
+Langfuse trace: the nodes of the graph, every model call with its tokens and
+every tool with its arguments. The chat is the session and the owner is the
+user. A bearer token is cut out of every span before it leaves the process.
+The SDK reads the rest of its settings from `LANGFUSE_*` variables itself.
 
 ## Measure it
 

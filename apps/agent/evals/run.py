@@ -128,7 +128,7 @@ class Golden:
         self._panel = panel
         self._langfuse = langfuse
         self._judge = judge
-        self._traced = bool(settings.langfuse_public_key and settings.langfuse_secret_key)
+        self._traced = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
 
     def run(
         self, cases: Sequence[Case], name: str, concurrency: int, judging: bool = False
@@ -188,7 +188,7 @@ class Golden:
         seen = Seen()
         callbacks: list[BaseCallbackHandler] = [seen]
         if self._traced:
-            callbacks.append(CallbackHandler(public_key=self._settings.langfuse_public_key))
+            callbacks.append(CallbackHandler())
         async with world.client() as http:
             config = Config(self._settings, StaticPanel(self._panel))
             agent = LangGraphAgent(
@@ -245,7 +245,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         panel = replace(panel, model=args.model)
     everything = load()
     cases = [case for case in everything if not args.only or case.id in args.only]
-    golden = Golden(settings, panel, langfuse_for(settings), args.judge or JUDGE)
+    golden = Golden(settings, panel, langfuse_for(), args.judge or JUDGE)
     golden.sync(everything)
     started = time.strftime("%Y-%m-%d %H:%M")
     rows: list[Row] = []
@@ -529,13 +529,9 @@ def baseline() -> dict[str, bool]:
     return json.loads(BASELINE.read_text())["cases"]
 
 
-def langfuse_for(settings: Settings) -> Langfuse:
-    if settings.langfuse_public_key and settings.langfuse_secret_key:
-        return Langfuse(
-            public_key=settings.langfuse_public_key,
-            secret_key=settings.langfuse_secret_key,
-            release=settings.release or None,
-        )
+def langfuse_for() -> Langfuse:
+    if os.getenv("LANGFUSE_PUBLIC_KEY"):
+        return Langfuse()
     return Langfuse(public_key="none", secret_key="none", tracing_enabled=False)
 
 
