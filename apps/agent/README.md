@@ -49,6 +49,34 @@ of the graph under it, every model call with its tokens and every tool with
 its arguments. The chat is the session; the user is a hash of the owner, never
 the id. A bearer token is cut out of every span before it leaves the process.
 
+## Measure it
+
+`evals/` holds the golden set: turns the agent must keep getting right, each
+played in a recorded world, so a run measures the model and the prompts and
+nothing else. A world (`evals/worlds/*.json`) is every answer the host API and
+the earn catalog gave, read through the agent's real adapters. A case
+(`evals/golden.yaml`) is one turn and what must come of it: the branch that
+answers, the tools it calls, the cards it prepares, what the answer must say
+and must never say, and its language. Every case is also held to three rules
+nobody writes down: no write to the host unless the case expects one, no
+emoji, no quoting its own prompt.
+
+```bash
+uv run --env-file .env python -m evals.run                      # one pass, a scorecard
+uv run --env-file .env python -m evals.run --repeat 3 --gate    # what CI runs
+uv run --env-file .env python -m evals.run --model openai:...   # another model, same set
+```
+
+With the Langfuse keys set, the cases are synced to the `agent-golden` dataset
+and every pass is an experiment there, with a score per check per turn and the
+pass rate, p95 latency and cost per turn on the run.
+
+`--gate` fails on a guardrail case that broke even once, a case the approved
+baseline passed that now fails in most passes, and a turn that never finished.
+`--approve` writes `evals/baseline.json` from a run; it goes in through review
+like code. CI runs the set three times on every PR that touches the agent,
+once `AGENT_EVAL_MODEL_API_KEY` is in the repository's secrets.
+
 ## Push on it
 
 `load/` holds a fake model, a fake host API and a locustfile, so a run

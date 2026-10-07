@@ -181,7 +181,7 @@ class LangGraphAgent:
 
     async def run(self, ask: Ask) -> Reply:
         with self._tracing.turn(ask) as traced:
-            state = await self.graph.ainvoke(_state(ask), config=traced.config)
+            state = await self.graph.ainvoke(state_of(ask), config=traced.config)
             reply = _reply(state)
             traced.answered(reply, _decided(state))
         return reply
@@ -189,7 +189,7 @@ class LangGraphAgent:
     async def watch(self, ask: Ask) -> AsyncIterator[Update]:
         with self._tracing.turn(ask) as traced:
             watched = turn_events(
-                self.graph, dict(_state(ask)), answering=SPEAKING_NODES, config=traced.config
+                self.graph, dict(state_of(ask)), answering=SPEAKING_NODES, config=traced.config
             )
             async for kind, payload in watched:
                 if kind == "done":
@@ -658,6 +658,17 @@ class LangGraphAgent:
         return builder.compile()
 
 
+def state_of(ask: Ask) -> AgentState:
+    return {
+        "question": ask.question,
+        "history": ask.history,
+        "portfolio": ask.portfolio,
+        "authorization": ask.authorization,
+        "pending_addresses": list(ask.pending_addresses) if ask.pending_addresses else None,
+        "settled": ask.settled,
+    }
+
+
 def answered_by(state: dict[str, Any]) -> str:
     route = state.get("route", "")
     return route if route in ANSWERING_NODES else state.get("intent", "")
@@ -686,17 +697,6 @@ def _branch(state: AgentState, intent: str) -> str:
 def _last_question(state: AgentState) -> str:
     spoken = [turn.q for turn in state.get("history", ()) if turn.q]
     return spoken[-1] if spoken else state["question"]
-
-
-def _state(ask: Ask) -> AgentState:
-    return {
-        "question": ask.question,
-        "history": ask.history,
-        "portfolio": ask.portfolio,
-        "authorization": ask.authorization,
-        "pending_addresses": list(ask.pending_addresses) if ask.pending_addresses else None,
-        "settled": ask.settled,
-    }
 
 
 def _decided(state: dict[str, Any]) -> dict[str, str]:

@@ -1,0 +1,667 @@
+{
+  "answers": {
+    "GET /api/auth/me": {
+      "id": "u-earner",
+      "portfolios": [
+        {
+          "slug": "earner-pf",
+          "name": "Solana"
+        }
+      ]
+    },
+    "GET /api/portfolios/earner-pf": {
+      "slug": "earner-pf",
+      "name": "Solana",
+      "totalUsd": 5341.68,
+      "wallets": [
+        {
+          "id": "w-9nV3",
+          "address": "7Yk8pQ2mZr4vN6xW9cB3hJ5tL1sD8fG2aE4kR7uM9nV3",
+          "chain": "SOL",
+          "label": null,
+          "status": "ok",
+          "stale": false,
+          "totalUsd": 5341.68,
+          "positions": [
+            {
+              "id": "pos-USDC-2500.0",
+              "symbol": "USDC",
+              "name": null,
+              "note": null,
+              "network": "sol",
+              "amount": 2500.0,
+              "priceUsd": 1.0,
+              "valueUsd": 2500.0,
+              "platform": "wallet",
+              "category": "token",
+              "apy": null,
+              "healthRate": null,
+              "borrowApy": null,
+              "range": null,
+              "band": null,
+              "tokens": null
+            },
+            {
+              "id": "pos-SOL-1830.0",
+              "symbol": "SOL",
+              "name": null,
+              "note": null,
+              "network": "sol",
+              "amount": 12.0,
+              "priceUsd": 152.5,
+              "valueUsd": 1830.0,
+              "platform": "wallet",
+              "category": "token",
+              "apy": null,
+              "healthRate": null,
+              "borrowApy": null,
+              "range": null,
+              "band": null,
+              "tokens": null
+            },
+            {
+              "id": "pos-Kamino-1000.0",
+              "symbol": "Kamino",
+              "name": "Steakhouse USDC (Vault)",
+              "note": null,
+              "network": "sol",
+              "amount": null,
+              "priceUsd": null,
+              "valueUsd": 1000.0,
+              "platform": "kamino",
+              "category": "defi",
+              "apy": 0.0512,
+              "healthRate": null,
+              "borrowApy": null,
+              "range": null,
+              "band": null,
+              "tokens": [
+                {
+                  "role": "supply",
+                  "symbol": "USDC",
+                  "amount": 1000.0,
+                  "priceUsd": 1.0,
+                  "valueUsd": 1000.0,
+                  "apy": 0.0512
+                }
+              ]
+            },
+            {
+              "id": "pos-xBTC-11.68",
+              "symbol": "xBTC",
+              "name": null,
+              "note": null,
+              "network": "sol",
+              "amount": 5.311297,
+              "priceUsd": 2.2,
+              "valueUsd": 11.68,
+              "platform": "wallet",
+              "category": "token",
+              "apy": null,
+              "healthRate": null,
+              "borrowApy": null,
+              "range": null,
+              "band": null,
+              "tokens": null
+            }
+          ]
+        }
+      ]
+    },
+    "GET /api/portfolios/earner-pf/history": {
+      "range": "7d",
+      "points": [
+        {
+          "t": "2026-09-24T00:00:00Z",
+          "usd": 5210.0,
+          "claimableUsd": null,
+          "debtUsd": null
+        },
+        {
+          "t": "2026-09-25T00:00:00Z",
+          "usd": 4310.0,
+          "claimableUsd": null,
+          "debtUsd": null
+        },
+        {
+          "t": "2026-09-26T00:00:00Z",
+          "usd": 5150.0,
+          "claimableUsd": null,
+          "debtUsd": null
+        },
+        {
+          "t": "2026-09-27T00:00:00Z",
+          "usd": 7450.0,
+          "claimableUsd": null,
+          "debtUsd": null
+        },
+        {
+          "t": "2026-09-28T00:00:00Z",
+          "usd": 5380.0,
+          "claimableUsd": null,
+          "debtUsd": null
+        },
+        {
+          "t": "2026-09-29T00:00:00Z",
+          "usd": 4180.0,
+          "claimableUsd": null,
+          "debtUsd": null
+        },
+        {
+          "t": "2026-09-30T00:00:00Z",
+          "usd": 4941.68,
+          "claimableUsd": null,
+          "debtUsd": null
+        },
+        {
+          "t": "2026-10-01T00:00:00Z",
+          "usd": 5341.68,
+          "claimableUsd": null,
+          "debtUsd": null
+        }
+      ]
+    },
+    "GET /v1/lend/pools": {
+      "data": [
+        {
+          "id": "sol:kamino:vault:HDsayqAsDWy3Q",
+          "name": "Allez USDC",
+          "protocol": "kamino",
+          "kind": "vault",
+          "network": "sol",
+          "token": {
+            "symbol": "USDC",
+            "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "decimals": 6
+          },
+          "apy": {
+            "net": "0.1140",
+            "base": "0.0320",
+            "rewards": "0.0820",
+            "incentives": "0"
+          },
+          "tvl_usd": "3100000",
+          "url": "https://kamino.com/earn/lend/HDsayqAsDWy3Q"
+        },
+        {
+          "id": "sol:kamino:vault:GtBo7sT9xWq4M",
+          "name": "Gauntlet USDC Boost",
+          "protocol": "kamino",
+          "kind": "vault",
+          "network": "sol",
+          "token": {
+            "symbol": "USDC",
+            "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "decimals": 6
+          },
+          "apy": {
+            "net": "0.0890",
+            "base": "0.0300",
+            "rewards": "0.0590",
+            "incentives": "0"
+          },
+          "tvl_usd": "18000000",
+          "url": "https://kamino.com/earn/lend/GtBo7sT9xWq4M"
+        },
+        {
+          "id": "sol:kamino:vault:Jt5oLsp1k8f2W",
+          "name": "Jito SOL Prime",
+          "protocol": "kamino",
+          "kind": "vault",
+          "network": "sol",
+          "token": {
+            "symbol": "SOL",
+            "mint": "So11111111111111111111111111111111111111112",
+            "decimals": 9
+          },
+          "apy": {
+            "net": "0.0745",
+            "base": "0.0700",
+            "rewards": "0.0045",
+            "incentives": "0"
+          },
+          "tvl_usd": "88000000",
+          "url": "https://kamino.com/earn/lend/Jt5oLsp1k8f2W"
+        },
+        {
+          "id": "sol:kamino:reserve:D6q6wuQSrifJKZ",
+          "name": "Kamino Main USDC",
+          "protocol": "kamino",
+          "kind": "reserve",
+          "network": "sol",
+          "token": {
+            "symbol": "USDC",
+            "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "decimals": 6
+          },
+          "apy": {
+            "net": "0.0681",
+            "base": "0.0681",
+            "rewards": "0",
+            "incentives": "0"
+          },
+          "tvl_usd": "310000000",
+          "url": "https://kamino.com/earn/lend/D6q6wuQSrifJKZ"
+        },
+        {
+          "id": "sol:kamino:vault:A1nS9pKq3vXw7",
+          "name": "Steakhouse USDC",
+          "protocol": "kamino",
+          "kind": "vault",
+          "network": "sol",
+          "token": {
+            "symbol": "USDC",
+            "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "decimals": 6
+          },
+          "apy": {
+            "net": "0.0512",
+            "base": "0.0480",
+            "rewards": "0.0032",
+            "incentives": "0"
+          },
+          "tvl_usd": "42000000",
+          "url": "https://kamino.com/earn/lend/A1nS9pKq3vXw7"
+        }
+      ],
+      "meta": {
+        "as_of": "2026-10-01T12:00:00Z",
+        "stale": false
+      }
+    },
+    "GET /v1/lend/pools?token=USDC": {
+      "data": [
+        {
+          "id": "sol:kamino:vault:HDsayqAsDWy3Q",
+          "name": "Allez USDC",
+          "protocol": "kamino",
+          "kind": "vault",
+          "network": "sol",
+          "token": {
+            "symbol": "USDC",
+            "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "decimals": 6
+          },
+          "apy": {
+            "net": "0.1140",
+            "base": "0.0320",
+            "rewards": "0.0820",
+            "incentives": "0"
+          },
+          "tvl_usd": "3100000",
+          "url": "https://kamino.com/earn/lend/HDsayqAsDWy3Q"
+        },
+        {
+          "id": "sol:kamino:vault:GtBo7sT9xWq4M",
+          "name": "Gauntlet USDC Boost",
+          "protocol": "kamino",
+          "kind": "vault",
+          "network": "sol",
+          "token": {
+            "symbol": "USDC",
+            "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "decimals": 6
+          },
+          "apy": {
+            "net": "0.0890",
+            "base": "0.0300",
+            "rewards": "0.0590",
+            "incentives": "0"
+          },
+          "tvl_usd": "18000000",
+          "url": "https://kamino.com/earn/lend/GtBo7sT9xWq4M"
+        },
+        {
+          "id": "sol:kamino:reserve:D6q6wuQSrifJKZ",
+          "name": "Kamino Main USDC",
+          "protocol": "kamino",
+          "kind": "reserve",
+          "network": "sol",
+          "token": {
+            "symbol": "USDC",
+            "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "decimals": 6
+          },
+          "apy": {
+            "net": "0.0681",
+            "base": "0.0681",
+            "rewards": "0",
+            "incentives": "0"
+          },
+          "tvl_usd": "310000000",
+          "url": "https://kamino.com/earn/lend/D6q6wuQSrifJKZ"
+        },
+        {
+          "id": "sol:kamino:vault:A1nS9pKq3vXw7",
+          "name": "Steakhouse USDC",
+          "protocol": "kamino",
+          "kind": "vault",
+          "network": "sol",
+          "token": {
+            "symbol": "USDC",
+            "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "decimals": 6
+          },
+          "apy": {
+            "net": "0.0512",
+            "base": "0.0480",
+            "rewards": "0.0032",
+            "incentives": "0"
+          },
+          "tvl_usd": "42000000",
+          "url": "https://kamino.com/earn/lend/A1nS9pKq3vXw7"
+        }
+      ],
+      "meta": {
+        "as_of": "2026-10-01T12:00:00Z",
+        "stale": false
+      }
+    },
+    "GET /v1/lend/pools?token=SOL": {
+      "data": [
+        {
+          "id": "sol:kamino:vault:Jt5oLsp1k8f2W",
+          "name": "Jito SOL Prime",
+          "protocol": "kamino",
+          "kind": "vault",
+          "network": "sol",
+          "token": {
+            "symbol": "SOL",
+            "mint": "So11111111111111111111111111111111111111112",
+            "decimals": 9
+          },
+          "apy": {
+            "net": "0.0745",
+            "base": "0.0700",
+            "rewards": "0.0045",
+            "incentives": "0"
+          },
+          "tvl_usd": "88000000",
+          "url": "https://kamino.com/earn/lend/Jt5oLsp1k8f2W"
+        }
+      ],
+      "meta": {
+        "as_of": "2026-10-01T12:00:00Z",
+        "stale": false
+      }
+    },
+    "GET /v1/lend/pools/sol:kamino:vault:A1nS9pKq3vXw7": {
+      "data": {
+        "id": "sol:kamino:vault:A1nS9pKq3vXw7",
+        "name": "Steakhouse USDC",
+        "protocol": "kamino",
+        "kind": "vault",
+        "network": "sol",
+        "token": {
+          "symbol": "USDC",
+          "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "decimals": 6
+        },
+        "apy": {
+          "net": "0.0512",
+          "base": "0.0480",
+          "rewards": "0.0032",
+          "incentives": "0"
+        },
+        "tvl_usd": "42000000",
+        "url": "https://kamino.com/earn/lend/A1nS9pKq3vXw7",
+        "deposit": {
+          "program_id": "KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd",
+          "address": "A1nS9pKq3vXw7Vault",
+          "min_amount": "1",
+          "shares_mint": "STEAKsharesMint1111111111111111111111111111",
+          "shares_decimals": 6,
+          "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "lending_market": "7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF"
+        }
+      }
+    },
+    "GET /v1/lend/pools/sol:kamino:reserve:D6q6wuQSrifJKZ": {
+      "data": {
+        "id": "sol:kamino:reserve:D6q6wuQSrifJKZ",
+        "name": "Kamino Main USDC",
+        "protocol": "kamino",
+        "kind": "reserve",
+        "network": "sol",
+        "token": {
+          "symbol": "USDC",
+          "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "decimals": 6
+        },
+        "apy": {
+          "net": "0.0681",
+          "base": "0.0681",
+          "rewards": "0",
+          "incentives": "0"
+        },
+        "tvl_usd": "310000000",
+        "url": "https://kamino.com/earn/lend/D6q6wuQSrifJKZ",
+        "deposit": {
+          "program_id": "KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd",
+          "address": "D6q6wuQSrifJKZReserve",
+          "min_amount": "0.1",
+          "shares_mint": "MAINsharesMint11111111111111111111111111111",
+          "shares_decimals": 6,
+          "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "lending_market": "7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF"
+        }
+      }
+    },
+    "GET /v1/lend/pools/sol:kamino:vault:HDsayqAsDWy3Q": {
+      "data": {
+        "id": "sol:kamino:vault:HDsayqAsDWy3Q",
+        "name": "Allez USDC",
+        "protocol": "kamino",
+        "kind": "vault",
+        "network": "sol",
+        "token": {
+          "symbol": "USDC",
+          "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "decimals": 6
+        },
+        "apy": {
+          "net": "0.1140",
+          "base": "0.0320",
+          "rewards": "0.0820",
+          "incentives": "0"
+        },
+        "tvl_usd": "3100000",
+        "url": "https://kamino.com/earn/lend/HDsayqAsDWy3Q",
+        "deposit": {
+          "program_id": "KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd",
+          "address": "HDsayqAsDWy3QVault",
+          "min_amount": "5",
+          "shares_mint": "ALLEZsharesMint1111111111111111111111111111",
+          "shares_decimals": 6,
+          "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "lending_market": "7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF"
+        }
+      }
+    },
+    "GET /v1/lend/pools/sol:kamino:vault:GtBo7sT9xWq4M": {
+      "data": {
+        "id": "sol:kamino:vault:GtBo7sT9xWq4M",
+        "name": "Gauntlet USDC Boost",
+        "protocol": "kamino",
+        "kind": "vault",
+        "network": "sol",
+        "token": {
+          "symbol": "USDC",
+          "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "decimals": 6
+        },
+        "apy": {
+          "net": "0.0890",
+          "base": "0.0300",
+          "rewards": "0.0590",
+          "incentives": "0"
+        },
+        "tvl_usd": "18000000",
+        "url": "https://kamino.com/earn/lend/GtBo7sT9xWq4M",
+        "deposit": {
+          "program_id": "KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd",
+          "address": "GtBo7sT9xWq4MVault",
+          "min_amount": "1",
+          "shares_mint": "BOOSTsharesMint1111111111111111111111111111",
+          "shares_decimals": 6,
+          "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "lending_market": "7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF"
+        }
+      }
+    },
+    "GET /v1/lend/pools/sol:kamino:vault:Jt5oLsp1k8f2W": {
+      "data": {
+        "id": "sol:kamino:vault:Jt5oLsp1k8f2W",
+        "name": "Jito SOL Prime",
+        "protocol": "kamino",
+        "kind": "vault",
+        "network": "sol",
+        "token": {
+          "symbol": "SOL",
+          "mint": "So11111111111111111111111111111111111111112",
+          "decimals": 9
+        },
+        "apy": {
+          "net": "0.0745",
+          "base": "0.0700",
+          "rewards": "0.0045",
+          "incentives": "0"
+        },
+        "tvl_usd": "88000000",
+        "url": "https://kamino.com/earn/lend/Jt5oLsp1k8f2W",
+        "deposit": {
+          "program_id": "KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd",
+          "address": "Jt5oLsp1k8f2WVault",
+          "min_amount": "0.01",
+          "shares_mint": "JITOsharesMint11111111111111111111111111111",
+          "shares_decimals": 6,
+          "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "lending_market": "7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF"
+        }
+      }
+    },
+    "GET /v1/lend/positions": {
+      "data": [
+        {
+          "pool": {
+            "id": "sol:kamino:vault:A1nS9pKq3vXw7",
+            "name": "Steakhouse USDC",
+            "protocol": "kamino",
+            "kind": "vault",
+            "network": "sol",
+            "token": {
+              "symbol": "USDC",
+              "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+              "decimals": 6
+            },
+            "apy": {
+              "net": "0.0512",
+              "base": "0.0480",
+              "rewards": "0.0032",
+              "incentives": "0"
+            },
+            "tvl_usd": "42000000",
+            "url": "https://kamino.com/earn/lend/A1nS9pKq3vXw7"
+          },
+          "amount": "1000.000000",
+          "shares": "987.654321"
+        }
+      ]
+    },
+    "GET /v1/lend/coins?q=USDC": {
+      "data": {
+        "symbol": "USDC",
+        "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        "decimals": 6
+      }
+    },
+    "GET /v1/lend/coins?q=SOL": {
+      "data": {
+        "symbol": "SOL",
+        "mint": "So11111111111111111111111111111111111111112",
+        "decimals": 9
+      }
+    },
+    "GET /v1/lend/coins?q=xBTC": {
+      "data": {
+        "symbol": "xBTC",
+        "mint": "2zCo6bUowJMvr89ajxuWsPadAqJ2F9akCkxumNsSdgsL",
+        "decimals": 6
+      }
+    },
+    "GET /v1/lend/coins?q=JUP": {
+      "data": {
+        "symbol": "JUP",
+        "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+        "decimals": 6
+      }
+    },
+    "GET /v1/lend/holdings?q=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
+      "data": {
+        "amount": "2500"
+      }
+    },
+    "GET /v1/lend/holdings?q=So11111111111111111111111111111111111111112": {
+      "data": {
+        "amount": "12"
+      }
+    },
+    "GET /v1/lend/holdings?q=2zCo6bUowJMvr89ajxuWsPadAqJ2F9akCkxumNsSdgsL": {
+      "data": {
+        "amount": "5.311297"
+      }
+    },
+    "GET /v1/lend/holdings?q=JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN": {
+      "data": {
+        "amount": "0"
+      }
+    },
+    "GET /v1/liquidity/pools": {
+      "data": [
+        {
+          "id": "sol:meteora:dlmm:5rCf1DM8LjKTw4Y",
+          "name": "SOL-USDC",
+          "x": {
+            "symbol": "SOL",
+            "mint": "So11111111111111111111111111111111111111112"
+          },
+          "y": {
+            "symbol": "USDC",
+            "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+          },
+          "bin_step": 4,
+          "fee_apr": "1.26",
+          "tvl_usd": "3997422",
+          "price": "152.5",
+          "url": "https://app.meteora.ag/dlmm/5rCf1DM8LjKTw4Y",
+          "active_usd": "645338",
+          "fee_active": "0.019"
+        }
+      ]
+    },
+    "GET /v1/liquidity/pools/sol:meteora:dlmm:5rCf1DM8LjKTw4Y": {
+      "data": {
+        "id": "sol:meteora:dlmm:5rCf1DM8LjKTw4Y",
+        "name": "SOL-USDC",
+        "x": {
+          "symbol": "SOL",
+          "mint": "So11111111111111111111111111111111111111112"
+        },
+        "y": {
+          "symbol": "USDC",
+          "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+        },
+        "bin_step": 4,
+        "fee_apr": "1.26",
+        "tvl_usd": "3997422",
+        "price": "152.5",
+        "url": "https://app.meteora.ag/dlmm/5rCf1DM8LjKTw4Y",
+        "active_usd": "645338",
+        "fee_active": "0.019"
+      }
+    },
+    "GET /v1/liquidity/positions": {
+      "data": []
+    }
+  }
+}

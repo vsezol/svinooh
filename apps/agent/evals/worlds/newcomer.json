@@ -1,0 +1,17 @@
+{
+  "answers": {
+    "GET /api/auth/me": {
+      "id": "u-new",
+      "portfolios": []
+    },
+    "POST /api/portfolios": {
+      "slug": "fresh-pf"
+    },
+    "POST /api/portfolios/anonymous": {
+      "slug": "anon-pf"
+    },
+    "POST /api/portfolios/fresh-pf/wallets": {
+      "ok": true
+    }
+  }
+}
