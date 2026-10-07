@@ -15,6 +15,7 @@ TOKEN = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLTQyIn0.c2lnbmF0dXJl"
 
 @pytest.fixture
 def exported(monkeypatch):
+    LangfuseResourceManager.reset()
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", f"pk-lf-test-{uuid.uuid4().hex}")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-lf-test")
     exporter = InMemorySpanExporter()
