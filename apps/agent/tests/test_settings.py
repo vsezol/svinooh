@@ -44,12 +44,6 @@ class TestReadingTheEnvironment:
         monkeypatch.setenv("AGENT_SOMETHING_ELSE", "1")
         Settings()
 
-    def test_the_release_is_the_commit_railway_deployed_unless_named(self, monkeypatch):
-        monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "c0523b9")
-        assert Settings().release == "c0523b9"
-        monkeypatch.setenv("LANGFUSE_RELEASE", "v1")
-        assert Settings().release == "v1"
-
     def test_a_test_can_build_its_own_without_touching_the_shell(self):
         assert Settings(model="openai:mine", tool_hops=1).tool_hops == 1
 

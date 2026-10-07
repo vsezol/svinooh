@@ -1,5 +1,5 @@
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import httpx
 from limits.aio.storage import Storage
@@ -20,7 +20,6 @@ from .application.limits import WindowAllowance, WindowRateLimiter
 from .application.sessions import SessionStore
 from .application.turns import Turns
 from .config import Config
-from .observability.tracing import Tracing
 from .ports import Agent, Allowance, ConversationStore, Panel, RateLimiter, Strategies
 from .settings import Settings
 
@@ -44,14 +43,12 @@ class Container:
     chats: Chats
     redis: ConnectionPool | None = None
     http: httpx.AsyncClient | None = None
-    tracing: Tracing = field(default_factory=Tracing)
 
     async def start(self) -> None:
         await self.panel.start()
 
     async def stop(self) -> None:
         await self.panel.stop()
-        await self.tracing.stop()
         if self.http is not None:
             await self.http.aclose()
         if self.redis is not None:
@@ -97,7 +94,6 @@ def build(settings: Settings) -> Container:
         settings.rate_limit_requests, settings.rate_limit_window_s, counters
     )
     allowance = WindowAllowance(settings.free_questions, settings.free_window_s, counters)
-    tracing = Tracing(settings)
     agent: Agent = LangGraphAgent(
         config,
         portfolio,
@@ -106,7 +102,6 @@ def build(settings: Settings) -> Container:
         IntentClassifier(models, config),
         ConfirmationClassifier(models, config),
         strategies,
-        tracing,
     )
     return Container(
         settings=settings,
@@ -132,7 +127,6 @@ def build(settings: Settings) -> Container:
         chats=Chats(sessions, identity, settings.chat_list_limit),
         redis=redis,
         http=http,
-        tracing=tracing,
     )
 
 

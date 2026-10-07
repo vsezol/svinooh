@@ -10,6 +10,7 @@ from .container import Container, build
 from .domain.identity import ANON_HEADER
 from .observability.logs import configure as configure_logging
 from .observability.middleware import Observed
+from .observability.tracing import configure as configure_tracing
 from .settings import Settings
 
 
@@ -25,6 +26,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app(container: Container | None = None) -> FastAPI:
     configure_logging()
+    configure_tracing()
     wired = container if container is not None else build(Settings())
     app = FastAPI(title="svinooh-ai", lifespan=_lifespan)
     app.state.container = wired

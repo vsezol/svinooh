@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -52,12 +52,6 @@ class Settings(BaseSettings):
     redis_url: str = Field("", validation_alias="REDIS_URL")
     portfolio_api_url: str = Field("http://localhost:3000", validation_alias="PORTFOLIO_API_URL")
     earn_api_url: str = Field("http://localhost:8080", validation_alias="EARN_API_URL")
-
-    langfuse_public_key: str = Field("", validation_alias="LANGFUSE_PUBLIC_KEY")
-    langfuse_secret_key: str = Field("", validation_alias="LANGFUSE_SECRET_KEY")
-    release: str = Field(
-        "", validation_alias=AliasChoices("LANGFUSE_RELEASE", "RAILWAY_GIT_COMMIT_SHA")
-    )
 
     @field_validator("cors_origins", mode="before")
     @classmethod

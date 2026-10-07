@@ -20,7 +20,7 @@ from ..domain.conversation import Turn
 from ..domain.earn import Card, Held, LiquidityPosition, Placement, Settled, Swap
 from ..domain.portfolio import Portfolio
 from ..observability import metrics
-from ..observability.tracing import Tracing
+from ..observability.tracing import traced
 from ..ports import Ask, Failed, Finished, Progress, Reply, Strategies, Update
 from .context import (
     earning_lines,
@@ -167,7 +167,6 @@ class LangGraphAgent:
         intents: IntentClassifier,
         confirmations: ConfirmationClassifier,
         strategies: Strategies | None = None,
-        tracing: Tracing | None = None,
     ) -> None:
         self._config = config
         self._portfolio = portfolio
@@ -176,28 +175,21 @@ class LangGraphAgent:
         self._intents = intents
         self._confirmations = confirmations
         self._strategies = strategies if strategies is not None else MemoryStrategies()
-        self._tracing = tracing if tracing is not None else Tracing()
         self.graph = self._build()
 
     async def run(self, ask: Ask) -> Reply:
-        with self._tracing.turn(ask) as traced:
-            state = await self.graph.ainvoke(_state(ask), config=traced.config)
-            reply = _reply(state)
-            traced.answered(reply, _decided(state))
-        return reply
+        with traced(ask) as config:
+            return _reply(await self.graph.ainvoke(_state(ask), config=config))
 
     async def watch(self, ask: Ask) -> AsyncIterator[Update]:
-        with self._tracing.turn(ask) as traced:
+        with traced(ask) as config:
             watched = turn_events(
-                self.graph, dict(_state(ask)), answering=SPEAKING_NODES, config=traced.config
+                self.graph, dict(_state(ask)), answering=SPEAKING_NODES, config=config
             )
             async for kind, payload in watched:
                 if kind == "done":
-                    reply = _reply(payload)
-                    traced.answered(reply, _decided(payload))
-                    yield Finished(reply)
+                    yield Finished(_reply(payload))
                 elif kind == "error":
-                    traced.failed(str(payload.get("message", "")))
                     yield Failed(str(payload.get("message", "")))
                 else:
                     yield Progress(kind="step" if kind == "step" else "token", payload=payload)
@@ -658,11 +650,6 @@ class LangGraphAgent:
         return builder.compile()
 
 
-def answered_by(state: dict[str, Any]) -> str:
-    route = state.get("route", "")
-    return route if route in ANSWERING_NODES else state.get("intent", "")
-
-
 def branch_by_route(state: AgentState) -> str:
     return state["route"]
 
@@ -697,15 +684,6 @@ def _state(ask: Ask) -> AgentState:
         "pending_addresses": list(ask.pending_addresses) if ask.pending_addresses else None,
         "settled": ask.settled,
     }
-
-
-def _decided(state: dict[str, Any]) -> dict[str, str]:
-    decided = {
-        "answered_by": answered_by(state),
-        "intent": state.get("intent", ""),
-        "language": state.get("language", ""),
-    }
-    return {key: value for key, value in decided.items() if value}
 
 
 def _reply(state: dict[str, Any]) -> Reply:
