@@ -222,7 +222,7 @@ class TestOneCaseOffline:
         )
         settings = Settings()
         panel = parse(json.loads((WORLDS.parent / "panel.json").read_text()))
-        golden = Golden(settings, panel, langfuse_for(settings))
+        golden = Golden(settings, panel, langfuse_for())
         case = next(case for case in CASES if case.id == "earn-asking-usdc-ru")
         answered = await golden.answer(case, Models(settings, factory=lambda *_, **__: scripted))
         assert answered["answered_by"] == "earn"
