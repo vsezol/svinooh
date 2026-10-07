@@ -46,6 +46,8 @@ ANSWER = (
     "them as liquidity, and it only becomes permanent when you withdraw."
 )
 
+USAGE = {"prompt_tokens": 800, "completion_tokens": 40, "total_tokens": 840}
+
 app = FastAPI(title="fake-upstream")
 
 
@@ -102,7 +104,7 @@ def _completion(message: dict[str, Any], finish: str = "stop") -> dict[str, Any]
         "created": int(time.time()),
         "model": "fake",
         "choices": [{"index": 0, "message": message, "finish_reason": finish}],
-        "usage": {"prompt_tokens": 800, "completion_tokens": 40, "total_tokens": 840},
+        "usage": USAGE,
     }
 
 
@@ -154,6 +156,7 @@ async def _stream(message: dict[str, Any]) -> AsyncIterator[str]:
         for word in str(message.get("content") or "").split(" "):
             yield f"data: {json.dumps(_chunk({'content': word + ' '}))}\n\n"
     yield f"data: {json.dumps(_chunk({}, finish='stop'))}\n\n"
+    yield f"data: {json.dumps({**_chunk({}), 'choices': [], 'usage': USAGE})}\n\n"
     yield "data: [DONE]\n\n"
 
 
