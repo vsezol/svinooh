@@ -91,7 +91,7 @@ class _OneNode:
     def __init__(self, node):
         self.node = node
 
-    async def astream(self, state, stream_mode=None):
+    async def astream(self, state, config=None, stream_mode=None):
         yield "values", await self.node(state)
 
 

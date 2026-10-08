@@ -92,6 +92,8 @@ class Turns:
                 authorization=caller.authorization,
                 pending_addresses=tuple(chat.pending) if chat and chat.pending else None,
                 settled=asked.settled,
+                session_id=session_id,
+                owner=known.key,
             ),
         )
 

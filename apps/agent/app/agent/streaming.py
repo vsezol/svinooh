@@ -2,6 +2,8 @@ import logging
 from collections.abc import AsyncIterator, Collection
 from typing import Any
 
+from langchain_core.runnables import RunnableConfig
+
 from .llm import extract_text
 
 logger = logging.getLogger("svinooh-ai")
@@ -10,13 +12,15 @@ BETWEEN_REPLIES = "\n\n"
 
 
 async def turn_events(
-    graph: Any, state: dict, *, answering: Collection[str]
+    graph: Any, state: dict, *, answering: Collection[str], config: RunnableConfig | None = None
 ) -> AsyncIterator[tuple[str, dict]]:
     final: dict[str, Any] = {}
     spoken = False
     speaking: str | None = None
     try:
-        async for mode, chunk in graph.astream(state, stream_mode=["custom", "messages", "values"]):
+        async for mode, chunk in graph.astream(
+            state, config=config, stream_mode=["custom", "messages", "values"]
+        ):
             if mode == "values":
                 final = chunk if isinstance(chunk, dict) else final
                 continue

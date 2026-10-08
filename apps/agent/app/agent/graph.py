@@ -20,6 +20,7 @@ from ..domain.conversation import Turn
 from ..domain.earn import Card, Held, LiquidityPosition, Placement, Settled, Swap
 from ..domain.portfolio import Portfolio
 from ..observability import metrics
+from ..observability.tracing import traced
 from ..ports import Ask, Failed, Finished, Progress, Reply, Strategies, Update
 from .context import (
     earning_lines,
@@ -177,17 +178,21 @@ class LangGraphAgent:
         self.graph = self._build()
 
     async def run(self, ask: Ask) -> Reply:
-        return _reply(await self.graph.ainvoke(_state(ask)))
+        with traced(ask) as config:
+            return _reply(await self.graph.ainvoke(_state(ask), config=config))
 
     async def watch(self, ask: Ask) -> AsyncIterator[Update]:
-        watched = turn_events(self.graph, dict(_state(ask)), answering=SPEAKING_NODES)
-        async for kind, payload in watched:
-            if kind == "done":
-                yield Finished(_reply(payload))
-            elif kind == "error":
-                yield Failed(str(payload.get("message", "")))
-            else:
-                yield Progress(kind="step" if kind == "step" else "token", payload=payload)
+        with traced(ask) as config:
+            watched = turn_events(
+                self.graph, dict(_state(ask)), answering=SPEAKING_NODES, config=config
+            )
+            async for kind, payload in watched:
+                if kind == "done":
+                    yield Finished(_reply(payload))
+                elif kind == "error":
+                    yield Failed(str(payload.get("message", "")))
+                else:
+                    yield Progress(kind="step" if kind == "step" else "token", payload=payload)
 
     async def _pending_gate(self, state: AgentState) -> AgentState:
         if not state.get("pending_addresses"):
@@ -618,7 +623,7 @@ class LangGraphAgent:
         builder.add_edge(START, "pending_gate")
         builder.add_conditional_edges(
             "pending_gate",
-            lambda state: state["route"],
+            branch_by_route,
             {
                 "classify_intent": "classify_intent",
                 "create_portfolio": "create_portfolio",
@@ -627,7 +632,7 @@ class LangGraphAgent:
         )
         builder.add_conditional_edges(
             "classify_intent",
-            lambda state: state["intent"],
+            branch_by_intent,
             {
                 "portfolio": "identity",
                 "earn": "earn",
@@ -637,12 +642,20 @@ class LangGraphAgent:
         )
         builder.add_conditional_edges(
             "identity",
-            lambda state: state["route"],
+            branch_by_route,
             {"grounded": "grounded", "onboard": "onboard", "unavailable": "unavailable"},
         )
         for leaf in ANSWERING_NODES:
             builder.add_edge(leaf, END)
         return builder.compile()
+
+
+def branch_by_route(state: AgentState) -> str:
+    return state["route"]
+
+
+def branch_by_intent(state: AgentState) -> str:
+    return state["intent"]
 
 
 def all_that_was_said(written: list[str]) -> str:
