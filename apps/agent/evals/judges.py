@@ -16,7 +16,7 @@ from app.agent.prompts import DEFAULT_SYSTEM_PROMPT, HOUSE_STYLE, WRITTEN_ONCE
 from app.config import Role
 from app.settings import Settings
 
-JUDGE = "openai:anthropic/claude-sonnet-5.5"
+JUDGE = "openai:anthropic/claude-haiku-5.5"
 
 PRODUCT = (
     "You review one reply written by the assistant inside svinooh, a DeFi portfolio tracker. "

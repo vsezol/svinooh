@@ -77,8 +77,8 @@ baseline passed that now fails in most passes, and a turn that never finished.
 like code. CI runs the set three times on every PR that touches the agent,
 once `AGENT_EVAL_MODEL_API_KEY` is in the repository's secrets.
 
-Three things code cannot read are read by a model of another family,
-`anthropic/claude-sonnet-5.5` unless `--judge` names another: whether every
+Three things code cannot read are read by a cheap model of another family,
+`anthropic/claude-haiku-5.5` unless `--judge` names another: whether every
 figure in the answer is in the data the agent was given (`grounded`), whether
 it does what was asked (`answers_the_question`), and whether it tells the
 truth about what happened (`honest_about_actions`). A judge answers pass, fail
