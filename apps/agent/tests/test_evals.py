@@ -20,7 +20,7 @@ from app.agent.tools import (
 from app.settings import Settings
 from evals.calibrate import Label, agreement, kappa
 from evals.calibrate import load as calibration_set
-from evals.checks import judged, language_of, mentions
+from evals.checks import judged, mentions
 from evals.judges import CRITERIA, Judges, Shown, Verdict, data_of, presented, record_of
 from evals.run import Case, Golden, gate, langfuse_for, load, parse, wilson
 from evals.world import WORLDS, World
@@ -52,7 +52,6 @@ EXPECTATIONS = {
     "says",
     "says_one_of",
     "never_says",
-    "language",
 }
 
 CASES = load()
@@ -97,28 +96,27 @@ class TestTheChecks:
     @pytest.mark.parametrize(
         ("said", "needle"),
         [
-            ("Итого лежит 158 536,15 $.", "158536"),
+            ("Your total is 158 536,15 $.", "158536"),
             ("Your total is $158,536.15.", "158,536.15"),
-            ("Итого лежит 158\u00a0536,15 $", "158536"),
+            ("Your total is 158\u00a0536,15 $", "158536"),
         ],
     )
     def test_a_figure_is_found_however_it_is_written(self, said, needle):
         assert mentions(said, needle)
 
     def test_a_figure_inside_a_bigger_one_is_still_a_mention(self):
-        assert mentions("в Ethena лежит $56,210.40", "56210")
+        assert mentions("Ethena holds $56,210.40", "56210")
 
     @pytest.mark.parametrize(
-        ("said", "language"),
+        ("said", "english"),
         [
-            ("Сколько денег лежит на кошельках?", "ru"),
-            ("Скільки в мене зараз грошей на гаманцях?", "uk"),
-            ("How much is my portfolio worth?", "en"),
-            ("Лежит 2500 USDC в Steakhouse USDC и 12 SOL на кошельке.", "ru"),
+            ("How much is my portfolio worth?", True),
+            ("2500 USDC sit in Steakhouse USDC at 5.12%, 12 SOL in the wallet.", True),
+            ("Итого лежит 158 536,15 $.", False),
         ],
     )
-    def test_the_language_of_an_answer(self, said, language):
-        assert language_of(said) == language
+    def test_an_answer_has_to_be_in_english(self, said, english):
+        assert judged({}, outcome(answer=said))["english"][0] is english
 
     def test_cards_match_whatever_order_they_came_in(self):
         prepared = [
@@ -137,7 +135,7 @@ class TestTheChecks:
         assert not verdicts["writes"][0]
 
     def test_an_emoji_fails(self):
-        assert not judged({}, outcome(answer="Готово ✅"))["no_emoji"][0]
+        assert not judged({}, outcome(answer="Done ✅"))["no_emoji"][0]
 
     def test_a_check_with_nothing_to_check_is_not_scored(self):
         assert set(judged({}, outcome(answer="ok"))) == {
@@ -145,6 +143,7 @@ class TestTheChecks:
             "writes",
             "no_emoji",
             "keeps_its_prompt",
+            "english",
         }
 
 
@@ -157,7 +156,7 @@ class TestTheGoldenSet:
     def test_a_case_can_run(self, case: Case):
         assert (WORLDS / f"{case.world}.json").exists()
         assert set(case.expect) <= EXPECTATIONS
-        assert {"intent", "language", "role", "source"} <= set(case.slice)
+        assert {"intent", "role", "source"} <= set(case.slice)
         assert case.slice["role"] in ("typical", "regression", "guardrail")
         wanted = case.expect.get("answered_by", [])
         assert set(wanted if isinstance(wanted, list) else [wanted]) <= set(ANSWERING_NODES)
@@ -206,7 +205,7 @@ class TestOneCaseOffline:
     async def test_a_turn_runs_in_its_world_and_is_measured(self):
         label = {
             "reason": "where to put USDC",
-            "language": "Russian",
+            "language": "English",
             "intent": "earn",
             "stance": "asking",
             "risk": "unknown",
@@ -221,13 +220,13 @@ class TestOneCaseOffline:
                     content="",
                     tool_calls=[{"name": "earn_options", "args": {"token": "USDC"}, "id": "e"}],
                 ),
-                AIMessage(content="Надёжнее всего Steakhouse USDC, 5.12%."),
+                AIMessage(content="Steakhouse USDC is the safest, at 5.12%."),
             ]
         )
         settings = Settings()
         panel = parse(json.loads((WORLDS.parent / "panel.json").read_text()))
         golden = Golden(settings, panel, langfuse_for())
-        case = next(case for case in CASES if case.id == "earn-asking-usdc-ru")
+        case = next(case for case in CASES if case.id == "earn-asking-usdc")
         answered = await golden.answer(case, Models(settings, factory=lambda *_, **__: scripted))
         assert answered["answered_by"] == "earn"
         assert [tool["name"] for tool in answered["tools"]] == ["earn_options"]
