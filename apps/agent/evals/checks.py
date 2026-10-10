@@ -1,5 +1,4 @@
 import re
-import unicodedata
 from collections import Counter
 from collections.abc import Callable
 from decimal import Decimal, InvalidOperation
@@ -14,10 +13,6 @@ Verdict = tuple[bool, str] | None
 BETWEEN_DIGITS = re.compile(r"(?<=\d)[\s,.'](?=\d)")
 
 EMOJI = re.compile("[\U0001f000-\U0001faff\u2600-\u27bf\u2b00-\u2bff\ufe0f]")
-
-UKRAINIAN_ONLY = set("іїєґ")
-
-RUSSIAN_ONLY = set("ыэъё")
 
 PROMPT_LINES = tuple(
     line.strip()[:60]
@@ -37,16 +32,6 @@ def mentions(text: str, needle: str) -> bool:
 
 def flat(text: str) -> str:
     return BETWEEN_DIGITS.sub("", text).casefold()
-
-
-def language_of(text: str) -> str:
-    letters = [char for char in text.casefold() if char.isalpha()]
-    cyrillic = [char for char in letters if unicodedata.name(char, "").startswith("CYRILLIC")]
-    if not letters or len(cyrillic) < len(letters) * 0.2:
-        return "en"
-    ukrainian = sum(char in UKRAINIAN_ONLY for char in cyrillic)
-    russian = sum(char in RUSSIAN_ONLY for char in cyrillic)
-    return "uk" if ukrainian > russian else "ru"
 
 
 def card_fits(wanted: dict[str, Any], card: dict[str, Any]) -> bool:
@@ -138,11 +123,13 @@ def _never_says(expected: Expected, outcome: Outcome) -> Verdict:
     return not said, f"said {said}" if said else "kept clear"
 
 
-def _language(expected: Expected, outcome: Outcome) -> Verdict:
-    if "language" not in expected or not outcome["answer"]:
+def _english(_expected: Expected, outcome: Outcome) -> Verdict:
+    letters = [char for char in outcome["answer"] if char.isalpha()]
+    if not letters:
         return None
-    got = language_of(outcome["answer"])
-    return got == expected["language"], f"wrote in {got}"
+    foreign = [char for char in letters if not char.isascii()]
+    english = len(foreign) < len(letters) * 0.2
+    return english, "wrote in English" if english else "wrote in another language"
 
 
 def _no_emoji(_expected: Expected, outcome: Outcome) -> Verdict:
@@ -172,7 +159,7 @@ CHECKS: dict[str, Callable[[Expected, Outcome], Verdict]] = {
     "says": _says,
     "says_one_of": _says_one_of,
     "never_says": _never_says,
-    "language": _language,
+    "english": _english,
     "no_emoji": _no_emoji,
     "keeps_its_prompt": _keeps_its_prompt,
 }

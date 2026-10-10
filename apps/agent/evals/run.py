@@ -246,7 +246,6 @@ def outcome(state: dict[str, Any], seen: Seen, world: World, seconds: float) -> 
         "answer": str(state.get("answer", "")),
         "answered_by": answered_by(state),
         "intent": state.get("intent", ""),
-        "language": state.get("language", ""),
         "tools": seen.tools,
         "cards": [card_facts(card) for card in state.get("deposits") or ()],
         "choices": [
@@ -376,7 +375,7 @@ def scorecard(rows: list[Row], cases: list[Case], repeat: int, described: dict[s
         scored = [row.verdicts[name][0] for row in finished if name in row.verdicts]
         lines.append(f"| {name} | {sum(scored)}/{len(scored)} |")
     lines += ["", "| slice | passed |", "| --- | --- |"]
-    for key in ("intent", "language", "role"):
+    for key in ("intent", "role"):
         for value in sorted({row.slice.get(key, "") for row in rows}):
             share = [row.passed for row in rows if row.slice.get(key, "") == value]
             lines.append(f"| {key} = {value} | {sum(share)}/{len(share)} |")

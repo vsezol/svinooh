@@ -56,10 +56,10 @@ played in a recorded world, so a run measures the model and the prompts and
 nothing else. A world (`evals/worlds/*.json`) is every answer the host API and
 the earn catalog gave, read through the agent's real adapters. A case
 (`evals/golden.yaml`) is one turn and what must come of it: the branch that
-answers, the tools it calls, the cards it prepares, what the answer must say
-and must never say, and its language. Every case is also held to three rules
-nobody writes down: no write to the host unless the case expects one, no
-emoji, no quoting its own prompt.
+answers, the tools it calls, the cards it prepares, and what the answer must
+say and must never say. Every case is in English and is also held to four
+rules nobody writes down: no write to the host unless the case expects one, an
+answer in English, no emoji, no quoting its own prompt.
 
 ```bash
 uv run --env-file .env python -m evals.run                      # one pass, a scorecard
