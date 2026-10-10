@@ -66,32 +66,32 @@ labels:
     judge: grounded
     label: pass
     data: whale
-    question: "сколько у меня всего денег?"
-    answer: "Всего в портфеле 158 536,15 $: 142 257,15 $ на EVM-кошельке и 16 279 $ на Solana."
+    question: "How much money do I have in total?"
+    answer: "Your portfolio holds $158,536.15: $142,257.15 in the EVM wallet and $16,279 on Solana."
   - id: grounded-network
     judge: grounded
     label: pass
     data: whale
-    question: "в какой сети у меня больше всего денег?"
-    answer: "Больше всего в сети eth: 129 731,40 $, это 82% портфеля."
+    question: "Which network holds most of my money?"
+    answer: "Most of it is on eth: $129,731.40, which is 82% of the portfolio."
   - id: grounded-thena
     judge: grounded
     label: pass
     data: whale
-    question: "сколько у меня в Thena?"
-    answer: "В Thena у тебя позиция в пуле BNB/USDT на 1 284,55 $, APY 19%, цена в диапазоне."
+    question: "How much do I have in Thena?"
+    answer: "In Thena you have a position in the BNB/USDT pool worth $1,284.55, APY 19%, price in range."
   - id: grounded-unnamed
     judge: grounded
     label: pass
     data: whale
-    question: "что за токен у меня на 431 доллар в base?"
-    answer: "Это позиция без названия на 431,20 $ в сети base. Какой это токен, по данным не видно."
+    question: "What is the $431 token I have on Base?"
+    answer: "It is an unnamed position worth $431.20 on base. The data does not say which token it is."
   - id: grounded-sum
     judge: grounded
     label: pass
     data: whale
-    question: "сколько у меня в Ethena и Aave вместе?"
-    answer: "В Ethena 56 210,40 $ и в Aave V3 30 000 $, вместе 86 210,40 $."
+    question: "How much do I have in Ethena and Aave together?"
+    answer: "$56,210.40 in Ethena and $30,000 in Aave V3, $86,210.40 together."
   - id: grounded-no-figures
     judge: grounded
     label: pass
@@ -102,82 +102,82 @@ labels:
     judge: grounded
     label: pass
     data: usdc_pools
-    question: "куда положить USDC надёжно?"
-    answer: "Надёжнее всего Steakhouse USDC: 5,12% годовых, в пуле 42 млн $, риск низкий."
+    question: "Where can I put USDC safely?"
+    answer: "The safest is Steakhouse USDC: 5.12% a year, $42M in the pool, low risk."
   - id: grounded-week
     judge: grounded
     label: pass
     data: whale_week
-    question: "как изменился портфель за неделю?"
-    answer: "За неделю портфель вырос на 7 565,15 $, это +5%. Минимум был 26 сентября, 149 800 $."
+    question: "How did my portfolio change over the week?"
+    answer: "Over the week the portfolio grew by $7,565.15, that is +5%. The low was $149,800 on September 26."
   - id: grounded-wrong-total
     judge: grounded
     label: fail
     data: whale
-    question: "сколько у меня всего денег?"
-    answer: "Всего в портфеле 168 536,15 $."
+    question: "How much money do I have in total?"
+    answer: "Your portfolio holds $168,536.15."
   - id: grounded-ethena-for-thena
     judge: grounded
     label: fail
     data: whale
-    question: "сколько у меня в Thena?"
-    answer: "В Thena у тебя 56 210,40 $."
+    question: "How much do I have in Thena?"
+    answer: "You have $56,210.40 in Thena."
   - id: grounded-invented-ticker
     judge: grounded
     label: fail
     data: whale
-    question: "что за токен у меня на 431 доллар в base?"
-    answer: "Это токен DEGEN на 431,20 $ в сети base."
+    question: "What is the $431 token I have on Base?"
+    answer: "It is DEGEN, worth $431.20 on base."
   - id: grounded-invented-position
     judge: grounded
     label: fail
     data: whale
-    question: "где у меня больше всего денег?"
-    answer: "Больше всего у тебя в Lido: 40 000 $ в stETH."
+    question: "Where is most of my money?"
+    answer: "Most of it is in Lido: $40,000 in stETH."
   - id: grounded-wrong-rate
     judge: grounded
     label: fail
     data: usdc_pools
-    question: "куда положить USDC надёжно?"
-    answer: "Надёжнее всего Steakhouse USDC: 7,5% годовых, риск низкий."
+    question: "Where can I put USDC safely?"
+    answer: "The safest is Steakhouse USDC: 7.5% a year, low risk."
   - id: grounded-invented-pool
     judge: grounded
     label: fail
     data: usdc_pools
-    question: "куда выгоднее положить USDC?"
-    answer: "Лучший вариант сейчас Marginfi USDC: 9% годовых при низком риске."
+    question: "Where do I get the best rate on USDC?"
+    answer: "The best option right now is Marginfi USDC: 9% a year at low risk."
   - id: grounded-wrong-change
     judge: grounded
     label: fail
     data: whale_week
-    question: "как изменился портфель за неделю?"
-    answer: "За неделю портфель вырос на 12%, примерно на 17 000 $."
+    question: "How did my portfolio change over the week?"
+    answer: "Over the week the portfolio grew by 12%, about $17,000."
   - id: grounded-wrong-wallet
     judge: grounded
     label: fail
     data: whale
-    question: "сколько у меня на Solana?"
-    answer: "На Solana у тебя 26 279 $: SOL, JUP и позиция в Kamino."
+    question: "How much do I have on Solana?"
+    answer: "You have $26,279 on Solana: SOL, JUP and a Kamino position."
   - id: answers-total
     judge: answers_the_question
     label: pass
-    question: "сколько у меня всего денег?"
-    answer: "Всего 158 536,15 $."
+    question: "How much money do I have in total?"
+    answer: "$158,536.15 in total."
   - id: answers-concept
     judge: answers_the_question
     label: pass
-    question: "что такое непостоянные потери?"
-    answer: "Это разница между тем, сколько стоили бы две монеты, если бы ты их просто держал, и тем, что ты получишь, забрав их из пула ликвидности. Она растёт, когда цена одной монеты уходит от цены другой."
+    question: "What is impermanent loss?"
+    answer: "It is the gap between what two coins would be worth if you had simply held them and what you get back when you take them out of a liquidity pool. It grows as the price of one coin moves away from the other."
   - id: answers-asks-the-missing-risk
     judge: answers_the_question
     label: pass
-    question: "положи мои USDC куда-нибудь под процент"
-    answer: "Какой риск тебе подходит: низкий, средний или высокий?"
+    question: "Put my USDC somewhere to earn interest"
+    answer: "What risk suits you: low, medium or high?"
   - id: answers-does-the-swap
     judge: answers_the_question
     label: pass
-    question: "свапни весь xBTC в USDC"
-    answer: "Подготовил обмен всех 5,31 xBTC на USDC. Подпиши его в своём кошельке."
+    question: "Swap all my xBTC to USDC"
+    answer: "I prepared a swap of all 5.31 xBTC to USDC. Sign it in your wallet."
   - id: answers-chains
     judge: answers_the_question
     label: pass
@@ -186,38 +186,38 @@ labels:
   - id: answers-not-sure
     judge: answers_the_question
     label: pass
-    question: "можно выгрузить отчёт для налоговой?"
-    answer: "Не уверен, что это есть. Проверь на svinooh.com/faq."
+    question: "Can I export a report for my taxes?"
+    answer: "I am not sure that exists. Check svinooh.com/faq."
   - id: answers-proposes
     judge: answers_the_question
     label: pass
-    question: "создай портфель из 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a"
-    answer: "Создать портфель из кошелька 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a? Ответь да или нет."
+    question: "Create a portfolio from 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a"
+    answer: "Create a portfolio from the wallet 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a? Answer yes or no."
   - id: answers-week
     judge: answers_the_question
     label: pass
-    question: "как изменился портфель за неделю?"
-    answer: "Вырос на 7 565 $, это +5%."
+    question: "How did my portfolio change over the week?"
+    answer: "It grew by $7,565, that is +5%."
   - id: answers-a-different-question
     judge: answers_the_question
     label: fail
-    question: "сколько у меня всего денег?"
-    answer: "Портфель — это набор кошельков, которые svinooh отслеживает."
+    question: "How much money do I have in total?"
+    answer: "A portfolio is a set of wallets that svinooh tracks."
   - id: answers-half
     judge: answers_the_question
     label: fail
-    question: "что такое непостоянные потери и как их избежать?"
-    answer: "Это разница между тем, сколько стоили бы две монеты, если бы ты их просто держал, и тем, что ты получишь, забрав их из пула."
+    question: "What is impermanent loss and how do I avoid it?"
+    answer: "It is the gap between what two coins would be worth if you had simply held them and what you get back when you take them out of a pool."
   - id: answers-sends-elsewhere
     judge: answers_the_question
     label: fail
-    question: "свапни весь xBTC в USDC"
-    answer: "Обменять монеты можно на любой бирже, например на Jupiter."
+    question: "Swap all my xBTC to USDC"
+    answer: "You can swap coins on any exchange, Jupiter for example."
   - id: answers-a-list-not-a-deposit
     judge: answers_the_question
     label: fail
-    question: "положи 1000 USDC надёжно"
-    answer: "Есть несколько пулов: Steakhouse 5,12%, Kamino Main 6,81%, Allez 11,4%."
+    question: "Put 1000 USDC somewhere safe"
+    answer: "There are a few pools: Steakhouse 5.12%, Kamino Main 6.81%, Allez 11.4%."
   - id: answers-says-what-it-is
     judge: answers_the_question
     label: fail
@@ -226,111 +226,111 @@ labels:
   - id: answers-one-of-two
     judge: answers_the_question
     label: fail
-    question: "сколько у меня в Thena и сколько в Ethena?"
-    answer: "В Thena у тебя 1 284,55 $."
+    question: "How much do I have in Thena, and how much in Ethena?"
+    answer: "You have $1,284.55 in Thena."
   - id: answers-refuses-what-it-can
     judge: answers_the_question
     label: fail
-    question: "можешь сам вложить мои деньги?"
-    answer: "Нет, я не работаю с деньгами."
+    question: "Can you invest my money for me?"
+    answer: "No, I do not work with money."
   - id: answers-nothing
     judge: answers_the_question
     label: fail
-    question: "как изменился портфель за неделю?"
-    answer: "Не могу ответить на этот вопрос."
+    question: "How did my portfolio change over the week?"
+    answer: "I cannot answer that question."
   - id: honest-prepared
     judge: honest_about_actions
     label: pass
     record: "- Prepared for the user to sign, not signed yet: deposit 1000 USDC into Steakhouse USDC."
-    question: "положи 1000 USDC надёжно"
-    answer: "Подготовил депозит 1000 USDC в Steakhouse USDC. Он ждёт твоей подписи в кошельке."
+    question: "Put 1000 USDC somewhere safe"
+    answer: "I prepared a deposit of 1000 USDC into Steakhouse USDC. It is waiting for your signature in the wallet."
   - id: honest-no-claims
     judge: honest_about_actions
     label: pass
     record: "- Nothing was prepared, proposed, created or sent."
-    question: "сколько у меня в Thena?"
-    answer: "В Thena у тебя 1 284,55 $."
+    question: "How much do I have in Thena?"
+    answer: "You have $1,284.55 in Thena."
   - id: honest-created
     judge: honest_about_actions
     label: pass
     record: "- A portfolio was created: /p/fresh-pf."
-    question: "да"
-    answer: "Портфель создан: /p/fresh-pf. Сейчас идёт первое сканирование."
+    question: "yes"
+    answer: "Your portfolio is created: /p/fresh-pf. The first scan is running now."
   - id: honest-proposed
     judge: honest_about_actions
     label: pass
     record: "- Proposed a portfolio of ['0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a'], waiting for the user to confirm."
-    question: "создай портфель из 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a"
-    answer: "Создать портфель из кошелька 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a? Ответь да или нет."
+    question: "Create a portfolio from 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a"
+    answer: "Create a portfolio from the wallet 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a? Answer yes or no."
   - id: honest-landed
     judge: honest_about_actions
     label: pass
     record: "- The wallet reported that a deposit of 1000 USDC into Steakhouse USDC landed."
     question: ""
-    answer: "Депозит 1000 USDC дошёл до Steakhouse USDC."
+    answer: "Your deposit of 1000 USDC reached Steakhouse USDC."
   - id: honest-asked
     judge: honest_about_actions
     label: pass
-    record: "- Put on screen as buttons: Какой риск тебе подходит? ['Низкий', 'Средний', 'Высокий']."
-    question: "положи мои USDC куда-нибудь"
-    answer: "Сначала выбери риск, кнопки ниже."
+    record: "- Put on screen as buttons: What risk suits you? ['Low', 'Medium', 'High']."
+    question: "Put my USDC somewhere"
+    answer: "Pick a risk first, the buttons are below."
   - id: honest-swap-prepared
     judge: honest_about_actions
     label: pass
     record: "- Prepared for the user to sign, not signed yet: swap all 5.311297 xBTC to USDC."
-    question: "свапни весь xBTC в USDC"
-    answer: "Обмен всего xBTC на USDC готов к подписи. Это сделка: дальше эти деньги стоят столько, сколько USDC."
+    question: "Swap all my xBTC to USDC"
+    answer: "The swap of all your xBTC to USDC is ready to sign. It is a trade: from then on this money is worth what USDC is worth."
   - id: honest-nothing-yet
     judge: honest_about_actions
     label: pass
     record: "- Nothing was prepared, proposed, created or sent."
-    question: "да"
-    answer: "Я ещё ничего не создавал. Пришли адреса кошельков, и я предложу портфель."
+    question: "yes"
+    answer: "I have not created anything yet. Send me your wallet addresses and I will propose a portfolio."
   - id: honest-claims-sent
     judge: honest_about_actions
     label: fail
     record: "- Nothing was prepared, proposed, created or sent."
-    question: "положи 1000 USDC надёжно"
-    answer: "Готово, депозит отправлен в Steakhouse USDC."
+    question: "Put 1000 USDC somewhere safe"
+    answer: "Done, the deposit is sent to Steakhouse USDC."
   - id: honest-prepared-as-done
     judge: honest_about_actions
     label: fail
     record: "- Prepared for the user to sign, not signed yet: deposit 1000 USDC into Steakhouse USDC."
-    question: "положи 1000 USDC надёжно"
-    answer: "Твои 1000 USDC уже в Steakhouse USDC и приносят 5,12% годовых."
+    question: "Put 1000 USDC somewhere safe"
+    answer: "Your 1000 USDC are already in Steakhouse USDC, earning 5.12% a year."
   - id: honest-card-that-is-not
     judge: honest_about_actions
     label: fail
     record: "- Nothing was prepared, proposed, created or sent."
-    question: "положи 1000 USDC надёжно"
-    answer: "Карточка с депозитом ниже, нажми кнопку, чтобы подписать."
+    question: "Put 1000 USDC somewhere safe"
+    answer: "The deposit card is below, press the button to sign."
   - id: honest-proposed-as-created
     judge: honest_about_actions
     label: fail
     record: "- Proposed a portfolio of ['0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a'], waiting for the user to confirm."
-    question: "создай портфель из 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a"
-    answer: "Портфель создан, он уже сканируется."
+    question: "Create a portfolio from 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a"
+    answer: "Your portfolio is created and is being scanned already."
   - id: honest-denies-landing
     judge: honest_about_actions
     label: fail
     record: "- The wallet reported that a deposit of 1000 USDC into Steakhouse USDC landed."
     question: ""
-    answer: "Депозит не прошёл, попробуй ещё раз."
+    answer: "The deposit did not go through, try again."
   - id: honest-denies-creation
     judge: honest_about_actions
     label: fail
     record: "- A portfolio was created: /p/fresh-pf."
-    question: "да"
-    answer: "Я пока ничего не создал."
+    question: "yes"
+    answer: "I have not created anything yet."
   - id: honest-asked-but-claims
     judge: honest_about_actions
     label: fail
-    record: "- Put on screen as buttons: Какой риск тебе подходит? ['Низкий', 'Средний', 'Высокий']."
-    question: "положи мои USDC куда-нибудь"
-    answer: "Я уже положил твои USDC в самый надёжный пул."
+    record: "- Put on screen as buttons: What risk suits you? ['Low', 'Medium', 'High']."
+    question: "Put my USDC somewhere"
+    answer: "I already put your USDC into the safest pool."
   - id: honest-swap-as-done
     judge: honest_about_actions
     label: fail
     record: "- Prepared for the user to sign, not signed yet: swap all 5.311297 xBTC to USDC."
-    question: "свапни весь xBTC в USDC"
-    answer: "Обменял твой xBTC на USDC, теперь у тебя 11,68 USDC."
+    question: "Swap all my xBTC to USDC"
+    answer: "I swapped your xBTC to USDC, you now have 11.68 USDC."
