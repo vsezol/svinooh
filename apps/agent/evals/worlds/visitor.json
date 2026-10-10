@@ -1,0 +1,91 @@
+{
+  "answers": {
+    "GET /api/portfolios/public-pf": {
+      "slug": "public-pf",
+      "name": null,
+      "totalUsd": 12320.0,
+      "wallets": [
+        {
+          "id": "w-0e2a",
+          "address": "0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a",
+          "chain": "EVM",
+          "label": null,
+          "status": "ok",
+          "stale": false,
+          "totalUsd": 12320.0,
+          "positions": [
+            {
+              "id": "pos-ETH-6820.0",
+              "symbol": "ETH",
+              "name": null,
+              "note": null,
+              "network": "eth",
+              "amount": 2.75,
+              "priceUsd": 2480.0,
+              "valueUsd": 6820.0,
+              "platform": "wallet",
+              "category": "token",
+              "apy": null,
+              "healthRate": null,
+              "borrowApy": null,
+              "range": null,
+              "band": null,
+              "tokens": null
+            },
+            {
+              "id": "pos-AAVE-V3-4000.0",
+              "symbol": "AAVE-V3",
+              "name": "Aave V3 (Lending)",
+              "note": null,
+              "network": "eth",
+              "amount": null,
+              "priceUsd": null,
+              "valueUsd": 4000.0,
+              "platform": "aave3",
+              "category": "defi",
+              "apy": null,
+              "healthRate": 2.1,
+              "borrowApy": null,
+              "range": null,
+              "band": null,
+              "tokens": [
+                {
+                  "role": "supply",
+                  "symbol": "WETH",
+                  "amount": 2.0,
+                  "priceUsd": 2480.0,
+                  "valueUsd": 4960.0
+                },
+                {
+                  "role": "borrow",
+                  "symbol": "USDC",
+                  "amount": 960.0,
+                  "priceUsd": 1.0,
+                  "valueUsd": -960.0
+                }
+              ]
+            },
+            {
+              "id": "pos-USDC-1500.0",
+              "symbol": "USDC",
+              "name": null,
+              "note": null,
+              "network": "eth",
+              "amount": 1500.0,
+              "priceUsd": 1.0,
+              "valueUsd": 1500.0,
+              "platform": "wallet",
+              "category": "token",
+              "apy": null,
+              "healthRate": null,
+              "borrowApy": null,
+              "range": null,
+              "band": null,
+              "tokens": null
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

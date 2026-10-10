@@ -37,6 +37,8 @@ dev = [
     "ruff>=0.16",
     "mypy>=2.3",
     "locust>=2.46.5",
+    "pyyaml>=6",
+    "types-pyyaml>=6",
 ]
 
 [tool.uv]
@@ -66,7 +68,7 @@ select = [
 
 [tool.mypy]
 python_version = "3.13"
-files = ["app"]
+files = ["app", "evals"]
 plugins = ["pydantic.mypy"]
 check_untyped_defs = true
 no_implicit_optional = true

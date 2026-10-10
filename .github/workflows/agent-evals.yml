@@ -1,0 +1,67 @@
+name: agent evals
+
+on:
+  pull_request:
+    paths:
+      - apps/agent/app/**
+      - apps/agent/evals/**
+      - apps/agent/uv.lock
+      - .github/workflows/agent-evals.yml
+  workflow_dispatch:
+    inputs:
+      repeat:
+        description: How many times each case runs
+        default: "3"
+      model:
+        description: A model to try instead of the one in evals/panel.json
+        default: ""
+      approve:
+        description: Write evals/baseline.json from this run, as an artifact to review
+        type: boolean
+        default: false
+
+concurrency:
+  group: agent-evals-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  golden:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/agent
+    env:
+      AGENT_MODEL_API_KEY: ${{ secrets.AGENT_EVAL_MODEL_API_KEY }}
+      AGENT_MODEL_BASE_URL: https://openrouter.ai/api/v1
+      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+      LANGFUSE_BASE_URL: https://cloud.langfuse.com
+      LANGFUSE_TRACING_ENVIRONMENT: evaluation
+    steps:
+      - if: env.AGENT_MODEL_API_KEY == ''
+        working-directory: .
+        run: echo "::notice::AGENT_EVAL_MODEL_API_KEY is not set, so the golden set did not run."
+      - if: env.AGENT_MODEL_API_KEY != ''
+        uses: actions/checkout@v5
+      - if: env.AGENT_MODEL_API_KEY != ''
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/agent/uv.lock
+      - if: env.AGENT_MODEL_API_KEY != ''
+        run: uv sync --frozen
+      - if: env.AGENT_MODEL_API_KEY != ''
+        env:
+          REPEAT: ${{ inputs.repeat || '3' }}
+          MODEL: ${{ inputs.model }}
+          RUN_NAME: ${{ github.event.pull_request.title || github.ref_name }}
+          APPROVE: ${{ inputs.approve && '--approve' || '' }}
+        run: >-
+          uv run python -m evals.run --gate $APPROVE
+          --repeat "$REPEAT" --model "$MODEL" --name "$RUN_NAME"
+      - if: always() && inputs.approve
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline
+          path: apps/agent/evals/baseline.json
