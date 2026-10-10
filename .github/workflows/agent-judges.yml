@@ -1,0 +1,42 @@
+name: agent judges
+
+on:
+  pull_request:
+    paths:
+      - apps/agent/evals/judges.py
+      - apps/agent/evals/calibrate.py
+      - apps/agent/evals/labels.yaml
+      - .github/workflows/agent-judges.yml
+  workflow_dispatch:
+    inputs:
+      judge:
+        description: A judge model to calibrate instead of the default one
+        default: ""
+
+jobs:
+  calibrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/agent
+    env:
+      AGENT_MODEL_API_KEY: ${{ secrets.AGENT_EVAL_MODEL_API_KEY }}
+      AGENT_MODEL_BASE_URL: https://openrouter.ai/api/v1
+    steps:
+      - if: env.AGENT_MODEL_API_KEY == ''
+        working-directory: .
+        run: echo "::notice::AGENT_EVAL_MODEL_API_KEY is not set, so the judges were not calibrated."
+      - if: env.AGENT_MODEL_API_KEY != ''
+        uses: actions/checkout@v5
+      - if: env.AGENT_MODEL_API_KEY != ''
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/agent/uv.lock
+      - if: env.AGENT_MODEL_API_KEY != ''
+        run: uv sync --frozen
+      - if: env.AGENT_MODEL_API_KEY != ''
+        env:
+          JUDGE: ${{ inputs.judge }}
+        run: uv run python -m evals.calibrate --gate --judge "$JUDGE"

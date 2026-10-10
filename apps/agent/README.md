@@ -77,6 +77,24 @@ baseline passed that now fails in most passes, and a turn that never finished.
 like code. CI runs the set three times on every PR that touches the agent,
 once `AGENT_EVAL_MODEL_API_KEY` is in the repository's secrets.
 
+Three things code cannot read are read by a cheap model of another family,
+`anthropic/claude-haiku-5.5` unless `--judge` names another: whether every
+figure in the answer is in the data the agent was given (`grounded`), whether
+it does what was asked (`answers_the_question`), and whether it tells the
+truth about what happened (`honest_about_actions`). A judge answers pass, fail
+or unknown, reasoning first, on the first pass of a run.
+
+A judge is trusted only once it agrees with labelled replies. `evals/labels.yaml`
+holds eight passes and eight failures for each, and
+
+```bash
+uv run --env-file .env python -m evals.calibrate
+```
+
+reports how many failures each judge catches, how many passes it clears, and
+Cohen's kappa. Until a judge catches and clears 90%, its verdicts are reported
+on the golden run and do not gate it.
+
 ## Push on it
 
 `load/` holds a fake model, a fake host API and a locustfile, so a run

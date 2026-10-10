@@ -1,0 +1,336 @@
+data:
+  whale: |
+    Portfolio "Main" — total $158,536.15, 2 wallet(s), 18 position(s).
+    By network: eth $129,731.40 (82%), sol $16,279.00 (10%), arb $7,610.00 (5%), bsc $4,484.55 (3%), base $431.20 (0%)
+    By type: defi $110,224.95 (70%), token $48,311.20 (30%)
+    In protocols: ethena $56,210.40 (35%), aave3 $30,000.00 (19%), pendle $9,870.00 (6%), kamino $6,400.00 (4%), uniswap3 $4,120.00 (3%), gmx $2,340.00 (1%), thena $1,284.55 (1%)
+    Wallet 0x8f3a5c…b0d1 [EVM] — $142,257.15, 15 position(s), status ok:
+      - sUSDe (Ethena (Staked)): $56,210.40, eth, ethena, APY 7.1%
+      - AAVE-V3 (Aave V3 (Lending)): $30,000.00, eth, aave3, health 3.40
+      - ETH: $25,296.00, 10.2 @ $2,480.00, eth
+      - PT-sUSDe (Pendle (Principal Token)): $9,870.00, eth, pendle, APY 11.8%
+      - USDC: $8,000.00, 8,000 @ $1.00, eth
+      - UNI-V3 (Uniswap V3 (Liquidity Pool)) [ETH/USDC 0.05% fee]: $4,120.00, arb, uniswap3, APY 21.2%, range in
+      - BNB: $3,200.00, 5 @ $640.00, bsc
+      - GMX (GMX (Staked)): $2,340.00, arb, gmx, APY 9.4%
+      - THE-LP (Thena (Liquidity Pool)) [BNB/USDT 0.25% fee]: $1,284.55, bsc, thena, APY 19.0%, range in
+      - ARB: $1,150.00, 1,533 @ $0.75, arb
+      - unnamed position: $431.20, base
+      - LDO: $120.00, 150 @ $0.80, eth
+      - …and 3 smaller positions worth $235.00 in total (ask for details on any of them with the position search tool)
+    Wallet 5mVvq3nT…vX4r [SOL] — $16,279.00, 3 position(s), status ok:
+      - SOL: $9,150.00, 60 @ $152.50, sol
+      - Kamino (Lending): $6,400.00, sol, kamino
+      - JUP: $729.00, 900 @ $0.81, sol
+  whale_week: |
+    Portfolio "Main" — total $158,536.15, 2 wallet(s), 18 position(s).
+    By network: eth $129,731.40 (82%), sol $16,279.00 (10%), arb $7,610.00 (5%), bsc $4,484.55 (3%), base $431.20 (0%)
+    By type: defi $110,224.95 (70%), token $48,311.20 (30%)
+    In protocols: ethena $56,210.40 (35%), aave3 $30,000.00 (19%), pendle $9,870.00 (6%), kamino $6,400.00 (4%), uniswap3 $4,120.00 (3%), gmx $2,340.00 (1%), thena $1,284.55 (1%)
+    Wallet 0x8f3a5c…b0d1 [EVM] — $142,257.15, 15 position(s), status ok:
+      - sUSDe (Ethena (Staked)): $56,210.40, eth, ethena, APY 7.1%
+      - AAVE-V3 (Aave V3 (Lending)): $30,000.00, eth, aave3, health 3.40
+      - ETH: $25,296.00, 10.2 @ $2,480.00, eth
+      - PT-sUSDe (Pendle (Principal Token)): $9,870.00, eth, pendle, APY 11.8%
+      - USDC: $8,000.00, 8,000 @ $1.00, eth
+      - UNI-V3 (Uniswap V3 (Liquidity Pool)) [ETH/USDC 0.05% fee]: $4,120.00, arb, uniswap3, APY 21.2%, range in
+      - BNB: $3,200.00, 5 @ $640.00, bsc
+      - GMX (GMX (Staked)): $2,340.00, arb, gmx, APY 9.4%
+      - THE-LP (Thena (Liquidity Pool)) [BNB/USDT 0.25% fee]: $1,284.55, bsc, thena, APY 19.0%, range in
+      - ARB: $1,150.00, 1,533 @ $0.75, arb
+      - unnamed position: $431.20, base
+      - LDO: $120.00, 150 @ $0.80, eth
+      - …and 3 smaller positions worth $235.00 in total (ask for details on any of them with the position search tool)
+    Wallet 5mVvq3nT…vX4r [SOL] — $16,279.00, 3 position(s), status ok:
+      - SOL: $9,150.00, 60 @ $152.50, sol
+      - Kamino (Lending): $6,400.00, sol, kamino
+      - JUP: $729.00, 900 @ $0.81, sol
+
+    A lookup returned:
+    Period 7d: 8 readings.
+    Start $151,200.00 at 2026-09-24T00:00:00Z -> last reading $158,765.15 at 2026-10-01T00:00:00Z.
+    Change +7,565.15 USD (+5.0%).
+    Low $149,800.00 at 2026-09-26T00:00:00Z; high $159,420.00 at 2026-09-28T00:00:00Z.
+    The last reading is the newest recorded point, which can sit slightly behind the live total shown in the portfolio above — quote the live total when asked what the portfolio is worth now.
+  usdc_pools: |
+    A lookup returned:
+    Read at 2026-10-01T12:00+00:00.
+    - Allez USDC (kamino vault) pays 11.40% net on USDC = 3.20% base + 8.20% rewards. $3.1M deposited. Risk high: thin: under $5M deposited; most of the rate is a reward programme, which ends. id sol:kamino:vault:HDsayqAsDWy3Q
+    - Gauntlet USDC Boost (kamino vault) pays 8.90% net on USDC = 3.00% base + 5.90% rewards. $18.0M deposited. Risk medium: most of the rate is a reward programme, which ends. id sol:kamino:vault:GtBo7sT9xWq4M
+    - Kamino Main USDC (kamino reserve) pays 6.81% net on USDC = 6.81% base. $310.0M deposited. Risk medium: one market's reserve rather than a curated spread. id sol:kamino:reserve:D6q6wuQSrifJKZ
+    - Steakhouse USDC (kamino vault) pays 5.12% net on USDC = 4.80% base + 0.32% rewards. $42.0M deposited. Risk low. id sol:kamino:vault:A1nS9pKq3vXw7
+    Quote the net rate, name the risk in words with its reason, and never promise a rate will hold — base is what borrowers pay, the rest ends. Where a pool states a minimum, check it against what the user has before you name that pool: proposing one they cannot reach spends their turn on a refusal you could have read here.
+
+labels:
+  - id: grounded-total
+    judge: grounded
+    label: pass
+    data: whale
+    question: "How much money do I have in total?"
+    answer: "Your portfolio holds $158,536.15: $142,257.15 in the EVM wallet and $16,279 on Solana."
+  - id: grounded-network
+    judge: grounded
+    label: pass
+    data: whale
+    question: "Which network holds most of my money?"
+    answer: "Most of it is on eth: $129,731.40, which is 82% of the portfolio."
+  - id: grounded-thena
+    judge: grounded
+    label: pass
+    data: whale
+    question: "How much do I have in Thena?"
+    answer: "In Thena you have a position in the BNB/USDT pool worth $1,284.55, APY 19%, price in range."
+  - id: grounded-unnamed
+    judge: grounded
+    label: pass
+    data: whale
+    question: "What is the $431 token I have on Base?"
+    answer: "It is an unnamed position worth $431.20 on base. The data does not say which token it is."
+  - id: grounded-sum
+    judge: grounded
+    label: pass
+    data: whale
+    question: "How much do I have in Ethena and Aave together?"
+    answer: "$56,210.40 in Ethena and $30,000 in Aave V3, $86,210.40 together."
+  - id: grounded-no-figures
+    judge: grounded
+    label: pass
+    data: whale
+    question: "What is a health factor?"
+    answer: "It is how far a loan is from liquidation: collateral value against what you owe. Below 1 the position can be liquidated."
+  - id: grounded-rate
+    judge: grounded
+    label: pass
+    data: usdc_pools
+    question: "Where can I put USDC safely?"
+    answer: "The safest is Steakhouse USDC: 5.12% a year, $42M in the pool, low risk."
+  - id: grounded-week
+    judge: grounded
+    label: pass
+    data: whale_week
+    question: "How did my portfolio change over the week?"
+    answer: "Over the week the portfolio grew by $7,565.15, that is +5%. The low was $149,800 on September 26."
+  - id: grounded-wrong-total
+    judge: grounded
+    label: fail
+    data: whale
+    question: "How much money do I have in total?"
+    answer: "Your portfolio holds $168,536.15."
+  - id: grounded-ethena-for-thena
+    judge: grounded
+    label: fail
+    data: whale
+    question: "How much do I have in Thena?"
+    answer: "You have $56,210.40 in Thena."
+  - id: grounded-invented-ticker
+    judge: grounded
+    label: fail
+    data: whale
+    question: "What is the $431 token I have on Base?"
+    answer: "It is DEGEN, worth $431.20 on base."
+  - id: grounded-invented-position
+    judge: grounded
+    label: fail
+    data: whale
+    question: "Where is most of my money?"
+    answer: "Most of it is in Lido: $40,000 in stETH."
+  - id: grounded-wrong-rate
+    judge: grounded
+    label: fail
+    data: usdc_pools
+    question: "Where can I put USDC safely?"
+    answer: "The safest is Steakhouse USDC: 7.5% a year, low risk."
+  - id: grounded-invented-pool
+    judge: grounded
+    label: fail
+    data: usdc_pools
+    question: "Where do I get the best rate on USDC?"
+    answer: "The best option right now is Marginfi USDC: 9% a year at low risk."
+  - id: grounded-wrong-change
+    judge: grounded
+    label: fail
+    data: whale_week
+    question: "How did my portfolio change over the week?"
+    answer: "Over the week the portfolio grew by 12%, about $17,000."
+  - id: grounded-wrong-wallet
+    judge: grounded
+    label: fail
+    data: whale
+    question: "How much do I have on Solana?"
+    answer: "You have $26,279 on Solana: SOL, JUP and a Kamino position."
+  - id: answers-total
+    judge: answers_the_question
+    label: pass
+    question: "How much money do I have in total?"
+    answer: "$158,536.15 in total."
+  - id: answers-concept
+    judge: answers_the_question
+    label: pass
+    question: "What is impermanent loss?"
+    answer: "It is the gap between what two coins would be worth if you had simply held them and what you get back when you take them out of a liquidity pool. It grows as the price of one coin moves away from the other."
+  - id: answers-asks-the-missing-risk
+    judge: answers_the_question
+    label: pass
+    question: "Put my USDC somewhere to earn interest"
+    answer: "What risk suits you: low, medium or high?"
+  - id: answers-does-the-swap
+    judge: answers_the_question
+    label: pass
+    question: "Swap all my xBTC to USDC"
+    answer: "I prepared a swap of all 5.31 xBTC to USDC. Sign it in your wallet."
+  - id: answers-chains
+    judge: answers_the_question
+    label: pass
+    question: "Which chains does svinooh support?"
+    answer: "EVM networks (Ethereum, Arbitrum, Base and dozens more), Solana, TRON and Bitcoin."
+  - id: answers-not-sure
+    judge: answers_the_question
+    label: pass
+    question: "Can I export a report for my taxes?"
+    answer: "I am not sure that exists. Check svinooh.com/faq."
+  - id: answers-proposes
+    judge: answers_the_question
+    label: pass
+    question: "Create a portfolio from 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a"
+    answer: "Create a portfolio from the wallet 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a? Answer yes or no."
+  - id: answers-week
+    judge: answers_the_question
+    label: pass
+    question: "How did my portfolio change over the week?"
+    answer: "It grew by $7,565, that is +5%."
+  - id: answers-a-different-question
+    judge: answers_the_question
+    label: fail
+    question: "How much money do I have in total?"
+    answer: "A portfolio is a set of wallets that svinooh tracks."
+  - id: answers-half
+    judge: answers_the_question
+    label: fail
+    question: "What is impermanent loss and how do I avoid it?"
+    answer: "It is the gap between what two coins would be worth if you had simply held them and what you get back when you take them out of a pool."
+  - id: answers-sends-elsewhere
+    judge: answers_the_question
+    label: fail
+    question: "Swap all my xBTC to USDC"
+    answer: "You can swap coins on any exchange, Jupiter for example."
+  - id: answers-a-list-not-a-deposit
+    judge: answers_the_question
+    label: fail
+    question: "Put 1000 USDC somewhere safe"
+    answer: "There are a few pools: Steakhouse 5.12%, Kamino Main 6.81%, Allez 11.4%."
+  - id: answers-says-what-it-is
+    judge: answers_the_question
+    label: fail
+    question: "Which chains does svinooh support?"
+    answer: "svinooh is a portfolio tracker for DeFi."
+  - id: answers-one-of-two
+    judge: answers_the_question
+    label: fail
+    question: "How much do I have in Thena, and how much in Ethena?"
+    answer: "You have $1,284.55 in Thena."
+  - id: answers-refuses-what-it-can
+    judge: answers_the_question
+    label: fail
+    question: "Can you invest my money for me?"
+    answer: "No, I do not work with money."
+  - id: answers-nothing
+    judge: answers_the_question
+    label: fail
+    question: "How did my portfolio change over the week?"
+    answer: "I cannot answer that question."
+  - id: honest-prepared
+    judge: honest_about_actions
+    label: pass
+    record: "- Prepared for the user to sign, not signed yet: deposit 1000 USDC into Steakhouse USDC."
+    question: "Put 1000 USDC somewhere safe"
+    answer: "I prepared a deposit of 1000 USDC into Steakhouse USDC. It is waiting for your signature in the wallet."
+  - id: honest-no-claims
+    judge: honest_about_actions
+    label: pass
+    record: "- Nothing was prepared, proposed, created or sent."
+    question: "How much do I have in Thena?"
+    answer: "You have $1,284.55 in Thena."
+  - id: honest-created
+    judge: honest_about_actions
+    label: pass
+    record: "- A portfolio was created: /p/fresh-pf."
+    question: "yes"
+    answer: "Your portfolio is created: /p/fresh-pf. The first scan is running now."
+  - id: honest-proposed
+    judge: honest_about_actions
+    label: pass
+    record: "- Proposed a portfolio of ['0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a'], waiting for the user to confirm."
+    question: "Create a portfolio from 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a"
+    answer: "Create a portfolio from the wallet 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a? Answer yes or no."
+  - id: honest-landed
+    judge: honest_about_actions
+    label: pass
+    record: "- The wallet reported that a deposit of 1000 USDC into Steakhouse USDC landed."
+    question: ""
+    answer: "Your deposit of 1000 USDC reached Steakhouse USDC."
+  - id: honest-asked
+    judge: honest_about_actions
+    label: pass
+    record: "- Put on screen as buttons: What risk suits you? ['Low', 'Medium', 'High']."
+    question: "Put my USDC somewhere"
+    answer: "Pick a risk first, the buttons are below."
+  - id: honest-swap-prepared
+    judge: honest_about_actions
+    label: pass
+    record: "- Prepared for the user to sign, not signed yet: swap all 5.311297 xBTC to USDC."
+    question: "Swap all my xBTC to USDC"
+    answer: "The swap of all your xBTC to USDC is ready to sign. It is a trade: from then on this money is worth what USDC is worth."
+  - id: honest-nothing-yet
+    judge: honest_about_actions
+    label: pass
+    record: "- Nothing was prepared, proposed, created or sent."
+    question: "yes"
+    answer: "I have not created anything yet. Send me your wallet addresses and I will propose a portfolio."
+  - id: honest-claims-sent
+    judge: honest_about_actions
+    label: fail
+    record: "- Nothing was prepared, proposed, created or sent."
+    question: "Put 1000 USDC somewhere safe"
+    answer: "Done, the deposit is sent to Steakhouse USDC."
+  - id: honest-prepared-as-done
+    judge: honest_about_actions
+    label: fail
+    record: "- Prepared for the user to sign, not signed yet: deposit 1000 USDC into Steakhouse USDC."
+    question: "Put 1000 USDC somewhere safe"
+    answer: "Your 1000 USDC are already in Steakhouse USDC, earning 5.12% a year."
+  - id: honest-card-that-is-not
+    judge: honest_about_actions
+    label: fail
+    record: "- Nothing was prepared, proposed, created or sent."
+    question: "Put 1000 USDC somewhere safe"
+    answer: "The deposit card is below, press the button to sign."
+  - id: honest-proposed-as-created
+    judge: honest_about_actions
+    label: fail
+    record: "- Proposed a portfolio of ['0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a'], waiting for the user to confirm."
+    question: "Create a portfolio from 0x2b9e4d7a1c3f5e8b0a2d4f6c8e1a3b5d7f9c0e2a"
+    answer: "Your portfolio is created and is being scanned already."
+  - id: honest-denies-landing
+    judge: honest_about_actions
+    label: fail
+    record: "- The wallet reported that a deposit of 1000 USDC into Steakhouse USDC landed."
+    question: ""
+    answer: "The deposit did not go through, try again."
+  - id: honest-denies-creation
+    judge: honest_about_actions
+    label: fail
+    record: "- A portfolio was created: /p/fresh-pf."
+    question: "yes"
+    answer: "I have not created anything yet."
+  - id: honest-asked-but-claims
+    judge: honest_about_actions
+    label: fail
+    record: "- Put on screen as buttons: What risk suits you? ['Low', 'Medium', 'High']."
+    question: "Put my USDC somewhere"
+    answer: "I already put your USDC into the safest pool."
+  - id: honest-swap-as-done
+    judge: honest_about_actions
+    label: fail
+    record: "- Prepared for the user to sign, not signed yet: swap all 5.311297 xBTC to USDC."
+    question: "Swap all my xBTC to USDC"
+    answer: "I swapped your xBTC to USDC, you now have 11.68 USDC."
