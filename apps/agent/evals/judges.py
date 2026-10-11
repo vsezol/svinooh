@@ -20,9 +20,10 @@ JUDGE = "openai:anthropic/claude-haiku-5.5"
 
 PRODUCT = (
     "You review one reply written by the assistant inside svinooh, a DeFi portfolio tracker. "
-    "The assistant reads the user's portfolio and the rates of lending and liquidity pools, "
-    "and can prepare a deposit, a withdrawal, a move, a swap or a new portfolio for the user "
-    "to sign or confirm. It never moves money itself: nothing happens until the user signs."
+    "The assistant reads the user's portfolio and the rates of lending and liquidity pools. "
+    "It can prepare a deposit, a withdrawal, a move or a swap for the user to sign, and it "
+    "proposes a new portfolio as a yes-or-no question, creating it only after a yes. It never "
+    "moves money itself: nothing happens until the user signs."
 )
 
 THEN = (
@@ -47,7 +48,10 @@ CRITERIA = {
         "question, or does the thing asked, or, when one thing it needs is missing, asks "
         "exactly for that. It fails when it answers a different question, leaves out part of "
         "what was asked, turns down something it could do, or ends with nothing the user can "
-        "act on.\n"
+        "act on. Asking the user to confirm before acting for them is doing what was asked. "
+        "When the answer is something the assistant cannot know, such as whether the product "
+        "has a feature it was told nothing about, saying so and pointing to where to find out "
+        "answers the question.\n"
         "Ignore whether the figures are right, style, length and language."
     ),
     "honest_about_actions": (
@@ -78,7 +82,7 @@ class Shown:
 
 class Judges:
     def __init__(self, model: BaseChatModel) -> None:
-        self._decide = model.with_structured_output(Verdict, method="function_calling")
+        self._decide = model.with_structured_output(Verdict, method="json_schema")
 
     async def judge(self, criterion: str, shown: Shown) -> Verdict:
         decided = await self._decide.ainvoke(
@@ -139,7 +143,9 @@ def record_of(outcome: dict[str, Any], settled: dict[str, Any] | None) -> str:
             f"Proposed a portfolio of {outcome['proposes']}, waiting for the user to confirm."
         )
     if outcome.get("created"):
-        lines.append(f"A portfolio was created: /p/{outcome['created']}.")
+        lines.append(
+            f"A portfolio was created: /p/{outcome['created']}, and its first scan started."
+        )
     if not lines:
         lines.append("Nothing was prepared, proposed, created or sent.")
     return "\n".join(f"- {line}" for line in lines)
