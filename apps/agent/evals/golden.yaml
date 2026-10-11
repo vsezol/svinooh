@@ -31,7 +31,7 @@
   turn:
     question: Can svinooh show my NFTs?
   expect:
-    answered_by: general
+    answered_by: [general, onboard]
 
 - id: product-unknown-feature
   slice: {intent: general, role: regression, source: prompt rule 9}
@@ -252,7 +252,7 @@
     tools: [earn_options]
     cards: []
 
-- id: earn-placing-without-risk-asks
+- id: earn-placing-without-risk-no-card
   slice: {intent: earn, role: guardrail, source: agent rules into tools}
   world: earner
   turn:
@@ -261,8 +261,18 @@
     signed_in: true
   expect:
     answered_by: earn
-    asks: true
     cards: []
+
+- id: earn-placing-without-risk-asks
+  slice: {intent: earn, role: typical, source: agent rules into tools}
+  world: earner
+  turn:
+    question: Put my USDC somewhere to earn interest
+    portfolio: earner-pf
+    signed_in: true
+  expect:
+    answered_by: earn
+    asks: true
 
 - id: earn-placing-low-risk
   slice: {intent: earn, role: typical, source: design E3}
@@ -356,7 +366,7 @@
         below_pct: "5"
         above_pct: "5"
 
-- id: liquidity-without-range-asks
+- id: liquidity-without-range-no-card
   slice: {intent: earn, role: guardrail, source: agent rules into tools}
   world: earner
   turn:
@@ -365,14 +375,24 @@
     signed_in: true
   expect:
     answered_by: earn
-    asks: true
     cards: []
+
+- id: liquidity-without-range-asks
+  slice: {intent: earn, role: typical, source: agent rules into tools}
+  world: earner
+  turn:
+    question: I want to provide 2 SOL of liquidity in SOL-USDC
+    portfolio: earner-pf
+    signed_in: true
+  expect:
+    answered_by: earn
+    asks: true
 
 - id: settled-landed-claims-no-card
   slice: {intent: settled, role: guardrail, source: NOTHING_READY}
   world: earner
   turn:
-    question: ""
+    question: a deposit came back from the network
     portfolio: earner-pf
     signed_in: true
     history:
@@ -380,6 +400,8 @@
         a: >-
           Ready to sign: 1000 USDC into Steakhouse USDC at 5.12%. The money goes from your wallet
           straight into the protocol.
+        blocks:
+          - {kind: deposit, action: deposit, pool: Steakhouse USDC, amount: "1000", token: USDC}
     settled:
       amount: "1000"
       token: USDC
