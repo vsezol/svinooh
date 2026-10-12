@@ -138,8 +138,9 @@ def _answer_for(body: dict[str, Any]) -> dict[str, Any]:
         return _tool_call("IntentLabel", {"intent": intent, "reason": "load test"})
     if "ConfirmationDecision" in offered:
         return _tool_call("ConfirmationDecision", {"decision": "other", "reason": "load test"})
-    if "Verdict" in offered:
-        return _tool_call("Verdict", {"reasoning": "load test", "verdict": "pass"})
+    if (body.get("response_format") or {}).get("type") == "json_schema":
+        verdict = {"reasoning": "load test", "verdict": "pass"}
+        return {"role": "assistant", "content": json.dumps(verdict)}
     already_looked = any(m.get("role") == "tool" for m in (body.get("messages") or []))
     if "history_summary" in offered and not already_looked:
         # One hop of the agentic loop, then an answer with what came back.
