@@ -515,6 +515,21 @@ model AddressSnapshot {
   @@index([chain, address, createdAt])
 }
 
+model PositionSnapshot {
+  id        String   @id @default(cuid())
+  chain     String
+  address   String
+  key       String
+  valueUsd  Float
+  amount    Float?
+  priceUsd  Float?
+  tokens    Json?
+  band      Json?
+  createdAt DateTime @default(now())
+
+  @@index([chain, address, key, createdAt])
+}
+
 /// One movement of value, as one address saw it.
 ///
 /// NOT a deposit or a withdrawal — those are verdicts, and a verdict needs a

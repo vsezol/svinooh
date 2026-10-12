@@ -7,6 +7,7 @@ import { MetricsService, RabbitService, type ScanJob } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import { AlertsCollector } from '../../alerts/collector.service';
 import { alertableStates } from './wallet-state';
+import { positionSnapshots } from './position-snapshots';
 import { scanAddress } from '../scanners';
 import type { ScanPosition, ScanResult } from '@svinooh/shared';
 
@@ -202,6 +203,9 @@ export class SyncService {
           ...accrued(result.positions),
           breakdown: result.breakdown ?? undefined,
         },
+      }),
+      this.prisma.positionSnapshot.createMany({
+        data: positionSnapshots(wallet.chain, wallet.address, result.positions, now),
       }),
     ]);
     // The one line that says what was actually stored. The night a scan bug
