@@ -1,12 +1,6 @@
 name: agent judges
 
 on:
-  pull_request:
-    paths:
-      - apps/agent/evals/judges.py
-      - apps/agent/evals/calibrate.py
-      - apps/agent/evals/labels.yaml
-      - .github/workflows/agent-judges.yml
   workflow_dispatch:
     inputs:
       judge:
