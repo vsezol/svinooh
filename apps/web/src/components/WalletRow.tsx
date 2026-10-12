@@ -4,8 +4,9 @@ import type { PositionTokenRole, WalletDto } from '@svinooh/shared';
 import { buildBlocks, withoutDust, type BlockSection } from '../lib/blocks';
 import { chainMeta, fmtAmount, fmtPrice, fmtUsd, shortAddress, walletName } from '../lib/format';
 import { rebalanceable, rebalanceQuestion } from '../lib/rebalance';
-import { Button, Card, Chevron, Spinner, Tag, Tooltip } from '../ui';
+import { Button, Card, Chevron, IconButton, Spinner, Tag, Tooltip } from '../ui';
 import { badgedText, ChainBadge } from './ChainBadge';
+import { PositionChart } from './PositionChart';
 import { RangeBar } from './RangeBar';
 import { WalletMenu } from './WalletMenu';
 import { TronResources } from './TronResources';
@@ -48,6 +49,23 @@ const roleColor = (role: PositionTokenRole): string =>
 /** 0.8075 → "80.8% APY" */
 const fmtApy = (apy: number): string => `${(apy * 100).toFixed(apy < 0.1 ? 2 : 1)}% APY`;
 
+const ChartIcon = () => (
+  <svg
+    viewBox="0 0 16 16"
+    width={14}
+    height={14}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.5}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden
+  >
+    <path d="M2 13.5h12" />
+    <path d="M3 10.5l3.5-3.5 2.5 2.5 4-4.5" />
+  </svg>
+);
+
 /**
  * edit   — the owner: rename and remove do what they say
  * locked — a portfolio nobody owns: the actions are there, and pressing one
@@ -58,6 +76,7 @@ const fmtApy = (apy: number): string => `${(apy * 100).toFixed(apy < 0.1 ? 2 : 1
 export type WalletActions = 'edit' | 'locked' | 'none';
 
 interface Props {
+  slug: string;
   wallet: WalletDto;
   actions: WalletActions;
   total: number;
@@ -72,6 +91,7 @@ interface Props {
 }
 
 export function WalletRow({
+  slug,
   wallet,
   actions,
   total,
@@ -85,6 +105,7 @@ export function WalletRow({
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
+  const [charted, setCharted] = useState<string | null>(null);
 
   const chain = chainMeta(wallet.chain);
   const label = walletName(wallet.label, wallet.chain);
@@ -344,6 +365,19 @@ export function WalletRow({
                     </span>
                   </Tooltip>
                 ) : null}
+                {b.key ? (
+                  <Tooltip text={charted === b.key ? 'Back to the position' : 'Chart of this position'}>
+                    <IconButton
+                      variant="bare"
+                      size="xs"
+                      label={charted === b.key ? 'Back to the position' : 'Chart of this position'}
+                      aria-pressed={charted === b.key}
+                      onClick={() => setCharted(charted === b.key ? null : b.key)}
+                    >
+                      <ChartIcon />
+                    </IconButton>
+                  </Tooltip>
+                ) : null}
                 {onRebalance && actions === 'edit' && rebalanceable(b) ? (
                   <Button variant="soft" size="xs" onClick={() => onRebalance(rebalanceQuestion(b.band))}>
                     Rebalance
@@ -357,113 +391,125 @@ export function WalletRow({
                   {fmtUsd(b.value)}
                 </span>
               </div>
-              {/* Where the price sits between the bounds — the part "IN RANGE"
-                  cannot say. Only where the protocol answered for the band. */}
-              {b.band ? <RangeBar band={b.band} inRange={b.range !== 'out'} /> : null}
-              {b.sections.map((s, si) => (
-                <div
-                  key={si}
-                  style={
-                    si === 0
-                      ? { padding: '12px 0 4px' }
-                      : { padding: '14px 0 4px', borderTop: '1px solid var(--line)' }
-                  }
-                >
-                  {s.label ? (
-                    // The heading names the run of rows below it. Its total is
-                    // dropped over a single row, where it would be that row's
-                    // own figure a second time.
+              {b.key && charted === b.key ? (
+                <PositionChart
+                  slug={slug}
+                  walletId={wallet.id}
+                  positionKey={b.key}
+                  pair={b.pair}
+                  title={b.proto}
+                />
+              ) : (
+                <>
+                  {/* Where the price sits between the bounds — the part "IN RANGE"
+                      cannot say. Only where the protocol answered for the band. */}
+                  {b.band ? <RangeBar band={b.band} inRange={b.range !== 'out'} /> : null}
+                  {b.sections.map((s, si) => (
                     <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'baseline',
-                        justifyContent: 'space-between',
-                        gap: 'var(--sp-4)',
-                        padding: '0 16px var(--sp-4)',
-                      }}
+                      key={si}
+                      style={
+                        si === 0
+                          ? { padding: '12px 0 4px' }
+                          : { padding: '14px 0 4px', borderTop: '1px solid var(--line)' }
+                      }
                     >
-                      <span
-                        className="mono"
-                        style={{ fontSize: 'var(--fs-micro)', letterSpacing: '0.14em', color: sectionColor(s) }}
-                      >
-                        {s.label}
-                      </span>
-                      {s.total !== null ? (
-                        <span
-                          className="mono"
+                      {s.label ? (
+                        // The heading names the run of rows below it. Its total is
+                        // dropped over a single row, where it would be that row's
+                        // own figure a second time.
+                        <div
                           style={{
-                            fontSize: 'var(--fs-note)',
-                            fontWeight: 'var(--fw-medium)',
-                            color: sectionColor(s),
+                            display: 'flex',
+                            alignItems: 'baseline',
+                            justifyContent: 'space-between',
+                            gap: 'var(--sp-4)',
+                            padding: '0 16px var(--sp-4)',
                           }}
                         >
-                          {s.negative ? '−' : ''}
-                          {fmtUsd(s.total)}
-                        </span>
+                          <span
+                            className="mono"
+                            style={{ fontSize: 'var(--fs-micro)', letterSpacing: '0.14em', color: sectionColor(s) }}
+                          >
+                            {s.label}
+                          </span>
+                          {s.total !== null ? (
+                            <span
+                              className="mono"
+                              style={{
+                                fontSize: 'var(--fs-note)',
+                                fontWeight: 'var(--fw-medium)',
+                                color: sectionColor(s),
+                              }}
+                            >
+                              {s.negative ? '−' : ''}
+                              {fmtUsd(s.total)}
+                            </span>
+                          ) : null}
+                        </div>
                       ) : null}
-                    </div>
-                  ) : null}
-                  {s.columns ? (
-                    // Printed once per block: the sections below are the same
-                    // four columns, and a heading repeated is a heading ignored
-                    <div className="pos-grid" style={{ padding: '2px 16px 4px' }}>
-                      {[s.firstColumn, 'PRICE', 'AMOUNT', 'USD VALUE'].map((label, ci) => (
-                        <span
-                          key={label}
-                          className={`mono${ci === 1 ? ' pos-price' : ''}`}
-                          style={{
-                            fontSize: 'var(--fs-micro)',
-                            letterSpacing: '0.14em',
-                            color: 'var(--mut)',
-                            textAlign: ci ? 'right' : 'left',
-                            whiteSpace: 'nowrap',
-                          }}
+                      {s.columns ? (
+                        // Printed once per block: the sections below are the same
+                        // four columns, and a heading repeated is a heading ignored
+                        <div className="pos-grid" style={{ padding: '2px 16px 4px' }}>
+                          {[s.firstColumn, 'PRICE', 'AMOUNT', 'USD VALUE'].map((label, ci) => (
+                            <span
+                              key={label}
+                              className={`mono${ci === 1 ? ' pos-price' : ''}`}
+                              style={{
+                                fontSize: 'var(--fs-micro)',
+                                letterSpacing: '0.14em',
+                                color: 'var(--mut)',
+                                textAlign: ci ? 'right' : 'left',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {label}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      {s.rows.map((r, ri) => (
+                        <div
+                          key={ri}
+                          className="pos-grid"
+                          // No rule between rows: the padding carries the rhythm, and
+                          // a line under every holding turned a wallet into a grate.
+                          // Borders survive where they separate different things —
+                          // between sections, and between blocks.
+                          style={{ alignItems: 'center', padding: '10px 16px' }}
                         >
-                          {label}
-                        </span>
+                          <span style={badgedText(!!r.network)}>
+                            <span
+                              style={{
+                                fontWeight: 'var(--fw-bold)',
+                                fontSize: 'var(--fs-body)',
+                                color: sectionColor(s) ?? 'var(--text)',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {r.title}
+                            </span>
+                            <ChainBadge network={r.network} />
+                          </span>
+                          <span className="mono pos-price" style={cellStyle}>
+                            {r.priceUsd == null ? '—' : fmtPrice(r.priceUsd)}
+                          </span>
+                          <span className="mono" style={cellStyle}>
+                            {r.amount == null ? '—' : fmtAmount(r.amount)}
+                          </span>
+                          <span
+                            className="mono"
+                            style={{ ...cellStyle, color: sectionColor(s) ?? 'var(--text)' }}
+                          >
+                            {s.negative ? '−' : ''}
+                            {fmtUsd(r.value)}
+                          </span>
+                        </div>
                       ))}
                     </div>
-                  ) : null}
-                  {s.rows.map((r, ri) => (
-                    <div
-                      key={ri}
-                      className="pos-grid"
-                      // No rule between rows: the padding carries the rhythm, and
-                      // a line under every holding turned a wallet into a grate.
-                      // Borders survive where they separate different things —
-                      // between sections, and between blocks.
-                      style={{ alignItems: 'center', padding: '10px 16px' }}
-                    >
-                      <span style={badgedText(!!r.network)}>
-                        <span
-                          style={{
-                            fontWeight: 'var(--fw-bold)',
-                            fontSize: 'var(--fs-body)',
-                            color: sectionColor(s) ?? 'var(--text)',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {r.title}
-                        </span>
-                        <ChainBadge network={r.network} />
-                      </span>
-                      <span className="mono pos-price" style={cellStyle}>
-                        {r.priceUsd == null ? '—' : fmtPrice(r.priceUsd)}
-                      </span>
-                      <span className="mono" style={cellStyle}>
-                        {r.amount == null ? '—' : fmtAmount(r.amount)}
-                      </span>
-                      <span
-                        className="mono"
-                        style={{ ...cellStyle, color: sectionColor(s) ?? 'var(--text)' }}
-                      >
-                        {s.negative ? '−' : ''}
-                        {fmtUsd(r.value)}
-                      </span>
-                    </div>
                   ))}
-                </div>
-              ))}
+                </>
+              )}
             </div>
           ))}
           {wallet.unpriced?.length ? (

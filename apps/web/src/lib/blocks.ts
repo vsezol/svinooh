@@ -47,6 +47,7 @@ export interface BlockSection {
 
 /** Positions grouped by protocol — Wallet, then a separate block per DeFi position */
 export interface Block {
+  key: string | null;
   proto: string;
   /** The network the position sits on, drawn beside its name */
   network: string | null;
@@ -180,6 +181,7 @@ function foldDuplicates(blocks: RawBlock[]): RawBlock[] {
       });
       continue;
     }
+    if (existing.key !== block.key) existing.key = null;
     existing.count += block.count;
     existing.value += block.value;
     existing.rows = existing.rows.concat(block.rows);
@@ -321,6 +323,7 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
 
     const kind = p.name || (p.category === 'staked' ? 'Staked' : 'DeFi');
     blocks.push({
+      key: p.key,
       proto: p.symbol,
       network: p.network ?? null,
       // "LP" rather than "LIQUIDITY POOL": the label sits on one line with the
@@ -345,6 +348,7 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
   if (walletRows.length) {
     walletRows.sort((a, b) => b.value - a.value);
     out.push({
+      key: null,
       proto: 'Wallet',
       // Its tokens each name their own network; the block itself is on none
       network: null,

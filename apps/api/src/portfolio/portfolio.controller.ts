@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -200,5 +201,18 @@ export class PortfolioController {
     @Query('range') range?: string,
   ) {
     return this.portfolios.walletHistory(slug, walletId, normalizeRange(range), userId);
+  }
+
+  @Get(':slug/wallets/:walletId/positions/history')
+  @UseGuards(OptionalAuthGuard)
+  positionHistory(
+    @Param('slug') slug: string,
+    @Param('walletId') walletId: string,
+    @CurrentUserId() userId: string | null,
+    @Query('key') key?: string,
+    @Query('range') range?: string,
+  ) {
+    if (!key) throw new BadRequestException('key is required');
+    return this.portfolios.positionHistory(slug, walletId, key, normalizeRange(range), userId);
   }
 }

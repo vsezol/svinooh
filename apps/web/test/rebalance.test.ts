@@ -16,6 +16,7 @@ const band = {
 
 const meteora = (over: Partial<PositionDto>): PositionDto => ({
   id: 'p-1',
+  key: 'p-1',
   symbol: 'Meteora',
   name: 'Liquidity Pool',
   note: 'SOL/USDC',

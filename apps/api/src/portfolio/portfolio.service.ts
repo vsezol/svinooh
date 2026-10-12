@@ -19,6 +19,7 @@ import type {
   PortfolioVisibility,
   PositionBand,
   PositionCategory,
+  PositionHistoryDto,
   PositionRange,
   PositionTokenDto,
   PublicPortfolioDto,
@@ -35,6 +36,8 @@ import { PrismaService } from '@svinooh/db';
 import { detectChain, normalizeAddress, RESERVED_SLUGS, setting, slugifyName, wordSlug } from '@svinooh/common';
 import { PremiumService } from '../billing/premium.service';
 import { ScanRequests } from '../wallet/scan-requests.service';
+import { positionKey } from '../wallet/sync/wallet-state';
+import { positionSeries } from './position-history';
 
 /**
  * A wallet as a portfolio holds it: the address and its readings, plus the
@@ -221,10 +224,10 @@ interface Sample {
  * The first and last real timestamps are preserved exactly, so the window math
  * on the client (which pins to the newest reading) still lands where it should.
  */
-function toTimeGrid(points: Sample[], stepMs: number): Sample[] {
+function toTimeGrid<T extends { t: number }>(points: T[], stepMs: number): T[] {
   if (points.length < 2 || stepMs <= 0) return points;
   const end = points[points.length - 1].t;
-  const out: Sample[] = [];
+  const out: T[] = [];
   let i = 0;
   for (let t = points[0].t; t < end; t += stepMs) {
     while (i + 1 < points.length && points[i + 1].t <= t) i++;
@@ -1189,6 +1192,59 @@ export class PortfolioService {
     return { range, points };
   }
 
+  async positionHistory(
+    slug: string,
+    walletId: string,
+    key: string,
+    range: HistoryRange,
+    userId: string | null,
+  ): Promise<PositionHistoryDto> {
+    const notBefore = await this.historyFloor(range, userId);
+    const held = await this.prisma.portfolioWallet.findFirst({
+      where: { id: walletId, portfolio: { slug } },
+      select: { wallet: { select: { chain: true, address: true } } },
+    });
+    if (!held) throw new NotFoundException('Wallet not found');
+
+    const { windowMs } = RANGES[range];
+    const since = laterOf(windowMs === null ? null : new Date(Date.now() - windowMs), notBefore);
+    const stepMs = GRID_STEP_MS[range];
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        createdAt: Date;
+        valueUsd: number;
+        amount: number | null;
+        tokens: PositionTokenDto[] | null;
+        band: PositionBand | null;
+      }>
+    >(Prisma.sql`
+      SELECT "createdAt", "valueUsd", "amount", "tokens", "band"
+      FROM "PositionSnapshot"
+      WHERE "id" IN (
+        SELECT DISTINCT ON (slot) "id"
+        FROM (
+          SELECT "id", "createdAt",
+                 date_bin(${`${stepMs / 1000} seconds`}::interval, "createdAt", TIMESTAMP '2020-01-01') AS slot
+          FROM "PositionSnapshot"
+          WHERE "chain" = ${held.wallet.chain} AND "address" = ${held.wallet.address} AND "key" = ${key}
+            ${since ? Prisma.sql`AND "createdAt" >= ${since}` : Prisma.empty}
+        ) slots
+        ORDER BY slot, "createdAt" DESC
+      )
+      ORDER BY "createdAt" ASC
+    `);
+
+    const readings = rows.map((row) => ({
+      t: row.createdAt.getTime(),
+      usd: row.valueUsd,
+      amount: row.amount,
+      tokens: row.tokens,
+      band: row.band,
+    }));
+    const cap = windowMs === null ? 220 : POINTS_PER_WINDOW;
+    return { range, ...positionSeries(downsample(toTimeGrid(readings, stepMs), cap)) };
+  }
+
   /**
    * The row for this address, created if this is the first portfolio to ask for
    * it.
@@ -1308,6 +1364,7 @@ export class PortfolioService {
       .sort((a, b) => b.valueUsd - a.valueUsd)
       .map((p) => ({
         id: p.id,
+        key: positionKey({ ...p, band: p.band as PositionBand | null }),
         symbol: p.symbol,
         name: p.name,
         note: p.note,

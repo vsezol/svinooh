@@ -5,6 +5,7 @@ import {
   AreaSeries,
   createChart,
   CrosshairMode,
+  LineSeries,
   LineStyle,
   type IChartApi,
   type ISeriesApi,
@@ -57,6 +58,13 @@ interface Props {
    * debt is red and a falling one green.
    */
   tone?: 'accent' | 'muted';
+  format?: (value: number) => string;
+  lines?: ReadonlyArray<ChartLine>;
+}
+
+export interface ChartLine {
+  label: string;
+  values: number[];
 }
 
 /**
@@ -84,6 +92,20 @@ const SCROLL = {
 
 const token = (name: string): string =>
   getComputedStyle(document.body).getPropertyValue(name).trim() || '#2bd576';
+
+const lineColor = (index: number): string => token(index < 4 ? `--series-${index + 1}` : '--mut');
+
+function toData(values: number[], times: number[]): Array<{ time: UTCTimestamp; value: number }> {
+  const out: Array<{ time: UTCTimestamp; value: number }> = [];
+  let last = -1;
+  for (let i = 0; i < values.length; i++) {
+    const t = Math.floor(times[i] / 1000);
+    const time = (t <= last ? last + 1 : t) as UTCTimestamp;
+    last = time;
+    out.push({ time, value: values[i] });
+  }
+  return out;
+}
 
 function dateLabel(ms: number, period: HistoryRange): string {
   const d = new Date(ms);
@@ -120,17 +142,24 @@ function dateLabel(ms: number, period: HistoryRange): string {
  * portfolio are decoration that competes with the only thing worth reading.
  */
 export function AreaChart({
-  values,
+  values: single,
   times,
   period,
   height,
   bare = false,
   framed = true,
   tone = 'accent',
+  format,
+  lines,
 }: Props) {
+  const multi = !!lines?.length;
+  const values = multi ? lines[0].values : single;
+  const fmtValue = format ?? fmtUsd;
+  const fmtChange = format ?? ((value: number) => fmtUsd(value, 0));
   const box = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const series = useRef<ISeriesApi<'Area'> | null>(null);
+  const lineSeries = useRef<Array<ISeriesApi<'Line'>>>([]);
   /**
    * The mouse gesture in progress. `measuring` is decided at the press, not
    * read per move: letting go of shift halfway through a measurement should
@@ -158,17 +187,7 @@ export function AreaChart({
 
   // Lightweight Charts wants seconds, strictly ascending and unique — the
   // history can carry two points inside one second after downsampling.
-  const data = (() => {
-    const out: Array<{ time: UTCTimestamp; value: number }> = [];
-    let last = -1;
-    for (let i = 0; i < values.length; i++) {
-      const t = Math.floor(times[i] / 1000);
-      const time = (t <= last ? last + 1 : t) as UTCTimestamp;
-      last = time;
-      out.push({ time, value: values[i] });
-    }
-    return out;
-  })();
+  const data = toData(values, times);
 
   /**
    * A cheap stand-in for the whole series, for the effect that pushes it in.
@@ -181,8 +200,9 @@ export function AreaChart({
    */
   const fingerprint = (() => {
     let sum = 0;
-    for (const v of values) sum += v;
-    return `${values.length}:${times[0] ?? 0}:${times[times.length - 1] ?? 0}:${sum}`;
+    const drawn = multi ? lines.flatMap((line) => line.values) : values;
+    for (const v of drawn) sum += v;
+    return `${drawn.length}:${times[0] ?? 0}:${times[times.length - 1] ?? 0}:${sum}`;
   })();
 
   // Build once; data and colours are pushed in by the effects below
@@ -233,6 +253,7 @@ export function AreaChart({
       c.remove();
       chart.current = null;
       series.current = null;
+      lineSeries.current = [];
     };
   }, []);
 
@@ -268,6 +289,7 @@ export function AreaChart({
       bottomColor: `color-mix(in srgb, ${line} 0%, transparent)`,
     });
     chart.current.applyOptions({ crosshair: { vertLine: { color: mut } } });
+    lineSeries.current.forEach((line, index) => line.applyOptions({ color: lineColor(index) }));
   }, [theme, tone]);
 
   /**
@@ -279,7 +301,21 @@ export function AreaChart({
    * and nothing to scroll, and the line fills the width the way it always did.
    */
   useEffect(() => {
-    series.current?.setData(data);
+    const c = chart.current;
+    for (const line of lineSeries.current) c?.removeSeries(line);
+    lineSeries.current = c
+      ? (lines ?? []).map((line, index) => {
+          const drawn = c.addSeries(LineSeries, {
+            lineWidth: 2,
+            color: lineColor(index),
+            priceLineVisible: false,
+            lastValueVisible: false,
+          });
+          drawn.setData(toData(line.values, times));
+          return drawn;
+        })
+      : [];
+    series.current?.setData(multi ? [] : data);
     const scale = chart.current?.timeScale();
     if (scale && data.length) {
       const window = WINDOW_MS[period];
@@ -337,6 +373,7 @@ export function AreaChart({
    * with `setSelection` and stays quiet, or the two would answer each other.
    */
   const share = (next: Selection | null): void => {
+    if (multi) return;
     setSelection(next);
     publish?.(id, {
       span: next ? { from: times[next.fromIndex], to: times[next.toIndex] } : null,
@@ -401,7 +438,7 @@ export function AreaChart({
     if (e.pointerType === 'touch') {
       touches.current.set(e.pointerId, e.clientX);
       const [a, b] = [...touches.current.values()];
-      if (touches.current.size === 2) {
+      if (touches.current.size === 2 && !multi) {
         // Or the chart would scroll out from under the fingers measuring it
         chart.current?.applyOptions({ handleScroll: false });
         spanBetween(a, b);
@@ -410,8 +447,9 @@ export function AreaChart({
     }
     const index = indexAt(e.clientX);
     if (index == null) return;
-    drag.current = { index, clientX: e.clientX, measuring: e.shiftKey, moved: false };
-    if (!e.shiftKey) return;
+    const measuring = e.shiftKey && !multi;
+    drag.current = { index, clientX: e.clientX, measuring, moved: false };
+    if (!measuring) return;
     // Both gestures are the same button held and moved, so the chart is told to
     // sit still for the length of a measurement — otherwise it scrolls out from
     // under the span being measured. The library reads this on every move, so
@@ -539,10 +577,12 @@ export function AreaChart({
           style={{
             position: 'absolute',
             top: 8,
-            ...(bare ? { right: 10 } : { left: 12 }),
+            ...(bare ? { right: 10 } : { left: 12, right: 12 }),
             fontSize: 'var(--fs-tag)',
             pointerEvents: 'none',
             display: 'flex',
+            flexWrap: 'wrap',
+            rowGap: 4,
             alignItems: 'baseline',
             gap: bare ? 7 : 9,
             ...(bare ? { background: 'var(--surf)', padding: '2px 6px', borderRadius: 'var(--r-sm)' } : null),
@@ -551,14 +591,29 @@ export function AreaChart({
           {range ? (
             <>
               <span style={{ fontWeight: 'var(--fw-medium)', color: range.good ? 'var(--up)' : 'var(--down)' }}>
-                {(range.up ? '+' : '−') + fmtUsd(Math.abs(range.chg), 0)} ({range.up ? '+' : ''}
+                {(range.up ? '+' : '−') + fmtChange(Math.abs(range.chg))} ({range.up ? '+' : ''}
                 {range.pct.toFixed(2)}%)
               </span>
               <span style={{ color: 'var(--mut)' }}>{range.label}</span>
             </>
+          ) : multi ? (
+            <>
+              {lines.map((line, index) => (
+                <span key={line.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 8, height: 2, borderRadius: 1, background: `var(--series-${index + 1}, var(--mut))` }} />
+                  <span style={{ color: 'var(--mut)' }}>{line.label}</span>
+                  {hovered !== null ? (
+                    <span style={{ fontWeight: 'var(--fw-medium)' }}>{fmtValue(line.values[hovered])}</span>
+                  ) : null}
+                </span>
+              ))}
+              {hovered !== null ? (
+                <span style={{ color: 'var(--mut)' }}>{dateLabel(times[hovered], period)}</span>
+              ) : null}
+            </>
           ) : hovered !== null ? (
             <>
-              <span style={{ fontWeight: 'var(--fw-medium)' }}>{fmtUsd(values[hovered])}</span>
+              <span style={{ fontWeight: 'var(--fw-medium)' }}>{fmtValue(values[hovered])}</span>
               <span style={{ color: 'var(--mut)' }}>{dateLabel(times[hovered], period)}</span>
             </>
           ) : null}
@@ -572,7 +627,7 @@ export function AreaChart({
           chart inside somebody else's box, and in the assistant's it landed
           under that box's own reading in the same corner — two right-aligned
           mono labels stacked where the design has one. */}
-      {values.length && !selection && hovered === null && !bare && framed ? (
+      {values.length && !multi && !selection && hovered === null && !bare && framed ? (
         <div
           className="mono mouse-only"
           style={{
