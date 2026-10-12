@@ -63,7 +63,7 @@ answer in English, no emoji, no quoting its own prompt.
 
 ```bash
 uv run --env-file .env python -m evals.run                      # one pass, a scorecard
-uv run --env-file .env python -m evals.run --repeat 3 --gate    # what CI runs
+uv run --env-file .env python -m evals.run --repeat 3 --gate    # what the workflow runs
 uv run --env-file .env python -m evals.run --model openai:...   # another model, same set
 ```
 
@@ -74,8 +74,19 @@ pass rate, p95 latency and cost per turn on the run.
 `--gate` fails on a guardrail case that broke even once, a case the approved
 baseline passed that now fails in most passes, and a turn that never finished.
 `--approve` writes `evals/baseline.json` from a run; it goes in through review
-like code. CI runs the set three times on every PR that touches the agent,
-once `AGENT_EVAL_MODEL_API_KEY` is in the repository's secrets.
+like code.
+
+Both runs cost money, so neither starts on a push. Start one by hand on the
+branch to measure, from Actions -> `agent evals` (or `agent judges`) -> Run
+workflow, or:
+
+```bash
+gh workflow run agent-evals.yml --ref my-branch           # three passes and the judges, about $0.20
+gh workflow run agent-judges.yml --ref my-branch          # calibration, about $0.02
+```
+
+Run the golden set before merging a change to the prompts, the graph or the
+model, and the calibration after a change to the judges or their labels.
 
 Three things code cannot read are read by a cheap model of another family,
 `anthropic/claude-haiku-5.5` unless `--judge` names another: whether every
