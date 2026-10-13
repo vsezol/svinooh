@@ -37,6 +37,7 @@ describe('WhatAThresholdAccepts', () => {
 
 const lp = (over: Partial<PositionDto>): PositionDto => ({
   id: 'p-1',
+  key: 'p-1',
   symbol: 'Uniswap V3',
   name: 'Liquidity Pool',
   note: '#6051653',

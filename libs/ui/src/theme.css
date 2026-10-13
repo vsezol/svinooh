@@ -18,6 +18,10 @@ body {
   --acc-ink: #07130c;
   --up: #2bd576;
   --down: #f6465d;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #9085e9;
+  --series-4: #d55181;
   /* The faces themselves are self-hosted by the consuming app (next/font in
      the web app), which hands their names over in these variables */
   --mono: var(--font-plex-mono), ui-monospace, 'SF Mono', Menlo, monospace;
@@ -38,6 +42,10 @@ body[data-theme='light'] {
   --acc-text: color-mix(in srgb, var(--acc) 62%, #063018);
   --up: #0e9f54;
   --down: #d9304e;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #4a3aa7;
+  --series-4: #d55181;
   /* A white page needs slightly darker dots to read at all */
   --dots: color-mix(in srgb, var(--text) 9%, transparent);
 }

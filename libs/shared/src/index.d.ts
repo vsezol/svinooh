@@ -45,6 +45,7 @@ export interface PositionTokenDto {
 
 export interface PositionDto {
   id: string;
+  key: string;
   /** Protocol or ticker: "BTC", "USDT", "Pendle V2", "Hyperliquid" */
   symbol: string;
   /** Position kind: "Lending", "Liquidity Pool", "Deposit", "Staked" */
@@ -322,6 +323,21 @@ export interface HistoryPointDto {
 export interface HistoryDto {
   range: HistoryRange;
   points: HistoryPointDto[];
+}
+
+export interface PositionHistoryLegDto {
+  symbol: string;
+  role: PositionTokenRole;
+  amounts: Array<number | null>;
+}
+
+export interface PositionHistoryDto {
+  range: HistoryRange;
+  times: string[];
+  usd: number[];
+  amounts: Array<number | null>;
+  legs: PositionHistoryLegDto[];
+  prices: Record<string, Array<number | null>>;
 }
 
 /**

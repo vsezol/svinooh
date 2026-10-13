@@ -11,7 +11,9 @@ import type { ScanPosition, WalletPositionState } from '@svinooh/shared';
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f]/g;
 
-export function positionKey(position: ScanPosition): string {
+export type PositionIdentity = Pick<ScanPosition, 'platform' | 'network' | 'symbol' | 'name' | 'ref' | 'pool' | 'band'>;
+
+export function positionKey(position: PositionIdentity): string {
   return [
     position.platform ?? '?',
     position.network ?? '',
@@ -23,7 +25,7 @@ export function positionKey(position: ScanPosition): string {
     .join(':');
 }
 
-function identityOf(position: ScanPosition): string[] {
+function identityOf(position: PositionIdentity): string[] {
   const ref = position.ref?.trim();
   if (ref) return ['ref', ref];
   const pool = position.pool?.trim();

@@ -1034,6 +1034,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
                 {wallets.map((w) => (
                   <WalletRow
                     key={w.id}
+                    slug={slug}
                     wallet={w}
                     actions={walletActions}
                     total={data.totalUsd}

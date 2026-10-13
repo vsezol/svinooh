@@ -323,6 +323,10 @@ button.ui-tag[data-variant='soft']:not(:disabled):hover {
   background: var(--line);
 }
 
+.ui-icon-btn[aria-pressed='true'] {
+  color: var(--acc-text);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    Spinner
    ═══════════════════════════════════════════════════════════════════════ */
