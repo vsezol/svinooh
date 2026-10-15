@@ -449,41 +449,42 @@ model WalletAlerts {
 }
 
 model Position {
-  id         String  @id @default(cuid())
-  walletId   String
-  wallet     Wallet  @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  id            String  @id @default(cuid())
+  walletId      String
+  wallet        Wallet  @relation(fields: [walletId], references: [id], onDelete: Cascade)
   // Protocol or ticker: "Pendle V2", "USDT"
-  symbol     String
+  symbol        String
   // Position kind: "Lending", "Liquidity Pool", "Deposit"
-  name       String?
+  name          String?
   // Extra detail: pool/market name, the protocol's own description
-  note       String?
-  ref        String?
-  pool       String?
+  note          String?
+  ref           String?
+  pool          String?
   /// The network this position sits on, as the source names it: eth, arb, base,
   /// op, sol, tron, btc. Distinct from Wallet.chain, which is the family — one
   /// EVM wallet holds positions on a dozen networks and "EVM" cannot say which.
-  network    String?
-  amount     Float?
-  priceUsd   Float?
-  valueUsd   Float
-  platform   String?
-  category   String  @default("token") // token | defi | staked | unpriced
+  network       String?
+  amount        Float?
+  priceUsd      Float?
+  valueUsd      Float
+  platform      String?
+  category      String  @default("token") // token | defi | staked | unpriced
   // Yield as a fraction (0.42 = 42% APY), when the source reports one
-  apy        Float?
+  apy           Float?
   // Health factor of a lending position (below 1 — liquidation)
-  healthRate Float?
+  healthRate    Float?
   // What the debt on this position costs, as a positive fraction (0.06 = 6% APY)
-  borrowApy  Float?
+  borrowApy     Float?
   // Concentrated liquidity only: "in" | "out" of the position's price range
-  range      String?
+  range         String?
   /// The band that `range` is a verdict on — a PositionBand: lower, upper and
   /// current price, the pair and which way round the prices read. One JSON
   /// value rather than five columns, because nothing queries by it: it is drawn
   /// and it is compared against itself.
-  band       Json?
+  band          Json?
   // The underlying legs — PositionTokenDto[]: what's supplied, accrued, borrowed
-  tokens     Json?
+  tokens        Json?
+  feesEarnedUsd Float?
 }
 
 /// The history of what an address is worth — total, what could be collected, and

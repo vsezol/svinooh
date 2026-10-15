@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { ScanPosition } from '@svinooh/shared';
-import { gmPool, type GmxNetwork } from '../src/scanners/defi/gmx';
+import { gmPool, withEarnings, type GmxNetwork } from '../src/scanners/defi/gmx';
 
 const WETH = '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1';
 const USDC = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831';
@@ -75,4 +75,12 @@ test('a two-token market is split the way its pool is', () => {
 
 test('a token that is not a GMX market stays a token', () => {
   assert.equal(gmPool(held('0x0000000000000000000000000000000000000001', 10), gmx), null);
+});
+
+test('what GMX says the pool has earned rides on the position, not as a leg', () => {
+  const pool = gmPool(held(ETH_ETH, 9500), gmx)!;
+  const earned = withEarnings(pool, new Map([[ETH_ETH.toLowerCase(), 412.5]]));
+  assert.equal(earned.feesEarnedUsd, 412.5);
+  assert.deepEqual(earned.tokens, pool.tokens);
+  assert.equal(withEarnings(pool, new Map()).feesEarnedUsd, undefined);
 });

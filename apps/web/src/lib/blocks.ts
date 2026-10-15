@@ -67,6 +67,7 @@ export interface Block {
   healthRate: number | null;
   /** What the debt costs overall, where only a position-wide rate is known */
   borrowApy: number | null;
+  feesEarned: number | null;
   /** Concentrated liquidity only: is the price still inside the range */
   range: PositionRange | null;
   /** Where inside that range the price is — drawn as a bar under the header */
@@ -182,6 +183,7 @@ function foldDuplicates(blocks: RawBlock[]): RawBlock[] {
       continue;
     }
     if (existing.key !== block.key) existing.key = null;
+    if (block.feesEarned !== null) existing.feesEarned = (existing.feesEarned ?? 0) + block.feesEarned;
     existing.count += block.count;
     existing.value += block.value;
     existing.rows = existing.rows.concat(block.rows);
@@ -336,6 +338,7 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
       apy: p.apy ?? null,
       healthRate: p.healthRate ?? null,
       borrowApy: p.borrowApy ?? null,
+      feesEarned: p.feesEarnedUsd ?? null,
       range: p.range ?? null,
       band: p.band ?? null,
       count: 1,
@@ -359,6 +362,7 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
       apy: null,
       healthRate: null,
       borrowApy: null,
+      feesEarned: null,
       range: null,
       band: null,
       count: 1,

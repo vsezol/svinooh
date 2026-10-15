@@ -75,5 +75,5 @@ export async function scanEvm(
     logger.log(`${address}: first reading via ${answered.label}`);
     onFirstReading?.(answered.id);
   }
-  return { ...result, positions: enrich(await withGmxPools(result.positions), facts) };
+  return { ...result, positions: enrich(await withGmxPools(result.positions, address), facts) };
 }
