@@ -93,6 +93,7 @@ export interface PositionDto {
   band?: PositionBand | null;
   /** Underlying legs: what's supplied, what's accrued, what's borrowed */
   tokens?: PositionTokenDto[] | null;
+  feesEarnedUsd?: number | null;
 }
 
 /** What a card asks the wallet to do with a pool. */
@@ -711,6 +712,7 @@ export interface ScanPosition {
   /** Which loan this is, when a lending market answered for it */
   loan?: PositionLoan | null;
   tokens?: ScanPositionToken[] | null;
+  feesEarnedUsd?: number | null;
 }
 
 export interface ScanResult {

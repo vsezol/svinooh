@@ -170,6 +170,7 @@ export class SyncService {
           // Prisma types JSON columns structurally; our leg array has to be
           // handed over as an opaque JSON value
           tokens: p.tokens?.length ? (p.tokens as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+          feesEarnedUsd: p.feesEarnedUsd ?? null,
         })),
       }),
       this.prisma.wallet.update({

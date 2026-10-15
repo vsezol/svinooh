@@ -1380,6 +1380,7 @@ export class PortfolioService {
         // Written by the scan pipeline as PositionTokenDto[]; Prisma types it as
         // opaque JSON, so this is the one place the shape is asserted
         tokens: (p.tokens as PositionTokenDto[] | null) ?? null,
+        feesEarnedUsd: p.feesEarnedUsd,
       }));
 
     return {

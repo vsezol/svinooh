@@ -330,6 +330,13 @@ export function WalletRow({
                     {fmtApy(b.apy)}
                   </span>
                 ) : null}
+                {b.feesEarned != null && b.feesEarned >= 0.01 ? (
+                  <Tooltip text="Fees this pool has earned you in GMX, already counted in its value">
+                    <span className="mono" style={{ ...NOTE, color: 'var(--up)' }}>
+                      +{fmtUsd(b.feesEarned)}
+                    </span>
+                  </Tooltip>
+                ) : null}
                 {b.healthRate != null ? (
                   <Tooltip text="Health factor — below 1 the position is liquidated">
                     <span

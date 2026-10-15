@@ -8,6 +8,11 @@ const API: Record<string, string> = {
   avax: 'https://avalanche-api.gmxinfra.io',
 };
 
+const EARNINGS_API: Record<string, string> = {
+  arb: 'https://arbitrum.gmxapi.io',
+  avax: 'https://avalanche.gmxapi.io',
+};
+
 const MARKET_TOKEN_SYMBOL = /^GM\b/;
 
 export interface GmxMarket {
@@ -37,20 +42,13 @@ export interface GmxNetwork {
   tickers: GmxTicker[];
 }
 
-export async function withGmxPools(positions: ScanPosition[]): Promise<ScanPosition[]> {
-  const networks = [...new Set(positions.filter(isMarketToken).map((position) => position.network!))];
-  if (!networks.length) return positions;
-  try {
-    const read = new Map(
-      await Promise.all(networks.map(async (network) => [network, await gmxNetwork(network)] as const)),
-    );
-    return positions.map(
-      (position) => (isMarketToken(position) && gmPool(position, read.get(position.network!)!)) || position,
-    );
-  } catch (error) {
-    logger.warn(`GMX markets could not be read: ${(error as Error).message}`);
-    return positions;
-  }
+export async function withGmxPools(positions: ScanPosition[], address: string): Promise<ScanPosition[]> {
+  return withFeesEarned(await asPools(positions), address);
+}
+
+export function withEarnings(position: ScanPosition, earnings: Map<string, number>): ScanPosition {
+  const fees = earnings.get(marketOf(position) ?? '');
+  return fees === undefined ? position : { ...position, feesEarnedUsd: fees };
 }
 
 export function gmPool(position: ScanPosition, gmx: GmxNetwork): ScanPosition | null {
@@ -88,6 +86,61 @@ export function gmPool(position: ScanPosition, gmx: GmxNetwork): ScanPosition | 
     category: 'defi',
     tokens: sameToken ? [leg(long, value)] : [leg(long, value * longShare), leg(short, value * (1 - longShare))],
   };
+}
+
+async function asPools(positions: ScanPosition[]): Promise<ScanPosition[]> {
+  const networks = [...new Set(positions.filter(isMarketToken).map((position) => position.network!))];
+  if (!networks.length) return positions;
+  try {
+    const read = new Map(
+      await Promise.all(networks.map(async (network) => [network, await gmxNetwork(network)] as const)),
+    );
+    return positions.map(
+      (position) => (isMarketToken(position) && gmPool(position, read.get(position.network!)!)) || position,
+    );
+  } catch (error) {
+    logger.warn(`GMX markets could not be read: ${(error as Error).message}`);
+    return positions;
+  }
+}
+
+async function withFeesEarned(positions: ScanPosition[], address: string): Promise<ScanPosition[]> {
+  const networks = [...new Set(positions.filter(isGmxPool).map((position) => position.network!))];
+  if (!networks.length) return positions;
+  try {
+    const earned = new Map(
+      await Promise.all(networks.map(async (network) => [network, await earningsOn(network, address)] as const)),
+    );
+    return positions.map((position) =>
+      isGmxPool(position) ? withEarnings(position, earned.get(position.network!)!) : position,
+    );
+  } catch (error) {
+    logger.warn(`GMX earnings of ${address} could not be read: ${(error as Error).message}`);
+    return positions;
+  }
+}
+
+function isGmxPool(position: ScanPosition): boolean {
+  return (
+    position.category !== 'token' &&
+    !!position.network &&
+    position.network in EARNINGS_API &&
+    /gmx/i.test(`${position.platform} ${position.symbol}`) &&
+    marketOf(position) !== null
+  );
+}
+
+function marketOf(position: ScanPosition): string | null {
+  return position.pool?.split(':')[0].toLowerCase() || null;
+}
+
+async function earningsOn(network: string, address: string): Promise<Map<string, number>> {
+  const response = await fetch(`${EARNINGS_API[network]}/v1/yield/gm-user-earnings?account=${address}`, {
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error(`${network} earnings answered ${response.status}`);
+  const body = (await response.json()) as { pools: Array<{ marketToken: string; lifetimeFeeUsd: string }> };
+  return new Map(body.pools.map((pool) => [pool.marketToken.toLowerCase(), Number(pool.lifetimeFeeUsd) / 1e30]));
 }
 
 function isMarketToken(position: ScanPosition): boolean {
