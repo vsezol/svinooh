@@ -337,7 +337,6 @@ export interface PositionHistoryDto {
   usd: number[];
   amounts: Array<number | null>;
   legs: PositionHistoryLegDto[];
-  prices: Record<string, Array<number | null>>;
 }
 
 /**

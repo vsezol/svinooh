@@ -9,7 +9,6 @@ const history = (over: Partial<PositionHistoryDto>): PositionHistoryDto => ({
   usd: [0, 0, 0],
   amounts: [null, null, null],
   legs: [],
-  prices: {},
   ...over,
 });
 
@@ -18,11 +17,10 @@ test('a one-token position is drawn in that token, not in dollars', () => {
     history({
       usd: [8419, 8300, 8600],
       legs: [{ symbol: 'stETH', role: 'supply', amounts: [3.39, 3.4, 3.41] }],
-      prices: { stETH: [2483, 2441, 2522] },
     }),
-    { pair: null, title: 'Fluid Lite' },
+    { pool: false, title: 'Fluid Lite' },
   );
-  assert.deepEqual(lines, [{ label: 'stETH', unit: 'stETH', owed: false, values: [3.39, 3.4, 3.41] }]);
+  assert.deepEqual(lines, [{ label: 'stETH', unit: 'stETH', role: 'supply', values: [3.39, 3.4, 3.41] }]);
 });
 
 test('a loan is a line per leg, and a repaid debt falls to zero', () => {
@@ -33,7 +31,7 @@ test('a loan is a line per leg, and a repaid debt falls to zero', () => {
         { symbol: 'USDC', role: 'borrow', amounts: [1000, 1001, null] },
       ],
     }),
-    { pair: null, title: 'Aave V3' },
+    { pool: false, title: 'Aave V3' },
   );
   assert.deepEqual(
     lines.map((line) => [line.label, line.values]),
@@ -44,34 +42,27 @@ test('a loan is a line per leg, and a repaid debt falls to zero', () => {
   );
 });
 
-test('a pool is worth so much of each token, and collecting fees does not make it fall', () => {
+test('a pool is the amount of each of its tokens, its fees after them', () => {
   const { lines } = positionLines(
     history({
-      usd: [0, 0, 0],
       legs: [
-        { symbol: 'SOL', role: 'supply', amounts: [10, 10, 10] },
-        { symbol: 'USDC', role: 'supply', amounts: [1000, 1000, 1000] },
-        { symbol: 'USDC', role: 'reward', amounts: [0, 100, null] },
+        { symbol: 'USDC', role: 'supply', amounts: [300, null, null] },
+        { symbol: 'WETH', role: 'reward', amounts: [0.01, 0.015, 0.017] },
+        { symbol: 'USDC', role: 'reward', amounts: [30, 31, 32.87] },
+        { symbol: 'WETH', role: 'supply', amounts: [3.9, 4.04, 4.04] },
       ],
-      prices: { SOL: [100, 100, 100], USDC: [1, 1, 1] },
     }),
-    { pair: 'SOL/USDC', title: 'Meteora' },
+    { pool: true, title: 'Uniswap V3' },
   );
   assert.deepEqual(
     lines.map((line) => [line.label, line.values]),
     [
-      ['in SOL', [20, 21, 21]],
-      ['in USDC', [2000, 2100, 2100]],
+      ['USDC', [300, 0, 0]],
+      ['WETH', [3.9, 4.04, 4.04]],
+      ['WETH fees', [0.01, 0.015, 0.017]],
+      ['USDC fees', [30, 31, 32.87]],
     ],
   );
-});
-
-test('a pool without prices for its pair falls back to its legs', () => {
-  const { lines } = positionLines(
-    history({ legs: [{ symbol: 'GM', role: 'supply', amounts: [5, 5, 6] }] }),
-    { pair: 'ETH/USDC', title: 'GMX' },
-  );
-  assert.deepEqual(lines.map((line) => line.label), ['GM']);
 });
 
 test('all lines at once are change from where each one starts', () => {

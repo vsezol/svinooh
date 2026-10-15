@@ -15,11 +15,11 @@ interface Props {
   slug: string;
   walletId: string;
   positionKey: string;
-  pair: string | null;
+  pool: boolean;
   title: string;
 }
 
-export function PositionChart({ slug, walletId, positionKey, pair, title }: Props) {
+export function PositionChart({ slug, walletId, positionKey, pool, title }: Props) {
   const [period, setPeriod] = useState<HistoryRange>('7d');
   const [history, setHistory] = useState<PositionHistoryDto | null>(null);
   const [failed, setFailed] = useState(false);
@@ -48,9 +48,11 @@ export function PositionChart({ slug, walletId, positionKey, pair, title }: Prop
     };
   }, [slug, walletId, positionKey, period]);
 
-  const drawn = useMemo(() => (history ? positionLines(history, { pair, title }) : null), [history, pair, title]);
+  const drawn = useMemo(() => (history ? positionLines(history, { pool, title }) : null), [history, pool, title]);
   const lines = drawn?.lines ?? [];
-  const chosen = lines.length === 1 ? lines[0] : lines.find((line) => line.label === picked) ?? null;
+  const together = lines.filter((line) => line.role !== 'reward');
+  const options = [...(together.length > 1 ? [ALL_TOKENS] : []), ...lines.map((line) => line.label)];
+  const chosen = lines.find((line) => line.label === picked) ?? (together.length > 1 ? null : (lines[0] ?? null));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)', padding: 'var(--sp-4)' }}>
@@ -58,7 +60,7 @@ export function PositionChart({ slug, walletId, positionKey, pair, title }: Prop
         {lines.length > 1 ? (
           <Segmented
             label="Token"
-            items={[ALL_TOKENS, ...lines.map((line) => line.label)].map((key) => ({ key, label: key.toUpperCase() }))}
+            items={options.map((key) => ({ key, label: key.toUpperCase() }))}
             value={chosen ? chosen.label : ALL_TOKENS}
             onChange={setPicked}
           />
@@ -83,13 +85,13 @@ export function PositionChart({ slug, walletId, positionKey, pair, title }: Prop
           period={history?.range ?? period}
           height={HEIGHT}
           framed={false}
-          tone={chosen.owed ? 'muted' : 'accent'}
+          tone={chosen.role === 'borrow' ? 'muted' : 'accent'}
           format={fmtUnits(chosen.unit)}
         />
       ) : (
         <AreaChart
           values={[]}
-          lines={lines.map((line) => ({ label: line.label, values: asChange(line.values) }))}
+          lines={together.map((line) => ({ label: line.label, values: asChange(line.values) }))}
           times={drawn.times}
           period={history?.range ?? period}
           height={HEIGHT}

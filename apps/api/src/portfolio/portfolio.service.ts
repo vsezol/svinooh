@@ -1215,10 +1215,9 @@ export class PortfolioService {
         valueUsd: number;
         amount: number | null;
         tokens: PositionTokenDto[] | null;
-        band: PositionBand | null;
       }>
     >(Prisma.sql`
-      SELECT "createdAt", "valueUsd", "amount", "tokens", "band"
+      SELECT "createdAt", "valueUsd", "amount", "tokens"
       FROM "PositionSnapshot"
       WHERE "id" IN (
         SELECT DISTINCT ON (slot) "id"
@@ -1239,7 +1238,6 @@ export class PortfolioService {
       usd: row.valueUsd,
       amount: row.amount,
       tokens: row.tokens,
-      band: row.band,
     }));
     const cap = windowMs === null ? 220 : POINTS_PER_WINDOW;
     return { range, ...positionSeries(downsample(toTimeGrid(readings, stepMs), cap)) };
