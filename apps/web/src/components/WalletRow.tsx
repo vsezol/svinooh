@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import type { PositionTokenRole, WalletDto } from '@svinooh/shared';
-import { buildBlocks, withoutDust, type BlockSection } from '../lib/blocks';
+import { buildBlocks, isPoolKind, withoutDust, type BlockSection } from '../lib/blocks';
 import { chainMeta, fmtAmount, fmtPrice, fmtUsd, shortAddress, walletName } from '../lib/format';
 import { rebalanceable, rebalanceQuestion } from '../lib/rebalance';
 import { Button, Card, Chevron, IconButton, Spinner, Tag, Tooltip } from '../ui';
@@ -396,7 +396,7 @@ export function WalletRow({
                   slug={slug}
                   walletId={wallet.id}
                   positionKey={b.key}
-                  pair={b.pair}
+                  pool={isPoolKind(b.typeLabel)}
                   title={b.proto}
                 />
               ) : (
