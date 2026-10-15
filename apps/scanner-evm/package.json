@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
-    "test": "tsx --test test/trust.test.ts test/positions.test.ts",
+    "test": "tsx --test test/trust.test.ts test/positions.test.ts test/gmx.test.ts",
     "start": "node dist/main.js",
     "test:strategies": "tsx --test test/strategies.test.ts",
     "diff": "tsx test/diff.ts",
