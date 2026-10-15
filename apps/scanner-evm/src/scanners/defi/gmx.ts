@@ -15,6 +15,27 @@ const EARNINGS_API: Record<string, string> = {
 
 const MARKET_TOKEN_SYMBOL = /^GM\b/;
 
+const BRIDGED_MARKETS: Record<string, Record<string, string>> = {
+  eth: {
+    '0x5ece4d3f43d3bd8cbffc1d2ce851e7605d403d3c': '0x7c11f78ce78768518d743e81fdfa2f860c6b9a77',
+    '0x91dd54aa8ba9dfde8b956cfb709a7c418f870e21': '0x47c031236e19d024b42f8ae6780e44a573170703',
+    '0xfcff5015627b8ce9ceaa7f5b38a6679f65fe39a7': '0x70d95587d40a2caf56bd97485ab3eec10bee6336',
+    '0x0b335e18ab68ccd2e8946a6e785d8be65f413103': '0x450bb6774dd8a756274e0ab4107953259d2ac541',
+  },
+  bsc: {
+    '0x2e6bf9bdd2a7872bdae170c13f34d64692f842c1': '0x7c11f78ce78768518d743e81fdfa2f860c6b9a77',
+    '0x91dd54aa8ba9dfde8b956cfb709a7c418f870e21': '0x47c031236e19d024b42f8ae6780e44a573170703',
+    '0xfcff5015627b8ce9ceaa7f5b38a6679f65fe39a7': '0x70d95587d40a2caf56bd97485ab3eec10bee6336',
+    '0x5ece4d3f43d3bd8cbffc1d2ce851e7605d403d3c': '0x450bb6774dd8a756274e0ab4107953259d2ac541',
+  },
+  base: {
+    '0x5e922d32c7278f6c5621a016c03055c54c97d27b': '0x7c11f78ce78768518d743e81fdfa2f860c6b9a77',
+    '0x91dd54aa8ba9dfde8b956cfb709a7c418f870e21': '0x47c031236e19d024b42f8ae6780e44a573170703',
+    '0xfcff5015627b8ce9ceaa7f5b38a6679f65fe39a7': '0x70d95587d40a2caf56bd97485ab3eec10bee6336',
+    '0x47dff0cbe239c02479c5944b9f4f3ade8a212457': '0x450bb6774dd8a756274e0ab4107953259d2ac541',
+  },
+};
+
 export interface GmxMarket {
   name: string;
   marketToken: string;
@@ -52,7 +73,7 @@ export function withEarnings(position: ScanPosition, earnings: Map<string, numbe
 }
 
 export function gmPool(position: ScanPosition, gmx: GmxNetwork): ScanPosition | null {
-  const address = position.ref?.toLowerCase();
+  const address = marketAddress(position);
   const market = gmx.markets.find((one) => one.marketToken.toLowerCase() === address);
   if (!market) return null;
   const long = tokenIn(gmx, market.longToken);
@@ -89,14 +110,14 @@ export function gmPool(position: ScanPosition, gmx: GmxNetwork): ScanPosition | 
 }
 
 async function asPools(positions: ScanPosition[]): Promise<ScanPosition[]> {
-  const networks = [...new Set(positions.filter(isMarketToken).map((position) => position.network!))];
+  const networks = [...new Set(positions.filter(isMarketToken).map(marketNetwork))];
   if (!networks.length) return positions;
   try {
     const read = new Map(
       await Promise.all(networks.map(async (network) => [network, await gmxNetwork(network)] as const)),
     );
     return positions.map(
-      (position) => (isMarketToken(position) && gmPool(position, read.get(position.network!)!)) || position,
+      (position) => (isMarketToken(position) && gmPool(position, read.get(marketNetwork(position))!)) || position,
     );
   } catch (error) {
     logger.warn(`GMX markets could not be read: ${(error as Error).message}`);
@@ -144,13 +165,18 @@ async function earningsOn(network: string, address: string): Promise<Map<string,
 }
 
 function isMarketToken(position: ScanPosition): boolean {
-  return (
-    position.category === 'token' &&
-    !!position.ref &&
-    !!position.network &&
-    position.network in API &&
-    MARKET_TOKEN_SYMBOL.test(position.symbol)
-  );
+  return position.category === 'token' && MARKET_TOKEN_SYMBOL.test(position.symbol) && !!marketAddress(position);
+}
+
+function marketAddress(position: ScanPosition): string | null {
+  const ref = position.ref?.toLowerCase();
+  if (!ref || !position.network) return null;
+  if (position.network in API) return ref;
+  return BRIDGED_MARKETS[position.network]?.[ref] ?? null;
+}
+
+function marketNetwork(position: ScanPosition): string {
+  return position.network! in API ? position.network! : 'arb';
 }
 
 function tokenIn(gmx: GmxNetwork, address: string): (GmxToken & { price: number }) | null {
