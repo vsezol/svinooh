@@ -84,3 +84,21 @@ test('what GMX says the pool has earned rides on the position, not as a leg', ()
   assert.deepEqual(earned.tokens, pool.tokens);
   assert.equal(withEarnings(pool, new Map()).feesEarnedUsd, undefined);
 });
+
+test('a GM token bridged to another network is the Arbitrum market it stands for', () => {
+  const onBase = { ...held('0x47dFf0cbE239c02479C5944b9F4F3Ade8a212457', 9834.38), network: 'base' };
+  const pool = gmPool(onBase, gmx)!;
+  assert.equal(pool.note, 'ETH/USD [ETH-ETH]');
+  assert.equal(pool.network, 'base');
+  assert.equal(pool.pool, ETH_ETH.toLowerCase());
+  assert.deepEqual(
+    pool.tokens!.map((leg) => leg.symbol),
+    ['ETH'],
+  );
+});
+
+test('one bridged address is a different market on each network', () => {
+  const shared = '0x5Ece4d3F43D3BD8cBffc1d2CE851E7605D403D3C';
+  assert.equal(gmPool({ ...held(shared, 100), network: 'bsc' }, gmx)!.note, 'ETH/USD [ETH-ETH]');
+  assert.equal(gmPool({ ...held(shared, 100), network: 'eth' }, gmx), null);
+});
