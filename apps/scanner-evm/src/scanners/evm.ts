@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { enrich, NO_FACTS, option } from '@svinooh/common';
 import type { ScanResult } from '@svinooh/shared';
 import { evmFacts } from './defi';
+import { withGmxPools } from './defi/gmx';
 import { EVM_SOURCES, type EvmSource } from './sources';
 
 const logger = new Logger('EvmScanner');
@@ -74,5 +75,5 @@ export async function scanEvm(
     logger.log(`${address}: first reading via ${answered.label}`);
     onFirstReading?.(answered.id);
   }
-  return { ...result, positions: enrich(result.positions, facts) };
+  return { ...result, positions: enrich(await withGmxPools(result.positions), facts) };
 }
