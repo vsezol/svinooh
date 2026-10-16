@@ -3,7 +3,9 @@ from app.agent.tools import (
     MAX_MATCHES,
     NOTHING_CAME_BACK,
     asking_tools,
+    calculated,
     find_positions,
+    math_tools,
     portfolio_tools,
     run_tools,
     summarize_history,
@@ -164,9 +166,9 @@ class TestToolWiring:
         assert source.calls == [("my-pf", "7d", "Bearer T")]
         assert "$84,657.50" in out
 
-    async def test_both_tools_are_offered_with_instructions_for_the_model(self):
+    async def test_every_tool_is_offered_with_instructions_for_the_model(self):
         tools = portfolio_tools(FakeSource(), "p", "t", fx.as_portfolio())
-        assert [t.name for t in tools] == ["history_summary", "position_details"]
+        assert [t.name for t in tools] == ["history_summary", "position_details", "asset_breakdown"]
         assert all(t.description for t in tools)
 
     async def test_a_failing_tool_returns_its_error_to_the_model(self):
@@ -292,3 +294,60 @@ class TestNoEmojiSurvivesTheDoor:
         told = " ".join(asking_tools([])[0].description.split())
         assert "in the user's own language" in told
         assert '"pick one below" says nothing' in told, "no chatter above the buttons"
+
+
+def breakdown(*positions: dict) -> str:
+    portfolio = fx.as_portfolio(fx.portfolio([fx.wallet(fx.EVM_ADDRESS, list(positions))]))
+    tools = portfolio_tools(None, portfolio.slug, None, portfolio)
+    return next(t for t in tools if t.name == "asset_breakdown").invoke({})
+
+
+class TestAssetBreakdown:
+    def test_the_stablecoin_half_of_a_pool_counts_as_stablecoins(self):
+        out = breakdown(fx.UNISWAP)
+        assert "Stablecoins: $1,676.00 held, $0.00 owed, $1,676.00 net — 46.56%" in out
+        assert "Volatile assets: $1,924.00 held" in out
+
+    def test_a_stablecoin_debt_is_subtracted_where_it_belongs(self):
+        out = breakdown(fx.AAVE)
+        assert "Stablecoins: $0.00 held, $5,200.00 owed, -$5,200.00 net" in out
+        assert "Volatile assets: $12,500.00 held, $0.00 owed, $12,500.00 net" in out
+        assert "Counted total $7,300.00" in out
+
+    def test_a_vault_named_by_its_stablecoin_counts_without_legs(self):
+        vault = fx.position("sUSDe", 1_000.0, platform="ethena", category="defi")
+        assert "Stablecoins: $1,000.00 held" in breakdown(vault, fx.ETH)
+
+    def test_a_position_with_unknown_contents_is_in_neither_figure(self):
+        pool = fx.position(
+            "UNI-V3",
+            500.0,
+            name="Uniswap V3 (Liquidity Pool)",
+            platform="uniswap3",
+            category="defi",
+        )
+        out = breakdown(pool, fx.ETH)
+        assert "Volatile assets: $16,683.65 held" in out
+        assert "in neither figure above: $500.00" in out
+        assert "UNI-V3 (Uniswap V3 (Liquidity Pool)) on eth $500.00" in out
+
+    def test_the_token_list_is_net_of_debt(self):
+        out = breakdown(fx.AAVE, fx.UNISWAP)
+        assert "USDC -$3,524.00" in out
+
+
+class TestCalculate:
+    def test_answers_exactly(self):
+        assert calculated("0.1 + 0.2") == "0.1 + 0.2 = 0.3 (rounded to cents: 0.30)"
+
+    def test_a_share_is_rounded_for_reading_and_kept_exact(self):
+        out = calculated("21327.72 / 85109.6 * 100")
+        assert "= 25.0591237651" in out and "rounded to cents: 25.06" in out
+
+    def test_says_it_could_not_rather_than_guessing(self):
+        assert calculated("1 / 0").startswith("Could not calculate")
+        assert calculated("open('x')").startswith("Could not calculate")
+
+    def test_is_offered_as_a_tool(self):
+        assert [t.name for t in math_tools()] == ["calculate"]
+        assert tool_phrase("calculate", {"expression": "1+1"}) == "Calculating"

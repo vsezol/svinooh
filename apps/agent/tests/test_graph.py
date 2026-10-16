@@ -353,6 +353,7 @@ class TestWhereToPutMoney:
         bot, _, model = wire(intent="earn", catalog=Catalog(), model=Model(tool_calls=[EARN_CALL]))
         await run(bot)
         assert model.tools_bound == [
+            "calculate",
             "earn_options",
             "propose_deposit",
             "propose_withdraw",

@@ -8,6 +8,7 @@ from langchain_core.tools import tool
 from ..adapters.earn import YieldCatalog
 from ..adapters.portfolio import DataSource
 from ..domain import lpdown as down
+from ..domain.arithmetic import evaluate
 from ..domain.asking import MAX_ANSWERS, MIN_ANSWERS, Choice
 from ..domain.earn import (
     Card,
@@ -22,9 +23,9 @@ from ..domain.earn import (
     YieldPool,
 )
 from ..domain.house import plain
-from ..domain.portfolio import History, Period, Portfolio, total_of
+from ..domain.portfolio import Exposure, History, Period, Portfolio, Side, exposure_of, total_of
 from ..observability import metrics
-from .context import position_line, short_address, usd
+from .context import named_position, position_line, short_address, usd
 from .steps import said, step, tool_label
 
 logger = logging.getLogger("svinooh-ai")
@@ -38,6 +39,8 @@ NOTHING_CAME_BACK = (
 )
 
 MAX_OPTIONS = 8
+
+MAX_TOKENS_LISTED = 25
 
 
 def summarize_history(history: History, period: str) -> str:
@@ -81,6 +84,82 @@ def find_positions(portfolio: Portfolio, query: str) -> str:
         for match in matches[:MAX_MATCHES]
     ]
     return "\n".join([head, *lines])
+
+
+def describe_exposure(exposure: Exposure) -> str:
+    total = exposure.total
+    said(f"stablecoins {money(exposure.stable.net)} · volatile {money(exposure.volatile.net)}")
+    lines = [
+        "Counted from every position's underlying tokens; what is owed is subtracted. "
+        f"Counted total {money(total)}.",
+        f"Stablecoins: {_side(exposure.stable, total)}.",
+        f"Volatile assets: {_side(exposure.volatile, total)}.",
+    ]
+    if exposure.unsplit:
+        listed = ", ".join(f"{where} {money(usd)}" for where, usd in exposure.unsplit)
+        lines.append(
+            f"Contents not reported by the source, so in neither figure above: "
+            f"{money(exposure.unsplit_usd)} ({share(exposure.unsplit_usd, total)}) — {listed}."
+        )
+    if exposure.stable_in:
+        lines.append(
+            "Stablecoins by position: "
+            + "; ".join(f"{where} {_held_and_owed(side)}" for where, side in exposure.stable_in)
+            + "."
+        )
+    shown = exposure.by_token[:MAX_TOKENS_LISTED]
+    tokens = ", ".join(
+        f"{symbol} {money(side.net)} ({share(side.net, total)})" for symbol, side in shown
+    )
+    left = exposure.by_token[MAX_TOKENS_LISTED:]
+    if left:
+        tokens += f", +{len(left)} more {money(sum((side.net for _, side in left), Decimal(0)))}"
+    lines.append(f"By token, net: {tokens}.")
+    return "\n".join(lines)
+
+
+def calculated(expression: str) -> str:
+    try:
+        result = evaluate(expression)
+    except (ArithmeticError, SyntaxError, ValueError) as error:
+        said("could not calculate")
+        return f"Could not calculate {expression!r}: {error}"
+    exact = format(result.quantize(Decimal("1e-10")).normalize(), "f")
+    said(f"= {exact}")
+    return f"{expression} = {exact} (rounded to cents: {result:,.2f})"
+
+
+def money(value: Decimal) -> str:
+    return f"-${abs(value):,.2f}" if value < 0 else f"${value:,.2f}"
+
+
+def share(part: Decimal, whole: Decimal) -> str:
+    return f"{part / whole * 100:.2f}%" if whole else "n/a"
+
+
+def _side(side: Side, total: Decimal) -> str:
+    net = f"{money(side.net)} net — {share(side.net, total)} of the counted total"
+    return f"{_held_and_owed(side)}, {net}"
+
+
+def _held_and_owed(side: Side) -> str:
+    return f"{money(side.held)} held, {money(side.owed)} owed"
+
+
+def math_tools() -> list:
+    @tool
+    def calculate(expression: str) -> str:
+        """Exact arithmetic: a sum, a difference, a share, a percentage.
+
+        Call it for every figure your answer works out rather than quotes —
+        totals of several values, what is left after subtracting, what part of
+        a whole something is. Pass one expression with plain numbers, + - * /
+        and brackets, e.g. "(10245.13 + 32.9) / 85109.6 * 100". Quote the result
+        it returns, not your own.
+        """
+        return calculated(expression)
+
+    return [calculate]
 
 
 def earn_tools(catalog: YieldCatalog) -> list:
@@ -1151,7 +1230,19 @@ def portfolio_tools(source: DataSource, slug: str, token: str | None, portfolio:
         """
         return find_positions(portfolio, query)
 
-    return [history_summary, position_details]
+    @tool
+    def asset_breakdown() -> str:
+        """What the portfolio's money is in, computed exactly from every position's tokens.
+
+        Call when the user asks how much is in stablecoins or in volatile
+        assets, how much of a token they hold across all positions, or what
+        share of the portfolio any of that is. It looks inside pools, vaults
+        and loans, and subtracts what is owed — the overview above cannot,
+        because it shows each position as one line.
+        """
+        return describe_exposure(exposure_of(portfolio.positions, named_position))
+
+    return [history_summary, position_details, asset_breakdown]
 
 
 _PERIODS = {
@@ -1164,6 +1255,10 @@ _PERIODS = {
 
 
 def tool_phrase(name: str, args: dict) -> str | None:
+    if name == "asset_breakdown":
+        return "Counting what the money is in"
+    if name == "calculate":
+        return "Calculating"
     if name == "history_summary":
         period = str(args.get("period", ""))
         return f"Reading the total over {_PERIODS[period]}" if period in _PERIODS else None

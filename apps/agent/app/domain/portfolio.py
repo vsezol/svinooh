@@ -1,6 +1,7 @@
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Literal
 
 Period = Literal["1h", "24h", "7d", "30d", "all"]
@@ -137,6 +138,90 @@ class Portfolio:
             if position.matches(needle)
         ]
         return tuple(sorted(found, key=lambda m: -m.position.value_usd))
+
+
+STABLE_WITHOUT_USD = frozenset({"DAI", "SDAI", "XDAI", "GHO", "FRAX", "MIM", "BOLD"})
+
+_PRINCIPAL_TOKEN = re.compile(r"^PT-([^-]+)")
+_ONE_WORD = re.compile(r"^[A-Z0-9]+$")
+
+ZERO = Decimal(0)
+
+
+def is_stablecoin(symbol: str) -> bool:
+    name = symbol.strip().upper().replace("₮", "T").replace(".", "")
+    principal = _PRINCIPAL_TOKEN.match(name)
+    if principal:
+        name = principal.group(1)
+    return bool(_ONE_WORD.match(name)) and ("USD" in name or name in STABLE_WITHOUT_USD)
+
+
+@dataclass(frozen=True)
+class Side:
+    held: Decimal = ZERO
+    owed: Decimal = ZERO
+
+    @property
+    def net(self) -> Decimal:
+        return self.held - self.owed
+
+    def plus(self, held: Decimal = ZERO, owed: Decimal = ZERO) -> "Side":
+        return Side(self.held + held, self.owed + owed)
+
+
+@dataclass(frozen=True)
+class Exposure:
+    stable: Side
+    volatile: Side
+    by_token: tuple[tuple[str, Side], ...]
+    stable_in: tuple[tuple[str, Side], ...]
+    unsplit: tuple[tuple[str, Decimal], ...]
+
+    @property
+    def unsplit_usd(self) -> Decimal:
+        return sum((usd for _, usd in self.unsplit), ZERO)
+
+    @property
+    def total(self) -> Decimal:
+        return self.stable.net + self.volatile.net + self.unsplit_usd
+
+
+def exposure_of(positions: Iterable[Position], label: Callable[[Position], str]) -> Exposure:
+    stable, volatile = Side(), Side()
+    tokens: dict[str, Side] = {}
+    stable_in: dict[str, Side] = {}
+    unsplit: list[tuple[str, Decimal]] = []
+    for position in positions:
+        legs = position.legs or _as_one_leg(position)
+        if not legs:
+            unsplit.append((label(position), Decimal(str(position.value_usd))))
+            continue
+        for leg in legs:
+            usd = abs(Decimal(str(leg.value_usd)))
+            held, owed = (ZERO, usd) if leg.role == "borrow" else (usd, ZERO)
+            tokens[leg.symbol] = tokens.get(leg.symbol, Side()).plus(held, owed)
+            if is_stablecoin(leg.symbol):
+                stable = stable.plus(held, owed)
+                where = label(position)
+                stable_in[where] = stable_in.get(where, Side()).plus(held, owed)
+            else:
+                volatile = volatile.plus(held, owed)
+    return Exposure(
+        stable=stable,
+        volatile=volatile,
+        by_token=tuple(sorted(tokens.items(), key=lambda row: -abs(row[1].net))),
+        stable_in=tuple(sorted(stable_in.items(), key=lambda row: -(row[1].held + row[1].owed))),
+        unsplit=tuple(sorted(unsplit, key=lambda row: -row[1])),
+    )
+
+
+def _as_one_leg(position: Position) -> tuple[Leg, ...]:
+    symbol = position.symbol.strip()
+    if not symbol:
+        return ()
+    if position.category == "token" or is_stablecoin(symbol):
+        return (Leg(symbol=symbol, role="supply", value_usd=position.value_usd),)
+    return ()
 
 
 @dataclass(frozen=True)
