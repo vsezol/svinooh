@@ -23,6 +23,7 @@ import type {
   PositionRange,
   PositionTokenDto,
   PublicPortfolioDto,
+  RealizedYieldDto,
   TronResources,
   TronResourcesDto,
   UpdateWalletAlertsDto,
@@ -1381,6 +1382,7 @@ export class PortfolioService {
         // opaque JSON, so this is the one place the shape is asserted
         tokens: (p.tokens as PositionTokenDto[] | null) ?? null,
         feesEarnedUsd: p.feesEarnedUsd,
+        realized: (p.realized as RealizedYieldDto | null) ?? null,
       }));
 
     return {
