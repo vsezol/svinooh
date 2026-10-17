@@ -213,10 +213,13 @@ def _owed_against(position: Position) -> str:
     )
 
 
+def named_position(position: Position) -> str:
+    head = _head(position)
+    return f"{head} on {position.network}" if position.network else head
+
+
 def position_line(position: Position, detail: bool = False) -> str:
-    head = named(position.symbol, UNNAMED_POSITION)
-    if position.name and position.name != head:
-        head = f"{head} ({position.name})"
+    head = _head(position)
     pair = _pair(position)
     if pair:
         head = f"{head} [{pair}]"
@@ -229,6 +232,11 @@ def position_line(position: Position, detail: bool = False) -> str:
     line = f"{head}: {', '.join(facts)}"
     composition = _composition(position) if detail else None
     return f"{line} — {composition}" if composition else line
+
+
+def _head(position: Position) -> str:
+    head = named(position.symbol, UNNAMED_POSITION)
+    return f"{head} ({position.name})" if position.name and position.name != head else head
 
 
 def _breakdown(label: str, totals: tuple[Total, ...], whole: float, limit: int = 8) -> str | None:

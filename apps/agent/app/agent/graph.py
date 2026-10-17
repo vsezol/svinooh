@@ -64,6 +64,7 @@ from .tools import (
     earn_tools,
     liquidity_tools,
     lpdown_tools,
+    math_tools,
     moving_tools,
     portfolio_tools,
     run_tools,
@@ -314,7 +315,8 @@ class LangGraphAgent:
         risk_known = state.get("risk", "unknown") != "unknown"
         range_known = state.get("lp_range", "unknown") != "unknown"
         tools = (
-            earn_tools(self._catalog)
+            math_tools()
+            + earn_tools(self._catalog)
             + deposit_tools(self._catalog, prepared, risk_known, holdings.owners)
             + moving_tools(self._catalog, holdings.held, prepared, risk_known, holdings.owners)
             + swap_tools(self._catalog, prepared, holdings.owners)
@@ -443,7 +445,7 @@ class LangGraphAgent:
                 portfolio = await self._portfolio.portfolio(target, token)
                 said(positions_read(portfolio))
             system = grounded_prompt(system, portfolio, self._config.context_max_positions())
-            tools = portfolio_tools(self._portfolio, target, token, portfolio)
+            tools = math_tools() + portfolio_tools(self._portfolio, target, token, portfolio)
         except Exception as error:  # noqa: BLE001 — any fetch failure degrades the same way
             logger.warning("portfolio context fetch failed for %s: %r", target, error)
             metrics.counted(metrics.errors, type="portfolio")

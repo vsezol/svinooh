@@ -130,6 +130,18 @@
     tools: [history_summary]
     says: ["7565"]
 
+- id: portfolio-stablecoin-share
+  slice: {intent: portfolio, role: regression, source: production 2026-10-15 stablecoin split}
+  world: whale
+  turn:
+    question: How much of my portfolio is in stablecoins, in dollars and as a share?
+    portfolio: whale-pf
+    signed_in: true
+  expect:
+    answered_by: grounded
+    tools: [asset_breakdown]
+    says: ["110480", "69.69"]
+
 - id: portfolio-no-hint-signed-in
   slice: {intent: portfolio, role: typical, source: design R3}
   world: whale

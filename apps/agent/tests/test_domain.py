@@ -1,3 +1,8 @@
+from decimal import Decimal
+
+import pytest
+
+from app.domain.arithmetic import evaluate
 from app.domain.portfolio import (
     WINDOW_MS,
     History,
@@ -5,6 +10,7 @@ from app.domain.portfolio import (
     Position,
     Reading,
     Wallet,
+    is_stablecoin,
     total_of,
 )
 from tests import fixtures as fx
@@ -150,3 +156,38 @@ class TestWhatAPeriodDid:
 
     def test_every_period_the_product_has_is_a_window(self):
         assert set(WINDOW_MS) == {"1h", "24h", "7d", "30d", "all"}
+
+
+class TestWhatCountsAsAStablecoin:
+    def test_dollar_tokens_are_stablecoins(self):
+        for symbol in ("USDC", "USD₮0", "USDC.e", "sUSDe", "USDG", "DAI", "GHO"):
+            assert is_stablecoin(symbol), symbol
+
+    def test_a_principal_token_on_a_dollar_is_a_stablecoin(self):
+        assert is_stablecoin("PT-apxUSD-5NOV2026")
+        assert not is_stablecoin("PT-wstETH-26DEC2026")
+
+    def test_everything_else_is_not(self):
+        for symbol in ("WETH", "cbBTC", "XAUt", "UNI-V3", "GM: ETH/USD [WETH-WETH]", ""):
+            assert not is_stablecoin(symbol), symbol
+
+
+class TestExactArithmetic:
+    def test_decimals_stay_exact(self):
+        assert evaluate("0.1 + 0.2") == Decimal("0.3")
+
+    def test_thousands_separators_and_dollar_signs_are_read_as_numbers(self):
+        assert evaluate("$85,110.43 - 59,634.95") == Decimal("25475.48")
+
+    def test_brackets_and_shares(self):
+        assert evaluate("(10245.13 + 32.9) / 85109.6 * 100").quantize(Decimal("0.0001")) == Decimal(
+            "12.0762"
+        )
+
+    def test_anything_but_arithmetic_is_refused(self):
+        with pytest.raises(ValueError, match="Only numbers"):
+            evaluate("__import__('os').getcwd()")
+
+    def test_dividing_by_zero_is_an_error_not_a_number(self):
+        with pytest.raises(ArithmeticError):
+            evaluate("1 / 0")

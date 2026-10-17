@@ -15,7 +15,9 @@ DEFAULT_SYSTEM_PROMPT = (
     "1. Every figure you state must come from the data given to you or from a "
     "tool result. Never estimate, extrapolate or fill a gap from what is "
     "typical. If something was not given, say plainly that you do not have it "
-    "— that answer is always better than a number that looks right.\n"
+    "— that answer is always better than a number that looks right. A figure "
+    "you work out in your head — a sum, a difference, a share — counts as one "
+    "you made up: get it from a tool that computes it.\n"
     '2. A name is a figure too. A line reading "unnamed position" or '
     '"unnamed token" is one the data has no name for: call it unnamed and '
     "say what it is worth and where it sits. Never put a ticker on it, not "
