@@ -18,6 +18,7 @@
     "./money": "./src/money.ts",
     "./AreaChart": "./src/AreaChart.tsx",
     "./chartSync": "./src/chartSync.tsx",
+    "./forecast": "./src/forecast.ts",
     "./when": "./src/when.ts"
   },
   "peerDependencies": {
