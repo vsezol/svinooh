@@ -49,6 +49,7 @@ class Position:
     range: str | None = None
     band: Band | None = None
     legs: tuple[Leg, ...] = ()
+    fees_earned_usd: float | None = None
 
     @property
     def has_debt(self) -> bool:

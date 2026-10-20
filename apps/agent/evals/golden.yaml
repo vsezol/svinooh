@@ -129,6 +129,7 @@
     answered_by: grounded
     tools: [history_summary]
     says: ["7565"]
+    never_says: [history_summary]
 
 - id: portfolio-stablecoin-share
   slice: {intent: portfolio, role: regression, source: production 2026-10-15 stablecoin split}
