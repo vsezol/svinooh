@@ -270,6 +270,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   const { onDeposit, asked: askedToDeposit } = useDeposits(chase);
   const [scope, setScope] = useState<string>('all');
   const [period, setPeriod] = useState<HistoryRange>('24h');
+  const [forecasting, setForecasting] = useState(false);
   /** Whether pointing at a moment on one chart reads it on the others — see ChartSettings */
   const [syncCursor, setSyncCursor] = useSyncCursor();
   const [hideSmall, setHideSmall] = useState(false);
@@ -944,7 +945,16 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
                   }}
                 >
                     <ScopeSelect options={scopeOptions} value={scope} onChange={setScope} />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'flex-end',
+                        flexWrap: 'wrap',
+                        gap: 8,
+                        marginLeft: 'auto',
+                      }}
+                    >
                       <div
                         style={{
                           border: '1px solid var(--line)',
@@ -959,6 +969,14 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
                           onChange={setPeriod}
                         />
                       </div>
+                      <TagButton
+                        variant="bare"
+                        size="sm"
+                        active={forecasting}
+                        onClick={() => setForecasting(!forecasting)}
+                      >
+                        FORECAST
+                      </TagButton>
                       <ChartSettings syncCursor={syncCursor} onSyncCursor={setSyncCursor} />
                     </div>
                   </div>
@@ -969,6 +987,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
                       times={history?.data.total.times ?? []}
                       period={drawn}
                       height="clamp(160px,26vw,240px)"
+                      showForecast={forecasting}
                     />
                   </div>
                 </>

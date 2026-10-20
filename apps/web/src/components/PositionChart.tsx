@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 import { isPaywall } from '../lib/billing';
 import { asChange, fmtChange, fmtUnits, positionLines } from '../lib/position-lines';
 import { PERIODS } from '../lib/ranges';
-import { Note, Segmented, Spinner } from '../ui';
+import { Note, Segmented, Spinner, TagButton } from '../ui';
 import { AreaChart } from './AreaChart';
 import { usePaywall } from './Paywall';
 
@@ -21,6 +21,7 @@ interface Props {
 
 export function PositionChart({ slug, walletId, positionKey, pool, title }: Props) {
   const [period, setPeriod] = useState<HistoryRange>('7d');
+  const [forecasting, setForecasting] = useState(false);
   const [history, setHistory] = useState<PositionHistoryDto | null>(null);
   const [failed, setFailed] = useState(false);
   const [picked, setPicked] = useState(ALL_TOKENS);
@@ -67,7 +68,12 @@ export function PositionChart({ slug, walletId, positionKey, pool, title }: Prop
         ) : (
           <span />
         )}
-        <Segmented label="Chart period" items={PERIODS} value={period} onChange={setPeriod} />
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--sp-3)' }}>
+          <TagButton variant="bare" size="sm" active={forecasting} onClick={() => setForecasting(!forecasting)}>
+            FORECAST
+          </TagButton>
+          <Segmented label="Chart period" items={PERIODS} value={period} onChange={setPeriod} />
+        </div>
       </div>
 
       {failed ? (
@@ -85,6 +91,7 @@ export function PositionChart({ slug, walletId, positionKey, pool, title }: Prop
           period={history?.range ?? period}
           height={HEIGHT}
           framed={false}
+          showForecast={forecasting}
           tone={chosen.role === 'borrow' ? 'muted' : 'accent'}
           format={fmtUnits(chosen.unit)}
         />
@@ -96,6 +103,7 @@ export function PositionChart({ slug, walletId, positionKey, pool, title }: Prop
           period={history?.range ?? period}
           height={HEIGHT}
           framed={false}
+          showForecast={forecasting}
           format={fmtChange}
         />
       )}
