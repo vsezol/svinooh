@@ -56,6 +56,7 @@ class PositionWire(Wire):
     range: str | None = Field(default=None, alias="range")
     band: BandWire | None = None
     tokens: list[LegWire] = Field(default_factory=list)
+    fees_earned_usd: float | None = None
 
 
 class WalletWire(Wire):
@@ -141,6 +142,7 @@ def _position(wire: PositionWire) -> Position:
         range=wire.range,
         band=band,
         legs=tuple(_leg(leg) for leg in wire.tokens),
+        fees_earned_usd=wire.fees_earned_usd,
     )
 
 

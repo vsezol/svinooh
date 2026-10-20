@@ -300,3 +300,12 @@ class TestTheGasTheWalletSignsWith:
         said = idle_lines(self.portfolio_with_sol(1.5))
         assert "SOL 1.48" in said
         assert "0.02 SOL more is kept back for network fees" in said
+
+
+def test_gmx_fees_earned_are_shown_as_all_time():
+    line = position_line(fx.as_position({**fx.UNISWAP, "feesEarnedUsd": 32.62}))
+    assert "fees earned in GMX $32.62 all time" in line
+
+
+def test_a_position_without_gmx_fees_says_nothing_about_them():
+    assert "fees earned" not in position_line(fx.as_position(fx.UNISWAP))

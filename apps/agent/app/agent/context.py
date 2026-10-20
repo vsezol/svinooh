@@ -51,6 +51,8 @@ def _rates(position: Position) -> list[str]:
     facts = []
     if position.apy is not None:
         facts.append(f"APY {position.apy * 100:.1f}%")
+    if position.fees_earned_usd is not None:
+        facts.append(f"fees earned in GMX {usd(position.fees_earned_usd)} all time")
     if position.health_rate is not None:
         facts.append(f"health {position.health_rate:.2f}")
     if position.borrow_apy is not None:
