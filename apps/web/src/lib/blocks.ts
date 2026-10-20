@@ -1,4 +1,11 @@
-import type { PositionBand, PositionDto, PositionRange, PositionTokenRole, WalletDto } from '@svinooh/shared';
+import type {
+  PositionBand,
+  PositionDto,
+  PositionRange,
+  PositionTokenRole,
+  RealizedYieldDto,
+  WalletDto,
+} from '@svinooh/shared';
 
 /**
  * One line of a position's table.
@@ -68,6 +75,7 @@ export interface Block {
   /** What the debt costs overall, where only a position-wide rate is known */
   borrowApy: number | null;
   feesEarned: number | null;
+  realized: RealizedYieldDto | null;
   /** Concentrated liquidity only: is the price still inside the range */
   range: PositionRange | null;
   /** Where inside that range the price is — drawn as a bar under the header */
@@ -182,7 +190,10 @@ function foldDuplicates(blocks: RawBlock[]): RawBlock[] {
       });
       continue;
     }
-    if (existing.key !== block.key) existing.key = null;
+    if (existing.key !== block.key) {
+      existing.key = null;
+      existing.realized = null;
+    }
     if (block.feesEarned !== null) existing.feesEarned = (existing.feesEarned ?? 0) + block.feesEarned;
     existing.count += block.count;
     existing.value += block.value;
@@ -339,6 +350,7 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
       healthRate: p.healthRate ?? null,
       borrowApy: p.borrowApy ?? null,
       feesEarned: p.feesEarnedUsd ?? null,
+      realized: p.realized ?? null,
       range: p.range ?? null,
       band: p.band ?? null,
       count: 1,
@@ -363,6 +375,7 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
       healthRate: null,
       borrowApy: null,
       feesEarned: null,
+      realized: null,
       range: null,
       band: null,
       count: 1,

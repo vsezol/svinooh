@@ -6,10 +6,11 @@ import { leaseUntil, retryAt, schedule, ScanHold, setting } from '@svinooh/commo
 import { MetricsService, RabbitService, type ScanJob } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import { AlertsCollector } from '../../alerts/collector.service';
-import { alertableStates } from './wallet-state';
-import { positionSnapshots } from './position-snapshots';
+import { alertableStates, positionKey } from './wallet-state';
+import { positionsByKey, positionSnapshots } from './position-snapshots';
+import { advance, realized, type Realized, type YieldReading, type YieldState } from './position-yield';
 import { scanAddress } from '../scanners';
-import type { ScanPosition, ScanResult } from '@svinooh/shared';
+import type { PositionTokenDto, RealizedYieldDto, ScanPosition, ScanResult } from '@svinooh/shared';
 
 /**
  * What the wallet could collect right now, and what it owes.
@@ -34,6 +35,27 @@ function accrued(positions: ScanPosition[]): { claimableUsd: number; debtUsd: nu
     }
   }
   return { claimableUsd, debtUsd };
+}
+
+function readingOf(position: ScanPosition, at: Date): YieldReading {
+  return {
+    at,
+    valueUsd: position.valueUsd,
+    amount: position.amount ?? null,
+    priceUsd: position.priceUsd ?? null,
+    tokens: position.tokens ?? null,
+    feesEarnedUsd: position.feesEarnedUsd ?? null,
+  };
+}
+
+function realizedJson(yielded: Realized | null | undefined): Prisma.InputJsonValue | typeof Prisma.DbNull {
+  if (!yielded) return Prisma.DbNull;
+  const dto: RealizedYieldDto = {
+    since: yielded.since.toISOString(),
+    apy: yielded.apy,
+    rewardsApy: yielded.rewardsApy,
+  };
+  return dto as unknown as Prisma.InputJsonValue;
 }
 
 @Injectable()
@@ -145,6 +167,7 @@ export class SyncService {
     // Decided from who has been looking, before the write, so the interval and
     // the reading land in the same transaction
     const nextScanAt = await this.nextScanFor(wallet.id, now);
+    const yields = await this.yieldsOf(wallet, positionsByKey(result.positions), now);
     await this.prisma.$transaction([
       this.prisma.position.deleteMany({ where: { walletId: wallet.id } }),
       this.prisma.position.createMany({
@@ -171,6 +194,7 @@ export class SyncService {
           // handed over as an opaque JSON value
           tokens: p.tokens?.length ? (p.tokens as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
           feesEarnedUsd: p.feesEarnedUsd ?? null,
+          realized: realizedJson(p.category === 'token' ? null : yields.get(positionKey(p))?.realized),
         })),
       }),
       this.prisma.wallet.update({
@@ -208,6 +232,15 @@ export class SyncService {
       this.prisma.positionSnapshot.createMany({
         data: positionSnapshots(wallet.chain, wallet.address, result.positions, now),
       }),
+      ...[...yields].map(([key, yielded]) => {
+        const state = yielded.state as unknown as Prisma.InputJsonValue;
+        const at = { chain: wallet.chain, address: wallet.address, key };
+        return this.prisma.positionYield.upsert({
+          where: { chain_address_key: at },
+          create: { ...at, state },
+          update: { state },
+        });
+      }),
     ]);
     // The one line that says what was actually stored. The night a scan bug
     // wiped a wallet's positions while keeping its total, nothing in any log
@@ -217,6 +250,48 @@ export class SyncService {
       `${wallet.chain}:${wallet.address} applied: ${result.positions.length} positions, $${result.totalUsd.toFixed(2)}`,
     );
     await this.announce(wallet, result);
+  }
+
+  private async yieldsOf(
+    wallet: Wallet,
+    byKey: Map<string, ScanPosition>,
+    at: Date,
+  ): Promise<Map<string, { state: YieldState; realized: Realized | null }>> {
+    const stored = await this.prisma.positionYield.findMany({
+      where: { chain: wallet.chain, address: wallet.address, key: { in: [...byKey.keys()] } },
+    });
+    const states = new Map(stored.map((row) => [row.key, row.state as unknown as YieldState]));
+    const out = new Map<string, { state: YieldState; realized: Realized | null }>();
+    for (const [key, position] of byKey) {
+      const earlier = states.get(key) ?? (await this.replayed(wallet, key, position.symbol));
+      const state = advance(earlier, readingOf(position, at), position.symbol);
+      out.set(key, { state, realized: realized(state, at) });
+    }
+    return out;
+  }
+
+  private async replayed(wallet: Wallet, key: string, symbol: string): Promise<YieldState | null> {
+    const rows = await this.prisma.positionSnapshot.findMany({
+      where: { chain: wallet.chain, address: wallet.address, key },
+      orderBy: { createdAt: 'asc' },
+      select: { createdAt: true, valueUsd: true, amount: true, priceUsd: true, tokens: true },
+    });
+    return rows.reduce<YieldState | null>(
+      (state, row) =>
+        advance(
+          state,
+          {
+            at: row.createdAt,
+            valueUsd: row.valueUsd,
+            amount: row.amount,
+            priceUsd: row.priceUsd,
+            tokens: row.tokens as PositionTokenDto[] | null,
+            feesEarnedUsd: null,
+          },
+          symbol,
+        ),
+      null,
+    );
   }
 
   /**
