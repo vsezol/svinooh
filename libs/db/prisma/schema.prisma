@@ -485,7 +485,6 @@ model Position {
   // The underlying legs — PositionTokenDto[]: what's supplied, accrued, borrowed
   tokens        Json?
   feesEarnedUsd Float?
-  realized      Json?
 }
 
 /// The history of what an address is worth — total, what could be collected, and
@@ -515,16 +514,6 @@ model AddressSnapshot {
   createdAt    DateTime @default(now())
 
   @@index([chain, address, createdAt])
-}
-
-model PositionYield {
-  chain     String
-  address   String
-  key       String
-  state     Json
-  updatedAt DateTime @updatedAt
-
-  @@id([chain, address, key])
 }
 
 model PositionSnapshot {

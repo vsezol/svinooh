@@ -2,7 +2,12 @@ import { Prisma } from '@prisma/client';
 import type { ScanPosition } from '@svinooh/shared';
 import { positionKey } from './wallet-state';
 
-export function positionsByKey(positions: ScanPosition[]): Map<string, ScanPosition> {
+export function positionSnapshots(
+  chain: string,
+  address: string,
+  positions: ScanPosition[],
+  createdAt: Date,
+): Prisma.PositionSnapshotCreateManyInput[] {
   const byKey = new Map<string, ScanPosition>();
   for (const position of positions) {
     if (position.category === 'token') continue;
@@ -10,16 +15,7 @@ export function positionsByKey(positions: ScanPosition[]): Map<string, ScanPosit
     const twin = byKey.get(key);
     byKey.set(key, twin ? mergeTwins(twin, position) : position);
   }
-  return byKey;
-}
-
-export function positionSnapshots(
-  chain: string,
-  address: string,
-  positions: ScanPosition[],
-  createdAt: Date,
-): Prisma.PositionSnapshotCreateManyInput[] {
-  return [...positionsByKey(positions)].map(([key, position]) => ({
+  return [...byKey].map(([key, position]) => ({
     chain,
     address,
     key,
@@ -38,9 +34,5 @@ function mergeTwins(first: ScanPosition, second: ScanPosition): ScanPosition {
     valueUsd: first.valueUsd + second.valueUsd,
     amount: first.amount != null && second.amount != null ? first.amount + second.amount : null,
     tokens: [...(first.tokens ?? []), ...(second.tokens ?? [])],
-    feesEarnedUsd:
-      first.feesEarnedUsd != null || second.feesEarnedUsd != null
-        ? (first.feesEarnedUsd ?? 0) + (second.feesEarnedUsd ?? 0)
-        : null,
   };
 }

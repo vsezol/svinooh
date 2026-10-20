@@ -46,20 +46,8 @@ const NOTE = {
 const roleColor = (role: PositionTokenRole): string =>
   role === 'reward' ? 'var(--up)' : role === 'borrow' ? 'var(--down)' : 'var(--mut)';
 
-const fmtPercent = (fraction: number): string => `${(fraction * 100).toFixed(fraction < 0.1 ? 2 : 1)}%`;
-
 /** 0.8075 → "80.8% APY" */
-const fmtApy = (apy: number): string => `${fmtPercent(apy)} APY`;
-
-const fmtDay = (iso: string): string =>
-  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
-const earnedTip = (since: string): string =>
-  `What this position actually earned a year, measured from its own history since ${fmtDay(since)}: ` +
-  'its tokens and its rewards, without price moves';
-
-const rewardsTip = (since: string): string =>
-  `Rewards alone, a year, against what the position was worth on ${fmtDay(since)}`;
+const fmtApy = (apy: number): string => `${(apy * 100).toFixed(apy < 0.1 ? 2 : 1)}% APY`;
 
 const ChartIcon = () => (
   <svg
@@ -337,31 +325,15 @@ export function WalletRow({
                     {b.meta}
                   </span>
                 ) : null}
-                {b.realized?.apy != null ? (
-                  <Tooltip text={earnedTip(b.realized.since)}>
-                    <span
-                      className="mono"
-                      style={{ ...NOTE, color: b.realized.apy >= 0 ? 'var(--up)' : 'var(--down)' }}
-                    >
-                      {fmtApy(b.realized.apy)}
-                    </span>
-                  </Tooltip>
-                ) : b.apy != null ? (
+                {b.apy != null ? (
                   <span className="mono" style={{ ...NOTE, color: b.apy >= 0 ? 'var(--up)' : 'var(--down)' }}>
                     {fmtApy(b.apy)}
                   </span>
                 ) : null}
-                {b.realized?.rewardsApy != null ? (
-                  <Tooltip text={rewardsTip(b.realized.since)}>
-                    <span className="mono" style={{ ...NOTE, color: 'var(--up)' }}>
-                      {fmtPercent(b.realized.rewardsApy)} REWARDS
-                    </span>
-                  </Tooltip>
-                ) : null}
                 {b.feesEarned != null && b.feesEarned >= 0.01 ? (
                   <Tooltip text="Fees this pool has earned you in GMX, already counted in its value">
-                    <span className="mono" style={{ ...NOTE, color: 'var(--up)' }}>
-                      +{fmtUsd(b.feesEarned)}
+                    <span className="mono" style={NOTE}>
+                      FEES {fmtUsd(b.feesEarned)}
                     </span>
                   </Tooltip>
                 ) : null}
