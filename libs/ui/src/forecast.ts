@@ -1,6 +1,12 @@
-export interface Forecast {
+export interface Line {
   times: number[];
   values: number[];
+}
+
+export interface Forecast {
+  from: number;
+  trend: Line;
+  ahead: Line;
 }
 
 export function forecast(values: number[], times: number[], windowMs: number | null): Forecast | null {
@@ -22,15 +28,16 @@ export function forecast(values: number[], times: number[], windowMs: number | n
   }
   if (variance === 0) return null;
   const slope = covariance / variance;
+  const onTrend = (t: number) => meanY + slope * (t - meanX);
 
   const step = medianStep(xs);
-  const last = values[values.length - 1];
-  const out: Forecast = { times: [end], values: [last] };
+  const ahead: Line = { times: [end], values: [onTrend(end)] };
   for (let t = end + step; t <= end + (end - xs[0]) + step / 2; t += step) {
-    out.times.push(t);
-    out.values.push(last + slope * (t - end));
+    ahead.times.push(t);
+    ahead.values.push(onTrend(t));
   }
-  return out.times.length > 1 ? out : null;
+  if (ahead.times.length < 2) return null;
+  return { from, trend: { times: xs, values: xs.map(onTrend) }, ahead };
 }
 
 function medianStep(times: number[]): number {

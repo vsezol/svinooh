@@ -13,7 +13,7 @@ import {
 } from 'lightweight-charts';
 import type { HistoryRange } from '@svinooh/shared';
 import { nearestIndex, useChartSync } from './chartSync';
-import { forecast, type Forecast } from './forecast';
+import { forecast, type Forecast, type Line } from './forecast';
 import { fmtUsd } from './money';
 import { useThemeName } from './useThemeName';
 
@@ -107,7 +107,11 @@ function mainColor(tone: 'accent' | 'muted'): string {
   return tone === 'muted' ? (/^#[0-9a-f]{6}$/i.test(mut) ? `${mut}d9` : mut) : token('--acc');
 }
 
-function aheadData(ahead: Forecast, from: UTCTimestamp): Array<{ time: UTCTimestamp; value: number }> {
+function faded(color: string): string {
+  return /^#[0-9a-f]{6}$/i.test(color) ? `${color}80` : color;
+}
+
+function aheadData(ahead: Line, from: UTCTimestamp): Array<{ time: UTCTimestamp; value: number }> {
   const out = [{ time: from, value: ahead.values[0] }];
   for (let i = 1; i < ahead.times.length; i++) {
     const t = Math.floor(ahead.times[i] / 1000);
@@ -183,9 +187,13 @@ export function AreaChart({
   const multi = !!lines?.length;
   const values = multi ? lines[0].values : single;
   const drawnLines = multi ? lines.map((line) => line.values) : [values];
-  const aheads = showForecast ? drawnLines.map((line) => forecast(line, times, WINDOW_MS[period])) : [];
-  const ahead = aheads.find((one): one is Forecast => one !== null) ?? null;
+  const forecasts = showForecast ? drawnLines.map((line) => forecast(line, times, WINDOW_MS[period])) : [];
+  const ahead = forecasts.find((one): one is Forecast => one !== null)?.ahead ?? null;
   const aheadLength = ahead ? ahead.times.length - 1 : 0;
+  const lastIndex = values.length - 1 + aheadLength;
+  const timeAt = (index: number) => (index < values.length ? times[index] : ahead!.times[index - values.length + 1]);
+  const valueAt = (line: number, index: number) =>
+    index < values.length ? drawnLines[line][index] : forecasts[line]?.ahead.values[index - values.length + 1];
   const fmtValue = format ?? fmtUsd;
   const fmtChange = format ?? ((value: number) => fmtUsd(value, 0));
   const box = useRef<HTMLDivElement>(null);
@@ -193,6 +201,7 @@ export function AreaChart({
   const series = useRef<ISeriesApi<'Area'> | null>(null);
   const lineSeries = useRef<Array<ISeriesApi<'Line'>>>([]);
   const aheadSeries = useRef<Array<ISeriesApi<'Line'>>>([]);
+  const trendSeries = useRef<Array<ISeriesApi<'Line'>>>([]);
   /**
    * The mouse gesture in progress. `measuring` is decided at the press, not
    * read per move: letting go of shift halfway through a measurement should
@@ -288,6 +297,7 @@ export function AreaChart({
       series.current = null;
       lineSeries.current = [];
       aheadSeries.current = [];
+      trendSeries.current = [];
     };
   }, []);
 
@@ -321,6 +331,9 @@ export function AreaChart({
     chart.current.applyOptions({ crosshair: { vertLine: { color: mut } } });
     lineSeries.current.forEach((line, index) => line.applyOptions({ color: lineColor(index) }));
     aheadSeries.current.forEach((dashed, index) => dashed.applyOptions({ color: multi ? lineColor(index) : line }));
+    trendSeries.current.forEach((trend, index) =>
+      trend.applyOptions({ color: faded(multi ? lineColor(index) : line) }),
+    );
   }, [theme, tone]);
 
   /**
@@ -347,23 +360,36 @@ export function AreaChart({
         })
       : [];
     series.current?.setData(multi ? [] : data);
-    for (const line of aheadSeries.current) c?.removeSeries(line);
+    for (const line of [...aheadSeries.current, ...trendSeries.current]) c?.removeSeries(line);
     const lastTime = data.length ? data[data.length - 1].time : null;
-    aheadSeries.current =
-      c && lastTime !== null
-        ? aheads.flatMap((one, index) => {
-            if (!one) return [];
-            const drawn = c.addSeries(LineSeries, {
-              lineWidth: 2,
-              lineStyle: LineStyle.Dashed,
-              color: multi ? lineColor(index) : mainColor(tone),
-              priceLineVisible: false,
-              lastValueVisible: false,
-            });
-            drawn.setData(aheadData(one, lastTime));
-            return [drawn];
-          })
-        : [];
+    const drawn = c && lastTime !== null ? forecasts.map((one, index) => (one ? { one, index } : null)) : [];
+    const color = (index: number) => (multi ? lineColor(index) : mainColor(tone));
+    trendSeries.current = drawn.flatMap((entry) => {
+      if (!entry || !c) return [];
+      const trend = c.addSeries(LineSeries, {
+        lineWidth: 1,
+        color: faded(color(entry.index)),
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      trend.setData(
+        entry.one.trend.values.map((value, k) => ({ time: data[entry.one.from + k].time, value })),
+      );
+      return [trend];
+    });
+    aheadSeries.current = drawn.flatMap((entry) => {
+      if (!entry || !c || lastTime === null) return [];
+      const dashed = c.addSeries(LineSeries, {
+        lineWidth: 2,
+        lineStyle: LineStyle.Dashed,
+        color: color(entry.index),
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+      dashed.setData(aheadData(entry.one.ahead, lastTime));
+      return [dashed];
+    });
     const scale = chart.current?.timeScale();
     if (scale && data.length) {
       const window = WINDOW_MS[period];
@@ -425,7 +451,7 @@ export function AreaChart({
     if (multi) return;
     setSelection(next);
     publish?.(id, {
-      span: next ? { from: times[next.fromIndex], to: times[next.toIndex] } : null,
+      span: next ? { from: timeAt(next.fromIndex), to: timeAt(next.toIndex) } : null,
     });
   };
 
@@ -435,7 +461,7 @@ export function AreaChart({
     const x = clientX - box.current.getBoundingClientRect().left;
     const logical = chart.current.timeScale().coordinateToLogical(x);
     if (logical == null) return null;
-    return Math.min(values.length - 1, Math.max(0, Math.round(logical)));
+    return Math.min(lastIndex, Math.max(0, Math.round(logical)));
   };
 
   const xAt = (index: number): number => {
@@ -552,10 +578,13 @@ export function AreaChart({
     if (el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
   };
 
+  const spanLabel = (index: number) =>
+    index < values.length ? dateLabel(times[index], period) : aheadLabel(timeAt(index), period);
+
   const range = selection
     ? (() => {
-        const from = values[selection.fromIndex];
-        const to = values[selection.toIndex];
+        const from = valueAt(0, selection.fromIndex) ?? 0;
+        const to = valueAt(0, selection.toIndex) ?? 0;
         const chg = to - from;
         const up = chg >= 0;
         return {
@@ -565,18 +594,17 @@ export function AreaChart({
           // Which way is the good way. On a debt it is down: the sign in front
           // of the number stays what it is, only the colour behind it flips.
           good: tone === 'muted' ? !up : up,
-          label: `${dateLabel(times[selection.fromIndex], period)} → ${dateLabel(times[selection.toIndex], period)}`,
+          label:
+            `${spanLabel(selection.fromIndex)} → ${spanLabel(selection.toIndex)}` +
+            (selection.toIndex >= values.length ? ' · FORECAST' : ''),
         };
       })()
     : null;
 
-  const own = hover && hover.index >= 0 && hover.index < values.length + aheadLength ? hover.index : null;
+  const own = hover && hover.index >= 0 && hover.index <= lastIndex ? hover.index : null;
   /** Under this chart's own pointer, or under another chart's — the same reading either way */
   const hovered = own ?? followed;
   const isAhead = hovered !== null && hovered >= values.length;
-  const timeAt = (index: number) => (index < values.length ? times[index] : ahead!.times[index - values.length + 1]);
-  const valueAt = (line: number, index: number) =>
-    index < values.length ? drawnLines[line][index] : aheads[line]?.values[index - values.length + 1];
   const outlook =
     !multi && ahead
       ? (() => {
