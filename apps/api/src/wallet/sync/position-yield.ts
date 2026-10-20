@@ -37,6 +37,8 @@ export interface Realized {
   since: Date;
   apy: number | null;
   rewardsApy: number | null;
+  perDayUsd: number | null;
+  rewardsPerDayUsd: number | null;
 }
 
 export function isStablecoin(symbol: string): boolean {
@@ -114,7 +116,8 @@ export function realized(state: YieldState, at: Date): Realized | null {
   const days = (at.getTime() - since.getTime()) / DAY_MS;
   if (days < MIN_DAYS) return null;
   const legs = Object.values(state.legs);
-  if (legs.some((leg) => leg.unit === 'unknown')) return { since, apy: null, rewardsApy: null };
+  const unmeasured = { since, apy: null, rewardsApy: null, perDayUsd: null, rewardsPerDayUsd: null };
+  if (legs.some((leg) => leg.unit === 'unknown')) return unmeasured;
 
   let body = 0;
   let base = 0;
@@ -123,19 +126,18 @@ export function realized(state: YieldState, at: Date): Realized | null {
     body += sign * (leg.last - leg.start) * leg.startPriceUsd;
     base += sign * leg.start * leg.startPriceUsd;
   }
-  if (base <= 0) return { since, apy: null, rewardsApy: null };
-  const yearly = (gain: number, over: number) => (gain / base) * (365 / over);
-
   const earned = state.earned;
   const earnedDays = earned ? (at.getTime() - Date.parse(earned.since)) / DAY_MS : 0;
-  const rewardsApy = earned
+  const perDayUsd = (body + state.rewardsUsd) / days;
+  const rewardsPerDayUsd = earned
     ? earnedDays >= MIN_DAYS
-      ? yearly(earned.nowUsd - earned.startUsd, earnedDays)
+      ? (earned.nowUsd - earned.startUsd) / earnedDays
       : null
     : Object.keys(state.rewards).length || state.rewardsUsd
-      ? yearly(state.rewardsUsd, days)
+      ? state.rewardsUsd / days
       : null;
-  return { since, apy: yearly(body + state.rewardsUsd, days), rewardsApy };
+  const yearly = (perDay: number | null) => (perDay == null || base <= 0 ? null : (perDay * 365) / base);
+  return { since, apy: yearly(perDayUsd), rewardsApy: yearly(rewardsPerDayUsd), perDayUsd, rewardsPerDayUsd };
 }
 
 interface Measured {

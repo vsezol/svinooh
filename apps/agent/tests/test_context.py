@@ -300,3 +300,22 @@ class TestTheGasTheWalletSignsWith:
         said = idle_lines(self.portfolio_with_sol(1.5))
         assert "SOL 1.48" in said
         assert "0.02 SOL more is kept back for network fees" in said
+
+
+def test_a_position_says_what_it_actually_earned_instead_of_the_quoted_rate():
+    realized = {
+        "since": "2026-10-12T23:04:00Z",
+        "apy": 0.3143,
+        "rewardsApy": 0.2433,
+        "perDayUsd": 3.1,
+        "rewardsPerDayUsd": 2.4,
+    }
+    line = position_line(fx.as_position({**fx.UNISWAP, "realized": realized}))
+    assert "actually earned $3.10 a day since 2026-10-12 (31.43% a year)" in line
+    assert "of it rewards $2.40 a day (24.33% a year)" in line
+    assert "APY 47.8%" not in line
+
+
+def test_gmx_fees_earned_are_shown_as_all_time():
+    line = position_line(fx.as_position({**fx.UNISWAP, "feesEarnedUsd": 32.62}))
+    assert "fees earned in GMX $32.62 all time" in line

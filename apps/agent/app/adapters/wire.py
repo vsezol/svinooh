@@ -12,6 +12,7 @@ from ..domain.portfolio import (
     PortfolioRef,
     Position,
     Reading,
+    Realized,
     Wallet,
 )
 
@@ -41,6 +42,14 @@ class BandWire(Wire):
     fee_pct: float | None = None
 
 
+class RealizedWire(Wire):
+    since: str
+    apy: float | None = None
+    rewards_apy: float | None = None
+    per_day_usd: float | None = None
+    rewards_per_day_usd: float | None = None
+
+
 class PositionWire(Wire):
     symbol: str = ""
     value_usd: float = 0.0
@@ -56,6 +65,8 @@ class PositionWire(Wire):
     range: str | None = Field(default=None, alias="range")
     band: BandWire | None = None
     tokens: list[LegWire] = Field(default_factory=list)
+    realized: RealizedWire | None = None
+    fees_earned_usd: float | None = None
 
 
 class WalletWire(Wire):
@@ -141,6 +152,8 @@ def _position(wire: PositionWire) -> Position:
         range=wire.range,
         band=band,
         legs=tuple(_leg(leg) for leg in wire.tokens),
+        realized=Realized(**wire.realized.model_dump()) if wire.realized else None,
+        fees_earned_usd=wire.fees_earned_usd,
     )
 
 

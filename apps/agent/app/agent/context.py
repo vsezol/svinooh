@@ -49,8 +49,13 @@ def rate(fraction: float) -> str:
 
 def _rates(position: Position) -> list[str]:
     facts = []
-    if position.apy is not None:
+    earned = earned_line(position)
+    if earned:
+        facts.append(earned)
+    elif position.apy is not None:
         facts.append(f"APY {position.apy * 100:.1f}%")
+    if position.fees_earned_usd is not None:
+        facts.append(f"fees earned in GMX {usd(position.fees_earned_usd)} all time")
     if position.health_rate is not None:
         facts.append(f"health {position.health_rate:.2f}")
     if position.borrow_apy is not None:
@@ -58,6 +63,21 @@ def _rates(position: Position) -> list[str]:
     if position.range:
         facts.append(f"range {position.range}")
     return facts
+
+
+def earned_line(position: Position) -> str | None:
+    realized = position.realized
+    if realized is None or realized.per_day_usd is None:
+        return None
+    since = realized.since[:10]
+    line = f"actually earned {usd(realized.per_day_usd)} a day since {since}"
+    if realized.apy is not None:
+        line += f" ({rate(realized.apy)} a year)"
+    if realized.rewards_per_day_usd is not None:
+        line += f", of it rewards {usd(realized.rewards_per_day_usd)} a day"
+        if realized.rewards_apy is not None:
+            line += f" ({rate(realized.rewards_apy)} a year)"
+    return line
 
 
 def _where(position: Position) -> list[str]:

@@ -101,6 +101,8 @@ export interface RealizedYieldDto {
   since: string;
   apy: number | null;
   rewardsApy: number | null;
+  perDayUsd?: number | null;
+  rewardsPerDayUsd?: number | null;
 }
 
 /** What a card asks the wallet to do with a pool. */

@@ -130,6 +130,19 @@
     tools: [history_summary]
     says: ["7565"]
 
+- id: portfolio-pools-earn-per-day
+  slice: {intent: portfolio, role: regression, source: production 2026-10-20 pool earnings}
+  world: whale
+  turn:
+    question: How much do my liquidity pools earn per day?
+    portfolio: whale-pf
+    signed_in: true
+  expect:
+    answered_by: grounded
+    tools: [position_earnings]
+    says: ["3.95"]
+    never_says: [position_earnings, history_summary, asset_breakdown, position_details]
+
 - id: portfolio-stablecoin-share
   slice: {intent: portfolio, role: regression, source: production 2026-10-15 stablecoin split}
   world: whale

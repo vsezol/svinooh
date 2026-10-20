@@ -54,6 +54,8 @@ test('a pool earns its fees and what the pool did to its tokens, against what we
   const base = 5 * 100 + 490;
   close(result.apy, ((-0.1 * 100 + 9 + 25) / base) * 36.5);
   close(result.rewardsApy, (25 / base) * 36.5);
+  close(result.perDayUsd, (-0.1 * 100 + 9 + 25) / 10);
+  close(result.rewardsPerDayUsd, 25 / 10);
 });
 
 test('a loan earns its interest, and a deposit along the way is not income', () => {

@@ -141,7 +141,14 @@
                 "pair": "ETH/USDC",
                 "feePct": 0.05
               },
-              "tokens": null
+              "tokens": null,
+              "realized": {
+                "since": "2026-10-12T23:04:00Z",
+                "apy": 0.2746,
+                "rewardsApy": 0.2126,
+                "perDayUsd": 3.1,
+                "rewardsPerDayUsd": 2.4
+              }
             },
             {
               "id": "pos-BNB-3200.0",
@@ -198,7 +205,14 @@
                 "pair": "BNB/USDT",
                 "feePct": 0.25
               },
-              "tokens": null
+              "tokens": null,
+              "realized": {
+                "since": "2026-10-12T23:04:00Z",
+                "apy": 0.2415,
+                "rewardsApy": 0.1705,
+                "perDayUsd": 0.85,
+                "rewardsPerDayUsd": 0.6
+              }
             },
             {
               "id": "pos-ARB-1150.0",

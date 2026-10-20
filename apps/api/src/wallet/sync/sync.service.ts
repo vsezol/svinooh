@@ -54,6 +54,8 @@ function realizedJson(yielded: Realized | null | undefined): Prisma.InputJsonVal
     since: yielded.since.toISOString(),
     apy: yielded.apy,
     rewardsApy: yielded.rewardsApy,
+    perDayUsd: yielded.perDayUsd,
+    rewardsPerDayUsd: yielded.rewardsPerDayUsd,
   };
   return dto as unknown as Prisma.InputJsonValue;
 }

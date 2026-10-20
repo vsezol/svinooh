@@ -25,7 +25,7 @@ from ..domain.earn import (
 from ..domain.house import plain
 from ..domain.portfolio import Exposure, History, Period, Portfolio, Side, exposure_of, total_of
 from ..observability import metrics
-from .context import named_position, position_line, short_address, usd
+from .context import earned_line, named_position, position_line, short_address, usd
 from .steps import said, step, tool_label
 
 logger = logging.getLogger("svinooh-ai")
@@ -115,6 +115,47 @@ def describe_exposure(exposure: Exposure) -> str:
     if left:
         tokens += f", +{len(left)} more {money(sum((side.net for _, side in left), Decimal(0)))}"
     lines.append(f"By token, net: {tokens}.")
+    return "\n".join(lines)
+
+
+def describe_earnings(portfolio: Portfolio, query: str) -> str:
+    asked = query.strip()
+    found = portfolio.matching(asked) if asked else portfolio.matching_all()
+    positions = [match.position for match in found if match.position.category != "token"]
+    if not positions:
+        said("nothing matched")
+        return f'No position matches "{asked}".' if asked else "The portfolio holds no positions."
+    measured = [p for p in positions if p.realized and p.realized.per_day_usd is not None]
+    waiting = [p for p in positions if p not in measured]
+    per_day = sum((Decimal(str(p.realized.per_day_usd)) for p in measured), Decimal(0))
+    rewards = [
+        p.realized.rewards_per_day_usd
+        for p in measured
+        if p.realized.rewards_per_day_usd is not None
+    ]
+    rewards_per_day = sum((Decimal(str(r)) for r in rewards), Decimal(0))
+    said(f"{len(measured)} measured · {money(per_day)} a day")
+    scope = f'positions matching "{asked}"' if asked else "all positions"
+    lines = [
+        f"What {scope} actually earned, measured from each one's own history: tokens and "
+        "rewards gained, valued at the prices of the day it started, so price moves are left out.",
+    ]
+    if measured:
+        month, year = money(per_day * 30), money(per_day * 365)
+        spans = f"{money(per_day)} a day, {month} a month, {year} a year"
+        lines.append(
+            f"Together: {spans}, from {len(measured)} position(s)"
+            + (f"; of it rewards {money(rewards_per_day)} a day." if rewards else ".")
+        )
+        lines.extend(
+            f"- {named_position(p)}, worth {usd(p.value_usd)}: {earned_line(p)}" for p in measured
+        )
+    if waiting:
+        lines.append(
+            "Not measured yet — under a day of history, or a source that gives no token amounts: "
+            + ", ".join(f"{named_position(p)} {usd(p.value_usd)}" for p in waiting)
+            + "."
+        )
     return "\n".join(lines)
 
 
@@ -1242,7 +1283,19 @@ def portfolio_tools(source: DataSource, slug: str, token: str | None, portfolio:
         """
         return describe_exposure(exposure_of(portfolio.positions, named_position))
 
-    return [history_summary, position_details, asset_breakdown]
+    @tool
+    def position_earnings(query: str = "") -> str:
+        """What positions actually earn, measured from each one's own history.
+
+        Call when the user asks how much their positions, pools, loans or a
+        protocol bring in — a day, a month, a year — or what yield they really
+        get. Pass one word to narrow it (a protocol, a token, or "pool" for
+        liquidity pools), or nothing for every position. Returns each one's
+        earnings a day and a year, rewards apart, and their total.
+        """
+        return describe_earnings(portfolio, query)
+
+    return [history_summary, position_details, asset_breakdown, position_earnings]
 
 
 _PERIODS = {
@@ -1259,6 +1312,8 @@ def tool_phrase(name: str, args: dict) -> str | None:
         return "Counting what the money is in"
     if name == "calculate":
         return "Calculating"
+    if name == "position_earnings":
+        return "Reading what positions earn"
     if name == "history_summary":
         period = str(args.get("period", ""))
         return f"Reading the total over {_PERIODS[period]}" if period in _PERIODS else None

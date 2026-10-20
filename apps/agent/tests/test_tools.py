@@ -4,6 +4,7 @@ from app.agent.tools import (
     NOTHING_CAME_BACK,
     asking_tools,
     calculated,
+    describe_earnings,
     find_positions,
     math_tools,
     portfolio_tools,
@@ -168,7 +169,12 @@ class TestToolWiring:
 
     async def test_every_tool_is_offered_with_instructions_for_the_model(self):
         tools = portfolio_tools(FakeSource(), "p", "t", fx.as_portfolio())
-        assert [t.name for t in tools] == ["history_summary", "position_details", "asset_breakdown"]
+        assert [t.name for t in tools] == [
+            "history_summary",
+            "position_details",
+            "asset_breakdown",
+            "position_earnings",
+        ]
         assert all(t.description for t in tools)
 
     async def test_a_failing_tool_returns_its_error_to_the_model(self):
@@ -351,3 +357,50 @@ class TestCalculate:
     def test_is_offered_as_a_tool(self):
         assert [t.name for t in math_tools()] == ["calculate"]
         assert tool_phrase("calculate", {"expression": "1+1"}) == "Calculating"
+
+
+def earning(
+    position: dict, per_day: float, rewards: float | None = None, apy: float | None = None
+) -> dict:
+    realized = {
+        "since": "2026-10-12T23:04:00Z",
+        "apy": apy,
+        "rewardsApy": None,
+        "perDayUsd": per_day,
+        "rewardsPerDayUsd": rewards,
+    }
+    return {**position, "realized": realized}
+
+
+class TestPositionEarnings:
+    def portfolio(self, *positions: dict):
+        return fx.as_portfolio(fx.portfolio([fx.wallet(fx.EVM_ADDRESS, list(positions))]))
+
+    def test_pools_add_up_in_code_and_say_how_much_is_rewards(self):
+        pool = earning(fx.UNISWAP, 3.1, rewards=2.4, apy=0.3143)
+        thena = earning(
+            fx.position(
+                "THE-LP", 1_284.55, name="Thena (Liquidity Pool)", platform="thena", category="defi"
+            ),
+            0.85,
+            rewards=0.6,
+        )
+        loan = earning(fx.AAVE, 1.0)
+        out = describe_earnings(self.portfolio(pool, thena, loan), "pool")
+        assert "Together: $3.95 a day, $118.50 a month, $1,441.75 a year, from 2 position(s)" in out
+        assert "of it rewards $3.00 a day" in out
+        assert "AAVE" not in out
+
+    def test_a_position_without_enough_history_is_named_not_guessed(self):
+        fresh = fx.position(
+            "Meteora", 900.0, name="Liquidity Pool", platform="meteora", category="defi"
+        )
+        out = describe_earnings(self.portfolio(earning(fx.UNISWAP, 3.1), fresh), "pool")
+        assert "Not measured yet" in out and "Meteora (Liquidity Pool) on eth $900.00" in out
+
+    def test_plain_holdings_are_not_earning_positions(self):
+        out = describe_earnings(self.portfolio(earning(fx.UNISWAP, 3.1), fx.ETH), "")
+        assert "from 1 position(s)" in out and "Not measured yet" not in out
+
+    def test_nothing_matching_says_so(self):
+        assert describe_earnings(self.portfolio(fx.ETH), "pool") == 'No position matches "pool".'

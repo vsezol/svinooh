@@ -34,6 +34,15 @@ class Band:
 
 
 @dataclass(frozen=True)
+class Realized:
+    since: str
+    apy: float | None = None
+    rewards_apy: float | None = None
+    per_day_usd: float | None = None
+    rewards_per_day_usd: float | None = None
+
+
+@dataclass(frozen=True)
 class Position:
     symbol: str
     value_usd: float
@@ -49,6 +58,8 @@ class Position:
     range: str | None = None
     band: Band | None = None
     legs: tuple[Leg, ...] = ()
+    realized: Realized | None = None
+    fees_earned_usd: float | None = None
 
     @property
     def has_debt(self) -> bool:
@@ -126,6 +137,14 @@ class Portfolio:
             Total(label=label, usd=usd)
             for label, usd in sorted(sums.items(), key=lambda row: -row[1])
         )
+
+    def matching_all(self) -> tuple[Match, ...]:
+        found = [
+            Match(address=wallet.address, position=position)
+            for wallet in self.wallets
+            for position in wallet.positions
+        ]
+        return tuple(sorted(found, key=lambda m: -m.position.value_usd))
 
     def matching(self, query: str) -> tuple[Match, ...]:
         needle = query.strip().lower()
