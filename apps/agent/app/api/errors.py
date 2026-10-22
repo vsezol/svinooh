@@ -2,6 +2,7 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
+from svinooh_portfolio.source import UnknownTokenError
 
 from ..domain.errors import (
     EmptyMessageError,
@@ -9,7 +10,6 @@ from ..domain.errors import (
     NoSuchConversationError,
     RateLimitedError,
     TurnTimedOutError,
-    UnknownTokenError,
 )
 
 Handler = Callable[[Request, Exception], Response | Awaitable[Response]]

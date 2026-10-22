@@ -2,12 +2,12 @@ from dataclasses import replace
 from decimal import Decimal
 
 import pytest
+from svinooh_portfolio.portfolio import Leg, Me, Portfolio, PortfolioRef, Position, Wallet
 
 from app.agent.context import without_what_the_chain_read
 from app.agent.onboarding import create_portfolio_with_wallets
 from app.domain.conversation import Turn
 from app.domain.earn import Coin, Held, YieldPool
-from app.domain.portfolio import Leg, Me, Portfolio, PortfolioRef, Position, Wallet
 from app.ports import Ask, Failed, Finished, Progress
 from tests import fixtures as fx
 from tests.support import Catalog, Intents, agent

@@ -1,8 +1,8 @@
 import pathlib
 
 import pytest
+from svinooh_portfolio.source import UnknownTokenError
 
-from app.domain.errors import UnknownTokenError
 from tests.support import Meter, client_for, container
 
 

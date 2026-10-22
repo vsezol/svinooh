@@ -21,11 +21,11 @@ from langfuse import Evaluation, Langfuse
 from langfuse.api import DatasetStatus
 from langfuse.experiment import ExperimentItemResult, LocalExperimentItem
 from langfuse.langchain import CallbackHandler
+from svinooh_portfolio.source import PortfolioApiSource
 
 from app.adapters.earn import EarnApiSource
 from app.adapters.memory import StaticPanel
 from app.adapters.panel import parse
-from app.adapters.portfolio import PortfolioApiSource
 from app.agent.graph import LangGraphAgent, answered_by, state_of
 from app.agent.intent import IntentClassifier
 from app.agent.llm import Models

@@ -8,11 +8,13 @@ on:
     branches: [main]
     paths:
       - apps/agent/**
+      - libs/portfolio-py/**
       - .github/workflows/agent.yml
       - .dockerignore
   pull_request:
     paths:
       - apps/agent/**
+      - libs/portfolio-py/**
       - .github/workflows/agent.yml
       - .dockerignore
 

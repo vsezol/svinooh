@@ -6,14 +6,6 @@ class EmptyMessageError(AgentError):
     """A turn with nothing in it. Refused before any work is done."""
 
 
-class UnknownTokenError(AgentError):
-    """The host affirmatively rejected the caller's token.
-
-    Only that: a host that cannot answer leaves the caller anonymous, because
-    this gate names callers and never guards data (app/application/auth.py).
-    """
-
-
 class MessageTooLongError(AgentError):
     def __init__(self, limit: int) -> None:
         super().__init__(f"message too long — at most {limit} characters")

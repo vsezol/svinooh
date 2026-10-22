@@ -1,12 +1,7 @@
-from app.agent.context import (
-    earning_lines,
-    idle_lines,
-    portfolio_context,
-    position_line,
-    positions_read,
-    usd,
-)
-from app.domain.portfolio import total_of
+from svinooh_portfolio.portfolio import total_of
+from svinooh_portfolio.reading import portfolio_context, position_line, usd
+
+from app.agent.context import earning_lines, idle_lines, positions_read
 from tests import fixtures as fx
 
 SOL_MINT = "So11111111111111111111111111111111111111112"
@@ -271,7 +266,7 @@ class TestAPastTurnAsTheModelsSeeIt:
 
 class TestTheGasTheWalletSignsWith:
     def portfolio_with_sol(self, amount: float):
-        from app.domain.portfolio import Portfolio, Position, Wallet
+        from svinooh_portfolio.portfolio import Portfolio, Position, Wallet
 
         sol = Position(
             symbol="SOL",

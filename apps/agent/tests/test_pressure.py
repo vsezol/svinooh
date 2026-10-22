@@ -5,15 +5,15 @@ import httpx
 import pytest
 from langchain_core.messages import AIMessage
 from redis.asyncio import ConnectionPool
+from svinooh_portfolio.portfolio import Me
+from svinooh_portfolio.source import PortfolioApiSource
 
 from app.adapters.memory import StaticPanel
-from app.adapters.portfolio import PortfolioApiSource
 from app.application.auth import Authenticator
 from app.application.turns import Question, Turns
 from app.config import Config
 from app.domain.errors import MessageTooLongError, TurnTimedOutError
 from app.domain.identity import Caller
-from app.domain.portfolio import Me
 from app.ports import Ask, Finished, Progress, Reply
 from app.settings import Settings
 from tests.support import client_for, container, models_of

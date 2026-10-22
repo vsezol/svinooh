@@ -3,7 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
-from ..domain.portfolio import (
+from .portfolio import (
     Band,
     History,
     Leg,

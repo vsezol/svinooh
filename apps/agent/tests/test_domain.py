@@ -1,9 +1,8 @@
 from decimal import Decimal
 
 import pytest
-
-from app.domain.arithmetic import evaluate
-from app.domain.portfolio import (
+from svinooh_portfolio.arithmetic import evaluate
+from svinooh_portfolio.portfolio import (
     WINDOW_MS,
     History,
     Portfolio,
@@ -13,6 +12,7 @@ from app.domain.portfolio import (
     is_stablecoin,
     total_of,
 )
+
 from tests import fixtures as fx
 
 

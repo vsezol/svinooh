@@ -1,0 +1,43 @@
+# The gates for apps/mcp, the same ones a developer runs locally (see
+# apps/mcp/README.md), plus proof that the image still builds. It also runs when
+# the portfolio package it shares with apps/agent changes.
+name: mcp
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/mcp/**
+      - libs/portfolio-py/**
+      - .github/workflows/mcp.yml
+      - .dockerignore
+  pull_request:
+    paths:
+      - apps/mcp/**
+      - libs/portfolio-py/**
+      - .github/workflows/mcp.yml
+      - .dockerignore
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mcp
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/mcp/uv.lock
+      - run: uv sync --frozen
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv run mypy
+      - run: uv run pytest -q
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build --file apps/mcp/Dockerfile .
