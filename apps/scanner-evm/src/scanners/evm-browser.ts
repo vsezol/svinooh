@@ -180,12 +180,6 @@ function positionsFromCapture(capture: Capture | null): ScanPosition[] | null {
   return positions;
 }
 
-const READ_TOTAL_SCRIPT = String.raw`(() => {
-  const el = document.querySelector('[class*="HeaderInfo_totalAssetInner"]');
-  const match = ((el && el.innerText) || '').match(/\$([\d,]+(?:\.\d+)?)/);
-  return match ? parseFloat(match[1].replace(/,/g, '')) : 0;
-})()`;
-
 // Expand collapsed chains ("Unfold N chains") so the breakdown is complete
 const UNFOLD_CHAINS_SCRIPT = String.raw`(() => {
   for (const el of document.querySelectorAll('[class*="AssetsOnChain"]')) {
@@ -205,6 +199,13 @@ const UNFOLD_CHAINS_SCRIPT = String.raw`(() => {
  * their selectors on every scan was work for a result that was thrown away.
  * The breakdown is cosmetic — a wrong one costs a mis-drawn bar, not a wrong
  * balance — so it stays best-effort.
+ *
+ * Read from the elements, never from innerText. DeBank renders the share as a
+ * bare text node right after the value: `<span>$63,045,994</span>99%`. Chrome
+ * puts a line break between them because the span is a block; lightpanda does
+ * no layout, so its innerText is `$63,045,99499%` and a greedy digit match
+ * reads $6.3B off a $63M chain. Every chain on every lightpanda scan was off by
+ * the digits of its share.
  */
 const EXTRACT_SCRIPT = String.raw`(() => {
   const parseUsd = (s) => {
@@ -214,10 +215,11 @@ const EXTRACT_SCRIPT = String.raw`(() => {
 
   const chains = [];
   for (const item of document.querySelectorAll('[class*="AssetsOnChain_item"]')) {
-    const lines = (item.innerText || '').split('\n').map((s) => s.trim()).filter(Boolean);
-    const usdLine = lines.find((l) => l.indexOf('$') === 0);
-    const usd = parseUsd(usdLine);
-    if (lines[0] && usd !== null) chains.push({ name: lines[0], usd });
+    const nameEl = item.querySelector('[class*="AssetsOnChain_chainName"]');
+    const usdEl = item.querySelector('[class*="AssetsOnChain_usdValue"]');
+    const name = ((nameEl && nameEl.textContent) || '').trim();
+    const usd = parseUsd(usdEl && usdEl.textContent);
+    if (name && usd !== null) chains.push({ name, usd });
   }
 
   return { chains };
@@ -314,10 +316,19 @@ async function waitForCapture(page: Page, timeoutMs: number): Promise<boolean> {
   return false;
 }
 
-/** How the header total is read out of the page */
+/**
+ * How the header total is read out of the page.
+ *
+ * The number is a bare text node and the 24h change sits in a child element
+ * right after it (`$64,558,975<div>-5.12%</div>`). Only the element's own text
+ * nodes are read: under lightpanda innerText runs them together, and a change
+ * that starts with a digit would be glued onto the total.
+ */
 const READ_SETTLE_SCRIPT = String.raw`(() => {
   const el = document.querySelector('[class*="HeaderInfo_totalAssetInner"]');
-  const m = ((el && el.innerText) || '').match(/\$([\d,]+(?:\.\d+)?)/);
+  let own = '';
+  for (const n of (el ? el.childNodes : [])) if (n.nodeType === 3) own += n.nodeValue;
+  const m = own.match(/\$([\d,]+(?:\.\d+)?)/);
   const s = window.__svinooh || {};
   return {
     total: m ? parseFloat(m[1].replace(/,/g, '')) : 0,
