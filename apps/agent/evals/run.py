@@ -3,16 +3,19 @@ import asyncio
 import json
 import math
 import os
+import socket
 import statistics
 import subprocess
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import httpx
 import yaml
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import BaseMessage
@@ -24,6 +27,7 @@ from langfuse.langchain import CallbackHandler
 from svinooh_portfolio.source import PortfolioApiSource
 
 from app.adapters.earn import EarnApiSource
+from app.adapters.mcp import McpTools
 from app.adapters.memory import StaticPanel
 from app.adapters.panel import parse
 from app.agent.graph import LangGraphAgent, answered_by, state_of
@@ -39,13 +43,15 @@ from app.settings import Settings
 
 from .checks import judged
 from .judges import CRITERIA, JUDGE, Shown, data_of, judges_for, record_of
-from .world import ADDRESS, World
+from .world import ADDRESS, World, every_world_served
 
 HERE = Path(__file__).parent
 
 DATASET = "agent-golden"
 
 BASELINE = HERE / "baseline.json"
+
+MCP = HERE.parent.parent / "mcp"
 
 SIGNED_IN = "Bearer eval"
 
@@ -122,9 +128,15 @@ class Seen(BaseCallbackHandler):
 
 class Golden:
     def __init__(
-        self, settings: Settings, panel: PanelValues, langfuse: Langfuse, judge: str = JUDGE
+        self,
+        settings: Settings,
+        panel: PanelValues,
+        langfuse: Langfuse,
+        judge: str = JUDGE,
+        mcp_url: str = "",
     ) -> None:
         self._settings = settings
+        self._mcp_url = mcp_url
         self._panel = panel
         self._langfuse = langfuse
         self._judge = judge
@@ -198,6 +210,7 @@ class Golden:
                 models,
                 IntentClassifier(models, config),
                 ConfirmationClassifier(models, config),
+                mcp=McpTools(self._mcp_url),
             )
             started = time.perf_counter()
             state = await agent.graph.ainvoke(state_of(case.ask()), config={"callbacks": callbacks})
@@ -245,14 +258,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         panel = replace(panel, model=args.model)
     everything = load()
     cases = [case for case in everything if not args.only or case.id in args.only]
-    golden = Golden(settings, panel, langfuse_for(), args.judge or JUDGE)
-    golden.sync(everything)
-    started = time.strftime("%Y-%m-%d %H:%M")
-    rows: list[Row] = []
-    for repetition in range(1, args.repeat + 1):
-        named = f"{args.name} {started} #{repetition}".strip()
-        judging = repetition == 1 and not args.no_judge
-        rows += golden.run(cases, named, args.concurrency, judging)
+    with every_world_served() as worlds, mcp_serving(worlds) as mcp_url:
+        golden = Golden(settings, panel, langfuse_for(), args.judge or JUDGE, mcp_url)
+        golden.sync(everything)
+        started = time.strftime("%Y-%m-%d %H:%M")
+        rows: list[Row] = []
+        for repetition in range(1, args.repeat + 1):
+            named = f"{args.name} {started} #{repetition}".strip()
+            judging = repetition == 1 and not args.no_judge
+            rows += golden.run(cases, named, args.concurrency, judging)
     report = scorecard(rows, cases, args.repeat, golden.described())
     sys.stdout.write(report + "\n")
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
@@ -265,6 +279,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     for problem in problems:
         sys.stderr.write(f"GATE: {problem}\n")
     return 1 if problems else 0
+
+
+@contextmanager
+def mcp_serving(worlds: str) -> Iterator[str]:
+    """apps/mcp in a process of its own, reading the recorded worlds: the turn reaches
+    its tools the way it does in production."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    server = subprocess.Popen(
+        ["uv", "run", "--frozen", "uvicorn", "main:app", "--port", str(port)],
+        cwd=MCP,
+        env={**os.environ, "PORTFOLIO_API_URL": worlds},
+    )
+    try:
+        for _ in range(120):
+            with suppress(httpx.TransportError):
+                if httpx.get(f"http://127.0.0.1:{port}/health").is_success:
+                    break
+            time.sleep(0.5)
+        else:
+            raise RuntimeError("apps/mcp did not start")
+        yield f"http://127.0.0.1:{port}/mcp"
+    finally:
+        server.terminate()
+        server.wait()
 
 
 def load() -> list[Case]:

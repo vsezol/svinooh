@@ -23,7 +23,7 @@ from svinooh_portfolio.reading import (
 )
 from svinooh_portfolio.source import DataSource, UnknownTokenError
 
-MAX_POSITIONS = 12
+LARGEST = 12
 
 ADDRESS_AT_LEAST = 26
 
@@ -38,6 +38,10 @@ INSTRUCTIONS = (
     "private ones included; without one only public portfolios can be read. "
     "Figures are in USD as of each wallet's last scan."
 )
+
+Largest = Annotated[
+    int, Field(ge=1, le=100, description="How many of each wallet's largest positions to list.")
+]
 
 PositionName = Annotated[
     str, Field(description="The position's token symbol or protocol, e.g. ETH or Aave.")
@@ -73,14 +77,16 @@ def build(source: DataSource) -> MCPServer:
         return "\n".join(f"- {ref.name or ref.slug} (id {ref.slug})" for ref in owned)
 
     @server.tool(title="Portfolio overview", annotations=READ_ONLY)
-    async def portfolio_overview(portfolio: PortfolioId, ctx: Context) -> str:
+    async def portfolio_overview(
+        portfolio: PortfolioId, ctx: Context, positions: Largest = LARGEST
+    ) -> str:
         """A portfolio as a whole: its total, where the money is by network, type and
         protocol, and every wallet with its largest positions.
 
         Read this first; the other tools go deeper into what it summarizes.
         """
         read = await _portfolio(source, portfolio, ctx)
-        return portfolio_context(read, MAX_POSITIONS)
+        return portfolio_context(read, positions)
 
     @server.tool(title="Position details", annotations=READ_ONLY)
     async def position_details(portfolio: PortfolioId, query: str, ctx: Context) -> str:
@@ -140,7 +146,7 @@ def build(source: DataSource) -> MCPServer:
     )
     async def portfolio_resource(portfolio: str, ctx: Context) -> str:
         read = await _portfolio(source, portfolio, ctx, ResourceError)
-        return portfolio_context(read, MAX_POSITIONS)
+        return portfolio_context(read, LARGEST)
 
     @server.resource(
         "svinooh://portfolio/{portfolio}/assets",

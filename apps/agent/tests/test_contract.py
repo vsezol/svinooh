@@ -2,8 +2,7 @@ import os
 
 import httpx
 import pytest
-
-from tests import fixtures as fx
+from svinooh_portfolio import testing as fx
 
 pytestmark = pytest.mark.contract
 

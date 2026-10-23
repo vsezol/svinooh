@@ -1,6 +1,8 @@
 from decimal import Decimal
 
 import pytest
+
+from svinooh_portfolio import testing as fx
 from svinooh_portfolio.arithmetic import evaluate
 from svinooh_portfolio.portfolio import (
     WINDOW_MS,
@@ -12,8 +14,6 @@ from svinooh_portfolio.portfolio import (
     is_stablecoin,
     total_of,
 )
-
-from tests import fixtures as fx
 
 
 def position(symbol: str, value: float, **kwargs) -> Position:

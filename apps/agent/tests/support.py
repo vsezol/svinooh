@@ -12,8 +12,11 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from langchain_core.tools import StructuredTool
+from svinooh_portfolio.reading import portfolio_context
 
 from app import create_app
+from app.adapters.mcp import GROUNDED
 from app.adapters.memory import MemoryConversationStore, StaticPanel, rate_limit_storage
 from app.agent.graph import LangGraphAgent
 from app.agent.intent import IntentLabel
@@ -213,6 +216,27 @@ class Catalog:
         return self.opened.get((signature, owner), ())
 
 
+def _served(name: str) -> StructuredTool:
+    def answer(**_args) -> str:
+        return f"{name} answered"
+
+    return StructuredTool.from_function(answer, name=name, description=f"The server's {name}.")
+
+
+class Mcp:
+    """The MCP server as a turn needs it: the overview read from the same host, and
+    tools with the server's names that answer without reading anything."""
+
+    def __init__(self, host) -> None:
+        self.host = host
+
+    async def overview(self, slug, token, positions):
+        return portfolio_context(await self.host.portfolio(slug, token), positions)
+
+    async def tools(self, token, slug=None, names=GROUNDED):
+        return [_served(name) for name in sorted(names)]
+
+
 class NoHost:
     async def me(self, token):
         raise AssertionError("the host was asked who is asking")
@@ -284,14 +308,16 @@ def agent(
 ) -> LangGraphAgent:
     settings = settings or Settings()
     config = Config(settings, StaticPanel(panel))
+    host = portfolio if portfolio is not None else NoHost()
     return LangGraphAgent(
         config,
-        portfolio if portfolio is not None else NoHost(),
+        host,
         catalog if catalog is not None else NoCatalog(),
         models_of(model if model is not None else fake_model("answered"), settings),
         intents if intents is not None else Intents(intent),
         confirmations if confirmations is not None else Confirmations(confirmation),
         strategies,
+        mcp=Mcp(host),
     )
 
 
@@ -328,6 +354,7 @@ def container(
         models,
         Intents(intent, asked_to_place=asked_to_place),
         Confirmations(confirmation),
+        mcp=Mcp(host),
     )
     return Container(
         settings=settings,

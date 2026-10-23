@@ -4,6 +4,7 @@ import httpx
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
+from app.adapters.mcp import GROUNDED
 from app.agent.graph import ANSWERING_NODES
 from app.agent.llm import Models
 from app.agent.prompts import DEFAULT_SYSTEM_PROMPT
@@ -14,7 +15,6 @@ from app.agent.tools import (
     liquidity_tools,
     lpdown_tools,
     moving_tools,
-    portfolio_tools,
     swap_tools,
 )
 from app.settings import Settings
@@ -24,7 +24,6 @@ from evals.checks import judged, mentions
 from evals.judges import CRITERIA, Judges, Shown, Verdict, data_of, presented, record_of
 from evals.run import Case, Golden, gate, langfuse_for, load, parse, wilson
 from evals.world import WORLDS, World
-from tests import fixtures as fx
 from tests.support import Talking
 
 TOOLS = {
@@ -37,9 +36,8 @@ TOOLS = {
         *liquidity_tools(None, (), [], True, None, ()),
         *lpdown_tools(None, [], (), None),
         *asking_tools([]),
-        *portfolio_tools(None, "pf", None, fx.as_portfolio()),
     ]
-}
+} | GROUNDED
 
 EXPECTATIONS = {
     "answered_by",

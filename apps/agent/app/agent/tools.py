@@ -4,19 +4,6 @@ from decimal import Decimal, InvalidOperation
 
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
-from svinooh_portfolio.portfolio import (
-    Period,
-    Portfolio,
-    exposure_of,
-)
-from svinooh_portfolio.reading import (
-    calculated,
-    describe_exposure,
-    find_positions,
-    named_position,
-    summarize_history,
-)
-from svinooh_portfolio.source import DataSource
 
 from ..adapters.earn import YieldCatalog
 from ..domain import lpdown as down
@@ -46,22 +33,6 @@ NOTHING_CAME_BACK = (
 )
 
 MAX_OPTIONS = 8
-
-
-def math_tools() -> list:
-    @tool
-    def calculate(expression: str) -> str:
-        """Exact arithmetic: a sum, a difference, a share, a percentage.
-
-        Call it for every figure your answer works out rather than quotes —
-        totals of several values, what is left after subtracting, what part of
-        a whole something is. Pass one expression with plain numbers, + - * /
-        and brackets, e.g. "(10245.13 + 32.9) / 85109.6 * 100". Quote the result
-        it returns, not your own.
-        """
-        return calculated(expression)
-
-    return [calculate]
 
 
 def earn_tools(catalog: YieldCatalog) -> list:
@@ -1107,46 +1078,6 @@ def as_money(value: Decimal) -> str:
     return f"${value:,.0f}"
 
 
-def portfolio_tools(source: DataSource, slug: str, token: str | None, portfolio: Portfolio) -> list:
-
-    @tool
-    async def history_summary(period: Period) -> str:
-        """How the portfolio's total value moved over a period.
-
-        Call when the user asks what changed, grew or dropped, or about peaks
-        and dips. Returns computed facts: start, end, change in USD and
-        percent, low and high. Pick the smallest period that covers the
-        question ("this week" -> 7d).
-        """
-        return summarize_history(await source.history(slug, period, token), period)
-
-    @tool
-    def position_details(query: str) -> str:
-        """Full detail on positions matching a token symbol or protocol name.
-
-        Call when the user asks about a specific token, pool or protocol
-        that the portfolio overview above does not show. Pass one short word
-        — a token symbol or a protocol name — and it matches any word in a
-        position that starts with it, whatever the case. If nothing matches,
-        try once more with a different word from the user's question.
-        """
-        return find_positions(portfolio, query)
-
-    @tool
-    def asset_breakdown() -> str:
-        """What the portfolio's money is in, computed exactly from every position's tokens.
-
-        Call when the user asks how much is in stablecoins or in volatile
-        assets, how much of a token they hold across all positions, or what
-        share of the portfolio any of that is. It looks inside pools, vaults
-        and loans, and subtracts what is owed — the overview above cannot,
-        because it shows each position as one line.
-        """
-        return describe_exposure(exposure_of(portfolio.positions, named_position))
-
-    return [history_summary, position_details, asset_breakdown]
-
-
 _PERIODS = {
     "1h": "the last hour",
     "24h": "the last 24 hours",
@@ -1215,5 +1146,13 @@ async def run_tools(calls: list[dict], tools: list) -> list[ToolMessage]:
             logger.warning("tool %s failed: %r", name, error)
             metrics.counted(metrics.tool_calls, tool=counted_as, outcome="failed")
             result = f"{error}\n{NOTHING_CAME_BACK}"
-        results.append(ToolMessage(content=str(result), tool_call_id=call.get("id", "")))
+        results.append(ToolMessage(content=_text_of(result), tool_call_id=call.get("id", "")))
     return results
+
+
+def _text_of(result: object) -> str:
+    if not isinstance(result, list):
+        return str(result)
+    return "\n".join(
+        str(block.get("text", "")) if isinstance(block, dict) else str(block) for block in result
+    )

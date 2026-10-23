@@ -28,8 +28,10 @@ dependencies = [
     "pydantic-settings>=2.15.0",
     "prometheus-client>=0.26.0",
     "langfuse>=4.17",
-    # The portfolio's model, its API client and its readings, shared with apps/mcp.
+    # The portfolio's model and its API client, shared with apps/mcp.
     "svinooh-portfolio-py",
+    # The svinooh MCP server's tools, as LangChain tools the graph binds.
+    "langchain-mcp-adapters>=0.3.2",
 ]
 
 [dependency-groups]

@@ -4,8 +4,7 @@ from prometheus_client import Counter
 
 from app.agent.tools import run_tools
 from app.observability import metrics
-from tests import fixtures as fx
-from tests.support import client_for, container, fake_model
+from tests.support import Mcp, client_for, container, fake_model
 
 
 def reading(metric: Counter, **labels: str) -> float:
@@ -75,9 +74,7 @@ class TestATurnIsCounted:
 
 class TestNoLabelIsTheModelsToInvent:
     async def test_a_tool_that_exists_is_counted_by_name(self):
-        tools = __import__("app.agent.tools", fromlist=["portfolio_tools"]).portfolio_tools(
-            None, "p", None, fx.as_portfolio()
-        )
+        tools = await Mcp(None).tools(None, "p")
         before = reading(metrics.tool_calls, tool="position_details", outcome="ok")
         await run_tools([{"name": "position_details", "args": {"query": "eth"}, "id": "a"}], tools)
         assert reading(metrics.tool_calls, tool="position_details", outcome="ok") - before == 1

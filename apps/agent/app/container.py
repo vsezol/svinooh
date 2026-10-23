@@ -8,6 +8,7 @@ from svinooh_portfolio.source import PortfolioApiSource
 
 from .adapters import memory
 from .adapters.earn import EarnApiSource
+from .adapters.mcp import McpTools
 from .adapters.panel import RemotePanel
 from .agent.graph import LangGraphAgent
 from .agent.intent import IntentClassifier
@@ -102,6 +103,7 @@ def build(settings: Settings) -> Container:
         IntentClassifier(models, config),
         ConfirmationClassifier(models, config),
         strategies,
+        mcp=McpTools(settings.mcp_url),
     )
     return Container(
         settings=settings,

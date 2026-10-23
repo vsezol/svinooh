@@ -198,6 +198,13 @@ class TestTheServer:
         assert failed and "Portfolio not found" in text
         assert "http://api" not in text
 
+    async def test_the_overview_lists_as_many_positions_as_asked(self):
+        async with connected(Host(), "Bearer T") as session:
+            _, one = await called(session, "portfolio_overview", portfolio="main", positions=1)
+            failed, _ = await called(session, "portfolio_overview", portfolio="main", positions=0)
+        assert "ETH: $3,000.00" in one
+        assert failed, "fewer than one is refused"
+
     async def test_history_is_summarized_for_the_asked_period(self):
         async with connected(Host(), "Bearer T") as session:
             _, text = await called(session, "history_summary", portfolio="main", period="7d")
