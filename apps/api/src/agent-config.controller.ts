@@ -33,6 +33,7 @@ export class AgentConfigController {
       contextMaxPositions: setting('agent.contextMaxPositions'),
       providerSort: option('agent.providerSort'),
       routerProviderSort: option('agent.routerProviderSort'),
+      tracing: option('agent.tracing'),
       // Copied rather than referenced: the agent has no shared libraries, and
       // this is the channel it already has.
       product: PRODUCT_FAQ.map((entry) => ({ ...entry })),

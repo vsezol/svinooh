@@ -29,6 +29,11 @@ def _count(raw: dict[str, Any], key: str, *, at_least: int) -> int | None:
     return value
 
 
+def _switch(raw: dict[str, Any], key: str) -> bool | None:
+    value = raw.get(key)
+    return {"on": True, "off": False}.get(value) if isinstance(value, str) else None
+
+
 def _facts(raw: dict[str, Any]) -> tuple[ProductFact, ...]:
     entries = raw.get("product")
     if not isinstance(entries, list):
@@ -54,6 +59,7 @@ def parse(raw: object) -> PanelValues:
         router_provider_sort=_word(raw, "routerProviderSort"),
         tool_hops=_count(raw, "toolHops", at_least=0),
         context_max_positions=_count(raw, "contextMaxPositions", at_least=1),
+        tracing=_switch(raw, "tracing"),
         product=_facts(raw),
     )
 

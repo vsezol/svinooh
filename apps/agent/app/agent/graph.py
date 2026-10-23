@@ -181,11 +181,11 @@ class LangGraphAgent:
         self.graph = self._build()
 
     async def run(self, ask: Ask) -> Reply:
-        with traced(ask) as config:
+        with traced(ask, self._config.tracing()) as config:
             return _reply(await self.graph.ainvoke(state_of(ask), config=config))
 
     async def watch(self, ask: Ask) -> AsyncIterator[Update]:
-        with traced(ask) as config:
+        with traced(ask, self._config.tracing()) as config:
             watched = turn_events(
                 self.graph, dict(state_of(ask)), answering=SPEAKING_NODES, config=config
             )

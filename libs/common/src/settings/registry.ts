@@ -552,6 +552,18 @@ export const REGISTRY = {
     readBy: ['agent'],
     live: true,
   },
+  'agent.tracing': {
+    kind: 'choice',
+    group: 'agent',
+    label: 'Traces to Langfuse',
+    about:
+      'on — every turn is recorded in Langfuse: the prompts, the tool calls, what came back and what it cost. off — nothing is sent, and Langfuse has nothing to show for those turns. Turn it off when the monthly allowance in Langfuse runs short: turns go on being answered either way.',
+    options: ['on', 'off'],
+    default: 'on',
+    env: 'AGENT_TRACING',
+    readBy: ['agent'],
+    live: true,
+  },
 } as const satisfies Record<string, SettingSpec>;
 
 /** Every key the code may ask for. Derived, so it cannot drift from the declarations. */
