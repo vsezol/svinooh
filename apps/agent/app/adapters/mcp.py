@@ -5,9 +5,9 @@ from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.interceptors import MCPToolCallRequest, MCPToolCallResult
 
-GROUNDED = frozenset({"position_details", "asset_breakdown", "history_summary", "calculate"})
+PORTFOLIO_TOOLS = frozenset({"position_details", "asset_breakdown", "history_summary", "calculate"})
 
-EARNING = frozenset({"calculate", "earn_options"})
+EARN_TOOLS = frozenset({"calculate", "earn_options"})
 
 PINNED = "portfolio"
 
@@ -20,11 +20,14 @@ class McpTools:
     """The svinooh MCP server, read with the caller's own token.
 
     The portfolio is the turn's, never the model's to pass: it is taken out of
-    every tool's schema and put back into every call.
+    every tool's schema and put back into every call. A turn with no token is
+    read on the server's public endpoint, which needs no sign-in and sees only
+    public portfolios; the signed-in one answers a request without a token 401.
     """
 
     def __init__(self, url: str, http: Callable[..., httpx.AsyncClient] | None = None) -> None:
         self._url = url
+        self._public = url.removesuffix("/mcp") + "/public/mcp"
         self._http = http
 
     async def overview(self, slug: str, token: str | None, positions: int) -> str:
@@ -38,7 +41,7 @@ class McpTools:
         return text
 
     async def tools(
-        self, token: str | None, slug: str | None = None, names: frozenset[str] = GROUNDED
+        self, token: str | None, slug: str | None = None, names: frozenset[str] = PORTFOLIO_TOOLS
     ) -> list[BaseTool]:
         async def pin(request: MCPToolCallRequest, handler: Handler) -> MCPToolCallResult:
             if request.name not in pinned:
@@ -54,7 +57,7 @@ class McpTools:
     def _client(self, token: str | None, *interceptors) -> MultiServerMCPClient:
         connection: dict = {
             "transport": "streamable_http",
-            "url": self._url,
+            "url": self._url if token else self._public,
             "headers": {"authorization": token} if token else {},
         }
         if self._http is not None:

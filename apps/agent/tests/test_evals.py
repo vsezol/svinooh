@@ -4,7 +4,7 @@ import httpx
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from app.adapters.mcp import EARNING, GROUNDED
+from app.adapters.mcp import EARN_TOOLS, PORTFOLIO_TOOLS
 from app.agent.graph import ANSWERING_NODES
 from app.agent.llm import Models
 from app.agent.prompts import DEFAULT_SYSTEM_PROMPT
@@ -37,8 +37,8 @@ TOOLS = (
             *asking_tools([]),
         ]
     }
-    | GROUNDED
-    | EARNING
+    | PORTFOLIO_TOOLS
+    | EARN_TOOLS
 )
 
 EXPECTATIONS = {

@@ -13,7 +13,7 @@ from svinooh_portfolio.portfolio import Portfolio
 from svinooh_portfolio.source import PortfolioApiSource
 
 from ..adapters.earn import YieldCatalog
-from ..adapters.mcp import EARNING, McpTools
+from ..adapters.mcp import EARN_TOOLS, McpTools
 from ..adapters.memory import MemoryStrategies
 from ..config import Config
 from ..domain import lpdown
@@ -438,7 +438,7 @@ class LangGraphAgent:
 
     async def _served(self, token: str | None) -> list:
         try:
-            return await self._mcp.tools(token, names=EARNING)
+            return await self._mcp.tools(token, names=EARN_TOOLS)
         except Exception as error:  # noqa: BLE001 — the turn can still prepare and ask
             logger.warning("mcp earn tools unavailable (%r)", error)
             metrics.counted(metrics.errors, type="mcp")

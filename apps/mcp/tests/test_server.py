@@ -1,3 +1,6 @@
+import base64
+import json
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from decimal import Decimal
@@ -7,6 +10,7 @@ import httpx2
 import pytest
 from mcp import ClientSession, MCPError
 from mcp.client.streamable_http import streamable_http_client
+from starlette.applications import Starlette
 from svinooh_portfolio.pools import CatalogSnapshot, YieldPool
 from svinooh_portfolio.portfolio import (
     History,
@@ -20,6 +24,7 @@ from svinooh_portfolio.portfolio import (
 from svinooh_portfolio.source import UnknownTokenError
 
 from app.server import create_app
+from app.store import MemoryStore
 
 PORTFOLIO = Portfolio(
     slug="main",
@@ -101,17 +106,39 @@ class Catalog:
         return CatalogSnapshot(pools=(pool,))
 
 
+def session_token(exp: float | None = None) -> str:
+    """A svinooh session the way the API issues one: a JWT, here unsigned, with an `exp`."""
+
+    def part(data: dict) -> str:
+        return base64.urlsafe_b64encode(json.dumps(data).encode()).decode().rstrip("=")
+
+    claims = {"sub": "u1", "exp": int(exp if exp is not None else time.time() + 3600)}
+    return f"{part({'alg': 'HS256'})}.{part(claims)}.signature"
+
+
+SESSION = f"Bearer {session_token()}"
+
+
+def app_for(host: Host, catalog: Catalog | None = None) -> Starlette:
+    return create_app(
+        host, catalog or Catalog(), MemoryStore(), "http://localhost", "https://svinooh.com"
+    )
+
+
 @asynccontextmanager
-async def connected(host: Host, token: str | None = None) -> AsyncIterator[ClientSession]:
-    app = create_app(host, Catalog())
+async def connected(
+    host: Host, token: str | None = None, catalog: Catalog | None = None
+) -> AsyncIterator[ClientSession]:
+    app = app_for(host, catalog)
     http = httpx2.AsyncClient(
         transport=httpx2.ASGITransport(app=app),
         headers={"authorization": token} if token else None,
     )
+    endpoint = "http://localhost/mcp" if token else "http://localhost/public/mcp"
     async with (
-        app.state.mcp.session_manager.run(),
+        app.router.lifespan_context(app),
         http,
-        streamable_http_client("http://mcp/mcp", http_client=http) as (read, write),
+        streamable_http_client(endpoint, http_client=http) as (read, write),
         ClientSession(read, write) as session,
     ):
         await session.initialize()
@@ -163,7 +190,7 @@ class TestTheServer:
 
     async def test_a_portfolio_can_be_attached_as_context(self):
         host = Host()
-        async with connected(host, "Bearer T") as session:
+        async with connected(host, SESSION) as session:
             templates = (await session.list_resource_templates()).resource_templates
             overview = await session.read_resource("svinooh://portfolio/main")
             assets = await session.read_resource("svinooh://portfolio/main/assets")
@@ -173,10 +200,10 @@ class TestTheServer:
         }
         assert overview.contents[0].text.startswith('Portfolio "main"')
         assert "Counted total $3,000.00" in assets.contents[0].text
-        assert host.tokens == ["Bearer T", "Bearer T"]
+        assert host.tokens == [SESSION, SESSION]
 
     async def test_a_missing_portfolio_is_refused_in_the_hosts_words(self):
-        async with connected(Host(missing=True), "Bearer T") as session:
+        async with connected(Host(missing=True), SESSION) as session:
             with pytest.raises(MCPError, match="Portfolio not found"):
                 await session.read_resource("svinooh://portfolio/nope")
 
@@ -200,15 +227,7 @@ class TestTheServer:
         assert host.read == ["peaceful-breezy-lynx"]
 
     async def test_the_best_rates_are_read_for_the_asked_token(self):
-        app = create_app(Host(), catalog := Catalog())
-        http = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app))
-        async with (
-            app.state.mcp.session_manager.run(),
-            http,
-            streamable_http_client("http://mcp/mcp", http_client=http) as (read, write),
-            ClientSession(read, write) as session,
-        ):
-            await session.initialize()
+        async with connected(Host(), catalog=(catalog := Catalog())) as session:
             failed, text = await called(session, "earn_options", token=" usdc ")
         assert not failed
         assert "Steakhouse USDC (kamino vault) pays 5.12% net on USDC" in text
@@ -216,10 +235,10 @@ class TestTheServer:
 
     async def test_reads_with_the_callers_own_token(self):
         host = Host()
-        async with connected(host, "Bearer T") as session:
+        async with connected(host, SESSION) as session:
             failed, text = await called(session, "position_details", portfolio="main", query="eth")
         assert not failed and "match" in text
-        assert host.tokens == ["Bearer T"]
+        assert host.tokens == [SESSION]
 
     async def test_without_a_token_reads_as_nobody(self):
         host = Host()
@@ -230,36 +249,36 @@ class TestTheServer:
         assert host.tokens == [None]
 
     async def test_lists_what_the_caller_owns(self):
-        async with connected(Host(), "Bearer T") as session:
+        async with connected(Host(), SESSION) as session:
             _, owned = await called(session, "my_portfolios")
         assert owned == "- Main (id main)"
 
     async def test_a_refused_token_is_said_plainly(self):
-        async with connected(Host(refused=True), "Bearer old") as session:
+        async with connected(Host(refused=True), f"Bearer {session_token()}") as session:
             failed, text = await called(session, "my_portfolios")
         assert failed and "refused" in text
 
     async def test_the_hosts_own_reason_reaches_the_caller(self):
-        async with connected(Host(missing=True), "Bearer T") as session:
+        async with connected(Host(missing=True), SESSION) as session:
             failed, text = await called(session, "asset_breakdown", portfolio="nope")
         assert failed and "Portfolio not found" in text
         assert "http://api" not in text
 
     async def test_the_overview_lists_as_many_positions_as_asked(self):
-        async with connected(Host(), "Bearer T") as session:
+        async with connected(Host(), SESSION) as session:
             _, one = await called(session, "portfolio_overview", portfolio="main", positions=1)
             failed, _ = await called(session, "portfolio_overview", portfolio="main", positions=0)
         assert "ETH: $3,000.00" in one
         assert failed, "fewer than one is refused"
 
     async def test_history_is_summarized_for_the_asked_period(self):
-        async with connected(Host(), "Bearer T") as session:
+        async with connected(Host(), SESSION) as session:
             _, text = await called(session, "history_summary", portfolio="main", period="7d")
         assert "+25.0%" in text
 
     async def test_answers_its_health_check(self):
-        app = create_app(Host(), Catalog())
+        app = app_for(Host())
         async with httpx2.AsyncClient(
-            transport=httpx2.ASGITransport(app=app), base_url="http://mcp"
+            transport=httpx2.ASGITransport(app=app), base_url="http://localhost"
         ) as client:
             assert (await client.get("/health")).json() == {"ok": True}

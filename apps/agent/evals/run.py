@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import base64
 import json
 import math
 import os
@@ -53,7 +54,22 @@ BASELINE = HERE / "baseline.json"
 
 MCP = HERE.parent.parent / "mcp"
 
-SIGNED_IN = "Bearer eval"
+
+def _session(subject: str, lasts_s: int) -> str:
+    """A svinooh session shaped the way the API issues one, a JWT with an `exp`.
+
+    Unsigned: the recorded worlds answer whatever is sent, and apps/mcp reads
+    only the expiry, leaving the signature to the API it reads with.
+    """
+
+    def part(data: dict) -> str:
+        return base64.urlsafe_b64encode(json.dumps(data).encode()).decode().rstrip("=")
+
+    claims = {"sub": subject, "exp": int(time.time()) + lasts_s}
+    return f"{part({'alg': 'HS256'})}.{part(claims)}.eval"
+
+
+SIGNED_IN = f"Bearer {_session('eval', 7 * 24 * 3600)}"
 
 
 @dataclass(frozen=True)
