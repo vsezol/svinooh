@@ -3,7 +3,8 @@ from contextlib import asynccontextmanager
 
 import httpx
 import httpx2
-from mcp import ClientSession
+import pytest
+from mcp import ClientSession, MCPError
 from mcp.client.streamable_http import streamable_http_client
 from svinooh_portfolio.portfolio import (
     History,
@@ -36,6 +37,8 @@ PORTFOLIO = Portfolio(
 class Host:
     def __init__(self, *, refused=False, missing=False):
         self.tokens = []
+        self.tracked = []
+        self.read = []
         self.refused = refused
         self.missing = missing
 
@@ -45,8 +48,13 @@ class Host:
             raise UnknownTokenError
         return Me(user_id="u1", portfolios=(PortfolioRef(slug="main", name="Main"),))
 
+    async def create_anonymous_portfolio(self, address):
+        self.tracked.append(address)
+        return "anon-1"
+
     async def portfolio(self, ref, token):
         self.tokens.append(token)
+        self.read.append(ref)
         if self.missing:
             response = httpx.Response(
                 404,
@@ -58,6 +66,7 @@ class Host:
 
     async def history(self, ref, range_, token):
         self.tokens.append(token)
+        self.read.append(ref)
         return History(
             range=range_,
             readings=(
@@ -102,6 +111,61 @@ class TestTheServer:
             "calculate",
         }
         assert all(tool.description for tool in tools)
+
+    async def test_every_tool_says_it_only_reads(self):
+        async with connected(Host()) as session:
+            tools = (await session.list_tools()).tools
+        assert all(tool.annotations and tool.annotations.read_only_hint for tool in tools)
+        assert all(tool.title for tool in tools)
+
+    async def test_offers_the_scenarios_a_person_starts(self):
+        async with connected(Host()) as session:
+            prompts = {p.name: p for p in (await session.list_prompts()).prompts}
+            asked = await session.get_prompt("risk_check", {"portfolio": "main"})
+        assert set(prompts) == {"weekly_review", "risk_check", "explain_position", "compare"}
+        assert [a.name for a in prompts["compare"].arguments or []] == ["first", "second"]
+        text = asked.messages[0].content
+        assert text.type == "text"
+        assert "Check main," in text.text
+        assert asked.messages[0].role == "user"
+
+    async def test_a_portfolio_can_be_attached_as_context(self):
+        host = Host()
+        async with connected(host, "Bearer T") as session:
+            templates = (await session.list_resource_templates()).resource_templates
+            overview = await session.read_resource("svinooh://portfolio/main")
+            assets = await session.read_resource("svinooh://portfolio/main/assets")
+        assert {t.uri_template for t in templates} == {
+            "svinooh://portfolio/{portfolio}",
+            "svinooh://portfolio/{portfolio}/assets",
+        }
+        assert overview.contents[0].text.startswith('Portfolio "main"')
+        assert "Counted total $3,000.00" in assets.contents[0].text
+        assert host.tokens == ["Bearer T", "Bearer T"]
+
+    async def test_a_missing_portfolio_is_refused_in_the_hosts_words(self):
+        async with connected(Host(missing=True), "Bearer T") as session:
+            with pytest.raises(MCPError, match="Portfolio not found"):
+                await session.read_resource("svinooh://portfolio/nope")
+
+    async def test_a_wallet_address_opens_as_the_landing_opens_it(self):
+        host = Host()
+        address = "0x" + "ab" * 20
+        async with connected(host) as session:
+            failed, text = await called(session, "portfolio_overview", portfolio=address)
+            history = await called(session, "history_summary", portfolio=address, period="7d")
+        assert not failed
+        assert text.startswith('Portfolio "main"')
+        assert host.tracked == [address, address]
+        assert host.read == ["anon-1", "anon-1"]
+        assert not history[0]
+
+    async def test_a_portfolio_id_is_read_as_it_is(self):
+        host = Host()
+        async with connected(host) as session:
+            await called(session, "asset_breakdown", portfolio="peaceful-breezy-lynx")
+        assert host.tracked == []
+        assert host.read == ["peaceful-breezy-lynx"]
 
     async def test_reads_with_the_callers_own_token(self):
         host = Host()

@@ -21,6 +21,8 @@ class DataSource(Protocol):
 
     async def history(self, ref: str, range_: str, token: str | None) -> History: ...
 
+    async def create_anonymous_portfolio(self, address: str) -> str: ...
+
 
 class PortfolioApiSource:
     def __init__(self, base_url: str, client: httpx.AsyncClient) -> None:
