@@ -83,6 +83,13 @@ NOTHING_READY = (
     "them, and never that something is ready to sign.)"
 )
 
+LEFT_IN_WORDS = (
+    "(They told you to put money to work and have not said how much risk they want, and "
+    "nothing was put in front of them to sign or to tap. If your answer leaves them a choice, "
+    "put it to them now with the buttons, in their language, as one question. If it leaves "
+    "them nothing to choose, call nothing.)"
+)
+
 CLAIMS_A_CARD = re.compile(r"\b(card|button)s?\b|карточк|кнопк", re.IGNORECASE)
 
 
@@ -347,6 +354,8 @@ class LangGraphAgent:
         )
         if settled is not None and not prepared and not asked:
             answered = await self._without_a_card(system, state, answered)
+        if settled is None and asked_to_place and not risk_known and not prepared and not asked:
+            await self._as_buttons(system, state, answered, asked)
         return {
             **answered,
             "deposits": () if asked else each_once(prepared),
@@ -609,6 +618,31 @@ class LangGraphAgent:
                 again = await self._models.ask(role, [*messages, HumanMessage(content=IN_WORDS)])
                 written.append(extract_text(again))
         return {"answer": all_that_was_said(written)}
+
+    async def _as_buttons(
+        self, system: str, state: AgentState, answered: AgentState, asked: list[Choice]
+    ) -> None:
+        """A choice the turn left in words, put up as the buttons it should have been.
+
+        The model knows to ask the risk with buttons and still, now and then, ends
+        on "pick how you'd like to go" under a table: on 2026-10-23 it did in two
+        turns of three. Then nothing on screen can be tapped, and the person has
+        to type the answer to a question the product meant to ask.
+        """
+        messages = self._messages(system, state)
+        messages += [
+            AIMessage(content=str(answered.get("answer", ""))),
+            HumanMessage(LEFT_IN_WORDS),
+        ]
+        tools = asking_tools(asked)
+        async with step("ask", "Putting the question as buttons"):
+            reply = await self._models.ask(
+                self._config.answering(), messages, prepare=lambda model: model.bind_tools(tools)
+            )
+        calls = getattr(reply, "tool_calls", None) or []
+        if calls:
+            logger.info("earn: the choice left in words is asked with buttons")
+            await run_tools(calls[:1], tools)
 
     async def _without_a_card(
         self, system: str, state: AgentState, answered: AgentState
