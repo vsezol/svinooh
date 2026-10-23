@@ -12,7 +12,7 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
-from svinooh_portfolio.portfolio import Period, exposure_of
+from svinooh_portfolio.portfolio import Period, Portfolio, exposure_of
 from svinooh_portfolio.reading import (
     calculated,
     describe_exposure,
@@ -25,11 +25,15 @@ from svinooh_portfolio.source import DataSource, UnknownTokenError
 
 MAX_POSITIONS = 12
 
+ADDRESS_AT_LEAST = 26
+
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
 INSTRUCTIONS = (
-    "Read-only access to crypto portfolios tracked on svinooh.com. A portfolio is "
-    "read by its id, the part of its link after /p/. With a svinooh token in the "
+    "Read-only access to crypto wallets and portfolios through svinooh.com. Pass a "
+    "wallet address to read that wallet, or a portfolio's id, the part of its link "
+    "after /p/, to read every wallet in it. A wallet svinooh has never read is read "
+    "on first use and may show no positions for a minute. With a svinooh token in the "
     "Authorization header the caller's own portfolios can be listed and read, "
     "private ones included; without one only public portfolios can be read. "
     "Figures are in USD as of each wallet's last scan."
@@ -40,7 +44,13 @@ PositionName = Annotated[
 ]
 
 PortfolioId = Annotated[
-    str, Field(description="The portfolio's id: the part of its svinooh.com link after /p/.")
+    str,
+    Field(
+        description=(
+            "A wallet address on any network svinooh reads (EVM, Solana, Tron, Bitcoin), or "
+            "a portfolio's id: the part of its svinooh.com link after /p/."
+        )
+    ),
 ]
 
 
@@ -69,7 +79,7 @@ def build(source: DataSource) -> MCPServer:
 
         Read this first; the other tools go deeper into what it summarizes.
         """
-        read = await _read(source.portfolio(portfolio, _token(ctx)))
+        read = await _portfolio(source, portfolio, ctx)
         return portfolio_context(read, MAX_POSITIONS)
 
     @server.tool(title="Position details", annotations=READ_ONLY)
@@ -83,7 +93,7 @@ def build(source: DataSource) -> MCPServer:
         whatever the case. If nothing matches, try once more with a different word
         from the question.
         """
-        return find_positions(await _read(source.portfolio(portfolio, _token(ctx))), query)
+        return find_positions(await _portfolio(source, portfolio, ctx), query)
 
     @server.tool(title="Asset breakdown", annotations=READ_ONLY)
     async def asset_breakdown(portfolio: PortfolioId, ctx: Context) -> str:
@@ -96,7 +106,7 @@ def build(source: DataSource) -> MCPServer:
         subtracts what is owed, which the overview cannot: it shows each position
         as one line.
         """
-        read = await _read(source.portfolio(portfolio, _token(ctx)))
+        read = await _portfolio(source, portfolio, ctx)
         return describe_exposure(exposure_of(read.positions, named_position))
 
     @server.tool(title="History summary", annotations=READ_ONLY)
@@ -107,7 +117,8 @@ def build(source: DataSource) -> MCPServer:
         Call when the question is what changed, grew or dropped, or about peaks and
         dips. Pick the smallest period that covers it ("this week" -> 7d).
         """
-        history = await _read(source.history(portfolio, period, _token(ctx)))
+        slug = await _slug(source, portfolio)
+        history = await _read(source.history(slug, period, _token(ctx)))
         return summarize_history(history, period)
 
     @server.tool(title="Calculate", annotations=READ_ONLY)
@@ -128,7 +139,7 @@ def build(source: DataSource) -> MCPServer:
         mime_type="text/plain",
     )
     async def portfolio_resource(portfolio: str, ctx: Context) -> str:
-        read = await _read(source.portfolio(portfolio, _token(ctx)), ResourceError)
+        read = await _portfolio(source, portfolio, ctx, ResourceError)
         return portfolio_context(read, MAX_POSITIONS)
 
     @server.resource(
@@ -138,52 +149,53 @@ def build(source: DataSource) -> MCPServer:
         mime_type="text/plain",
     )
     async def assets_resource(portfolio: str, ctx: Context) -> str:
-        read = await _read(source.portfolio(portfolio, _token(ctx)), ResourceError)
+        read = await _portfolio(source, portfolio, ctx, ResourceError)
         return describe_exposure(exposure_of(read.positions, named_position))
 
     @server.prompt(title="Weekly review")
     def weekly_review(portfolio: PortfolioId) -> str:
-        """How a portfolio did over the last 7 days, and why."""
+        """How a portfolio or wallet did over the last 7 days, and why."""
         return (
-            f"Review how my svinooh portfolio {portfolio} did over the last 7 days. Read its "
-            "overview and its 7-day history. Say how much the total changed in USD and percent, "
-            "which positions moved it most and why: price, rewards, debt or money moved in or "
-            "out. Then name anything that needs my attention this week, such as a loan whose "
-            "health fell or a pool that left its range. Use only figures the tools return and "
-            "work every sum out with the calculator."
+            f"Review how {portfolio} did over the last 7 days; it is a svinooh portfolio or "
+            "a wallet. Read its overview and its 7-day history. Say how much the total changed "
+            "in USD and percent, which positions moved it most and why: price, rewards, debt or "
+            "money moved in or out. Then name anything that needs attention this week, such as "
+            "a loan whose health fell or a pool that left its range. Use only figures the tools "
+            "return and work every sum out with the calculator."
         )
 
     @server.prompt(title="Risk check")
     def risk_check(portfolio: PortfolioId) -> str:
-        """The risks that lose money in a portfolio: debt, health, concentration, pools."""
+        """The risks that lose money: debt, health, concentration, pools out of range."""
         return (
-            f"Check my svinooh portfolio {portfolio} for the risks that lose money. Read its "
-            "overview, what its money is in, and the detail of every loan and pool. Cover: each "
-            "loan's health factor and how far prices can fall before liquidation; how much of the "
-            "portfolio sits in one token, one protocol and one network; the stablecoin share; "
-            "pools out of their range. Rank the risks from most to least urgent and say for each "
-            "what would reduce it. Use only figures the tools return."
+            f"Check {portfolio}, a svinooh portfolio or a wallet, for the risks that lose "
+            "money. Read its overview, what its money is in, and the detail of every loan and "
+            "pool. Cover: each loan's health factor and how far prices can fall before "
+            "liquidation; how much sits in one token, one protocol and one network; the "
+            "stablecoin share; pools out of their range. Rank the risks from most to least "
+            "urgent and say for each what would reduce it. Use only figures the tools return."
         )
 
     @server.prompt(title="Explain a position")
     def explain_position(portfolio: PortfolioId, position: PositionName) -> str:
         """One position in plain words: what it holds, what it earns, what can go wrong."""
         return (
-            f"Explain the {position} position in my svinooh portfolio {portfolio}. Read its full "
-            "detail. Say in plain words what it holds and in which amounts, what it earns and "
-            "from what (rates, rewards, fees), what it owes, and what can go wrong with it. Use "
-            "only figures the tools return."
+            f"Explain the {position} position of {portfolio}, a svinooh portfolio or a "
+            "wallet. Read its full detail. Say in plain words what it holds and in which "
+            "amounts, what it earns and from what (rates, rewards, fees), what it owes, and "
+            "what can go wrong with it. Use only figures the tools return."
         )
 
-    @server.prompt(title="Compare portfolios")
+    @server.prompt(title="Compare")
     def compare(first: PortfolioId, second: PortfolioId) -> str:
-        """Two portfolios side by side: size, what the money is in, risk, last 30 days."""
+        """Two portfolios or wallets side by side: size, holdings, risk, last 30 days."""
         return (
-            f"Compare my svinooh portfolios {first} and {second}. Read the overview, what the "
-            "money is in and the 30-day history of each. Put them side by side: total, split "
-            "between stablecoins and volatile assets, largest positions, debt, and how each "
-            "moved over 30 days. End with the one difference that matters most. Use only "
-            "figures the tools return and work every comparison out with the calculator."
+            f"Compare {first} and {second}; each is a svinooh portfolio or a wallet. Read the "
+            "overview, what the money is in and the 30-day history of each. Put them side by "
+            "side: total, split between stablecoins and volatile assets, largest positions, "
+            "debt, and how each moved over 30 days. End with the one difference that matters "
+            "most. Use only figures the tools return and work every comparison out with the "
+            "calculator."
         )
 
     return server
@@ -211,6 +223,25 @@ def create_app(source: DataSource) -> Starlette:
     )
     app.state.mcp = server
     return app
+
+
+async def _portfolio(
+    source: DataSource, ref: str, ctx: Context, refused: type[MCPServerError] = ToolError
+) -> Portfolio:
+    return await _read(source.portfolio(await _slug(source, ref, refused), _token(ctx)), refused)
+
+
+async def _slug(source: DataSource, ref: str, refused: type[MCPServerError] = ToolError) -> str:
+    """A wallet address opens as the anonymous portfolio the landing search opens it as:
+    found if somebody has looked before, created and first scanned if not."""
+    ref = ref.strip()
+    if not _looks_like_an_address(ref):
+        return ref
+    return await _read(source.create_anonymous_portfolio(ref), refused)
+
+
+def _looks_like_an_address(ref: str) -> bool:
+    return len(ref) >= ADDRESS_AT_LEAST and ref.isalnum()
 
 
 def _token(ctx: Context) -> str | None:

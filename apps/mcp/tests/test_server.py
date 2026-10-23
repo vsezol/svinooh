@@ -37,6 +37,8 @@ PORTFOLIO = Portfolio(
 class Host:
     def __init__(self, *, refused=False, missing=False):
         self.tokens = []
+        self.tracked = []
+        self.read = []
         self.refused = refused
         self.missing = missing
 
@@ -46,8 +48,13 @@ class Host:
             raise UnknownTokenError
         return Me(user_id="u1", portfolios=(PortfolioRef(slug="main", name="Main"),))
 
+    async def create_anonymous_portfolio(self, address):
+        self.tracked.append(address)
+        return "anon-1"
+
     async def portfolio(self, ref, token):
         self.tokens.append(token)
+        self.read.append(ref)
         if self.missing:
             response = httpx.Response(
                 404,
@@ -59,6 +66,7 @@ class Host:
 
     async def history(self, ref, range_, token):
         self.tokens.append(token)
+        self.read.append(ref)
         return History(
             range=range_,
             readings=(
@@ -118,7 +126,7 @@ class TestTheServer:
         assert [a.name for a in prompts["compare"].arguments or []] == ["first", "second"]
         text = asked.messages[0].content
         assert text.type == "text"
-        assert "portfolio main" in text.text
+        assert "Check main," in text.text
         assert asked.messages[0].role == "user"
 
     async def test_a_portfolio_can_be_attached_as_context(self):
@@ -139,6 +147,25 @@ class TestTheServer:
         async with connected(Host(missing=True), "Bearer T") as session:
             with pytest.raises(MCPError, match="Portfolio not found"):
                 await session.read_resource("svinooh://portfolio/nope")
+
+    async def test_a_wallet_address_opens_as_the_landing_opens_it(self):
+        host = Host()
+        address = "0x" + "ab" * 20
+        async with connected(host) as session:
+            failed, text = await called(session, "portfolio_overview", portfolio=address)
+            history = await called(session, "history_summary", portfolio=address, period="7d")
+        assert not failed
+        assert text.startswith('Portfolio "main"')
+        assert host.tracked == [address, address]
+        assert host.read == ["anon-1", "anon-1"]
+        assert not history[0]
+
+    async def test_a_portfolio_id_is_read_as_it_is(self):
+        host = Host()
+        async with connected(host) as session:
+            await called(session, "asset_breakdown", portfolio="peaceful-breezy-lynx")
+        assert host.tracked == []
+        assert host.read == ["peaceful-breezy-lynx"]
 
     async def test_reads_with_the_callers_own_token(self):
         host = Host()
