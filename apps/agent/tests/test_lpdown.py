@@ -1,6 +1,8 @@
 from dataclasses import replace
 from decimal import Decimal
 
+from svinooh_portfolio import testing as fx
+
 from app.adapters.memory import MemoryStrategies
 from app.agent.prompts import LPDOWN
 from app.agent.tools import liquidity_tools, lpdown_tools
@@ -8,7 +10,6 @@ from app.domain import lpdown
 from app.domain.conversation import Turn
 from app.domain.earn import LiquidityPosition, PairPool, Placement, Settled
 from app.ports import Ask
-from tests import fixtures as fx
 from tests.support import Catalog, Intents, agent
 from tests.test_graph import Api, Model
 

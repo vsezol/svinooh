@@ -314,7 +314,7 @@ class Holder:
         raise AssertionError("the host was asked who is asking")
 
     async def portfolio(self, ref, token):
-        from tests import fixtures as fx
+        from svinooh_portfolio import testing as fx
 
         return fx.as_portfolio(
             fx.portfolio([fx.wallet(fx.SOL_ADDRESS, [fx.USDC_SOL], chain="SOL")])

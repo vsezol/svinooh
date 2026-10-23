@@ -1,6 +1,3 @@
-from svinooh_portfolio.portfolio import Portfolio
-from svinooh_portfolio.reading import portfolio_context
-
 from ..config import Config
 from ..domain.earn import Settled
 from ..domain.onboarding import Created
@@ -118,9 +115,8 @@ def in_language(system: str, language: str | None) -> str:
     )
 
 
-def grounded_prompt(system: str, portfolio: Portfolio, max_positions: int) -> str:
-    shown = portfolio_context(portfolio, max_positions)
-    return f"{system}\n\nThe user is looking at this portfolio right now:\n{shown}"
+def grounded_prompt(system: str, overview: str) -> str:
+    return f"{system}\n\nThe user is looking at this portfolio right now:\n{overview}"
 
 
 def earn_prompt(

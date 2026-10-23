@@ -1104,6 +1104,13 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.13" },
 ]
 
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=2.3" },
+    { name = "pytest", specifier = ">=9.1" },
+    { name = "ruff", specifier = ">=0.16" },
+]
+
 [[package]]
 name = "truststore"
 version = "0.10.5"

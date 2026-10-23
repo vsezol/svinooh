@@ -1,8 +1,8 @@
 from dataclasses import replace
 from decimal import Decimal
 
+from svinooh_portfolio.format import UNNAMED_POSITION, UNNAMED_TOKEN, amount_at, named, rate, usd
 from svinooh_portfolio.portfolio import Portfolio, Position
-from svinooh_portfolio.reading import UNNAMED_POSITION, UNNAMED_TOKEN, amount_at, named, rate, usd
 
 from ..domain.conversation import Turn
 from ..domain.earn import Held, LiquidityPosition

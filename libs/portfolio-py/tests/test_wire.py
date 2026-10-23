@@ -1,8 +1,8 @@
 import pytest
 from pydantic import ValidationError
-from svinooh_portfolio import wire
 
-from tests import fixtures as fx
+from svinooh_portfolio import testing as fx
+from svinooh_portfolio import wire
 
 
 class TestReadingAPortfolio:

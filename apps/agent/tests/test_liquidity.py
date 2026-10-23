@@ -1,12 +1,13 @@
 from dataclasses import replace
 from decimal import Decimal
 
+from svinooh_portfolio import testing as fx
+
 from app.agent.context import placed_lines, replayed
 from app.agent.tools import liquidity_tools
 from app.api.routes import _deposit_card
 from app.domain.conversation import Turn
 from app.domain.earn import Coin, Held, LiquidityPosition, PairPool, Placement, YieldPool
-from tests import fixtures as fx
 from tests.support import Catalog
 
 PAIR = PairPool(

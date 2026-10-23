@@ -1,5 +1,9 @@
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Thread
 from typing import Any
 from urllib.parse import parse_qsl
 
@@ -48,3 +52,34 @@ def most_specific(route: str, params: dict[str, str], answers: dict[str, Any]) -
         if recorded_route == route and all(params.get(k) == v for k, v in wanted.items()):
             fitting.append((len(wanted), key))
     return max(fitting)[1] if fitting else None
+
+
+@contextmanager
+def every_world_served() -> Iterator[str]:
+    """Every recorded world's answers at one local address, for a process of its own.
+
+    The worlds name different portfolios, so one address can answer for all of
+    them. Their failures are left out: they are the agent's own reads to fail.
+    """
+    merged: dict[str, Any] = {}
+    for path in sorted(WORLDS.glob("*.json")):
+        merged.update(json.loads(path.read_text())["answers"])
+    world = World(merged)
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            answered = world.answer(httpx.Request("GET", f"http://world{self.path}"))
+            self.send_response(answered.status_code)
+            self.send_header("content-type", "application/json")
+            self.end_headers()
+            self.wfile.write(answered.content)
+
+        def log_message(self, *_: Any) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()

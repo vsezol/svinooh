@@ -13,6 +13,7 @@ from svinooh_portfolio.portfolio import Portfolio
 from svinooh_portfolio.source import PortfolioApiSource
 
 from ..adapters.earn import YieldCatalog
+from ..adapters.mcp import McpTools
 from ..adapters.memory import MemoryStrategies
 from ..config import Config
 from ..domain import lpdown
@@ -64,9 +65,7 @@ from .tools import (
     earn_tools,
     liquidity_tools,
     lpdown_tools,
-    math_tools,
     moving_tools,
-    portfolio_tools,
     run_tools,
     swap_tools,
 )
@@ -168,8 +167,11 @@ class LangGraphAgent:
         intents: IntentClassifier,
         confirmations: ConfirmationClassifier,
         strategies: Strategies | None = None,
+        *,
+        mcp: McpTools,
     ) -> None:
         self._config = config
+        self._mcp = mcp
         self._portfolio = portfolio
         self._catalog = catalog
         self._models = models
@@ -315,7 +317,7 @@ class LangGraphAgent:
         risk_known = state.get("risk", "unknown") != "unknown"
         range_known = state.get("lp_range", "unknown") != "unknown"
         tools = (
-            math_tools()
+            await self._calculator(state.get("authorization"))
             + earn_tools(self._catalog)
             + deposit_tools(self._catalog, prepared, risk_known, holdings.owners)
             + moving_tools(self._catalog, holdings.held, prepared, risk_known, holdings.owners)
@@ -435,6 +437,14 @@ class LangGraphAgent:
             return ()
         return placed
 
+    async def _calculator(self, token: str | None) -> list:
+        try:
+            return await self._mcp.tools(token, names=frozenset({"calculate"}))
+        except Exception as error:  # noqa: BLE001 — advice without a calculator beats none
+            logger.warning("mcp calculator unavailable (%r)", error)
+            metrics.counted(metrics.errors, type="mcp")
+            return []
+
     async def _grounded(self, state: AgentState) -> AgentState:
         system = system_prompt(self._config)
         tools: list = []
@@ -442,14 +452,19 @@ class LangGraphAgent:
         token = state.get("authorization")
         try:
             async with step("portfolio", f"Reading portfolio · {target}"):
-                portfolio = await self._portfolio.portfolio(target, token)
-                said(positions_read(portfolio))
-            system = grounded_prompt(system, portfolio, self._config.context_max_positions())
-            tools = math_tools() + portfolio_tools(self._portfolio, target, token, portfolio)
+                overview = await self._mcp.overview(
+                    target, token, self._config.context_max_positions()
+                )
         except Exception as error:  # noqa: BLE001 — any fetch failure degrades the same way
             logger.warning("portfolio context fetch failed for %s: %r", target, error)
             metrics.counted(metrics.errors, type="portfolio")
-            system = degraded_prompt(system)
+            return await self._answer(degraded_prompt(system), state)
+        system = grounded_prompt(system, overview)
+        try:
+            tools = await self._mcp.tools(token, target)
+        except Exception as error:  # noqa: BLE001 — the overview alone still answers
+            logger.warning("mcp tools unavailable for %s: %r", target, error)
+            metrics.counted(metrics.errors, type="mcp")
         return await self._answer_with_tools(system, state, tools)
 
     async def _onboard(self, state: AgentState) -> AgentState:

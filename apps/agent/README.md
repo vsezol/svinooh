@@ -10,6 +10,10 @@ being brought to production shape is in [ROADMAP.md](ROADMAP.md).
 Needs [uv](https://docs.astral.sh/uv/). Redis is optional: without
 `REDIS_URL`, conversations and counters live in the process.
 
+A portfolio question reads the portfolio and its tools through the MCP server
+in `apps/mcp`, at `AGENT_MCP_URL` (default `http://localhost:3010/mcp`): run
+it beside the agent, see its README.
+
 ```bash
 uv sync                                     # the venv, exactly what uv.lock says
 cp .env.example .env                        # then fill in AGENT_MODEL_API_KEY
