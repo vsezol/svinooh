@@ -3,7 +3,8 @@ from contextlib import asynccontextmanager
 
 import httpx
 import httpx2
-from mcp import ClientSession
+import pytest
+from mcp import ClientSession, MCPError
 from mcp.client.streamable_http import streamable_http_client
 from svinooh_portfolio.portfolio import (
     History,
@@ -119,6 +120,25 @@ class TestTheServer:
         assert text.type == "text"
         assert "portfolio main" in text.text
         assert asked.messages[0].role == "user"
+
+    async def test_a_portfolio_can_be_attached_as_context(self):
+        host = Host()
+        async with connected(host, "Bearer T") as session:
+            templates = (await session.list_resource_templates()).resource_templates
+            overview = await session.read_resource("svinooh://portfolio/main")
+            assets = await session.read_resource("svinooh://portfolio/main/assets")
+        assert {t.uri_template for t in templates} == {
+            "svinooh://portfolio/{portfolio}",
+            "svinooh://portfolio/{portfolio}/assets",
+        }
+        assert overview.contents[0].text.startswith('Portfolio "main"')
+        assert "Counted total $3,000.00" in assets.contents[0].text
+        assert host.tokens == ["Bearer T", "Bearer T"]
+
+    async def test_a_missing_portfolio_is_refused_in_the_hosts_words(self):
+        async with connected(Host(missing=True), "Bearer T") as session:
+            with pytest.raises(MCPError, match="Portfolio not found"):
+                await session.read_resource("svinooh://portfolio/nope")
 
     async def test_reads_with_the_callers_own_token(self):
         host = Host()

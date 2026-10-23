@@ -4,7 +4,7 @@ from typing import Annotated
 
 import httpx
 from mcp.server.mcpserver import Context, MCPServer
-from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import MCPServerError, ResourceError, ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp_types import ToolAnnotations
 from pydantic import Field
@@ -121,6 +121,26 @@ def build(source: DataSource) -> MCPServer:
         """
         return calculated(expression)
 
+    @server.resource(
+        "svinooh://portfolio/{portfolio}",
+        title="Portfolio",
+        description="A portfolio's overview, to attach to a conversation as context.",
+        mime_type="text/plain",
+    )
+    async def portfolio_resource(portfolio: str, ctx: Context) -> str:
+        read = await _read(source.portfolio(portfolio, _token(ctx)), ResourceError)
+        return portfolio_context(read, MAX_POSITIONS)
+
+    @server.resource(
+        "svinooh://portfolio/{portfolio}/assets",
+        title="Portfolio assets",
+        description="What a portfolio's money is in, net of debt, to attach as context.",
+        mime_type="text/plain",
+    )
+    async def assets_resource(portfolio: str, ctx: Context) -> str:
+        read = await _read(source.portfolio(portfolio, _token(ctx)), ResourceError)
+        return describe_exposure(exposure_of(read.positions, named_position))
+
     @server.prompt(title="Weekly review")
     def weekly_review(portfolio: PortfolioId) -> str:
         """How a portfolio did over the last 7 days, and why."""
@@ -197,11 +217,11 @@ def _token(ctx: Context) -> str | None:
     return (ctx.headers or {}).get("authorization")
 
 
-async def _read[T](reading: Awaitable[T]) -> T:
+async def _read[T](reading: Awaitable[T], refused: type[MCPServerError] = ToolError) -> T:
     try:
         return await reading
     except httpx.HTTPStatusError as error:
-        raise ToolError(_said(error.response)) from error
+        raise refused(_said(error.response)) from error
 
 
 def _said(response: httpx.Response) -> str:
