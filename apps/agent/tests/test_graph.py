@@ -3,12 +3,13 @@ from decimal import Decimal
 
 import pytest
 from svinooh_portfolio import testing as fx
+from svinooh_portfolio.pools import YieldPool
 from svinooh_portfolio.portfolio import Leg, Me, Portfolio, PortfolioRef, Position, Wallet
 
 from app.agent.context import without_what_the_chain_read
 from app.agent.onboarding import create_portfolio_with_wallets
 from app.domain.conversation import Turn
-from app.domain.earn import Coin, Held, YieldPool
+from app.domain.earn import Coin, Held
 from app.ports import Ask, Failed, Finished, Progress
 from tests.support import Catalog, Intents, agent
 
@@ -194,11 +195,11 @@ EARN_CALL = {"name": "earn_options", "args": {"token": "USDC"}, "id": "e1"}
 
 
 class TestWhereToPutMoney:
-    async def test_the_catalog_is_asked(self):
-        shelf = Catalog()
-        bot, _, _ = wire(intent="earn", catalog=shelf, model=Model(tool_calls=[EARN_CALL]))
+    async def test_the_rates_are_asked_of_the_mcp_server(self):
+        bot, _, _ = wire(intent="earn", catalog=Catalog(), model=Model(tool_calls=[EARN_CALL]))
         out = await run(bot)
-        assert out["intent"] == "earn" and shelf.asked == [("USDC", 8)]
+        assert out["intent"] == "earn"
+        assert bot._mcp.called == [("earn_options", EARN_CALL["args"])]
 
     async def test_what_is_already_earning_is_in_the_prompt_to_beat(self):
         bot, api, model = wire(
@@ -412,14 +413,13 @@ class TestWhereToPutMoney:
         bot, _, model = wire(intent="earn", catalog=Catalog(), model=Model(tool_calls=[EARN_CALL]))
         await run(bot)
         said = model.seen[-1].content
-        assert "Steakhouse USDC" in said and "Risk low" in said, "the tool result reached the model"
+        assert said == "earn_options answered", "the tool result reached the model"
 
     async def test_a_visitor_is_answered_without_being_asked_who_they_are(self):
-        shelf = Catalog()
-        bot, api, _ = wire(intent="earn", catalog=shelf, model=Model(tool_calls=[EARN_CALL]))
+        bot, api, _ = wire(intent="earn", catalog=Catalog(), model=Model(tool_calls=[EARN_CALL]))
         out = await run(bot)
         assert out["answer"] == "answered" and api.calls == []
-        assert shelf.asked, "a visitor gets the catalog, not a sign-in wall"
+        assert bot._mcp.called, "a visitor gets the rates, not a sign-in wall"
 
 
 class TestTools:

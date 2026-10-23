@@ -291,7 +291,7 @@ def mcp_serving(worlds: str) -> Iterator[str]:
     server = subprocess.Popen(
         ["uv", "run", "--frozen", "uvicorn", "main:app", "--port", str(port)],
         cwd=MCP,
-        env={**os.environ, "PORTFOLIO_API_URL": worlds},
+        env={**os.environ, "PORTFOLIO_API_URL": worlds, "EARN_API_URL": worlds},
     )
     try:
         for _ in range(120):

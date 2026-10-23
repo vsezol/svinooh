@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 UNNAMED_POSITION = "unnamed position"
 
 UNNAMED_TOKEN = "unnamed token"
@@ -38,3 +40,15 @@ def rate(fraction: float) -> str:
     if 0 < percent < 0.01:
         return "<0.01%"
     return f"{percent:.2f}%"
+
+
+def as_percent(value: Decimal) -> str:
+    return f"{value * 100:.2f}%"
+
+
+def as_money(value: Decimal) -> str:
+    if value >= 1_000_000:
+        return f"${value / 1_000_000:,.1f}M"
+    if value >= 1_000:
+        return f"${value / 1_000:,.0f}k"
+    return f"${value:,.0f}"

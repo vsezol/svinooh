@@ -1,11 +1,13 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from decimal import Decimal
 
 import httpx
 import httpx2
 import pytest
 from mcp import ClientSession, MCPError
 from mcp.client.streamable_http import streamable_http_client
+from svinooh_portfolio.pools import CatalogSnapshot, YieldPool
 from svinooh_portfolio.portfolio import (
     History,
     Me,
@@ -76,9 +78,32 @@ class Host:
         )
 
 
+class Catalog:
+    def __init__(self) -> None:
+        self.asked: list[tuple[str | None, int]] = []
+
+    async def best_pools(self, token, limit):
+        self.asked.append((token, limit))
+        pool = YieldPool(
+            id="sol:kamino:vault:A1",
+            name="Steakhouse USDC",
+            protocol="kamino",
+            kind="vault",
+            network="sol",
+            token="USDC",
+            apy_net=Decimal("0.0512"),
+            apy_base=Decimal("0.0412"),
+            apy_rewards=Decimal("0.01"),
+            apy_incentives=Decimal(0),
+            tvl_usd=Decimal("88000000"),
+            url="https://kamino.finance",
+        )
+        return CatalogSnapshot(pools=(pool,))
+
+
 @asynccontextmanager
 async def connected(host: Host, token: str | None = None) -> AsyncIterator[ClientSession]:
-    app = create_app(host)
+    app = create_app(host, Catalog())
     http = httpx2.AsyncClient(
         transport=httpx2.ASGITransport(app=app),
         headers={"authorization": token} if token else None,
@@ -109,6 +134,7 @@ class TestTheServer:
             "asset_breakdown",
             "history_summary",
             "calculate",
+            "earn_options",
         }
         assert all(tool.description for tool in tools)
 
@@ -122,7 +148,13 @@ class TestTheServer:
         async with connected(Host()) as session:
             prompts = {p.name: p for p in (await session.list_prompts()).prompts}
             asked = await session.get_prompt("risk_check", {"portfolio": "main"})
-        assert set(prompts) == {"weekly_review", "risk_check", "explain_position", "compare"}
+        assert set(prompts) == {
+            "weekly_review",
+            "risk_check",
+            "explain_position",
+            "compare",
+            "where_to_earn",
+        }
         assert [a.name for a in prompts["compare"].arguments or []] == ["first", "second"]
         text = asked.messages[0].content
         assert text.type == "text"
@@ -166,6 +198,21 @@ class TestTheServer:
             await called(session, "asset_breakdown", portfolio="peaceful-breezy-lynx")
         assert host.tracked == []
         assert host.read == ["peaceful-breezy-lynx"]
+
+    async def test_the_best_rates_are_read_for_the_asked_token(self):
+        app = create_app(Host(), catalog := Catalog())
+        http = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app))
+        async with (
+            app.state.mcp.session_manager.run(),
+            http,
+            streamable_http_client("http://mcp/mcp", http_client=http) as (read, write),
+            ClientSession(read, write) as session,
+        ):
+            await session.initialize()
+            failed, text = await called(session, "earn_options", token=" usdc ")
+        assert not failed
+        assert "Steakhouse USDC (kamino vault) pays 5.12% net on USDC" in text
+        assert catalog.asked == [("USDC", 8)]
 
     async def test_reads_with_the_callers_own_token(self):
         host = Host()
@@ -211,7 +258,7 @@ class TestTheServer:
         assert "+25.0%" in text
 
     async def test_answers_its_health_check(self):
-        app = create_app(Host())
+        app = create_app(Host(), Catalog())
         async with httpx2.AsyncClient(
             transport=httpx2.ASGITransport(app=app), base_url="http://mcp"
         ) as client:

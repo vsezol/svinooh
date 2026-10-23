@@ -7,6 +7,8 @@ from langchain_mcp_adapters.interceptors import MCPToolCallRequest, MCPToolCallR
 
 GROUNDED = frozenset({"position_details", "asset_breakdown", "history_summary", "calculate"})
 
+EARNING = frozenset({"calculate", "earn_options"})
+
 PINNED = "portfolio"
 
 SERVER = "svinooh"
