@@ -2,7 +2,9 @@
 
 An MCP server (streamable HTTP, at `/mcp`) with a portfolio's reading tools:
 the caller's portfolios, a portfolio's overview, its positions, what its money
-is in, how its total moved, and exact arithmetic. It reads the portfolio's
+is in, how its total moved, the best lending rates, and exact arithmetic. A
+wallet address works wherever a portfolio does. It also serves scenarios
+(prompts) and a portfolio as a resource. It reads the portfolio's
 public API with whatever `Authorization` header it is given and holds no
 credentials of its own, so a caller sees exactly what they would see on
 svinooh.com: their own private portfolios with a token, public ones without.
@@ -14,7 +16,8 @@ live in `libs/portfolio-py`, shared with `apps/agent`.
 
 ```bash
 uv sync
-PORTFOLIO_API_URL=https://api-production-b486.up.railway.app uv run uvicorn main:app --port 3000
+PORTFOLIO_API_URL=https://api-production-b486.up.railway.app EARN_API_URL=<earn service> \
+  uv run uvicorn main:app --port 3000
 uv run ruff check && uv run ruff format --check && uv run mypy && uv run pytest -q
 ```
 

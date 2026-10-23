@@ -12,10 +12,12 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
+from svinooh_portfolio.pools import PoolCatalog
 from svinooh_portfolio.portfolio import Period, Portfolio, exposure_of
 from svinooh_portfolio.reading import (
     calculated,
     describe_exposure,
+    describe_pools,
     find_positions,
     named_position,
     portfolio_context,
@@ -25,9 +27,13 @@ from svinooh_portfolio.source import DataSource, UnknownTokenError
 
 LARGEST = 12
 
+MAX_OPTIONS = 8
+
 ADDRESS_AT_LEAST = 26
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
+
+Ticker = Annotated[str, Field(description="One token's ticker, e.g. USDC; empty for every token.")]
 
 INSTRUCTIONS = (
     "Read-only access to crypto wallets and portfolios through svinooh.com. Pass a "
@@ -58,7 +64,7 @@ PortfolioId = Annotated[
 ]
 
 
-def build(source: DataSource) -> MCPServer:
+def build(source: DataSource, catalog: PoolCatalog) -> MCPServer:
     """The portfolio reading tools as an MCP server, acting with the caller's own token."""
     server = MCPServer("svinooh", instructions=INSTRUCTIONS)
 
@@ -138,6 +144,20 @@ def build(source: DataSource) -> MCPServer:
         """
         return calculated(expression)
 
+    @server.tool(title="Earn options", annotations=READ_ONLY)
+    async def earn_options(token: Ticker = "") -> str:
+        """Places that pay for a deposit of one token, best rate first.
+
+        Call when the question is where to put money, what to earn on, which rate a
+        token gets, or how to make idle funds work. Pass one ticker (USDC, SOL, PYUSD)
+        to narrow it to that token; leave it empty for the best rates across every
+        token. Returns each pool's rate split by where it comes from, how much is
+        deposited, its minimum deposit, and a risk band with its reasons. The same
+        catalog answers every call, so once per question is enough.
+        """
+        ticker = token.strip().upper()
+        return describe_pools(await _read(catalog.best_pools(ticker or None, MAX_OPTIONS)), ticker)
+
     @server.resource(
         "svinooh://portfolio/{portfolio}",
         title="Portfolio",
@@ -192,6 +212,21 @@ def build(source: DataSource) -> MCPServer:
             "what can go wrong with it. Use only figures the tools return."
         )
 
+    @server.prompt(title="Where to earn")
+    def where_to_earn(portfolio: PortfolioId) -> str:
+        """Where the idle money in a portfolio or wallet could earn, safest first."""
+        return (
+            f"Find where the idle money in {portfolio}, a svinooh portfolio or a wallet, "
+            "could earn. Read its overview to see which tokens sit idle and what already "
+            "earns, then read the best rates for each idle token. Recommend two or three "
+            "places, safest first, each with its net rate, where the rate comes from, its "
+            "risk band and the reason for it, and what it would earn a year on the amount "
+            "held. Say where moving something that already earns would gain enough to be "
+            "worth it. Never promise a rate will hold: a deposit goes into a third-party "
+            "protocol. Use only figures the tools return and work every sum out with the "
+            "calculator."
+        )
+
     @server.prompt(title="Compare")
     def compare(first: PortfolioId, second: PortfolioId) -> str:
         """Two portfolios or wallets side by side: size, holdings, risk, last 30 days."""
@@ -207,8 +242,8 @@ def build(source: DataSource) -> MCPServer:
     return server
 
 
-def create_app(source: DataSource) -> Starlette:
-    server = build(source)
+def create_app(source: DataSource, catalog: PoolCatalog) -> Starlette:
+    server = build(source, catalog)
     mcp = server.streamable_http_app(
         stateless_http=True,
         json_response=True,

@@ -13,7 +13,7 @@ from svinooh_portfolio.portfolio import Portfolio
 from svinooh_portfolio.source import PortfolioApiSource
 
 from ..adapters.earn import YieldCatalog
-from ..adapters.mcp import McpTools
+from ..adapters.mcp import EARNING, McpTools
 from ..adapters.memory import MemoryStrategies
 from ..config import Config
 from ..domain import lpdown
@@ -63,7 +63,6 @@ from .streaming import BETWEEN_REPLIES, turn_events
 from .tools import (
     asking_tools,
     deposit_tools,
-    earn_tools,
     liquidity_tools,
     lpdown_tools,
     moving_tools,
@@ -318,8 +317,7 @@ class LangGraphAgent:
         risk_known = state.get("risk", "unknown") != "unknown"
         range_known = state.get("lp_range", "unknown") != "unknown"
         tools = (
-            await self._calculator(state.get("authorization"))
-            + earn_tools(self._catalog)
+            await self._served(state.get("authorization"))
             + deposit_tools(self._catalog, prepared, risk_known, holdings.owners)
             + moving_tools(self._catalog, holdings.held, prepared, risk_known, holdings.owners)
             + swap_tools(self._catalog, prepared, holdings.owners)
@@ -438,11 +436,11 @@ class LangGraphAgent:
             return ()
         return placed
 
-    async def _calculator(self, token: str | None) -> list:
+    async def _served(self, token: str | None) -> list:
         try:
-            return await self._mcp.tools(token, names=frozenset({"calculate"}))
-        except Exception as error:  # noqa: BLE001 — advice without a calculator beats none
-            logger.warning("mcp calculator unavailable (%r)", error)
+            return await self._mcp.tools(token, names=EARNING)
+        except Exception as error:  # noqa: BLE001 — the turn can still prepare and ask
+            logger.warning("mcp earn tools unavailable (%r)", error)
             metrics.counted(metrics.errors, type="mcp")
             return []
 

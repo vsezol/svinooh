@@ -4,57 +4,26 @@ from decimal import Decimal, InvalidOperation
 
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
+from svinooh_portfolio.format import as_money, as_percent
+from svinooh_portfolio.pools import YieldPool
 
 from ..adapters.earn import YieldCatalog
 from ..domain import lpdown as down
 from ..domain.asking import MAX_ANSWERS, MIN_ANSWERS, Choice
-from ..domain.earn import (
-    Card,
-    CatalogSnapshot,
-    Coin,
-    Deposit,
-    Held,
-    LiquidityPosition,
-    PairPool,
-    Placement,
-    Swap,
-    YieldPool,
-)
+from ..domain.earn import Card, Coin, Deposit, Held, LiquidityPosition, PairPool, Placement, Swap
 from ..domain.house import plain
 from ..observability import metrics
 from .steps import said, step, tool_label
 
 logger = logging.getLogger("svinooh-ai")
 
+MAX_OPTIONS = 8
+
 NOTHING_CAME_BACK = (
     "This call failed, so you have nothing from it. Say plainly that you could "
     "not read this right now, name no figure that would have come from it, and "
     "do not answer it from memory."
 )
-
-MAX_OPTIONS = 8
-
-
-def earn_tools(catalog: YieldCatalog) -> list:
-
-    @tool
-    async def earn_options(token: str = "") -> str:
-        """Places that pay for a deposit of one token, best rate first.
-
-        Call whenever the user asks where to put money, what to earn on, which
-        rate a token gets, or how to make idle funds work. Pass one ticker —
-        USDC, SOL, PYUSD — to narrow it to that token; leave it empty for the
-        best rates across every token. Returns each pool's rate split by where
-        it comes from, how much is deposited, its minimum deposit, and a risk
-        band with its reasons.
-
-        Once per turn is enough: the same catalog answers every call, so a
-        second one spends a step you may need to prepare the deposit with.
-        """
-        ticker = token.strip().upper()
-        return describe_pools(await catalog.best_pools(ticker or None, MAX_OPTIONS), ticker)
-
-    return [earn_options]
 
 
 def asking_tools(asked: list[Choice]) -> list:
@@ -1016,66 +985,6 @@ def _amount(raw: str) -> Decimal | None:
     except InvalidOperation:
         return None
     return size if size > 0 else None
-
-
-def describe_pools(snapshot: CatalogSnapshot, asked_for: str) -> str:
-    said(pools_found(snapshot))
-    if not snapshot.pools:
-        asked = f" for {asked_for}" if asked_for else ""
-        return (
-            f"The catalog has nothing{asked} right now. Say so plainly; do not "
-            "substitute a token that was not asked about."
-        )
-    read_at = snapshot.as_of.isoformat(timespec="minutes") if snapshot.as_of else "an unknown time"
-    stale = " The catalog could not be refreshed, so these rates are older than usual."
-    lines = [f"Read at {read_at}.{stale if snapshot.stale else ''}"]
-    for pool in snapshot.pools:
-        reasons = "; ".join(pool.risk_reasons)
-        least = pool.terms.min_amount if pool.terms else None
-        lines.append(
-            f"- {pool.name} ({pool.protocol} {pool.kind}) pays "
-            f"{as_percent(pool.apy_net)} net on {pool.token} = {rate_breakdown(pool)}. "
-            f"{as_money(pool.tvl_usd)} deposited. Risk {pool.risk}"
-            f"{f': {reasons}' if reasons else ''}."
-            f"{f' Takes {least:f} {pool.token} at least.' if least else ''}"
-            f" id {pool.id}"
-        )
-    lines.append(
-        "Quote the net rate, name the risk in words with its reason, and never "
-        "promise a rate will hold — base is what borrowers pay, the rest ends. "
-        "Where a pool states a minimum, check it against what the user has "
-        "before you name that pool: proposing one they cannot reach spends "
-        "their turn on a refusal you could have read here."
-    )
-    return "\n".join(lines)
-
-
-def pools_found(snapshot: CatalogSnapshot) -> str:
-    if not snapshot.pools:
-        return "nothing listed"
-    pools = f"{len(snapshot.pools)} pools" if len(snapshot.pools) > 1 else "1 pool"
-    return f"{pools} · best {as_percent(max(pool.apy_net for pool in snapshot.pools))}"
-
-
-def rate_breakdown(pool: YieldPool) -> str:
-    parts = [f"{as_percent(pool.apy_base)} base"]
-    if pool.apy_rewards > 0:
-        parts.append(f"{as_percent(pool.apy_rewards)} rewards")
-    if pool.apy_incentives > 0:
-        parts.append(f"{as_percent(pool.apy_incentives)} incentives")
-    return " + ".join(parts)
-
-
-def as_percent(value: Decimal) -> str:
-    return f"{value * 100:.2f}%"
-
-
-def as_money(value: Decimal) -> str:
-    if value >= 1_000_000:
-        return f"${value / 1_000_000:,.1f}M"
-    if value >= 1_000:
-        return f"${value / 1_000:,.0f}k"
-    return f"${value:,.0f}"
 
 
 _PERIODS = {

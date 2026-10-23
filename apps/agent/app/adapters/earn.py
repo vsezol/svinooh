@@ -1,26 +1,14 @@
-from dataclasses import replace
-from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Protocol
 
 import httpx
-from pydantic import BaseModel, ConfigDict
+from pydantic import Field
+from svinooh_portfolio.pools import PoolAnswer, PoolWire, Wire, YieldPool, number
 
-from ..domain.earn import (
-    CatalogSnapshot,
-    Coin,
-    DepositTerms,
-    Held,
-    LiquidityPosition,
-    PairPool,
-    YieldPool,
-)
+from ..domain.earn import Coin, Held, LiquidityPosition, PairPool
 
 
 class YieldCatalog(Protocol):
-    async def best_pools(self, token: str | None, limit: int) -> CatalogSnapshot:
-        """The best-paying pools for a token, or across every token."""
-
     async def pool(self, pool_id: str) -> YieldPool | None: ...
 
     async def positions(self, owner: str) -> tuple[Held, ...]: ...
@@ -53,20 +41,12 @@ class EarnApiSource:
         self._base = base_url.rstrip("/")
         self._client = client
 
-    async def best_pools(self, token: str | None, limit: int) -> CatalogSnapshot:
-        params: dict[str, str | int] = {"sort": "-apy", "limit": limit}
-        if token:
-            params["token"] = token
-        response = await self._client.get(f"{self._base}/v1/lend/pools", params=params)
-        response.raise_for_status()
-        return _CatalogAnswer.model_validate(response.json()).domain()
-
     async def pool(self, pool_id: str) -> YieldPool | None:
         response = await self._client.get(f"{self._base}/v1/lend/pools/{pool_id}")
         if response.status_code == 404:
             return None
         response.raise_for_status()
-        return _PoolAnswer.model_validate(response.json()).domain()
+        return PoolAnswer.model_validate(response.json()).domain()
 
     async def positions(self, owner: str) -> tuple[Held, ...]:
         response = await self._client.get(
@@ -131,7 +111,7 @@ class EarnApiSource:
             return None
         response.raise_for_status()
         amount = _HoldingAnswer.model_validate(response.json()).data.amount
-        return None if amount is None else _number(amount)
+        return None if amount is None else number(amount)
 
     async def opened_by(self, signature: str, owner: str) -> tuple[str, ...]:
         response = await self._client.get(
@@ -147,160 +127,53 @@ class EarnApiSource:
         return tuple(one.address for pair in found.pairs for one in pair.positions if one.touched)
 
 
-def _number(raw: str | None) -> Decimal:
-    try:
-        return Decimal(raw) if raw else Decimal(0)
-    except InvalidOperation:
-        return Decimal(0)
-
-
-class _WirePart(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-
-class _WireToken(_WirePart):
-    symbol: str
-    mint: str = ""
-    decimals: int | None = None
-
-
-class _WireApy(_WirePart):
-    net: str
-    base: str
-    rewards: str
-    incentives: str = "0"
-
-
-class _WirePool(_WirePart):
-    id: str
-    name: str
-    protocol: str
-    kind: str
-    network: str = ""
-    token: _WireToken
-    apy: _WireApy
-    tvl_usd: str
-    url: str
-
-    def domain(self) -> YieldPool:
-        return YieldPool(
-            id=self.id,
-            name=self.name,
-            protocol=self.protocol,
-            kind=self.kind,
-            network=self.network,
-            token=self.token.symbol,
-            apy_net=_number(self.apy.net),
-            apy_base=_number(self.apy.base),
-            apy_rewards=_number(self.apy.rewards),
-            apy_incentives=_number(self.apy.incentives),
-            tvl_usd=_number(self.tvl_usd),
-            url=self.url,
-        )
-
-
-class _WireDeposit(_WirePart):
-    program_id: str
-    address: str
-    min_amount: str | None = None
-    shares_mint: str | None = None
-    shares_decimals: int | None = None
-    token_program: str | None = None
-    lending_market: str | None = None
-
-
-class _WirePoolDetail(_WirePool):
-    deposit: _WireDeposit
-
-    def domain(self) -> YieldPool:
-        pool = super().domain()
-        return replace(
-            pool,
-            terms=DepositTerms(
-                program_id=self.deposit.program_id,
-                address=self.deposit.address,
-                token_mint=self.token.mint,
-                token_decimals=self.token.decimals,
-                min_amount=_number(self.deposit.min_amount) or None,
-                shares_mint=self.deposit.shares_mint,
-                shares_decimals=self.deposit.shares_decimals,
-                token_program=self.deposit.token_program,
-                lending_market=self.deposit.lending_market,
-            ),
-        )
-
-
-class _PoolAnswer(_WirePart):
-    data: _WirePoolDetail
-
-    def domain(self) -> YieldPool:
-        return self.data.domain()
-
-
-class _WireMeta(_WirePart):
-    as_of: datetime | None = None
-    stale: bool = False
-
-
-class _CatalogAnswer(_WirePart):
-    data: list[_WirePool]
-    meta: _WireMeta = _WireMeta()
-
-    def domain(self) -> CatalogSnapshot:
-        return CatalogSnapshot(
-            pools=tuple(pool.domain() for pool in self.data),
-            as_of=self.meta.as_of,
-            stale=self.meta.stale,
-        )
-
-
-class _WireHeld(_WirePart):
-    pool: _WirePool
+class _WireHeld(Wire):
+    pool: PoolWire
     amount: str
     shares: str | None = None
 
     def domain(self) -> Held:
         return Held(
             pool=self.pool.domain(),
-            amount=_number(self.amount),
-            shares=_number(self.shares) if self.shares else None,
+            amount=number(self.amount),
+            shares=number(self.shares) if self.shares else None,
         )
 
 
-class _PositionsAnswer(_WirePart):
+class _PositionsAnswer(Wire):
     data: list[_WireHeld]
 
     def domain(self) -> tuple[Held, ...]:
         return tuple(held.domain() for held in self.data)
 
 
-class _WireCoin(_WirePart):
+class _WireCoin(Wire):
     symbol: str
     mint: str
     decimals: int
 
 
-class _CoinAnswer(_WirePart):
+class _CoinAnswer(Wire):
     data: _WireCoin
 
     def domain(self) -> Coin:
         return Coin(symbol=self.data.symbol, mint=self.data.mint, decimals=self.data.decimals)
 
 
-class _WireHolding(_WirePart):
+class _WireHolding(Wire):
     amount: str | None
 
 
-class _HoldingAnswer(_WirePart):
+class _HoldingAnswer(Wire):
     data: _WireHolding
 
 
-class _WirePairToken(_WirePart):
+class _WirePairToken(Wire):
     symbol: str
     mint: str
 
 
-class _WirePairPool(_WirePart):
+class _WirePairPool(Wire):
     id: str
     name: str
     x: _WirePairToken
@@ -324,26 +197,26 @@ class _WirePairPool(_WirePart):
             x_mint=self.x.mint,
             y_mint=self.y.mint,
             bin_step=self.bin_step,
-            fee_apr=_number(self.fee_apr),
-            tvl_usd=_number(self.tvl_usd),
-            price=_number(self.price),
+            fee_apr=number(self.fee_apr),
+            tvl_usd=number(self.tvl_usd),
+            price=number(self.price),
             url=self.url,
             range_bins=self.range_bins,
             why_not=self.why_not,
-            active_usd=None if self.active_usd is None else _number(self.active_usd),
-            fee_active=None if self.fee_active is None else _number(self.fee_active),
+            active_usd=None if self.active_usd is None else number(self.active_usd),
+            fee_active=None if self.fee_active is None else number(self.fee_active),
         )
 
 
-class _PairPoolsAnswer(_WirePart):
+class _PairPoolsAnswer(Wire):
     data: list[_WirePairPool]
 
 
-class _PairPoolAnswer(_WirePart):
+class _PairPoolAnswer(Wire):
     data: _WirePairPool
 
 
-class _WireLiquidityPosition(_WirePart):
+class _WireLiquidityPosition(Wire):
     address: str
     pool: _WirePairPool
     lower_price: str
@@ -358,32 +231,32 @@ class _WireLiquidityPosition(_WirePart):
         return LiquidityPosition(
             address=self.address,
             pool=self.pool.domain(),
-            lower_price=_number(self.lower_price),
-            upper_price=_number(self.upper_price),
+            lower_price=number(self.lower_price),
+            upper_price=number(self.upper_price),
             in_range=self.in_range,
-            amount_x=_number(self.amount_x),
-            amount_y=_number(self.amount_y),
-            value_usd=_number(self.value_usd),
-            fees_usd=_number(self.fees_usd),
+            amount_x=number(self.amount_x),
+            amount_y=number(self.amount_y),
+            value_usd=number(self.value_usd),
+            fees_usd=number(self.fees_usd),
         )
 
 
-class _LiquidityPositionsAnswer(_WirePart):
+class _LiquidityPositionsAnswer(Wire):
     data: list[_WireLiquidityPosition]
 
 
-class _WireTouched(_WirePart):
+class _WireTouched(Wire):
     address: str
     touched: bool = False
 
 
-class _WirePairAfter(_WirePart):
-    positions: list[_WireTouched] = []
+class _WirePairAfter(Wire):
+    positions: list[_WireTouched] = Field(default_factory=list)
 
 
-class _WireEffects(_WirePart):
-    pairs: list[_WirePairAfter] = []
+class _WireEffects(Wire):
+    pairs: list[_WirePairAfter] = Field(default_factory=list)
 
 
-class _EffectsAnswer(_WirePart):
+class _EffectsAnswer(Wire):
     data: _WireEffects | None = None

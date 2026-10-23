@@ -4,14 +4,13 @@ import httpx
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from app.adapters.mcp import GROUNDED
+from app.adapters.mcp import EARNING, GROUNDED
 from app.agent.graph import ANSWERING_NODES
 from app.agent.llm import Models
 from app.agent.prompts import DEFAULT_SYSTEM_PROMPT
 from app.agent.tools import (
     asking_tools,
     deposit_tools,
-    earn_tools,
     liquidity_tools,
     lpdown_tools,
     moving_tools,
@@ -22,22 +21,25 @@ from evals.calibrate import Label, agreement, kappa
 from evals.calibrate import load as calibration_set
 from evals.checks import judged, mentions
 from evals.judges import CRITERIA, Judges, Shown, Verdict, data_of, presented, record_of
-from evals.run import Case, Golden, gate, langfuse_for, load, parse, wilson
-from evals.world import WORLDS, World
+from evals.run import Case, Golden, gate, langfuse_for, load, mcp_serving, parse, wilson
+from evals.world import WORLDS, World, every_world_served
 from tests.support import Talking
 
-TOOLS = {
-    tool.name
-    for tool in [
-        *earn_tools(None),
-        *deposit_tools(None, []),
-        *moving_tools(None, (), []),
-        *swap_tools(None, []),
-        *liquidity_tools(None, (), [], True, None, ()),
-        *lpdown_tools(None, [], (), None),
-        *asking_tools([]),
-    ]
-} | GROUNDED
+TOOLS = (
+    {
+        tool.name
+        for tool in [
+            *deposit_tools(None, []),
+            *moving_tools(None, (), []),
+            *swap_tools(None, []),
+            *liquidity_tools(None, (), [], True, None, ()),
+            *lpdown_tools(None, [], (), None),
+            *asking_tools([]),
+        ]
+    }
+    | GROUNDED
+    | EARNING
+)
 
 EXPECTATIONS = {
     "answered_by",
@@ -235,12 +237,14 @@ class TestOneCaseOffline:
         )
         settings = Settings()
         panel = parse(json.loads((WORLDS.parent / "panel.json").read_text()))
-        golden = Golden(settings, panel, langfuse_for())
         case = next(case for case in CASES if case.id == "earn-asking-usdc")
-        answered = await golden.answer(case, Models(settings, factory=lambda *_, **__: scripted))
+        with every_world_served() as worlds, mcp_serving(worlds) as mcp_url:
+            golden = Golden(settings, panel, langfuse_for(), mcp_url=mcp_url)
+            answered = await golden.answer(
+                case, Models(settings, factory=lambda *_, **__: scripted)
+            )
         assert answered["answered_by"] == "earn"
         assert [tool["name"] for tool in answered["tools"]] == ["earn_options"]
-        assert "GET /v1/lend/pools" in answered["fetched"]
         assert all(ok for ok, _ in judged(case.expect, answered).values())
 
 

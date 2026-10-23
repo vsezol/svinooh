@@ -1,7 +1,18 @@
 from decimal import Decimal
 
 from .arithmetic import evaluate
-from .format import UNNAMED_POSITION, UNNAMED_TOKEN, amount_at, named, rate, short_address, usd
+from .format import (
+    UNNAMED_POSITION,
+    UNNAMED_TOKEN,
+    amount_at,
+    as_money,
+    as_percent,
+    named,
+    rate,
+    short_address,
+    usd,
+)
+from .pools import CatalogSnapshot, YieldPool
 from .portfolio import Exposure, History, Portfolio, Position, Side, Total, Wallet, total_of
 
 MAX_CHARS = 6000
@@ -241,3 +252,49 @@ def _side(side: Side, total: Decimal) -> str:
 
 def _held_and_owed(side: Side) -> str:
     return f"{money(side.held)} held, {money(side.owed)} owed"
+
+
+def describe_pools(snapshot: CatalogSnapshot, asked_for: str) -> str:
+    if not snapshot.pools:
+        asked = f" for {asked_for}" if asked_for else ""
+        return (
+            f"The catalog has nothing{asked} right now. Say so plainly; do not "
+            "substitute a token that was not asked about."
+        )
+    read_at = snapshot.as_of.isoformat(timespec="minutes") if snapshot.as_of else "an unknown time"
+    stale = " The catalog could not be refreshed, so these rates are older than usual."
+    lines = [f"Read at {read_at}.{stale if snapshot.stale else ''}"]
+    for pool in snapshot.pools:
+        reasons = "; ".join(pool.risk_reasons)
+        least = pool.terms.min_amount if pool.terms else None
+        lines.append(
+            f"- {pool.name} ({pool.protocol} {pool.kind}) pays "
+            f"{as_percent(pool.apy_net)} net on {pool.token} = {rate_breakdown(pool)}. "
+            f"{as_money(pool.tvl_usd)} deposited. Risk {pool.risk}"
+            f"{f': {reasons}' if reasons else ''}."
+            f"{f' Takes {least:f} {pool.token} at least.' if least else ''}"
+            f" id {pool.id}"
+        )
+    lines.append(
+        "Quote the net rate, name the risk in words with its reason, and never "
+        "promise a rate will hold — base is what borrowers pay, the rest ends. "
+        "Where a pool states a minimum, check it against what the user has "
+        "before you name that pool."
+    )
+    return "\n".join(lines)
+
+
+def pools_found(snapshot: CatalogSnapshot) -> str:
+    if not snapshot.pools:
+        return "nothing listed"
+    pools = f"{len(snapshot.pools)} pools" if len(snapshot.pools) > 1 else "1 pool"
+    return f"{pools} · best {as_percent(max(pool.apy_net for pool in snapshot.pools))}"
+
+
+def rate_breakdown(pool: YieldPool) -> str:
+    parts = [f"{as_percent(pool.apy_base)} base"]
+    if pool.apy_rewards > 0:
+        parts.append(f"{as_percent(pool.apy_rewards)} rewards")
+    if pool.apy_incentives > 0:
+        parts.append(f"{as_percent(pool.apy_incentives)} incentives")
+    return " + ".join(parts)

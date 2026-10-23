@@ -13,6 +13,7 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.tools import StructuredTool
+from svinooh_portfolio.pools import CatalogSnapshot, DepositTerms, YieldPool
 from svinooh_portfolio.reading import portfolio_context
 
 from app import create_app
@@ -30,15 +31,7 @@ from app.application.sessions import SessionStore
 from app.application.turns import Turns
 from app.config import Config
 from app.container import Container
-from app.domain.earn import (
-    CatalogSnapshot,
-    Coin,
-    DepositTerms,
-    Held,
-    LiquidityPosition,
-    PairPool,
-    YieldPool,
-)
+from app.domain.earn import Coin, Held, LiquidityPosition, PairPool
 from app.panel import NOTHING_DECIDED, PanelValues
 from app.settings import Settings
 
@@ -216,11 +209,17 @@ class Catalog:
         return self.opened.get((signature, owner), ())
 
 
-def _served(name: str) -> StructuredTool:
-    def answer(**_args) -> str:
+def _served(name: str, called: list) -> StructuredTool:
+    def answer(**args) -> str:
+        called.append((name, args))
         return f"{name} answered"
 
-    return StructuredTool.from_function(answer, name=name, description=f"The server's {name}.")
+    return StructuredTool(
+        name=name,
+        description=f"The server's {name}.",
+        args_schema={"type": "object", "properties": {}, "additionalProperties": True},
+        func=answer,
+    )
 
 
 class Mcp:
@@ -229,12 +228,13 @@ class Mcp:
 
     def __init__(self, host) -> None:
         self.host = host
+        self.called: list[tuple[str, dict]] = []
 
     async def overview(self, slug, token, positions):
         return portfolio_context(await self.host.portfolio(slug, token), positions)
 
     async def tools(self, token, slug=None, names=GROUNDED):
-        return [_served(name) for name in sorted(names)]
+        return [_served(name, self.called) for name in sorted(names)]
 
 
 class NoHost:

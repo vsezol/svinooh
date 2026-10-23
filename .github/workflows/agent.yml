@@ -9,12 +9,14 @@ on:
     paths:
       - apps/agent/**
       - libs/portfolio-py/**
+      - apps/mcp/**
       - .github/workflows/agent.yml
       - .dockerignore
   pull_request:
     paths:
       - apps/agent/**
       - libs/portfolio-py/**
+      - apps/mcp/**
       - .github/workflows/agent.yml
       - .dockerignore
 
