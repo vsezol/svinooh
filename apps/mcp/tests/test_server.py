@@ -103,6 +103,23 @@ class TestTheServer:
         }
         assert all(tool.description for tool in tools)
 
+    async def test_every_tool_says_it_only_reads(self):
+        async with connected(Host()) as session:
+            tools = (await session.list_tools()).tools
+        assert all(tool.annotations and tool.annotations.read_only_hint for tool in tools)
+        assert all(tool.title for tool in tools)
+
+    async def test_offers_the_scenarios_a_person_starts(self):
+        async with connected(Host()) as session:
+            prompts = {p.name: p for p in (await session.list_prompts()).prompts}
+            asked = await session.get_prompt("risk_check", {"portfolio": "main"})
+        assert set(prompts) == {"weekly_review", "risk_check", "explain_position", "compare"}
+        assert [a.name for a in prompts["compare"].arguments or []] == ["first", "second"]
+        text = asked.messages[0].content
+        assert text.type == "text"
+        assert "portfolio main" in text.text
+        assert asked.messages[0].role == "user"
+
     async def test_reads_with_the_callers_own_token(self):
         host = Host()
         async with connected(host, "Bearer T") as session:

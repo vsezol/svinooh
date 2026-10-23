@@ -6,6 +6,7 @@ import httpx
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
+from mcp_types import ToolAnnotations
 from pydantic import Field
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -24,6 +25,8 @@ from svinooh_portfolio.source import DataSource, UnknownTokenError
 
 MAX_POSITIONS = 12
 
+READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
+
 INSTRUCTIONS = (
     "Read-only access to crypto portfolios tracked on svinooh.com. A portfolio is "
     "read by its id, the part of its link after /p/. With a svinooh token in the "
@@ -31,6 +34,10 @@ INSTRUCTIONS = (
     "private ones included; without one only public portfolios can be read. "
     "Figures are in USD as of each wallet's last scan."
 )
+
+PositionName = Annotated[
+    str, Field(description="The position's token symbol or protocol, e.g. ETH or Aave.")
+]
 
 PortfolioId = Annotated[
     str, Field(description="The portfolio's id: the part of its svinooh.com link after /p/.")
@@ -41,7 +48,7 @@ def build(source: DataSource) -> MCPServer:
     """The portfolio reading tools as an MCP server, acting with the caller's own token."""
     server = MCPServer("svinooh", instructions=INSTRUCTIONS)
 
-    @server.tool()
+    @server.tool(title="My portfolios", annotations=READ_ONLY)
     async def my_portfolios(ctx: Context) -> str:
         """The portfolios the signed-in caller owns, each with the id it is read by."""
         token = _token(ctx)
@@ -55,7 +62,7 @@ def build(source: DataSource) -> MCPServer:
             return "The caller owns no portfolios yet."
         return "\n".join(f"- {ref.name or ref.slug} (id {ref.slug})" for ref in owned)
 
-    @server.tool()
+    @server.tool(title="Portfolio overview", annotations=READ_ONLY)
     async def portfolio_overview(portfolio: PortfolioId, ctx: Context) -> str:
         """A portfolio as a whole: its total, where the money is by network, type and
         protocol, and every wallet with its largest positions.
@@ -65,7 +72,7 @@ def build(source: DataSource) -> MCPServer:
         read = await _read(source.portfolio(portfolio, _token(ctx)))
         return portfolio_context(read, MAX_POSITIONS)
 
-    @server.tool()
+    @server.tool(title="Position details", annotations=READ_ONLY)
     async def position_details(portfolio: PortfolioId, query: str, ctx: Context) -> str:
         """Full detail on a portfolio's positions matching a token symbol or protocol name:
         amounts, legs, debt, rates, health and pool ranges.
@@ -78,7 +85,7 @@ def build(source: DataSource) -> MCPServer:
         """
         return find_positions(await _read(source.portfolio(portfolio, _token(ctx))), query)
 
-    @server.tool()
+    @server.tool(title="Asset breakdown", annotations=READ_ONLY)
     async def asset_breakdown(portfolio: PortfolioId, ctx: Context) -> str:
         """What a portfolio's money is in, counted exactly from every position's tokens:
         stablecoins against volatile assets, and each token's net amount.
@@ -92,7 +99,7 @@ def build(source: DataSource) -> MCPServer:
         read = await _read(source.portfolio(portfolio, _token(ctx)))
         return describe_exposure(exposure_of(read.positions, named_position))
 
-    @server.tool()
+    @server.tool(title="History summary", annotations=READ_ONLY)
     async def history_summary(portfolio: PortfolioId, period: Period, ctx: Context) -> str:
         """How a portfolio's total value moved over a period: start, last reading,
         change in USD and percent, low and high.
@@ -103,7 +110,7 @@ def build(source: DataSource) -> MCPServer:
         history = await _read(source.history(portfolio, period, _token(ctx)))
         return summarize_history(history, period)
 
-    @server.tool()
+    @server.tool(title="Calculate", annotations=READ_ONLY)
     def calculate(expression: str) -> str:
         """Exact arithmetic: a sum, a difference, a share, a percentage.
 
@@ -113,6 +120,51 @@ def build(source: DataSource) -> MCPServer:
         e.g. "(10245.13 + 32.9) / 85109.6 * 100". Quote the result it returns.
         """
         return calculated(expression)
+
+    @server.prompt(title="Weekly review")
+    def weekly_review(portfolio: PortfolioId) -> str:
+        """How a portfolio did over the last 7 days, and why."""
+        return (
+            f"Review how my svinooh portfolio {portfolio} did over the last 7 days. Read its "
+            "overview and its 7-day history. Say how much the total changed in USD and percent, "
+            "which positions moved it most and why: price, rewards, debt or money moved in or "
+            "out. Then name anything that needs my attention this week, such as a loan whose "
+            "health fell or a pool that left its range. Use only figures the tools return and "
+            "work every sum out with the calculator."
+        )
+
+    @server.prompt(title="Risk check")
+    def risk_check(portfolio: PortfolioId) -> str:
+        """The risks that lose money in a portfolio: debt, health, concentration, pools."""
+        return (
+            f"Check my svinooh portfolio {portfolio} for the risks that lose money. Read its "
+            "overview, what its money is in, and the detail of every loan and pool. Cover: each "
+            "loan's health factor and how far prices can fall before liquidation; how much of the "
+            "portfolio sits in one token, one protocol and one network; the stablecoin share; "
+            "pools out of their range. Rank the risks from most to least urgent and say for each "
+            "what would reduce it. Use only figures the tools return."
+        )
+
+    @server.prompt(title="Explain a position")
+    def explain_position(portfolio: PortfolioId, position: PositionName) -> str:
+        """One position in plain words: what it holds, what it earns, what can go wrong."""
+        return (
+            f"Explain the {position} position in my svinooh portfolio {portfolio}. Read its full "
+            "detail. Say in plain words what it holds and in which amounts, what it earns and "
+            "from what (rates, rewards, fees), what it owes, and what can go wrong with it. Use "
+            "only figures the tools return."
+        )
+
+    @server.prompt(title="Compare portfolios")
+    def compare(first: PortfolioId, second: PortfolioId) -> str:
+        """Two portfolios side by side: size, what the money is in, risk, last 30 days."""
+        return (
+            f"Compare my svinooh portfolios {first} and {second}. Read the overview, what the "
+            "money is in and the 30-day history of each. Put them side by side: total, split "
+            "between stablecoins and volatile assets, largest positions, debt, and how each "
+            "moved over 30 days. End with the one difference that matters most. Use only "
+            "figures the tools return and work every comparison out with the calculator."
+        )
 
     return server
 
