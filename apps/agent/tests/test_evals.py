@@ -52,6 +52,7 @@ EXPECTATIONS = {
     "says",
     "says_one_of",
     "never_says",
+    "language",
 }
 
 CASES = load()
@@ -69,6 +70,17 @@ def outcome(**overrides) -> dict:
         "fetched": [],
         **overrides,
     }
+
+
+class TestTheLanguageOfTheAnswer:
+    def test_an_english_case_wants_english(self):
+        ok, _ = judged({}, outcome(answer="Steakhouse pays 5.12%"))["english"]
+        assert ok
+
+    def test_a_case_in_another_language_wants_that_language(self):
+        russian = {"language": "Russian"}
+        assert judged(russian, outcome(answer="Steakhouse платит 5,12% годовых"))["english"][0]
+        assert not judged(russian, outcome(answer="Steakhouse pays 5.12%"))["english"][0]
 
 
 class TestTheWorld:

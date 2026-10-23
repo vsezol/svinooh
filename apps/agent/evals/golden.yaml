@@ -297,6 +297,7 @@
   expect:
     answered_by: earn
     asks: true
+    language: Russian
 
 - id: earn-placing-low-risk
   slice: {intent: earn, role: typical, source: design E3}
