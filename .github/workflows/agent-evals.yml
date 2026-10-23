@@ -13,6 +13,10 @@ on:
         description: Write evals/baseline.json from this run, as an artifact to review
         type: boolean
         default: false
+      trace:
+        description: Send this run's traces to Langfuse, to read why a case failed
+        type: boolean
+        default: false
 
 concurrency:
   group: agent-evals-${{ github.ref }}
@@ -28,8 +32,12 @@ jobs:
     env:
       AGENT_MODEL_API_KEY: ${{ secrets.AGENT_EVAL_MODEL_API_KEY }}
       AGENT_MODEL_BASE_URL: https://openrouter.ai/api/v1
-      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
-      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+      # Off unless asked for: one run of the golden set is about 2,000 observations,
+      # and in October 2026 the runs alone spent the month's Langfuse allowance
+      # (31,870 observations, against 330 from production). Without the keys the
+      # run scores itself the same and only prints its card.
+      LANGFUSE_PUBLIC_KEY: ${{ inputs.trace && secrets.LANGFUSE_PUBLIC_KEY || '' }}
+      LANGFUSE_SECRET_KEY: ${{ inputs.trace && secrets.LANGFUSE_SECRET_KEY || '' }}
       LANGFUSE_BASE_URL: https://cloud.langfuse.com
       LANGFUSE_TRACING_ENVIRONMENT: evaluation
     steps:
