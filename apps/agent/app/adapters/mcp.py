@@ -21,13 +21,15 @@ class McpTools:
 
     The portfolio is the turn's, never the model's to pass: it is taken out of
     every tool's schema and put back into every call. A turn with no token is
-    read on the server's public endpoint, which needs no sign-in and sees only
-    public portfolios; the signed-in one answers a request without a token 401.
+    read at `anonymous`, the server's endpoint on the private network that
+    reads as nobody: the public one answers a request without a token 401.
     """
 
-    def __init__(self, url: str, http: Callable[..., httpx.AsyncClient] | None = None) -> None:
+    def __init__(
+        self, url: str, anonymous: str, http: Callable[..., httpx.AsyncClient] | None = None
+    ) -> None:
         self._url = url
-        self._public = url.removesuffix("/mcp") + "/public/mcp"
+        self._anonymous = anonymous
         self._http = http
 
     async def overview(self, slug: str, token: str | None, positions: int) -> str:
@@ -57,7 +59,7 @@ class McpTools:
     def _client(self, token: str | None, *interceptors) -> MultiServerMCPClient:
         connection: dict = {
             "transport": "streamable_http",
-            "url": self._url if token else self._public,
+            "url": self._url if token else self._anonymous,
             "headers": {"authorization": token} if token else {},
         }
         if self._http is not None:

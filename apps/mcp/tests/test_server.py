@@ -23,7 +23,7 @@ from svinooh_portfolio.portfolio import (
 )
 from svinooh_portfolio.source import UnknownTokenError
 
-from app.server import create_app
+from app.server import create_anonymous_app, create_app
 from app.store import MemoryStore
 
 PORTFOLIO = Portfolio(
@@ -129,12 +129,12 @@ def app_for(host: Host, catalog: Catalog | None = None) -> Starlette:
 async def connected(
     host: Host, token: str | None = None, catalog: Catalog | None = None
 ) -> AsyncIterator[ClientSession]:
-    app = app_for(host, catalog)
+    app = app_for(host, catalog) if token else create_anonymous_app(host, catalog or Catalog())
     http = httpx2.AsyncClient(
         transport=httpx2.ASGITransport(app=app),
         headers={"authorization": token} if token else None,
     )
-    endpoint = "http://localhost/mcp" if token else "http://localhost/public/mcp"
+    endpoint = "http://localhost/mcp"
     async with (
         app.router.lifespan_context(app),
         http,

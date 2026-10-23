@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     portfolio_api_url: str = Field("http://localhost:3000", validation_alias="PORTFOLIO_API_URL")
     earn_api_url: str = Field("http://localhost:8080", validation_alias="EARN_API_URL")
     mcp_url: str = "http://localhost:3010/mcp"
+    mcp_anonymous_url: str = "http://localhost:3011/mcp"
 
     @field_validator("cors_origins", mode="before")
     @classmethod

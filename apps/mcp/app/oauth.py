@@ -31,6 +31,8 @@ CODE_TTL = 300
 
 TOKEN_TTL = 30 * 24 * 3600
 
+CLIENT_TTL = 90 * 24 * 3600
+
 REDIRECT_HOSTS = frozenset({"claude.ai", "claude.com", "localhost", "127.0.0.1"})
 
 
@@ -74,7 +76,9 @@ class SvinoohOAuth(OAuthAuthorizationServerProvider[Granted, RefreshToken, Acces
                 raise RegistrationError(
                     "invalid_redirect_uri", f"{uri} is not a client svinooh lets in"
                 )
-        await self._store.put(f"client:{client_info.client_id}", client_info.model_dump_json())
+        await self._store.put(
+            f"client:{client_info.client_id}", client_info.model_dump_json(), CLIENT_TTL
+        )
 
     async def authorize(
         self, client: OAuthClientInformationFull, params: AuthorizationParams
@@ -105,6 +109,7 @@ class SvinoohOAuth(OAuthAuthorizationServerProvider[Granted, RefreshToken, Acces
         )
         lasts = max(expires_at - int(time.time()), 1)
         await self._store.put(f"token:{token}", issued.model_dump_json(), lasts)
+        await self.register_client(client)
         return OAuthToken(access_token=token, token_type="Bearer", expires_in=lasts)
 
     async def load_refresh_token(

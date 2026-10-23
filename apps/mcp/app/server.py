@@ -38,6 +38,8 @@ MAX_OPTIONS = 8
 
 ADDRESS_AT_LEAST = 26
 
+ANYWHERE = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
 Ticker = Annotated[str, Field(description="One token's ticker, e.g. USDC; empty for every token.")]
@@ -47,8 +49,8 @@ INSTRUCTIONS = (
     "wallet address to read that wallet, or a portfolio's id, the part of its link "
     "after /p/, to read every wallet in it. A wallet svinooh has never read is read "
     "on first use and may show no positions for a minute. Signed in with svinooh, the "
-    "caller's own portfolios can be listed and read, private ones included; the public "
-    "endpoint, /public/mcp, reads only public portfolios and needs no sign-in. "
+    "caller's own portfolios can be listed and read, private ones included, as well as "
+    "any public portfolio. "
     "Figures are in USD as of each wallet's last scan."
 )
 
@@ -276,36 +278,24 @@ def build(
 def create_app(
     source: DataSource, catalog: PoolCatalog, store: Store, url: str, web_url: str
 ) -> Starlette:
-    """`/mcp` signed in through svinooh, `/public/mcp` for anybody, and the consent
-    page's calls, which only svinooh.com may make from a browser."""
+    """The service as the internet sees it: `/mcp` signed in through svinooh, and the
+    consent page's calls, which only svinooh.com may make from a browser."""
     oauth = SvinoohOAuth(store, source, web_url)
-    signed_in, public = build(source, catalog, oauth, url.rstrip("/")), build(source, catalog)
-    anywhere = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+    signed_in = build(source, catalog, oauth, url.rstrip("/"))
     protected = signed_in.streamable_http_app(
-        stateless_http=True, json_response=True, transport_security=anywhere
-    )
-    open_to_all = public.streamable_http_app(
-        streamable_http_path="/public/mcp",
-        stateless_http=True,
-        json_response=True,
-        transport_security=anywhere,
+        stateless_http=True, json_response=True, transport_security=ANYWHERE
     )
 
     @asynccontextmanager
     async def lifespan(_app: Starlette) -> AsyncIterator[None]:
-        async with signed_in.session_manager.run(), public.session_manager.run():
+        async with signed_in.session_manager.run():
             yield
 
     async def health(_request: Request) -> JSONResponse:
         return JSONResponse({"ok": True})
 
     app = Starlette(
-        routes=[
-            Route("/health", health),
-            *open_to_all.routes,
-            *oauth.routes(),
-            Mount("/", protected),
-        ],
+        routes=[Route("/health", health), *oauth.routes(), Mount("/", protected)],
         middleware=[
             Middleware(
                 CORSMiddleware,
@@ -317,8 +307,19 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.mcp = signed_in
-    app.state.public = public
     return app
+
+
+def create_anonymous_app(source: DataSource, catalog: PoolCatalog) -> Starlette:
+    """The same tools reading as nobody, for the agent's visitors who are not signed in.
+
+    Served on a port of its own that no public domain routes to, so only a
+    service inside the private network reaches it: from the internet, every
+    request needs a sign-in.
+    """
+    return build(source, catalog).streamable_http_app(
+        stateless_http=True, json_response=True, transport_security=ANYWHERE
+    )
 
 
 async def _portfolio(

@@ -149,10 +149,10 @@ class Golden:
         panel: PanelValues,
         langfuse: Langfuse,
         judge: str = JUDGE,
-        mcp_url: str = "",
+        mcp_urls: tuple[str, str] = ("", ""),
     ) -> None:
         self._settings = settings
-        self._mcp_url = mcp_url
+        self._mcp_urls = mcp_urls
         self._panel = panel
         self._langfuse = langfuse
         self._judge = judge
@@ -226,7 +226,7 @@ class Golden:
                 models,
                 IntentClassifier(models, config),
                 ConfirmationClassifier(models, config),
-                mcp=McpTools(self._mcp_url),
+                mcp=McpTools(*self._mcp_urls),
             )
             started = time.perf_counter()
             state = await agent.graph.ainvoke(state_of(case.ask()), config={"callbacks": callbacks})
@@ -274,8 +274,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         panel = replace(panel, model=args.model)
     everything = load()
     cases = [case for case in everything if not args.only or case.id in args.only]
-    with every_world_served() as worlds, mcp_serving(worlds) as mcp_url:
-        golden = Golden(settings, panel, langfuse_for(), args.judge or JUDGE, mcp_url)
+    with every_world_served() as worlds, mcp_serving(worlds) as mcp_urls:
+        golden = Golden(settings, panel, langfuse_for(), args.judge or JUDGE, mcp_urls)
         golden.sync(everything)
         started = time.strftime("%Y-%m-%d %H:%M")
         rows: list[Row] = []
@@ -298,16 +298,20 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 @contextmanager
-def mcp_serving(worlds: str) -> Iterator[str]:
+def mcp_serving(worlds: str) -> Iterator[tuple[str, str]]:
     """apps/mcp in a process of its own, reading the recorded worlds: the turn reaches
-    its tools the way it does in production."""
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
+    its tools the way it does in production, signed in or not."""
+    port, anonymous = _free_port(), _free_port()
     server = subprocess.Popen(
-        ["uv", "run", "--frozen", "uvicorn", "main:app", "--port", str(port)],
+        ["uv", "run", "--frozen", "python", "main.py"],
         cwd=MCP,
-        env={**os.environ, "PORTFOLIO_API_URL": worlds, "EARN_API_URL": worlds},
+        env={
+            **os.environ,
+            "PORT": str(port),
+            "MCP_ANONYMOUS_PORT": str(anonymous),
+            "PORTFOLIO_API_URL": worlds,
+            "EARN_API_URL": worlds,
+        },
     )
     try:
         for _ in range(120):
@@ -317,10 +321,16 @@ def mcp_serving(worlds: str) -> Iterator[str]:
             time.sleep(0.5)
         else:
             raise RuntimeError("apps/mcp did not start")
-        yield f"http://127.0.0.1:{port}/mcp"
+        yield f"http://127.0.0.1:{port}/mcp", f"http://127.0.0.1:{anonymous}/mcp"
     finally:
         server.terminate()
         server.wait()
+
+
+def _free_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
 
 
 def load() -> list[Case]:

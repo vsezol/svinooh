@@ -238,8 +238,8 @@ class TestOneCaseOffline:
         settings = Settings()
         panel = parse(json.loads((WORLDS.parent / "panel.json").read_text()))
         case = next(case for case in CASES if case.id == "earn-asking-usdc")
-        with every_world_served() as worlds, mcp_serving(worlds) as mcp_url:
-            golden = Golden(settings, panel, langfuse_for(), mcp_url=mcp_url)
+        with every_world_served() as worlds, mcp_serving(worlds) as mcp_urls:
+            golden = Golden(settings, panel, langfuse_for(), mcp_urls=mcp_urls)
             answered = await golden.answer(
                 case, Models(settings, factory=lambda *_, **__: scripted)
             )

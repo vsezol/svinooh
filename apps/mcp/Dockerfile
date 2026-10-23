@@ -28,5 +28,6 @@ RUN useradd --system --uid 10001 --no-create-home mcp
 COPY --from=builder --chown=mcp:mcp /app/apps/mcp /app/apps/mcp
 USER mcp
 ENV PATH="/app/apps/mcp/.venv/bin:$PATH"
+# 3000 is the public domain's; 3001, for the agent, is reached only privately
 EXPOSE 3000
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-3000}"]
+CMD ["python", "main.py"]
