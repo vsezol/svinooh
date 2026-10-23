@@ -2,12 +2,21 @@ from typing import Protocol
 
 import httpx
 
-from ..domain.errors import UnknownTokenError
-from ..domain.portfolio import History, Me, Portfolio
 from . import wire
+from .portfolio import History, Me, Portfolio
+
+
+class UnknownTokenError(Exception):
+    """The host affirmatively rejected the caller's token.
+
+    Only that: a host that cannot answer leaves the caller anonymous, because
+    this gate names callers and never guards data.
+    """
 
 
 class DataSource(Protocol):
+    async def me(self, token: str) -> Me: ...
+
     async def portfolio(self, ref: str, token: str | None) -> Portfolio: ...
 
     async def history(self, ref: str, range_: str, token: str | None) -> History: ...

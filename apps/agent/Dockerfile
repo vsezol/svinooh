@@ -10,7 +10,7 @@
 FROM python:3.13-slim AS base
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
-WORKDIR /app
+WORKDIR /app/apps/agent
 
 FROM base AS builder
 COPY --from=ghcr.io/astral-sh/uv:0.9 /uv /usr/local/bin/uv
@@ -27,16 +27,21 @@ ENV UV_PYTHON_DOWNLOADS=never \
 # variable cannot stand in for that id — so the alternative is this repo
 # carrying a platform's opaque service id, to save a package download on the
 # rare build where the lockfile changed at all.
+#
+# The service sits at its repository path so the lockfile's relative path to
+# the shared portfolio package resolves; the package is installed as a copy,
+# not a link, so the final stage needs only the service's own directory.
+COPY libs/portfolio-py /app/libs/portfolio-py
 COPY apps/agent/pyproject.toml apps/agent/uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-editable
 COPY apps/agent/main.py ./
 COPY apps/agent/app ./app
 
 FROM base
 RUN useradd --system --uid 10001 --no-create-home agent
-COPY --from=builder --chown=agent:agent /app /app
+COPY --from=builder --chown=agent:agent /app/apps/agent /app/apps/agent
 USER agent
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/app/apps/agent/.venv/bin:$PATH"
 EXPOSE 3000
 # Railway injects PORT; default 3000 to match the other services.
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-3000}"]

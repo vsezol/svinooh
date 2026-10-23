@@ -1,0 +1,49 @@
+# The svinooh MCP server: a portfolio's reading tools for any MCP client, read
+# over the portfolio's public API with the caller's own token.
+
+[project]
+name = "svinooh-mcp"
+version = "0.0.1"
+description = "svinooh portfolios over the Model Context Protocol."
+requires-python = ">=3.13"
+dependencies = [
+    "mcp>=1.30.0",
+    "uvicorn[standard]>=0.52",
+    "httpx>=0.28",
+    # The portfolio's model, its API client and its readings, shared with apps/agent.
+    "svinooh-portfolio-py",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1",
+    "pytest-asyncio>=1.4",
+    "ruff>=0.16",
+    "mypy>=2.3",
+]
+
+[tool.uv.sources]
+svinooh-portfolio-py = { path = "../../libs/portfolio-py", editable = true }
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+ignore = ["PT018"]
+select = ["E", "F", "W", "I", "N", "UP", "B", "BLE", "ASYNC", "C4", "SIM", "PT", "T20", "RUF"]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["app", "main.py"]
+check_untyped_defs = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

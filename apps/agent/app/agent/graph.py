@@ -9,16 +9,16 @@ from typing import Any, TypedDict
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+from svinooh_portfolio.portfolio import Portfolio
+from svinooh_portfolio.source import PortfolioApiSource
 
 from ..adapters.earn import YieldCatalog
 from ..adapters.memory import MemoryStrategies
-from ..adapters.portfolio import PortfolioApiSource
 from ..config import Config
 from ..domain import lpdown
 from ..domain.asking import Choice
 from ..domain.conversation import Turn
 from ..domain.earn import Card, Held, LiquidityPosition, Placement, Settled, Swap
-from ..domain.portfolio import Portfolio
 from ..observability import metrics
 from ..observability.tracing import traced
 from ..ports import Ask, Failed, Finished, Progress, Reply, Strategies, Update

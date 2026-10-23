@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
+from svinooh_portfolio import wire
 
-from app.adapters import wire
 from tests import fixtures as fx
 
 

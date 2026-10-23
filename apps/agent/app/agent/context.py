@@ -1,91 +1,11 @@
 from dataclasses import replace
 from decimal import Decimal
 
+from svinooh_portfolio.portfolio import Portfolio, Position
+from svinooh_portfolio.reading import UNNAMED_POSITION, UNNAMED_TOKEN, amount_at, named, rate, usd
+
 from ..domain.conversation import Turn
 from ..domain.earn import Held, LiquidityPosition
-from ..domain.portfolio import Portfolio, Position, Total, Wallet, total_of
-
-MAX_CHARS = 6000
-ROOM_FOR_THE_CUT = 80
-UNNAMED_POSITION = "unnamed position"
-UNNAMED_TOKEN = "unnamed token"
-NO_NAME = ("", "?")
-
-
-def named(symbol: str | None, unnamed: str) -> str:
-    clean = (symbol or "").strip()
-    return unnamed if clean in NO_NAME else clean
-
-
-def usd(value: float | None) -> str:
-    return f"${value:,.2f}" if value is not None else "n/a"
-
-
-def short_address(address: str) -> str:
-    return address if len(address) <= 14 else f"{address[:8]}…{address[-4:]}"
-
-
-def _amount(amount: float | None, price: float | None) -> str | None:
-    if amount is None or amount <= 0:
-        return None
-    figure = f"{amount:,.4f}".rstrip("0").rstrip(".") if amount < 1000 else f"{amount:,.0f}"
-    if price is None or price <= 0:
-        return figure
-    if price >= 0.01:
-        shown = f"{price:,.2f}"
-    elif price >= 1e-6:
-        shown = f"{price:.8f}".rstrip("0").rstrip(".")
-    else:
-        shown = f"{price:.2e}"
-    return f"{figure} @ ${shown}"
-
-
-def rate(fraction: float) -> str:
-    percent = fraction * 100
-    if 0 < percent < 0.01:
-        return "<0.01%"
-    return f"{percent:.2f}%"
-
-
-def _rates(position: Position) -> list[str]:
-    facts = []
-    if position.apy is not None:
-        facts.append(f"APY {position.apy * 100:.1f}%")
-    if position.fees_earned_usd is not None:
-        facts.append(f"fees earned in GMX {usd(position.fees_earned_usd)} all time")
-    if position.health_rate is not None:
-        facts.append(f"health {position.health_rate:.2f}")
-    if position.borrow_apy is not None:
-        facts.append(f"borrow {position.borrow_apy * 100:.1f}%")
-    if position.range:
-        facts.append(f"range {position.range}")
-    return facts
-
-
-def _where(position: Position) -> list[str]:
-    return [fact for fact in (position.network, position.protocol) if fact]
-
-
-def _pair(position: Position) -> str | None:
-    band = position.band
-    if band is None:
-        return None
-    return band.pair + (f" {band.fee_pct}% fee" if band.fee_pct is not None else "")
-
-
-def _composition(position: Position) -> str | None:
-    parts = []
-    for leg in position.legs[:6]:
-        piece = f"{named(leg.symbol, UNNAMED_TOKEN)} {usd(abs(leg.value_usd))}"
-        amount = _amount(leg.amount, leg.price_usd)
-        if amount:
-            piece += f" ({amount})"
-        if leg.apy is not None:
-            piece += f" at {rate(leg.apy)}"
-        if leg.role and leg.role != "supply":
-            piece = f"{leg.role} {piece}"
-        parts.append(piece)
-    return " + ".join(parts) if parts else None
 
 
 def positions_read(portfolio: Portfolio, name_at_most: int = 3) -> str:
@@ -151,10 +71,10 @@ def _idle_line(position: Position) -> str:
     if _is_gas(position):
         spare = _spare(position)
         value = spare * position.price_usd if position.price_usd else None
-        figure = f"SOL {_amount(spare, position.price_usd)}"
+        figure = f"SOL {amount_at(spare, position.price_usd)}"
         worth = f" = {usd(value)}" if value is not None else ""
         return f"- {figure}{worth} on sol ({GAS_KEPT} SOL more is kept back for network fees)"
-    held = _amount(position.amount, position.price_usd)
+    held = amount_at(position.amount, position.price_usd)
     figure = f"{held} = {usd(position.value_usd)}" if held else usd(position.value_usd)
     where = f" on {position.network}" if position.network else ""
     return f"- {named(position.symbol, 'unnamed token')} {figure}{where}"
@@ -213,97 +133,6 @@ def _owed_against(position: Position) -> str:
         f"; {debt}. This is collateral for that loan, not idle money: it cannot be moved "
         "before the loan is repaid, and taking part of it out lowers the health factor."
     )
-
-
-def named_position(position: Position) -> str:
-    head = _head(position)
-    return f"{head} on {position.network}" if position.network else head
-
-
-def position_line(position: Position, detail: bool = False) -> str:
-    head = _head(position)
-    pair = _pair(position)
-    if pair:
-        head = f"{head} [{pair}]"
-    facts = [usd(position.value_usd)]
-    amount = _amount(position.amount, position.price_usd)
-    if amount:
-        facts.append(amount)
-    facts.extend(_where(position))
-    facts.extend(_rates(position))
-    line = f"{head}: {', '.join(facts)}"
-    composition = _composition(position) if detail else None
-    return f"{line} — {composition}" if composition else line
-
-
-def _head(position: Position) -> str:
-    head = named(position.symbol, UNNAMED_POSITION)
-    return f"{head} ({position.name})" if position.name and position.name != head else head
-
-
-def _breakdown(label: str, totals: tuple[Total, ...], whole: float, limit: int = 8) -> str | None:
-    if not totals:
-        return None
-    parts = []
-    for total in totals[:limit]:
-        share = f" ({total.usd / whole * 100:.0f}%)" if whole else ""
-        parts.append(f"{total.label} {usd(total.usd)}{share}")
-    if len(totals) > limit:
-        rest = sum(total.usd for total in totals[limit:])
-        parts.append(f"+{len(totals) - limit} more {usd(rest)}")
-    return f"{label}: {', '.join(parts)}"
-
-
-def _wallet_lines(wallet: Wallet, cap: int) -> list[str]:
-    stale = ", stale data" if wallet.stale else ""
-    positions = wallet.largest_first
-    header = (
-        f"Wallet {short_address(wallet.address)} "
-        f"[{wallet.chain}] — {usd(wallet.total_usd)}, "
-        f"{len(positions)} position(s), status {wallet.status}{stale}:"
-    )
-    lines = [header] + [f"  - {position_line(p)}" for p in positions[:cap]]
-    rest = positions[cap:]
-    if rest:
-        lines.append(
-            f"  - …and {len(rest)} smaller positions worth {usd(total_of(rest))} in total "
-            "(ask for details on any of them with the position search tool)"
-        )
-    return lines
-
-
-def portfolio_context(portfolio: Portfolio, max_positions: int) -> str:
-    whole = portfolio.total_usd
-    lines = [
-        f'Portfolio "{portfolio.title}" — '
-        f"total {usd(whole)}, {len(portfolio.wallets)} wallet(s), "
-        f"{len(portfolio.positions)} position(s)."
-    ]
-    for line in (
-        _breakdown("By network", portfolio.totals_by(lambda p: p.network), whole),
-        _breakdown("By type", portfolio.totals_by(lambda p: p.category), whole),
-        _breakdown("In protocols", portfolio.totals_by(lambda p: p.protocol), whole),
-    ):
-        if line:
-            lines.append(line)
-    for wallet in portfolio.wallets:
-        lines.extend(_wallet_lines(wallet, max_positions))
-    return _capped(lines)
-
-
-def _capped(lines: list[str]) -> str:
-    whole = "\n".join(lines)
-    if len(whole) <= MAX_CHARS:
-        return whole
-    kept: list[str] = []
-    used = 0
-    for line in lines:
-        if used + len(line) + 1 > MAX_CHARS - ROOM_FOR_THE_CUT:
-            break
-        kept.append(line)
-        used += len(line) + 1
-    kept.append(f"…and {len(lines) - len(kept)} more lines, left out for length")
-    return "\n".join(kept)
 
 
 def held_lines(held: tuple[Held, ...]) -> str:

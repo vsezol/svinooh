@@ -1,5 +1,5 @@
-from app.adapters import wire
-from app.domain.portfolio import History, Portfolio, Position
+from svinooh_portfolio import wire
+from svinooh_portfolio.portfolio import History, Portfolio, Position
 
 
 def position(

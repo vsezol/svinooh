@@ -4,8 +4,7 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass
 
-from ..adapters.portfolio import PortfolioApiSource
-from ..domain.errors import UnknownTokenError
+from svinooh_portfolio.source import PortfolioApiSource, UnknownTokenError
 
 logger = logging.getLogger("svinooh-ai")
 

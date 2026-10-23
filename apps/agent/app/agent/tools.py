@@ -4,11 +4,22 @@ from decimal import Decimal, InvalidOperation
 
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
+from svinooh_portfolio.portfolio import (
+    Period,
+    Portfolio,
+    exposure_of,
+)
+from svinooh_portfolio.reading import (
+    calculated,
+    describe_exposure,
+    find_positions,
+    named_position,
+    summarize_history,
+)
+from svinooh_portfolio.source import DataSource
 
 from ..adapters.earn import YieldCatalog
-from ..adapters.portfolio import DataSource
 from ..domain import lpdown as down
-from ..domain.arithmetic import evaluate
 from ..domain.asking import MAX_ANSWERS, MIN_ANSWERS, Choice
 from ..domain.earn import (
     Card,
@@ -23,14 +34,10 @@ from ..domain.earn import (
     YieldPool,
 )
 from ..domain.house import plain
-from ..domain.portfolio import Exposure, History, Period, Portfolio, Side, exposure_of, total_of
 from ..observability import metrics
-from .context import named_position, position_line, short_address, usd
 from .steps import said, step, tool_label
 
 logger = logging.getLogger("svinooh-ai")
-
-MAX_MATCHES = 30
 
 NOTHING_CAME_BACK = (
     "This call failed, so you have nothing from it. Say plainly that you could "
@@ -39,111 +46,6 @@ NOTHING_CAME_BACK = (
 )
 
 MAX_OPTIONS = 8
-
-MAX_TOKENS_LISTED = 25
-
-
-def summarize_history(history: History, period: str) -> str:
-    change = history.change(period)
-    if change is None:
-        said("not enough history")
-        return "Not enough history recorded for this period yet."
-    said(f"{len(change.readings)} readings · {change.percent:+.1f}%")
-    return (
-        f"Period {period}: {len(change.readings)} readings.\n"
-        f"Start {usd(change.first.usd)} at {change.first.at} -> "
-        f"last reading {usd(change.last.usd)} at {change.last.at}.\n"
-        f"Change {change.delta:+,.2f} USD ({change.percent:+.1f}%).\n"
-        f"Low {usd(change.low.usd)} at {change.low.at}; "
-        f"high {usd(change.high.usd)} at {change.high.at}.\n"
-        "The last reading is the newest recorded point, which can sit slightly "
-        "behind the live total shown in the portfolio above — quote the live "
-        "total when asked what the portfolio is worth now."
-    )
-
-
-def find_positions(portfolio: Portfolio, query: str) -> str:
-    if not query.strip():
-        return "Empty query."
-    matches = portfolio.matching(query)
-    said(f"{len(matches)} matched" if matches else "nothing matched")
-    if not matches:
-        held = ", ".join(portfolio.protocols) or "no protocol positions"
-        return (
-            f'No position matches "{query}". '
-            f"The portfolio holds: {held} — and plain token holdings."
-        )
-    total = total_of(match.position for match in matches)
-    head = (
-        f'{len(matches)} position(s) match "{query}", {usd(total)} in total'
-        + (f" (showing the largest {MAX_MATCHES})" if len(matches) > MAX_MATCHES else "")
-        + ":"
-    )
-    lines = [
-        f"{short_address(match.address)}: {position_line(match.position, detail=True)}"
-        for match in matches[:MAX_MATCHES]
-    ]
-    return "\n".join([head, *lines])
-
-
-def describe_exposure(exposure: Exposure) -> str:
-    total = exposure.total
-    said(f"stablecoins {money(exposure.stable.net)} · volatile {money(exposure.volatile.net)}")
-    lines = [
-        "Counted from every position's underlying tokens; what is owed is subtracted. "
-        f"Counted total {money(total)}.",
-        f"Stablecoins: {_side(exposure.stable, total)}.",
-        f"Volatile assets: {_side(exposure.volatile, total)}.",
-    ]
-    if exposure.unsplit:
-        listed = ", ".join(f"{where} {money(usd)}" for where, usd in exposure.unsplit)
-        lines.append(
-            f"Contents not reported by the source, so in neither figure above: "
-            f"{money(exposure.unsplit_usd)} ({share(exposure.unsplit_usd, total)}) — {listed}."
-        )
-    if exposure.stable_in:
-        lines.append(
-            "Stablecoins by position: "
-            + "; ".join(f"{where} {_held_and_owed(side)}" for where, side in exposure.stable_in)
-            + "."
-        )
-    shown = exposure.by_token[:MAX_TOKENS_LISTED]
-    tokens = ", ".join(
-        f"{symbol} {money(side.net)} ({share(side.net, total)})" for symbol, side in shown
-    )
-    left = exposure.by_token[MAX_TOKENS_LISTED:]
-    if left:
-        tokens += f", +{len(left)} more {money(sum((side.net for _, side in left), Decimal(0)))}"
-    lines.append(f"By token, net: {tokens}.")
-    return "\n".join(lines)
-
-
-def calculated(expression: str) -> str:
-    try:
-        result = evaluate(expression)
-    except (ArithmeticError, SyntaxError, ValueError) as error:
-        said("could not calculate")
-        return f"Could not calculate {expression!r}: {error}"
-    exact = format(result.quantize(Decimal("1e-10")).normalize(), "f")
-    said(f"= {exact}")
-    return f"{expression} = {exact} (rounded to cents: {result:,.2f})"
-
-
-def money(value: Decimal) -> str:
-    return f"-${abs(value):,.2f}" if value < 0 else f"${value:,.2f}"
-
-
-def share(part: Decimal, whole: Decimal) -> str:
-    return f"{part / whole * 100:.2f}%" if whole else "n/a"
-
-
-def _side(side: Side, total: Decimal) -> str:
-    net = f"{money(side.net)} net — {share(side.net, total)} of the counted total"
-    return f"{_held_and_owed(side)}, {net}"
-
-
-def _held_and_owed(side: Side) -> str:
-    return f"{money(side.held)} held, {money(side.owed)} owed"
 
 
 def math_tools() -> list:

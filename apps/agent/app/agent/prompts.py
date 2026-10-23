@@ -1,8 +1,9 @@
+from svinooh_portfolio.portfolio import Portfolio
+from svinooh_portfolio.reading import portfolio_context
+
 from ..config import Config
 from ..domain.earn import Settled
 from ..domain.onboarding import Created
-from ..domain.portfolio import Portfolio
-from .context import portfolio_context
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are the assistant inside svinooh, a DeFi portfolio tracker. Be brief "

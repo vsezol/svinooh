@@ -1,6 +1,6 @@
 # The gates for everything TypeScript: the same two commands a developer runs
-# locally, over every workspace at once. apps/agent has its own workflow and is
-# excluded here, so a change to the Python service does not run these.
+# locally, over every workspace at once. The Python services (apps/agent,
+# apps/mcp, libs/portfolio-py) have their own workflows and are excluded here.
 name: node
 
 on:
@@ -9,7 +9,9 @@ on:
     paths:
       - apps/**
       - '!apps/agent/**'
+      - '!apps/mcp/**'
       - libs/**
+      - '!libs/portfolio-py/**'
       - package.json
       - package-lock.json
       - nx.json
@@ -19,7 +21,9 @@ on:
     paths:
       - apps/**
       - '!apps/agent/**'
+      - '!apps/mcp/**'
       - libs/**
+      - '!libs/portfolio-py/**'
       - package.json
       - package-lock.json
       - nx.json

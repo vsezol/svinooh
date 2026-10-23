@@ -4,11 +4,11 @@ from dataclasses import dataclass
 import httpx
 from limits.aio.storage import Storage
 from redis.asyncio import ConnectionPool, Redis
+from svinooh_portfolio.source import PortfolioApiSource
 
 from .adapters import memory
 from .adapters.earn import EarnApiSource
 from .adapters.panel import RemotePanel
-from .adapters.portfolio import PortfolioApiSource
 from .agent.graph import LangGraphAgent
 from .agent.intent import IntentClassifier
 from .agent.llm import Models
