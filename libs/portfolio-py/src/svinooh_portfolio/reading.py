@@ -198,8 +198,8 @@ def summarize_history(history: History, period: str) -> str:
         f"Low {usd(change.low.usd)} at {change.low.at}; "
         f"high {usd(change.high.usd)} at {change.high.at}.\n"
         "The last reading is the newest recorded point, which can sit slightly "
-        "behind the live total shown in the portfolio above — quote the live "
-        "total when asked what the portfolio is worth now."
+        "behind the live total in the portfolio's overview — quote that total "
+        "when asked what the portfolio is worth now."
     )
 
 
