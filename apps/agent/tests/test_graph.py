@@ -2,6 +2,7 @@ from dataclasses import replace
 from decimal import Decimal
 
 import pytest
+from langchain_core.messages import AIMessage
 from svinooh_portfolio import testing as fx
 from svinooh_portfolio.pools import YieldPool
 from svinooh_portfolio.portfolio import Leg, Me, Portfolio, PortfolioRef, Position, Wallet
@@ -11,7 +12,7 @@ from app.agent.onboarding import create_portfolio_with_wallets
 from app.domain.conversation import Turn
 from app.domain.earn import Coin, Held
 from app.ports import Ask, Failed, Finished, Progress
-from tests.support import Catalog, Intents, agent
+from tests.support import Catalog, Intents, Talking, agent
 
 
 class Api:
@@ -58,6 +59,7 @@ class Model:
     def __init__(self, tool_calls=None, text="answered"):
         self.prompts = []
         self.seen = []
+        self.everything = []
         self.bound = 0
         self._tool_calls = tool_calls
         self.text = text
@@ -71,6 +73,7 @@ class Model:
     async def ainvoke(self, messages):
         self.prompts.append(messages[0].content)
         self.seen = messages
+        self.everything += messages
         calls, self._tool_calls = self._tool_calls, None
 
         class Reply:
@@ -1055,7 +1058,8 @@ class TestNoPoolBeforeTheRiskIsKnown:
     async def test_a_move_waits_for_the_risk(self):
         out, model = await self.unknown(MOVE_ON_A_GUESS)
         assert out["deposits"] == ()
-        assert "Nobody has said how much risk they want" in str(model.seen[-1].content)
+        told = [str(message.content) for message in model.everything]
+        assert any("Nobody has said how much risk they want" in said for said in told)
 
     async def test_a_deposit_waits_for_the_risk(self):
         out, _ = await self.unknown(
@@ -1068,6 +1072,38 @@ class TestNoPoolBeforeTheRiskIsKnown:
             {"name": "propose_withdraw", "args": {"pool_id": PRIME.id}, "id": "w1"}
         )
         assert [card.action for card in out["deposits"]] == ["withdraw"]
+
+    async def test_a_risk_question_left_in_words_is_put_up_as_buttons(self):
+        ask = {
+            "name": "ask_the_user",
+            "args": {"header": "Risk", "question": "How much risk?", "options": ["Low", "High"]},
+            "id": "q1",
+        }
+        model = Talking(
+            replies=[
+                AIMessage(content="Here are the pools. Pick how you'd like to go."),
+                AIMessage(content="", tool_calls=[ask]),
+            ]
+        )
+        bot, _, _ = wire(intent="earn", catalog=Catalog(), model=model, asked_to_place=True)
+        bot.intents.risk = "unknown"
+        out = await run(bot, portfolio="on-screen", authorization="Bearer T")
+        assert [choice.question for choice in out["choices"]] == ["How much risk?"]
+        assert out["answer"] == "Here are the pools. Pick how you'd like to go."
+
+    async def test_a_turn_with_nothing_to_choose_gets_no_buttons(self):
+        model = Talking(replies=[AIMessage(content="You hold no JUP to swap.")])
+        bot, _, _ = wire(intent="earn", catalog=Catalog(), model=model, asked_to_place=True)
+        bot.intents.risk = "unknown"
+        out = await run(bot, portfolio="on-screen", authorization="Bearer T")
+        assert out["choices"] == ()
+
+    async def test_a_known_risk_is_not_asked_again(self):
+        model = Model(text="Here are the pools.")
+        bot, _, _ = wire(intent="earn", catalog=Catalog(), model=model, asked_to_place=True)
+        bot.intents.risk = "low"
+        await run(bot, portfolio="on-screen", authorization="Bearer T")
+        assert len(model.prompts) == 1, "no second call"
 
     def test_a_better_rate_is_not_a_risk(self):
         from app.agent.intent import IntentLabel
