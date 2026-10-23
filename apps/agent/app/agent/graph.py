@@ -38,6 +38,7 @@ from .llm import Models, extract_text
 from .onboarding import (
     ConfirmationClassifier,
     ProposePortfolio,
+    as_written,
     create_portfolio_with_wallets,
     sanitize_addresses,
 )
@@ -488,7 +489,9 @@ class LangGraphAgent:
             return {"answer": extract_text(reply)}
 
         before = extract_text(reply)
-        addresses = sanitize_addresses(calls[0].get("args", {}).get("addresses", []))
+        written = " ".join([*(turn.q for turn in state.get("history", ())), state["question"]])
+        proposed = calls[0].get("args", {}).get("addresses", [])
+        addresses = sanitize_addresses(as_written(proposed, written))
         if not addresses:
             answered = await self._answer(system, state)
             return {"answer": all_that_was_said([before, answered["answer"]])}

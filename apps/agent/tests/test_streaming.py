@@ -150,7 +150,9 @@ class TestAProposalKeepsWhatCameBeforeIt:
         )
         asking = AIMessage(content="Track this wallet? Yes or no.")
         bot = agent(model=Talking(replies=[proposing, asking]), intent="portfolio")
-        tokens, events = await collect({"question": "track 9xQeWvG8"}, bot)
+        tokens, events = await collect(
+            {"question": "track 9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin"}, bot
+        )
         final = events[-1][1]
         assert final["answer"] == "Got it.\n\nTrack this wallet? Yes or no."
         assert "".join(tokens) == final["answer"]

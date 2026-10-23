@@ -103,6 +103,9 @@ def wire(
     return bot, api, model
 
 
+WALLETS = "make me a portfolio of 0xAAA and sol1"
+
+
 async def run(bot, **state):
     return await bot.graph.ainvoke({"question": "q", "history": (), **state})
 
@@ -437,15 +440,39 @@ class TestTools:
         assert model.bound == 0
 
 
+class TestOnlyWhatTheUserWrote:
+    SOL = "7Yk8pQ2mZr4vN6xW9cB3hJ5tL1sD8fG2aE4kR7uM9nV3"
+
+    def proposing(self, *addresses):
+        call = {"name": "ProposePortfolio", "args": {"addresses": list(addresses)}, "id": "c"}
+        return Model(tool_calls=[call])
+
+    async def test_an_address_whose_tail_the_model_changed_is_proposed_as_written(self):
+        mangled = self.SOL[:-4] + "N1xP"
+        bot, _, _ = wire(api=Api(owned=[]), model=self.proposing("0xAAA", mangled))
+        out = await run(bot, question=f"portfolio from 0xAAA and {self.SOL}")
+        assert out["pending_set"] == ["0xAAA", self.SOL]
+
+    async def test_an_address_the_user_never_wrote_is_not_proposed(self):
+        invented = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin"
+        bot, _, _ = wire(api=Api(owned=[]), model=self.proposing("0xAAA", invented))
+        out = await run(bot, question="portfolio from 0xAAA")
+        assert out["pending_set"] == ["0xAAA"]
+
+    async def test_an_address_from_an_earlier_turn_counts(self):
+        earlier = Turn(q=f"my wallet is {self.SOL}", a="Want a portfolio?", at=0)
+        bot, _, _ = wire(api=Api(owned=[]), model=self.proposing(self.SOL))
+        out = await run(bot, question="yes, make one", history=(earlier,))
+        assert out["pending_set"] == [self.SOL]
+
+
 class TestAVisitorWithNoAccount:
     async def test_a_visitor_is_proposed_to_rather_than_turned_away(self):
         model = Model(
             tool_calls=[{"name": "ProposePortfolio", "args": {"addresses": ["0xAAA"]}, "id": "c"}]
         )
         bot, api, _ = wire(api=Api(owned=[]), model=model)
-        out = await run(
-            bot,
-        )
+        out = await run(bot, question=WALLETS)
         assert out["pending_set"] == ["0xAAA"]
         assert api.created == 0 and api.created_anonymous == [], "still only a proposal"
 
@@ -456,9 +483,7 @@ class TestAVisitorWithNoAccount:
             ]
         )
         bot, _, _ = wire(api=Api(owned=[]), model=model)
-        await run(
-            bot,
-        )
+        await run(bot, question=WALLETS)
         confirmation = model.prompts[-1]
         assert "public" in confirmation
         assert "held together" in confirmation, "two wallets are linked in the open"
@@ -505,7 +530,7 @@ class TestAYesWithNothingBehindIt:
             tool_calls=[{"name": "ProposePortfolio", "args": {"addresses": ["0xAAA"]}, "id": "c"}]
         )
         bot, api, _ = wire(api=Api(owned=[]), model=model)
-        out = await run(bot)
+        out = await run(bot, question=WALLETS)
         assert out["pending_set"] == ["0xAAA"] and api.created == 0
 
 
@@ -554,7 +579,7 @@ class TestWrites:
             ]
         )
         bot, api, _ = wire(api=Api(owned=[]), model=model)
-        out = await run(bot, authorization="Bearer T")
+        out = await run(bot, question=WALLETS, authorization="Bearer T")
         assert out["pending_set"] == ["0xAAA", "sol1"], "trimmed and deduped"
         assert api.created == 0, "nothing is created before a confirmation"
 
@@ -619,7 +644,7 @@ class TestTheContractWithTheLayerAbove:
             tool_calls=[{"name": "ProposePortfolio", "args": {"addresses": ["0xAAA"]}, "id": "c"}]
         )
         bot, api, _ = wire(api=Api(owned=[]), model=model)
-        reply = await bot.run(Ask(question="track my wallet"))
+        reply = await bot.run(Ask(question="track my wallet 0xAAA"))
         assert reply.pending_set == ("0xAAA",), "the order, not the write"
         assert api.created == 0 and api.created_anonymous == []
 
