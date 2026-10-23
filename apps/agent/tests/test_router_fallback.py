@@ -99,8 +99,9 @@ class TestAskingApartFromTelling:
 
     def test_the_model_is_told_which_is_which(self):
         told = IntentLabel.model_json_schema()["properties"]["stance"]["description"]
-        assert "tell you to put it somewhere" in told
+        assert "tells you to do something with money" in told
         assert "only name an amount" in told, "a reply to 'how much?' is still placing"
+        assert "leaves the destination to you is still `placing`" in told, "not a question"
         assert "no default" in told
 
 

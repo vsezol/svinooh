@@ -287,6 +287,17 @@
     answered_by: earn
     asks: true
 
+- id: earn-placing-somewhere-ru-asks
+  slice: {intent: earn, role: typical, source: an instruction that leaves the pool to us}
+  world: earner
+  turn:
+    question: Закинь мои USDC куда-нибудь под процент
+    portfolio: earner-pf
+    signed_in: true
+  expect:
+    answered_by: earn
+    asks: true
+
 - id: earn-placing-low-risk
   slice: {intent: earn, role: typical, source: design E3}
   world: earner
