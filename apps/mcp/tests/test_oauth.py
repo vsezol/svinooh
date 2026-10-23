@@ -76,6 +76,13 @@ class TestFindingTheWayIn:
         assert resource.json()["resource"] == "http://localhost/mcp"
         assert server.json()["registration_endpoint"] == "http://localhost/register"
 
+    async def test_nobody_reads_from_the_internet_without_signing_in(self):
+        async with served(Host()) as http:
+            gone = await http.post("/public/mcp", json={})
+            refused = await http.post("/mcp", json={})
+        assert gone.status_code == 404, "the anonymous endpoint is not served here"
+        assert refused.status_code == 401
+
     async def test_only_claude_and_this_machine_may_register(self):
         async with served(Host()) as http:
             evil = await registered(http, "https://evil.example/callback")

@@ -103,7 +103,7 @@ def build(settings: Settings) -> Container:
         IntentClassifier(models, config),
         ConfirmationClassifier(models, config),
         strategies,
-        mcp=McpTools(settings.mcp_url),
+        mcp=McpTools(settings.mcp_url, settings.mcp_anonymous_url),
     )
     return Container(
         settings=settings,

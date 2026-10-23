@@ -68,10 +68,9 @@ class Server:
         self.paths: list[str] = []
 
     async def both(self, scope, receive, send) -> None:
-        """Both endpoints of the real server, each request noted by the one it came to."""
+        """Both endpoints of the real server, each request noted by the host it came to."""
         if scope["type"] == "http":
-            self.paths.append(scope["path"])
-            scope = {**scope, "path": "/mcp"}
+            self.paths.append(dict(scope["headers"])[b"host"].decode())
         await self.app(scope, receive, send)
 
     def client(self, **options) -> httpx.AsyncClient:
@@ -82,7 +81,7 @@ class Server:
 async def served(fail: bool = False) -> AsyncIterator[tuple[Server, McpTools]]:
     server = Server(fail)
     async with server.mcp.session_manager.run():
-        yield server, McpTools("http://mcp/mcp", server.client)
+        yield server, McpTools("http://mcp/mcp", "http://anonymous/mcp", server.client)
 
 
 class TestTheServersTools:
@@ -122,12 +121,12 @@ class TestTheServersTools:
         assert text.startswith("portfolio_overview read")
         asked = {"portfolio": "my-pf", "positions": 5}
         assert server.calls == [("portfolio_overview", asked, None)]
-        assert set(server.paths) == {"/public/mcp"}, "a visitor reads on the public endpoint"
+        assert set(server.paths) == {"anonymous"}, "a visitor reads on the private endpoint"
 
     async def test_a_signed_in_turn_reads_on_the_signed_in_endpoint(self):
         async with served() as (server, mcp):
             await mcp.overview("my-pf", "Bearer T", 5)
-        assert set(server.paths) == {"/mcp"}
+        assert set(server.paths) == {"mcp"}
 
     async def test_a_refusal_from_the_server_is_raised_not_read_as_an_answer(self):
         async with served(fail=True) as (_, mcp):

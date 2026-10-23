@@ -6,15 +6,17 @@ its total moved, the best lending rates, and exact arithmetic. A wallet address
 works wherever a portfolio does. It also serves scenarios (prompts) and a
 portfolio as a resource.
 
-Two endpoints, the same tools:
+Every request from the internet signs in. `/mcp` is signed in with svinooh
+over OAuth: a client that arrives without a token is answered 401 with where
+to get one, registers itself, and sends the person to `svinooh.com/connect` to
+allow it. The server then reads with that person's svinooh session, private
+portfolios included. A svinooh session token sent as `Authorization: Bearer …`
+also works, for clients set up by hand.
 
-- `/mcp` — signed in with svinooh over OAuth. A client that arrives without a
-  token is answered 401 with where to get one, registers itself, and sends the
-  person to `svinooh.com/connect` to allow it. The server then reads with that
-  person's svinooh session, private portfolios included. A svinooh session
-  token sent as `Authorization: Bearer …` also works, for clients set up by hand.
-- `/public/mcp` — no sign-in: public portfolios and any wallet address. The
-  agent reads here for visitors who are not signed in.
+The same tools reading as nobody are served on a second port,
+`MCP_ANONYMOUS_PORT` (3001), which no public domain routes to: only the agent,
+over Railway's private network, reaches it, to answer visitors who are not
+signed in.
 
 The model of a portfolio, the API client and the text the tools answer with
 live in `libs/portfolio-py`, shared with `apps/agent`.
@@ -24,7 +26,7 @@ live in `libs/portfolio-py`, shared with `apps/agent`.
 ```bash
 uv sync
 PORTFOLIO_API_URL=https://api-production-b486.up.railway.app EARN_API_URL=<earn service> \
-  uv run uvicorn main:app --port 3000
+  uv run python main.py
 uv run ruff check && uv run ruff format --check && uv run mypy && uv run pytest -q
 ```
 
@@ -33,7 +35,8 @@ uv run ruff check && uv run ruff format --check && uv run mypy && uv run pytest 
 | `PORTFOLIO_API_URL`, `EARN_API_URL` | the APIs it reads |
 | `MCP_PUBLIC_URL` | its own public origin: the OAuth issuer, and `/mcp` under it is the resource |
 | `WEB_URL` | where the consent page is, and the only origin its calls are open to |
-| `REDIS_URL` | registered clients, pending requests and issued tokens; without it they live in the process |
+| `REDIS_URL` | registered clients (90 days from their last connection), pending requests and issued tokens; without it they live in the process |
+| `PORT`, `MCP_ANONYMOUS_PORT` | the signed-in port the public domain routes to (3000), and the private one (3001) |
 
 ## Connect Claude
 
