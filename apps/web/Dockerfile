@@ -20,6 +20,10 @@ ARG NEXT_PUBLIC_AGENT_URL
 ENV NEXT_PUBLIC_AGENT_URL=$NEXT_PUBLIC_AGENT_URL
 ARG NEXT_PUBLIC_AGENT_WIDGET_URL
 ENV NEXT_PUBLIC_AGENT_WIDGET_URL=$NEXT_PUBLIC_AGENT_WIDGET_URL
+# The MCP server the /connect page answers for: an MCP client's sign-in lands
+# there, and the person's yes or no is sent back to this address.
+ARG NEXT_PUBLIC_MCP_URL
+ENV NEXT_PUBLIC_MCP_URL=$NEXT_PUBLIC_MCP_URL
 
 COPY package.json package-lock.json nx.json tsconfig.base.json ./
 COPY apps/web/package.json apps/web/

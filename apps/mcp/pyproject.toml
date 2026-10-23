@@ -12,6 +12,7 @@ dependencies = [
     "httpx>=0.28",
     # The portfolio's model, its API client and its readings, shared with apps/agent.
     "svinooh-portfolio-py",
+    "redis>=5",
 ]
 
 [dependency-groups]

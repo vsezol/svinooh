@@ -65,9 +65,17 @@ class Server:
             return heard("my_portfolios", ctx)
 
         self.app = self.mcp.streamable_http_app()
+        self.paths: list[str] = []
+
+    async def both(self, scope, receive, send) -> None:
+        """Both endpoints of the real server, each request noted by the one it came to."""
+        if scope["type"] == "http":
+            self.paths.append(scope["path"])
+            scope = {**scope, "path": "/mcp"}
+        await self.app(scope, receive, send)
 
     def client(self, **options) -> httpx.AsyncClient:
-        return httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app), **options)
+        return httpx.AsyncClient(transport=httpx.ASGITransport(app=self.both), **options)
 
 
 @asynccontextmanager
@@ -114,6 +122,12 @@ class TestTheServersTools:
         assert text.startswith("portfolio_overview read")
         asked = {"portfolio": "my-pf", "positions": 5}
         assert server.calls == [("portfolio_overview", asked, None)]
+        assert set(server.paths) == {"/public/mcp"}, "a visitor reads on the public endpoint"
+
+    async def test_a_signed_in_turn_reads_on_the_signed_in_endpoint(self):
+        async with served() as (server, mcp):
+            await mcp.overview("my-pf", "Bearer T", 5)
+        assert set(server.paths) == {"/mcp"}
 
     async def test_a_refusal_from_the_server_is_raised_not_read_as_an_answer(self):
         async with served(fail=True) as (_, mcp):

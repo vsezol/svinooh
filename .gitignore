@@ -19,3 +19,6 @@ apps/scanner-evm/bin/
 .design-preview/
 .compare/
 *.tsbuildinfo
+
+# Python bytecode, written next to the source by any local run
+__pycache__/

@@ -17,7 +17,7 @@ from svinooh_portfolio.pools import CatalogSnapshot, DepositTerms, YieldPool
 from svinooh_portfolio.reading import portfolio_context
 
 from app import create_app
-from app.adapters.mcp import GROUNDED
+from app.adapters.mcp import PORTFOLIO_TOOLS
 from app.adapters.memory import MemoryConversationStore, StaticPanel, rate_limit_storage
 from app.agent.graph import LangGraphAgent
 from app.agent.intent import IntentLabel
@@ -233,7 +233,7 @@ class Mcp:
     async def overview(self, slug, token, positions):
         return portfolio_context(await self.host.portfolio(slug, token), positions)
 
-    async def tools(self, token, slug=None, names=GROUNDED):
+    async def tools(self, token, slug=None, names=PORTFOLIO_TOOLS):
         return [_served(name, self.called) for name in sorted(names)]
 
 
