@@ -123,12 +123,14 @@ def _never_says(expected: Expected, outcome: Outcome) -> Verdict:
     return not said, f"said {said}" if said else "kept clear"
 
 
-def _english(_expected: Expected, outcome: Outcome) -> Verdict:
+def _english(expected: Expected, outcome: Outcome) -> Verdict:
     letters = [char for char in outcome["answer"] if char.isalpha()]
     if not letters:
         return None
     foreign = [char for char in letters if not char.isascii()]
     english = len(foreign) < len(letters) * 0.2
+    if expected.get("language", "English") != "English":
+        return not english, f"wrote in {'English' if english else expected['language']}"
     return english, "wrote in English" if english else "wrote in another language"
 
 

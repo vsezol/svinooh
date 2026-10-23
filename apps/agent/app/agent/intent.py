@@ -25,9 +25,9 @@ CLASSIFIER_PROMPT = (
     "pool to another, and liquidity for a pair: providing it, its price range, "
     "closing or rebalancing a liquidity position — and when they want a coin "
     "they hold swapped, exchanged or sold for another. `earn` wins even when they "
-    "say 'my' — 'put my USDC to work' is asking where to put it, and 'move my "
-    "USDC somewhere that pays "
-    "more' is asking where to move it, not what it is worth. Label `general` for "
+    "say 'my' — 'put my USDC to work' is about where it goes, and 'move my USDC "
+    "somewhere that pays more' is about where it moves, not what it is worth. "
+    "Label `general` for "
     "everything else: DeFi concepts, how the app works, small talk. When in "
     "doubt between portfolio and general, prefer `portfolio` — a wrong general "
     "answer to a money question costs more than a wasted context fetch.\n"
@@ -60,14 +60,18 @@ class IntentLabel(BaseModel):
     intent: Literal["portfolio", "earn", "general"]
     stance: Literal["asking", "placing"] = Field(
         description=(
-            "What they want done with money, for `earn`. `placing` when they "
-            "tell you to put it somewhere, take it out, move it or swap it — 'put my "
-            "USDC to work', 'invest 500 for me', 'закинь', 'выведи', 'переложи "
-            "повыгоднее', 'свапни', 'do it', 'all of it' — and also when they only name "
-            "an amount or a pool after you asked which. `asking` when they "
-            "want to know what the options are or what a rate is. For "
-            "`portfolio` and `general` say `asking`. Say one of the two words "
-            "every time; there is no default."
+            "What they want done with money, for `earn`. Read the form of the line, "
+            "not its topic. `placing` when it tells you to do something with money — "
+            "put it somewhere, take it out, move it or swap it: 'put my USDC to "
+            "work', 'invest 500 for me', 'закинь', 'выведи', 'переложи повыгоднее', "
+            "'свапни', 'do it', 'all of it' — and also when they only name an amount "
+            "or a pool after you asked which. An instruction that leaves the "
+            "destination to you is still `placing`: 'put my USDC somewhere', "
+            "'somewhere safe', 'куда-нибудь' hand you the choice, they do not ask "
+            "for a list. `asking` only when the line asks what the options are or "
+            "what a rate is: 'where can I earn on SOL?', 'what pays most for "
+            "USDC?'. For `portfolio` and `general` say `asking`. Say one of the two "
+            "words every time; there is no default."
         )
     )
     risk: Literal["low", "medium", "high", "unknown"] = Field(
