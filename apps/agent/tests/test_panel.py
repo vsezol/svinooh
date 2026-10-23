@@ -53,6 +53,12 @@ class TestReadingTheWire:
             None,
         )
 
+    def test_tracing_is_on_off_or_no_opinion(self):
+        assert parse({"tracing": "on"}).tracing is True
+        assert parse({"tracing": "off"}).tracing is False
+        assert parse({"tracing": "maybe"}).tracing is None
+        assert parse({}).tracing is None
+
     def test_zero_tool_hops_is_a_decision(self):
         assert parse({"toolHops": 0}).tool_hops == 0
 

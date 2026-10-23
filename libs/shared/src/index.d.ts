@@ -360,6 +360,8 @@ export interface AgentConfigDto {
   contextMaxPositions: number;
   providerSort: string;
   routerProviderSort: string;
+  /** on or off: whether the agent sends its turns to Langfuse */
+  tracing: string;
   /**
    * What the product says about itself — the same sentences the FAQ page
    * shows, so the assistant cannot answer a question about svinooh differently

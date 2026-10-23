@@ -20,8 +20,9 @@ def configure(**options: Any) -> None:
 
 
 @contextmanager
-def traced(ask: Ask) -> Iterator[RunnableConfig | None]:
-    if not os.getenv("LANGFUSE_PUBLIC_KEY"):
+def traced(ask: Ask, enabled: bool = True) -> Iterator[RunnableConfig | None]:
+    """The turn's trace in Langfuse, unless there are no keys or the panel turned it off."""
+    if not enabled or not os.getenv("LANGFUSE_PUBLIC_KEY"):
         yield None
         return
     with propagate_attributes(session_id=ask.session_id or None, user_id=ask.owner or None):

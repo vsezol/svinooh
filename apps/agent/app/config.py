@@ -42,6 +42,9 @@ class Config:
     def tool_hops(self) -> int:
         return _first(self._panel.current().tool_hops, self.settings.tool_hops)
 
+    def tracing(self) -> bool:
+        return _first(self._panel.current().tracing, self.settings.tracing)
+
     def context_max_positions(self) -> int:
         return _first(
             self._panel.current().context_max_positions, self.settings.context_max_positions

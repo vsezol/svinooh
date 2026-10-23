@@ -19,6 +19,7 @@ class PanelValues:
     router_provider_sort: str | None = None
     tool_hops: int | None = None
     context_max_positions: int | None = None
+    tracing: bool | None = None
     product: tuple[ProductFact, ...] = ()
 
 

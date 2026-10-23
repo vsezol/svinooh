@@ -34,6 +34,7 @@ class Settings(BaseSettings):
 
     system_prompt: str = Field("", validation_alias="AGENT_SYSTEM")
     tool_hops: int = Field(3, ge=0)
+    tracing: bool = True
     context_max_positions: int = Field(12, ge=1)
     request_timeout_s: int = Field(60, ge=1, validation_alias="AGENT_TIMEOUT_S")
     context_timeout_s: int = Field(10, ge=1)

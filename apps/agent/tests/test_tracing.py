@@ -7,6 +7,7 @@ from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from app.observability.tracing import configure, traced
+from app.panel import PanelValues
 from app.ports import Ask, Finished
 from tests.support import agent, fake_model
 
@@ -65,3 +66,14 @@ async def test_without_keys_nothing_is_traced_and_the_turn_still_answers():
     with traced(Ask(question="hi")) as config:
         assert config is None
     assert (await agent().run(Ask(question="hi"))).answer == "answered"
+
+
+async def test_the_panel_turns_tracing_off_and_nothing_is_sent(exported):
+    bot = agent(panel=PanelValues(tracing=False))
+    assert (await bot.run(Ask(question="hi"))).answer == "answered"
+    assert spans(exported) == ()
+
+
+async def test_with_no_word_from_the_panel_turns_are_traced(exported):
+    await agent().run(Ask(question="hi"))
+    assert spans(exported)
