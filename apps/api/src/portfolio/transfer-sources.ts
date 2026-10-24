@@ -5,9 +5,15 @@ import { config } from '../config';
 
 /**
  * Plain transfers of one address, a page at a time, newest first, each leg
- * priced at the time it moved. Only `send` and `receive` — a swap or a protocol
- * deposit moved no money anywhere. A leg nobody can price is dropped: on TRON
- * and EVM that is the spam and the address-poisoning dust, which is most of them.
+ * priced at the time it moved.
+ *
+ * Plain means the transaction did nothing but move the money: a coin sent
+ * straight to someone, or a token's own `transfer`, signed by whoever the money
+ * left. Sources call a Kamino deposit, a Meteora withdrawal, a bridge and a
+ * swap leg a send or a receive just the same, so each transaction is judged by
+ * what it actually called — see evmPlain, solanaPlain and tronPlain. A leg
+ * nobody can price is dropped too: on TRON and EVM that is the spam and the
+ * address-poisoning dust.
  */
 export interface Transfer {
   txHash: string;
@@ -34,10 +40,15 @@ type Leg = Omit<Transfer, 'usd'> & { usd: number | null; coin: string | null };
 
 const TIMEOUT_MS = 20_000;
 
-/** A 429 or a 5xx is waited out twice before giving up */
-async function getJson<T>(url: string, headers: Record<string, string> = {}): Promise<T> {
+/** A 429 or a 5xx is waited out twice before giving up. A body makes it a POST. */
+async function getJson<T>(url: string, headers: Record<string, string> = {}, body?: string): Promise<T> {
   for (let attempt = 0; ; attempt++) {
-    const res = await fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    const res = await fetch(url, {
+      method: body ? 'POST' : 'GET',
+      headers: body ? { 'content-type': 'application/json', ...headers } : headers,
+      body,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
     if (res.ok) return (await res.json()) as T;
     if (attempt === 2 || (res.status !== 429 && res.status < 500)) {
       throw new Error(`${new URL(url).host} answered ${res.status}`);
@@ -77,6 +88,9 @@ interface ZerionTx {
     hash?: string;
     mined_at?: string;
     status?: string;
+    /** Who signed the transaction, and what it was addressed to */
+    sent_from?: string | null;
+    sent_to?: string | null;
     transfers?: Array<{
       direction?: string;
       sender?: string | null;
@@ -137,6 +151,7 @@ async function zerion(address: string, floor: Date, cursor: string | null): Prom
     authorization: `Basic ${auth}`,
   });
 
+  const evm = address.startsWith('0x');
   const legs: Leg[] = [];
   for (const tx of page.data ?? []) {
     const a = tx.attributes ?? {};
@@ -150,6 +165,9 @@ async function zerion(address: string, floor: Date, cursor: string | null): Prom
       if ((t.direction !== 'in' && t.direction !== 'out') || !(amount > 0)) return;
       if (!t.fungible_info?.flags?.verified) return;
       const contract = t.fungible_info.implementations?.find((i) => i.chain_id === chainId)?.address;
+      if (evm && !evmPlain({ signer: a.sent_from, to: a.sent_to, sender: t.sender, recipient: t.recipient, token: contract })) {
+        return;
+      }
       legs.push({
         txHash: a.hash!,
         leg: String(i),
@@ -167,7 +185,89 @@ async function zerion(address: string, floor: Date, cursor: string | null): Prom
       });
     });
   }
-  return { legs, next: page.links?.next ?? null };
+  const next = page.links?.next ?? null;
+  if (evm) return { legs, next };
+  const plain = new Set<string>();
+  await Promise.all(
+    [...new Set(legs.map((leg) => leg.txHash))].map(async (hash) => {
+      if (await solanaTransactionIsPlain(hash)) plain.add(hash);
+    }),
+  );
+  return { legs: legs.filter((leg) => plain.has(leg.txHash)), next };
+}
+
+/**
+ * An EVM transfer is plain when whoever the money left signed the transaction,
+ * and addressed it to the recipient (a coin) or to the token's own contract (its
+ * `transfer`). A router, a vault, a bridge or a Safe is something else.
+ */
+export function evmPlain(t: {
+  signer?: string | null;
+  to?: string | null;
+  sender?: string | null;
+  recipient?: string | null;
+  token?: string | null;
+}): boolean {
+  const signer = spell(t.signer);
+  const to = spell(t.to);
+  return signer !== null && signer === spell(t.sender) && to !== null && (to === spell(t.recipient) || to === spell(t.token));
+}
+
+/** Moving money and nothing else: what a wallet's own send, or an exchange's payout, calls */
+const PLAIN_SOLANA_PROGRAMS = new Set([
+  '11111111111111111111111111111111', // System
+  'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', // Token
+  'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb', // Token-2022
+  'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL', // Associated token accounts
+  'ComputeBudget111111111111111111111111111111',
+  'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr',
+  'Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo',
+  'L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95', // Lighthouse, the guard Phantom adds to a send
+]);
+
+export const solanaPlain = (programs: string[]): boolean => programs.every((p) => PLAIN_SOLANA_PROGRAMS.has(p));
+
+interface SolanaTx {
+  transaction: { message: { instructions: Array<{ programId: string }> } };
+  meta: { innerInstructions?: Array<{ instructions: Array<{ programId: string }> }> | null } | null;
+}
+
+const SOLANA_RPCS = [...config.solanaRpcUrls, 'https://solana-rpc.publicnode.com', 'https://api.mainnet-beta.solana.com'];
+const solanaGate = new Semaphore(2);
+
+/**
+ * What a transaction was never changes, so it is asked once: a page that failed
+ * halfway on a rate limit picks up where it was instead of asking all over again.
+ */
+const solanaVerdicts = new Map<string, boolean>();
+const SOLANA_VERDICTS_MAX = 100_000;
+
+async function solanaTransactionIsPlain(signature: string): Promise<boolean> {
+  const known = solanaVerdicts.get(signature);
+  if (known !== undefined) return known;
+  const params = [signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }];
+  const tx = await solanaGate.run(async () => {
+    let lastError: unknown;
+    for (const url of SOLANA_RPCS) {
+      try {
+        const answer = await getJson<{ result?: SolanaTx | null; error?: { message?: string } }>(
+          url,
+          {},
+          JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getTransaction', params }),
+        );
+        if (answer.result) return answer.result;
+        lastError = new Error(answer.error?.message ?? `${signature.slice(0, 8)}… not found`);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError;
+  });
+  const inner = (tx.meta?.innerInstructions ?? []).flatMap((i) => i.instructions);
+  const plain = solanaPlain([...tx.transaction.message.instructions, ...inner].map((i) => i.programId));
+  solanaVerdicts.set(signature, plain);
+  if (solanaVerdicts.size > SOLANA_VERDICTS_MAX) solanaVerdicts.delete(solanaVerdicts.keys().next().value!);
+  return plain;
 }
 
 // --- TRON: TronGrid ----------------------------------------------------------
@@ -216,14 +316,42 @@ interface Trc20Row {
 const trongrid = new Semaphore(1);
 const TRONGRID_GAP_MS = 300;
 
-const tronGet = <T>(url: string, headers: Record<string, string>): Promise<T> =>
+const tronGet = <T>(url: string, headers: Record<string, string>, body?: string): Promise<T> =>
   trongrid.run(async () => {
     try {
-      return await getJson<T>(url, headers);
+      return await getJson<T>(url, headers, body);
     } finally {
       await sleep(TRONGRID_GAP_MS);
     }
   });
+
+interface TronCall {
+  raw_data?: {
+    contract?: Array<{
+      type?: string;
+      parameter?: { value?: { owner_address?: string; contract_address?: string; data?: string } };
+    }>;
+  };
+}
+
+const tronCall = (txid: string, headers: Record<string, string>): Promise<TronCall> =>
+  tronGet<TronCall>('https://api.trongrid.io/walletsolidity/gettransactionbyid', headers, JSON.stringify({ value: txid }));
+
+/**
+ * A TRC20 Transfer event is also what a swap, a bridge and a vault emit. Plain
+ * is only the token's own `transfer` (a9059cbb), called by the sender itself.
+ * TRX needs no such check: a TransferContract is nothing but a send.
+ */
+export function tronPlain(call: TronCall, token: string, from: string): boolean {
+  const c = call.raw_data?.contract?.[0];
+  const v = c?.parameter?.value;
+  return (
+    c?.type === 'TriggerSmartContract' &&
+    tronHexToBase58(v?.contract_address) === token &&
+    tronHexToBase58(v?.owner_address) === from &&
+    (v?.data ?? '').startsWith('a9059cbb')
+  );
+}
 
 /** Two endpoints, two cursors, carried as one: each is the next-page URL TronGrid built, null once spent */
 async function tron(address: string, floor: Date, cursor: string | null): Promise<LegPage> {
@@ -275,7 +403,8 @@ async function tron(address: string, floor: Date, cursor: string | null): Promis
     const contract = row.token_info?.address;
     if (row.type !== 'Transfer' || !row.transaction_id || !row.block_timestamp || !contract) continue;
     const amount = Number(row.value) / 10 ** (row.token_info?.decimals ?? 6);
-    if (!(amount > 0)) continue;
+    if (!(amount > 0) || (row.from !== address && row.to !== address)) continue;
+    if (!tronPlain(await tronCall(row.transaction_id, headers), contract, row.from ?? '')) continue;
     // TronGrid gives a TRC20 row no index of its own inside the transaction
     push(row.transaction_id, row.block_timestamp, row.from ?? null, row.to ?? null, {
       leg: `trc20:${contract}:${row.from}:${row.to}:${row.value}`,

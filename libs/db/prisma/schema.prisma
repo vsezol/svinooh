@@ -541,7 +541,8 @@ model PositionSnapshot {
 ///
 /// Keyed by (chain, address) like AddressSnapshot: the same answer whoever is
 /// asking, and it outlives any Wallet row. No portfolio, no owner, no label.
-/// Only plain sends and receives, only legs that could be priced.
+/// Only plain transfers — transactions that did nothing but move the money —
+/// and only legs that could be priced. See portfolio/transfer-sources.ts.
 model AddressTransfer {
   id           String   @id @default(cuid())
   chain        String

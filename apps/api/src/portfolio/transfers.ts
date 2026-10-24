@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
+import { sleep } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import type { Chain, TransferDto, TransfersDto } from '@svinooh/shared';
 import { readPage, type Transfer } from './transfer-sources';
@@ -21,6 +22,12 @@ const FRESH_MS = 15 * 60_000;
 const OVERLAP_MS = 60 * 60_000;
 /** What one tab open may spend per address; the background walks the rest */
 const PAGES_ON_VIEW = 3;
+/**
+ * How long a tab open waits for its catch-up. Telling a plain transfer from
+ * DeFi takes a look at every transaction, so a first pass can run for minutes;
+ * a short catch-up lands in this answer, a long pass carries on behind it.
+ */
+const VIEW_WAIT_MS = 3_000;
 const PAGES_IN_BACKGROUND = 5;
 const ADDRESSES_PER_TICK = 2;
 const RETRY_MS = 5 * 60_000;
@@ -31,7 +38,7 @@ const RETRY_MS = 5 * 60_000;
  *
  * A pass reads newest-first down to a floor and saves its place after every
  * page: the first pass goes down to `since`, a catch-up to just under where the
- * last one stopped. The background only finishes first passes, and only for
+ * last one stopped. The background only finishes unfinished passes, and only for
  * owned portfolios — Zerion allows 2,000 requests a day, and a landing search
  * is not worth spending them on. Catching up happens when the tab is opened,
  * which is enough: a catch-up reads down to where the history stopped however
@@ -47,7 +54,7 @@ export class TransferHistory {
 
   async forPortfolio(wallets: HeldAddress[]): Promise<TransfersDto> {
     if (!wallets.length) return { transfers: [], unread: [], loading: [] };
-    await Promise.all(wallets.map((w) => this.catchUp(w, PAGES_ON_VIEW, FRESH_MS)));
+    await Promise.race([Promise.all(wallets.map((w) => this.catchUp(w, PAGES_ON_VIEW, FRESH_MS))), sleep(VIEW_WAIT_MS)]);
 
     const [cursors, rows] = await Promise.all([
       this.prisma.addressTransferCursor.findMany({
@@ -68,7 +75,9 @@ export class TransferHistory {
     return {
       transfers: crossings(read, wallets),
       unread: wallets.filter((w) => cursorOf(w)?.lastError).map((w) => w.id),
-      loading: wallets.filter((w) => !cursorOf(w)?.syncedTo).map((w) => w.id),
+      loading: wallets
+        .filter((w) => !cursorOf(w)?.syncedTo || cursorOf(w)?.passCursor || this.passes.has(`${w.chain}:${w.address}`))
+        .map((w) => w.id),
     };
   }
 
@@ -81,7 +90,7 @@ export class TransferHistory {
         SELECT w."chain", w."address", w."createdAt" AS "since"
         FROM "Wallet" w
         LEFT JOIN "AddressTransferCursor" c ON c."chain" = w."chain" AND c."address" = w."address"
-        WHERE (c."chain" IS NULL OR c."syncedTo" IS NULL)
+        WHERE (c."chain" IS NULL OR c."syncedTo" IS NULL OR c."passCursor" IS NOT NULL)
           AND (c."retryAt" IS NULL OR c."retryAt" <= now())
           AND EXISTS (
             SELECT 1 FROM "PortfolioWallet" pw
