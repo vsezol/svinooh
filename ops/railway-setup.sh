@@ -65,6 +65,10 @@ command -v railway >/dev/null || { echo "railway CLI not found"; exit 1; }
 # image exposes USER/PASS + a private domain, not a ready URL. This exact form
 # is what the live services use (verified: scanner-evm connected with it).
 PG_URL='${{Postgres.DATABASE_URL}}'
+# The api pins its Prisma pool to 10. Prisma's default is CPUs * 2 + 1, and a
+# container here sees the host's 48 cores, so an unpinned pool may grow to 97
+# connections that are never given back: that is the slow native-memory climb
+# the api showed between deploys (set 2026-10-23; watch the RSS slope after).
 REDIS_URL='${{Redis.REDIS_URL}}'
 RABBIT_URL='amqp://${{rabbitmq.RABBITMQ_DEFAULT_USER}}:${{rabbitmq.RABBITMQ_DEFAULT_PASS}}@${{rabbitmq.RAILWAY_PRIVATE_DOMAIN}}:5672'
 # Kept for bringing Loki back; the services below get an empty LOKI_URL today
@@ -164,7 +168,7 @@ echo "== application services (all from ${REPO}@${BRANCH}) =="
 add_repo api
 setvars api \
   "NODE_ENV=production" "PORT=3000" \
-  "DATABASE_URL=${PG_URL}" "REDIS_URL=${REDIS_URL}" \
+  "DATABASE_URL=${PG_URL}?connection_limit=10" "REDIS_URL=${REDIS_URL}" \
   "JWT_SECRET=${JWT_SECRET}" \
   "AUTH_SERVICE_URL=${AUTH_URL}" \
   "WEB_ORIGIN=${PUBLIC_WEB_ORIGIN}" \
@@ -269,6 +273,9 @@ The Railway CLI does not set these reliably; do them once in the dashboard
      loki   → nothing ships logs to it or scrapes it (see observability)
      earn   → also needs EARN_REFRESH_INTERVAL_S=604800, or its five-minute
               refresh counts as traffic and it never sleeps
+     grafana → nobody looks at it most of the day; it wakes on the first
+              request, a few seconds. A dashboard tab left open with
+              auto-refresh is traffic and keeps it awake (set 2026-10-23)
    Not agent-web: the first request to a sleeping service can fail, and the
    chat widget is fetched from it on the portfolio page — not worth ~40MB.
    Nothing holding a RabbitMQ connection, polling settings or scraped by
