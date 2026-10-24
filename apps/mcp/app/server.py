@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Any
 
 import httpx
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -8,7 +8,7 @@ from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, Re
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import MCPServerError, ResourceError, ToolError
 from mcp.server.transport_security import TransportSecuritySettings
-from mcp_types import ToolAnnotations
+from mcp_types import Resource, ToolAnnotations
 from pydantic import Field
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -73,6 +73,50 @@ PortfolioId = Annotated[
 ]
 
 
+class SvinoohServer(MCPServer):
+    """The MCP server, with the caller's own portfolios listed as resources.
+
+    The two portfolio resources are templates, and clients put only listed
+    resources in their attach menus; a template, with nothing to fill it in,
+    shows nowhere. So the list carries one concrete resource per portfolio the
+    caller owns, worked out from their token on every listing: nobody else's
+    appear, and a caller without a token gets the plain list.
+    """
+
+    def __init__(self, source: DataSource, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._source = source
+
+    async def list_resources(self) -> list[Resource]:
+        listed = await super().list_resources()
+        token = _token()
+        if token is None:
+            return listed
+        try:
+            owned = (await self._source.me(token)).portfolios
+        except UnknownTokenError:
+            return listed
+        for ref in owned:
+            named = ref.name or ref.slug
+            listed += [
+                Resource(
+                    uri=f"svinooh://portfolio/{ref.slug}",
+                    name=f"{ref.slug}",
+                    title=f"{named}: overview",
+                    description=f"The {named} portfolio as a whole, to attach as context.",
+                    mime_type="text/plain",
+                ),
+                Resource(
+                    uri=f"svinooh://portfolio/{ref.slug}/assets",
+                    name=f"{ref.slug}-assets",
+                    title=f"{named}: what the money is in",
+                    description=f"What the {named} portfolio holds, net of debt.",
+                    mime_type="text/plain",
+                ),
+            ]
+        return listed
+
+
 def build(
     source: DataSource, catalog: PoolCatalog, oauth: SvinoohOAuth | None = None, url: str = ""
 ) -> MCPServer:
@@ -95,7 +139,8 @@ def build(
         if oauth
         else None
     )
-    server = MCPServer(
+    server = SvinoohServer(
+        source,
         "svinooh",
         instructions=INSTRUCTIONS,
         auth=auth,

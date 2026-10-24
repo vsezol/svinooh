@@ -202,6 +202,25 @@ class TestTheServer:
         assert "Counted total $3,000.00" in assets.contents[0].text
         assert host.tokens == [SESSION, SESSION]
 
+    async def test_the_callers_own_portfolios_are_listed_to_attach(self):
+        async with connected(Host(), SESSION) as session:
+            listed = (await session.list_resources()).resources
+            read = await session.read_resource(str(listed[0].uri))
+        assert [str(r.uri) for r in listed] == [
+            "svinooh://portfolio/main",
+            "svinooh://portfolio/main/assets",
+        ]
+        assert listed[0].title == "Main: overview"
+        assert read.contents[0].text.startswith('Portfolio "main"')
+
+    async def test_nobody_is_listed_anybodys_portfolios(self):
+        async with connected(Host()) as session:
+            assert (await session.list_resources()).resources == []
+
+    async def test_a_refused_token_lists_nothing_of_its_own(self):
+        async with connected(Host(refused=True), SESSION) as session:
+            assert (await session.list_resources()).resources == []
+
     async def test_a_missing_portfolio_is_refused_in_the_hosts_words(self):
         async with connected(Host(missing=True), SESSION) as session:
             with pytest.raises(MCPError, match="Portfolio not found"):
