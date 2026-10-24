@@ -50,7 +50,7 @@ ops/
 ```
 web ──HTTPS+JWT──▶ api ──HTTP /auth/*───▶ auth ──▶ Telegram Bot API
                     │
-                    ├──▶ Redis Streams (scan.evm, scan.sol, …) ──▶ scanner-evm ──▶ browser (lightpanda)
+                    ├──▶ BullMQ on Redis (scan.evm, scan.sol, …) ──▶ scanner-evm ──▶ browser (lightpanda)
                     │      ▲ the api's own scan pipeline drains scan.sol/tron/btc
                     │      └─ and scan.result, where every reading is judged and stored
                     ├──WS accountSubscribe──▶ Solana node (SOLANA_WS_URL): the Meteora
@@ -557,7 +557,7 @@ Reliability rules (a silently wrong number is worse than a failed request):
 
 ## The scan queue and history
 
-The api keeps a queue of addresses on Redis Streams (`src/wallet`). A producer tops it up
+The api keeps a queue of addresses on BullMQ over Redis (`src/wallet`). A producer tops it up
 with the addresses that are **due**, a consumer takes them one at a time
 (`SCAN_PREFETCH`) with a pause after each (`SCAN_JOB_DELAY_MS`). Identical
 addresses in different portfolios are scanned once.
@@ -578,13 +578,14 @@ This matters more than it looks: the producer used to refill the moment the
 queue drained, so everything was rescanned every ~1.8 minutes no matter what
 `SYNC_INTERVAL_MIN` said — about 4,800 DeBank page loads a day from one
 datacenter IP, which is what got the EVM scans throttled into timeouts. After each successful scan an
-`AddressSnapshot` is written. The scan queues are `scan.<chain>`, each a Redis
-stream with a consumer group (`libs/common/src/queue`); an urgent job goes to a
-second stream the consumer reads first. A job a stopped consumer never
-acknowledged is taken over by a live one after a minute, and a job that is simply
-never delivered comes due again when its lease expires. There is one pipeline
-and it goes through the queue — locally too, which is why `docker compose`
-brings Redis up alongside Postgres.
+`AddressSnapshot` is written. The scan queues are `scan.<chain>`, BullMQ queues
+on Redis (`libs/common/src/queue`); an urgent job goes ahead of the rest. A job
+whose worker stopped mid-way — a deploy, a crash — goes back to waiting once its
+lock runs out, and a job that is simply never delivered comes due again when its
+lease expires. Scan jobs are never retried on failure (the next top-up makes a
+fresh one); messages to the Telegram bot are, for about half an hour. There is
+one pipeline and it goes through the queue — locally too, which is why
+`docker compose` brings Redis up alongside Postgres.
 
 The api assembles a portfolio from Postgres on every request — one query — so
 the page shows a scan the moment it lands. It used to be served from a Redis

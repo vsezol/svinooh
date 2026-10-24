@@ -6,12 +6,9 @@ import type { Chain, ScanResult } from '@svinooh/shared';
  * only lands on one of them doesn't compile.
  */
 
-/** Every scan queue starts with this; see hasPriority */
-export const SCAN_QUEUE_PREFIX = 'scan.';
-
 /** One queue per chain: scan.evm, scan.sol, scan.tron, scan.btc. */
 export function scanQueueName(chain: Chain): string {
-  return `${SCAN_QUEUE_PREFIX}${chain.toLowerCase()}`;
+  return `scan.${chain.toLowerCase()}`;
 }
 
 /**
@@ -30,11 +27,6 @@ export const SCAN_MAX_PRIORITY = 1;
  * here to separate.
  */
 export const SCAN_RESULT_QUEUE = 'scan.result';
-
-/** The scan queues carry a priority; the result queue and the telegram queues do not */
-export function hasPriority(queue: string): boolean {
-  return queue.startsWith(SCAN_QUEUE_PREFIX) && queue !== SCAN_RESULT_QUEUE;
-}
 
 export interface ScanJob {
   chain: Chain;

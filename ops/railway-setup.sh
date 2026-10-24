@@ -61,7 +61,7 @@ command -v railway >/dev/null || { echo "railway CLI not found"; exit 1; }
 
 # ── cross-service references ────────────────────────────────────────────────
 # Railway resolves ${{service.VAR}} at deploy time over the private network.
-# REDIS_URL is the queue (Redis Streams, libs/common/src/queue) as well as the
+# REDIS_URL is the queue (BullMQ, libs/common/src/queue) as well as the
 # agent's conversation store: api, scanner-evm and bot-telegram all read it.
 PG_URL='${{Postgres.DATABASE_URL}}'
 # The api pins its Prisma pool to 10. Prisma's default is CPUs * 2 + 1, and a

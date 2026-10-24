@@ -26,8 +26,8 @@ async function main(): Promise<void> {
   await queue.onApplicationBootstrap();
 
   if (queue.enabled) {
-    // Manual ack, so a Telegram outage delays a warning rather than losing it:
-    // the message stays on the queue until it has actually been sent
+    // The telegram queues retry for about half an hour, so a Telegram outage
+    // delays a warning rather than losing it — see QueueService
     queue.consume<AlertEvent>(
       ALERTS_QUEUE,
       async (event) => {
@@ -36,8 +36,8 @@ async function main(): Promise<void> {
       },
       4,
     );
-    // Same manual ack for the same reason: a notice is worth delivering late
-    // and not worth losing
+    // Same retries for the same reason: a notice is worth delivering late and
+    // not worth losing
     queue.consume<SlowedNotice>(
       NOTICES_QUEUE,
       async (notice) => {
