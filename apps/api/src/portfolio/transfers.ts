@@ -13,6 +13,9 @@ export interface HeldAddress {
 
 const TTL_MS = 10 * 60_000;
 
+/** Below this a transaction is dust or spam, not money moving */
+const MIN_USD = 1;
+
 // ponytail: in-process cache, fine on one api replica; a table with a cursor
 // when the list needs depth or the chart needs the numbers
 const cache = new Map<string, { at: number; read: Promise<Transfer[]> }>();
@@ -50,7 +53,8 @@ const spell = (address: string): string => (address.startsWith('0x') ? address.t
 /**
  * What crossed the portfolio's edge: every transfer whose other side is not one
  * of the portfolio's own addresses, one row per wallet, transaction and
- * direction. A transfer between two of its wallets is a move, not money in or out.
+ * direction, worth a dollar or more. A transfer between two of its wallets is a
+ * move, not money in or out.
  */
 export function crossings(
   read: Array<{ wallet: HeldAddress; transfers: Transfer[] }>,
@@ -84,5 +88,5 @@ export function crossings(
     }
   }
 
-  return [...rows.values()].sort((a, b) => b.t.localeCompare(a.t));
+  return [...rows.values()].filter((row) => row.usd >= MIN_USD).sort((a, b) => b.t.localeCompare(a.t));
 }

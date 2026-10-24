@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { Semaphore, sleep } from '@svinooh/common';
 import type { Chain } from '@svinooh/shared';
 import { config } from '../config';
 
@@ -24,13 +25,18 @@ export interface Transfer {
 /** A leg before pricing. `coin` is the DefiLlama id to price it by when `usd` is missing. */
 type Leg = Omit<Transfer, 'usd'> & { usd: number | null; coin: string | null };
 
-const MIN_USD = 0.01;
 const TIMEOUT_MS = 20_000;
 
+/** A 429 or a 5xx is waited out twice before giving up */
 async function getJson<T>(url: string, headers: Record<string, string> = {}): Promise<T> {
-  const res = await fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
-  if (!res.ok) throw new Error(`${new URL(url).host} answered ${res.status}`);
-  return (await res.json()) as T;
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    if (res.ok) return (await res.json()) as T;
+    if (attempt === 2 || (res.status !== 429 && res.status < 500)) {
+      throw new Error(`${new URL(url).host} answered ${res.status}`);
+    }
+    await sleep(1000 * 2 ** attempt);
+  }
 }
 
 export async function readTransfers(chain: Chain, address: string): Promise<Transfer[]> {
@@ -40,15 +46,14 @@ export async function readTransfers(chain: Chain, address: string): Promise<Tran
 }
 
 async function priced(legs: Leg[]): Promise<Transfer[]> {
-  const prices = await historicalPrices(
-    legs.filter((leg) => leg.usd === null && leg.coin).map((leg) => ({ coin: leg.coin!, at: leg.at })),
-  );
+  const unpriced = legs.filter((leg) => leg.usd === null && leg.coin);
+  await pricesAt(unpriced.map((leg) => ({ coin: leg.coin!, at: leg.at })));
   return legs
     .map(({ coin, ...leg }) => {
-      const price = leg.usd === null && coin ? priceAt(prices, coin, leg.at) : null;
+      const price = leg.usd === null && coin ? (priceCache.get(priceKey(coin, leg.at)) ?? null) : null;
       return { ...leg, usd: leg.usd ?? (price === null ? null : leg.amount * price) };
     })
-    .filter((leg): leg is Transfer => leg.usd !== null && leg.usd >= MIN_USD);
+    .filter((leg): leg is Transfer => leg.usd !== null);
 }
 
 // --- EVM and SOL: Zerion -----------------------------------------------------
@@ -188,13 +193,26 @@ interface Trc20Row {
   token_info?: { symbol?: string; address?: string; decimals?: number };
 }
 
+/** Keyless TronGrid is per-second and unforgiving: one call at a time, spaced as tron-resources spaces them */
+const trongrid = new Semaphore(1);
+const TRONGRID_GAP_MS = 300;
+
+const tronGet = <T>(url: string, headers: Record<string, string>): Promise<T> =>
+  trongrid.run(async () => {
+    try {
+      return await getJson<T>(url, headers);
+    } finally {
+      await sleep(TRONGRID_GAP_MS);
+    }
+  });
+
 async function tron(address: string): Promise<Leg[]> {
   const api = `https://api.trongrid.io/v1/accounts/${address}`;
   const query = 'limit=200&only_confirmed=true';
   const headers: Record<string, string> = config.tronApiKey ? { 'TRON-PRO-API-KEY': config.tronApiKey } : {};
   const [txs, trc20] = await Promise.all([
-    getJson<{ data?: TronTx[] }>(`${api}/transactions?${query}`, headers),
-    getJson<{ data?: Trc20Row[] }>(`${api}/transactions/trc20?${query}`, headers),
+    tronGet<{ data?: TronTx[] }>(`${api}/transactions?${query}`, headers),
+    tronGet<{ data?: Trc20Row[] }>(`${api}/transactions/trc20?${query}`, headers),
   ]);
 
   const legs: Leg[] = [];
@@ -297,38 +315,51 @@ async function btc(address: string): Promise<Leg[]> {
 // --- Prices at the time: DefiLlama ------------------------------------------
 
 const HOUR_S = 3600;
+const PRICE_CACHE_MAX = 100_000;
 
-/** One batch per ten coins, every timestamp rounded to its hour. Throws rather than leave everything unpriced. */
-async function historicalPrices(
-  wanted: Array<{ coin: string; at: Date }>,
-): Promise<Map<string, Array<{ t: number; price: number }>>> {
+/**
+ * USD per (coin, hour); null — Llama has no price for it. A past hour's price
+ * never changes, so an entry is never refreshed, only evicted oldest-first.
+ * Stablecoins go through here like anything else rather than as a constant $1:
+ * they depeg, and a fake "USDT" shares the ticker.
+ */
+export const priceCache = new Map<string, number | null>();
+
+const hourOf = (at: Date): number => Math.floor(at.getTime() / 1000 / HOUR_S) * HOUR_S;
+const priceKey = (coin: string, at: Date): string => `${coin}@${hourOf(at)}`;
+
+/** Fills priceCache for whatever it lacks: one request per ten coins. Throws rather than leave everything unpriced. */
+export async function pricesAt(wanted: Array<{ coin: string; at: Date }>): Promise<void> {
   const hours = new Map<string, Set<number>>();
   for (const { coin, at } of wanted) {
+    if (priceCache.has(priceKey(coin, at))) continue;
     const set = hours.get(coin) ?? new Set<number>();
-    set.add(Math.floor(at.getTime() / 1000 / HOUR_S) * HOUR_S);
+    set.add(hourOf(at));
     hours.set(coin, set);
   }
 
-  const out = new Map<string, Array<{ t: number; price: number }>>();
   const coins = [...hours.keys()];
   for (let i = 0; i < coins.length; i += 10) {
     const batch = Object.fromEntries(coins.slice(i, i + 10).map((coin) => [coin, [...hours.get(coin)!]]));
     const url = `https://coins.llama.fi/batchHistorical?coins=${encodeURIComponent(JSON.stringify(batch))}&searchWidth=4h`;
     const body = await getJson<{ coins?: Record<string, { prices?: Array<{ timestamp: number; price: number }> }> }>(url);
-    for (const [coin, entry] of Object.entries(body.coins ?? {})) {
-      out.set(coin, (entry.prices ?? []).map((p) => ({ t: p.timestamp, price: p.price })));
+
+    for (const [coin, asked] of Object.entries(batch)) {
+      const points = body.coins?.[coin]?.prices ?? [];
+      for (const hour of asked) {
+        // Llama answers the nearest point it has within the search width, not the exact hour
+        const nearest = points.reduce<{ timestamp: number; price: number } | null>(
+          (best, p) => (!best || Math.abs(p.timestamp - hour) < Math.abs(best.timestamp - hour) ? p : best),
+          null,
+        );
+        // "No price" is only final once Llama has had a day to index the hour
+        if (nearest || hour < Date.now() / 1000 - 24 * HOUR_S) priceCache.set(`${coin}@${hour}`, nearest?.price ?? null);
+      }
     }
   }
-  return out;
-}
 
-/** The answer nearest in time; Llama only answers within the width it was asked to search */
-function priceAt(prices: Map<string, Array<{ t: number; price: number }>>, coin: string, at: Date): number | null {
-  const t = at.getTime() / 1000;
-  let best: { gap: number; price: number } | null = null;
-  for (const p of prices.get(coin) ?? []) {
-    const gap = Math.abs(p.t - t);
-    if (!best || gap < best.gap) best = { gap, price: p.price };
+  for (const key of priceCache.keys()) {
+    if (priceCache.size <= PRICE_CACHE_MAX) break;
+    priceCache.delete(key);
   }
-  return best?.price ?? null;
 }

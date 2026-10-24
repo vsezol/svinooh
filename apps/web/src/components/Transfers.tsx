@@ -51,7 +51,7 @@ export function Transfers({ slug, wallets }: { slug: string; wallets: WalletDto[
       {data.transfers.length === 0 ? (
         <Empty
           title="No deposits or withdrawals"
-          note="Nothing moved between this portfolio and the outside lately. Swaps, protocol deposits and moves between its own wallets are not listed."
+          note="Nothing moved between this portfolio and the outside lately. Swaps, protocol deposits, moves between its own wallets and anything under $1 are not listed."
         />
       ) : (
         <div style={{ borderTop: '1px solid var(--line)' }}>
