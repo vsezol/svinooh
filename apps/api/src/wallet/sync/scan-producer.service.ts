@@ -3,7 +3,7 @@ import { Interval } from '@nestjs/schedule';
 import type { Chain } from '@svinooh/shared';
 import {
   queueDepth,
-  RabbitService,
+  QueueService,
   SCAN_MAX_PRIORITY,
   scanQueueName,
   type ScanJob,
@@ -22,7 +22,7 @@ import { SyncService } from './sync.service';
  * instant somebody added the wallet — is never published a second time.
  *
  * There is one pipeline and this is it. There used to be a second, broker-less
- * one right here, so that `npm run dev` worked without RabbitMQ; it skipped EVM,
+ * one right here, so that `npm run dev` worked without a broker; it skipped EVM,
  * paced itself off how long each scan took rather than off a clock, and was the
  * only copy nobody ran in production. Running the broker locally is cheaper than
  * keeping a shadow implementation honest — see docker-compose.yml.
@@ -40,16 +40,16 @@ export class ScanProducerService implements OnApplicationBootstrap {
   private ticking = false;
 
   constructor(
-    private readonly rabbit: RabbitService,
+    private readonly queue: QueueService,
     private readonly sync: SyncService,
   ) {}
 
   onApplicationBootstrap() {
-    if (this.rabbit.enabled) {
+    if (this.queue.enabled) {
       this.logger.log(`Producer: topping the queue up every ${setting('scan.reloadSec')}s`);
     } else {
       this.logger.error(
-        'RABBITMQ_URL is not set — nothing will be scanned. Start the broker: docker compose up -d rabbitmq',
+        'REDIS_URL is not set — nothing will be scanned. Start Redis: docker compose up -d redis',
       );
     }
   }
@@ -69,7 +69,7 @@ export class ScanProducerService implements OnApplicationBootstrap {
    */
   @Interval('scan-top-up', setting('scan.reloadSec') * 1000)
   async tick(): Promise<void> {
-    if (this.ticking || !this.rabbit.enabled) return;
+    if (this.ticking || !this.queue.enabled) return;
     this.ticking = true;
     try {
       await this.topUp();
@@ -88,8 +88,8 @@ export class ScanProducerService implements OnApplicationBootstrap {
 
     let dispatched = 0;
     for (const chain of CHAINS) {
-      const queue = scanQueueName(chain);
-      const room = (depth.get(chain) ?? 1) - (await this.rabbit.messageCount([queue]));
+      const name = scanQueueName(chain);
+      const room = (depth.get(chain) ?? 1) - (await this.queue.messageCount([name]));
       if (room <= 0) continue;
 
       // Urgent first: somebody pasted an address and is watching a spinner
@@ -104,8 +104,8 @@ export class ScanProducerService implements OnApplicationBootstrap {
       await this.sync.lease(batch);
       for (const job of batch) {
         const priority = job.priority === 'urgent' ? SCAN_MAX_PRIORITY : 0;
-        if (!(await this.rabbit.publish(queue, job, { priority }))) {
-          this.logger.warn('Broker would not take the job — stopping this top-up');
+        if (!(await this.queue.publish(name, job, { priority }))) {
+          this.logger.warn('The queue would not take the job — stopping this top-up');
           return;
         }
         dispatched++;

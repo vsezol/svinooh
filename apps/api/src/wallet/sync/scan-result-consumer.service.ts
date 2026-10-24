@@ -4,7 +4,7 @@ import {
   agree,
   MetricsService,
   moved,
-  RabbitService,
+  QueueService,
   SCAN_RESULT_QUEUE,
   type ScanOutcome,
 } from '@svinooh/common';
@@ -34,7 +34,7 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
   private readonly logger = new Logger(ScanResultConsumerService.name);
 
   constructor(
-    private readonly rabbit: RabbitService,
+    private readonly queue: QueueService,
     private readonly prisma: PrismaService,
     private readonly sync: SyncService,
     private readonly metrics: MetricsService,
@@ -42,11 +42,11 @@ export class ScanResultConsumerService implements OnApplicationBootstrap {
   ) {}
 
   onApplicationBootstrap() {
-    if (!this.rabbit.enabled) return;
+    if (!this.queue.enabled) return;
     // One at a time so results apply in arrival order: two readings of the
     // same address can sit in the queue together (a retry, a late recheck),
     // and interleaved they could let the older one land last and win.
-    this.rabbit.consume<ScanOutcome>(SCAN_RESULT_QUEUE, (o) => this.apply(o), 1);
+    this.queue.consume<ScanOutcome>(SCAN_RESULT_QUEUE, (o) => this.apply(o), 1);
     this.logger.log(`Consuming ${SCAN_RESULT_QUEUE} — the single writer of wallet values`);
   }
 

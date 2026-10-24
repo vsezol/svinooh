@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { RabbitService, SCAN_MAX_PRIORITY, scanQueueName, type ScanJob } from '@svinooh/common';
+import { QueueService, SCAN_MAX_PRIORITY, scanQueueName, type ScanJob } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import type { Chain } from '@svinooh/shared';
 import { LandingOverlay, type WalletAfterLanding } from './sync/landing-overlay';
@@ -31,7 +31,7 @@ export const CATCHING_UP_MS = [15_000, 45_000];
 export class ScanRequests {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly rabbit: RabbitService,
+    private readonly queue: QueueService,
     private readonly sync: SyncService,
     private readonly overlay: LandingOverlay,
   ) {}
@@ -97,6 +97,6 @@ export class ScanRequests {
       return;
     }
     // Somebody is watching a spinner right now: ahead of whatever is queued
-    await this.rabbit.publish(scanQueueName(job.chain), job, { priority: SCAN_MAX_PRIORITY });
+    await this.queue.publish(scanQueueName(job.chain), job, { priority: SCAN_MAX_PRIORITY });
   }
 }

@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { Wallet } from '@prisma/client';
 import type { Chain, TronResources } from '@svinooh/shared';
 import { leaseUntil, retryAt, schedule, ScanHold, setting } from '@svinooh/common';
-import { MetricsService, RabbitService, type ScanJob } from '@svinooh/common';
+import { MetricsService, QueueService, type ScanJob } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import { AlertsCollector } from '../../alerts/collector.service';
 import { alertableStates } from './wallet-state';
@@ -43,7 +43,7 @@ export class SyncService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly metrics: MetricsService,
-    private readonly rabbit: RabbitService,
+    private readonly queue: QueueService,
     private readonly alerts: AlertsCollector,
   ) {}
 

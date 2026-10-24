@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { NOTICES_QUEUE, RabbitService, setting } from '@svinooh/common';
+import { NOTICES_QUEUE, QueueService, setting } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import type { SlowedNotice } from '@svinooh/shared';
 
@@ -22,7 +22,7 @@ import type { SlowedNotice } from '@svinooh/shared';
 export class Slowdown {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly rabbit: RabbitService,
+    private readonly queue: QueueService,
   ) {}
 
   async sweep(now = new Date()): Promise<number> {
@@ -69,7 +69,7 @@ export class Slowdown {
       // Said before it is written down, the same way alerts are: a notice that
       // arrives twice is a nuisance, one recorded as sent but never delivered
       // is silence that looks deliberate.
-      if (!(await this.rabbit.publish(NOTICES_QUEUE, notice))) continue;
+      if (!(await this.queue.publish(NOTICES_QUEUE, notice))) continue;
       await this.prisma.portfolioOwner.update({
         where: { portfolioId: owner.portfolioId },
         data: { slowedNoticeAt: now },

@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import {
   MetricsService,
-  RabbitService,
+  QueueService,
   scanQueueName,
   SCAN_RESULT_QUEUE,
   sleep,
@@ -30,14 +30,14 @@ export class ScanConsumerService implements OnApplicationBootstrap {
   private readonly logger = new Logger(ScanConsumerService.name);
 
   constructor(
-    private readonly rabbit: RabbitService,
+    private readonly queue: QueueService,
     private readonly metrics: MetricsService,
   ) {}
 
   onApplicationBootstrap() {
-    if (!this.rabbit.enabled) return;
+    if (!this.queue.enabled) return;
     for (const chain of OWN_CHAINS) {
-      this.rabbit.consume<ScanJob>(scanQueueName(chain), (job) => this.handle(job), setting('scan.prefetch'));
+      this.queue.consume<ScanJob>(scanQueueName(chain), (job) => this.handle(job), setting('scan.prefetch'));
     }
     this.logger.log(
       `Consuming ${OWN_CHAINS.map(scanQueueName).join(', ')} at prefetch=${setting('scan.prefetch')}`,
@@ -78,6 +78,6 @@ export class ScanConsumerService implements OnApplicationBootstrap {
   }
 
   private publish(outcome: ScanOutcome): Promise<boolean> {
-    return this.rabbit.publish(SCAN_RESULT_QUEUE, outcome);
+    return this.queue.publish(SCAN_RESULT_QUEUE, outcome);
   }
 }

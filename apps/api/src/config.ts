@@ -68,7 +68,7 @@ export const config = {
   tronApiKey: process.env.TRON_PRO_API_KEY || null,
   // The broker, for telling the bot a payment landed. Empty — the thank-you
   // message is simply never sent; the payment itself works without it.
-  rabbitUrl: process.env.RABBITMQ_URL ?? '',
+  queueUrl: process.env.REDIS_URL ?? '',
   // Public URL of the site: where a checkout returns to, and what the buttons
   // under billing messages open. One name across services — the bot reads the
   // same variable.

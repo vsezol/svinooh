@@ -3,11 +3,10 @@
  * directly: tracing.ts requires it, and only when tracing is on.
  *
  * Spans go over OTLP/HTTP to Tempo, which Grafana reads: one request through
- * web → api → auth/wallet → Postgres/Redis/RabbitMQ becomes a single trace.
+ * web → api → auth/wallet → Postgres/Redis becomes a single trace.
  */
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { AmqplibInstrumentation } from '@opentelemetry/instrumentation-amqplib';
 import { ExpressInstrumentation } from '@opentelemetry/instrumentation-express';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { NestInstrumentation } from '@opentelemetry/instrumentation-nestjs-core';
@@ -57,7 +56,6 @@ const sdk = new NodeSDK({
     }),
     new ExpressInstrumentation(),
     new NestInstrumentation(),
-    new AmqplibInstrumentation(),
     new PrismaInstrumentation(),
   ],
 });

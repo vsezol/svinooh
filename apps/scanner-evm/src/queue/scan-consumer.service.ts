@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import {
   MetricsService,
-  RabbitService,
+  QueueService,
   ScanHold,
   scanQueueName,
   SCAN_RESULT_QUEUE,
@@ -30,19 +30,19 @@ export class ScanConsumerService implements OnApplicationBootstrap {
   private readonly logger = new Logger(ScanConsumerService.name);
 
   constructor(
-    private readonly rabbit: RabbitService,
+    private readonly queue: QueueService,
     private readonly metrics: MetricsService,
   ) {}
 
   onApplicationBootstrap() {
-    if (!this.rabbit.enabled) {
-      this.logger.warn('No RABBITMQ_URL — this service has nothing to do without a queue');
+    if (!this.queue.enabled) {
+      this.logger.warn('No REDIS_URL — this service has nothing to do without a queue');
       return;
     }
     // One at a time per instance: this process holds a single browser, and two
     // headless Chromes in one container choke each other into returning $0.
     // More throughput is more replicas, not more tabs.
-    this.rabbit.consume<ScanJob>(scanQueueName('EVM'), (job) => this.handle(job), 1);
+    this.queue.consume<ScanJob>(scanQueueName('EVM'), (job) => this.handle(job), 1);
     this.logger.log(`Consuming ${scanQueueName('EVM')} → ${SCAN_RESULT_QUEUE}`);
   }
 
@@ -105,6 +105,6 @@ export class ScanConsumerService implements OnApplicationBootstrap {
   }
 
   private publish(outcome: ScanOutcome): Promise<boolean> {
-    return this.rabbit.publish(SCAN_RESULT_QUEUE, outcome);
+    return this.queue.publish(SCAN_RESULT_QUEUE, outcome);
   }
 }
