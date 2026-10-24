@@ -4,15 +4,15 @@ import type { Chain } from '@svinooh/shared';
 import { config } from '../config';
 
 /**
- * The latest plain transfers of one address, newest first, each leg priced at
- * the time it moved. Only `send` and `receive` — a swap or a protocol deposit
- * moved no money anywhere. A leg nobody can price is dropped: on TRON and EVM
- * that is the spam and the address-poisoning dust, which is most of them.
- *
- * One page per address, no storage: this feeds a list, not a calculation.
+ * Plain transfers of one address, a page at a time, newest first, each leg
+ * priced at the time it moved. Only `send` and `receive` — a swap or a protocol
+ * deposit moved no money anywhere. A leg nobody can price is dropped: on TRON
+ * and EVM that is the spam and the address-poisoning dust, which is most of them.
  */
 export interface Transfer {
   txHash: string;
+  /** Which leg of the transaction, named the same way on every re-read */
+  leg: string;
   at: Date;
   direction: 'in' | 'out';
   counterparty: string | null;
@@ -20,6 +20,13 @@ export interface Transfer {
   symbol: string;
   amount: number;
   usd: number;
+}
+
+export interface TransferPage {
+  /** Only what moved at or after the floor */
+  transfers: Transfer[];
+  /** Where the next page starts; null — nothing older than the floor is left */
+  next: string | null;
 }
 
 /** A leg before pricing. `coin` is the DefiLlama id to price it by when `usd` is missing. */
@@ -39,11 +46,18 @@ async function getJson<T>(url: string, headers: Record<string, string> = {}): Pr
   }
 }
 
-export async function readTransfers(chain: Chain, address: string): Promise<Transfer[]> {
-  const legs =
-    chain === 'TRON' ? await tron(address) : chain === 'BTC' ? await btc(address) : await zerion(address);
-  return priced(legs);
+export async function readPage(
+  chain: Chain,
+  address: string,
+  floor: Date,
+  cursor: string | null,
+): Promise<TransferPage> {
+  const read = chain === 'TRON' ? tron : chain === 'BTC' ? btc : zerion;
+  const page = await read(address, floor, cursor);
+  return { transfers: await priced(page.legs.filter((leg) => leg.at >= floor)), next: page.next };
 }
+
+type LegPage = { legs: Leg[]; next: string | null };
 
 async function priced(legs: Leg[]): Promise<Transfer[]> {
   const unpriced = legs.filter((leg) => leg.usd === null && leg.coin);
@@ -110,14 +124,18 @@ const spell = (raw: string | null | undefined): string | null => {
   return value.startsWith('0x') ? value.toLowerCase() : value;
 };
 
-async function zerion(address: string): Promise<Leg[]> {
+async function zerion(address: string, floor: Date, cursor: string | null): Promise<LegPage> {
   if (!config.zerionApiKey) throw new Error('ZERION_API_KEY is not set');
+  // A cursor is the whole next-page URL Zerion built, filters and all
   const url =
+    cursor ??
     `https://api.zerion.io/v1/wallets/${address}/transactions/?currency=usd` +
-    '&filter[asset_types]=fungible&filter[trash]=only_non_trash' +
-    '&filter[operation_types]=send,receive&page[size]=100';
+      '&filter[asset_types]=fungible&filter[trash]=only_non_trash' +
+      `&filter[operation_types]=send,receive&filter[min_mined_at]=${floor.getTime()}&page[size]=100`;
   const auth = Buffer.from(`${config.zerionApiKey}:`).toString('base64');
-  const page = await getJson<{ data?: ZerionTx[] }>(url, { authorization: `Basic ${auth}` });
+  const page = await getJson<{ data?: ZerionTx[]; links?: { next?: string | null } }>(url, {
+    authorization: `Basic ${auth}`,
+  });
 
   const legs: Leg[] = [];
   for (const tx of page.data ?? []) {
@@ -126,14 +144,15 @@ async function zerion(address: string): Promise<Leg[]> {
     if (a.status !== 'confirmed' || !a.hash || Number.isNaN(at.getTime())) continue;
     const chainId = tx.relationships?.chain?.data?.id ?? '';
 
-    for (const t of a.transfers ?? []) {
+    (a.transfers ?? []).forEach((t, i) => {
       const amount = t.quantity?.float ?? 0;
       // Unverified tokens are the airdropped spam the trash filter lets through
-      if ((t.direction !== 'in' && t.direction !== 'out') || !(amount > 0)) continue;
-      if (!t.fungible_info?.flags?.verified) continue;
+      if ((t.direction !== 'in' && t.direction !== 'out') || !(amount > 0)) return;
+      if (!t.fungible_info?.flags?.verified) return;
       const contract = t.fungible_info.implementations?.find((i) => i.chain_id === chainId)?.address;
       legs.push({
-        txHash: a.hash,
+        txHash: a.hash!,
+        leg: String(i),
         at,
         direction: t.direction,
         // The transfer's own ends, not the transaction's: a token transfer is
@@ -146,9 +165,9 @@ async function zerion(address: string): Promise<Leg[]> {
         usd: t.value ?? null,
         coin: contract ? `${LLAMA_CHAIN[chainId] ?? chainId}:${contract}` : null,
       });
-    }
+    });
   }
-  return legs;
+  return { legs, next: page.links?.next ?? null };
 }
 
 // --- TRON: TronGrid ----------------------------------------------------------
@@ -206,17 +225,23 @@ const tronGet = <T>(url: string, headers: Record<string, string>): Promise<T> =>
     }
   });
 
-async function tron(address: string): Promise<Leg[]> {
+/** Two endpoints, two cursors, carried as one: each is the next-page URL TronGrid built, null once spent */
+async function tron(address: string, floor: Date, cursor: string | null): Promise<LegPage> {
   const api = `https://api.trongrid.io/v1/accounts/${address}`;
-  const query = 'limit=200&only_confirmed=true';
+  const query = `limit=200&only_confirmed=true&min_timestamp=${floor.getTime()}`;
   const headers: Record<string, string> = config.tronApiKey ? { 'TRON-PRO-API-KEY': config.tronApiKey } : {};
+  const at: { txs: string | null; trc20: string | null } = cursor
+    ? JSON.parse(cursor)
+    : { txs: `${api}/transactions?${query}`, trc20: `${api}/transactions/trc20?${query}` };
+  type TronPage<T> = { data?: T[]; meta?: { links?: { next?: string } } };
+  const none: TronPage<never> = { data: [] };
   const [txs, trc20] = await Promise.all([
-    tronGet<{ data?: TronTx[] }>(`${api}/transactions?${query}`, headers),
-    tronGet<{ data?: Trc20Row[] }>(`${api}/transactions/trc20?${query}`, headers),
+    at.txs ? tronGet<TronPage<TronTx>>(at.txs, headers) : none,
+    at.trc20 ? tronGet<TronPage<Trc20Row>>(at.trc20, headers) : none,
   ]);
 
   const legs: Leg[] = [];
-  const push = (hash: string, at: number, from: string | null, to: string | null, rest: Pick<Leg, 'symbol' | 'amount' | 'coin'>) => {
+  const push = (hash: string, at: number, from: string | null, to: string | null, rest: Pick<Leg, 'leg' | 'symbol' | 'amount' | 'coin'>) => {
     if (from !== address && to !== address) return;
     const direction = to === address ? 'in' : 'out';
     legs.push({
@@ -233,15 +258,16 @@ async function tron(address: string): Promise<Leg[]> {
   for (const tx of txs.data ?? []) {
     if (tx.ret?.[0]?.contractRet !== 'SUCCESS' || !tx.txID || !tx.block_timestamp) continue;
     // TRX only: freezes, votes and delegations move nothing, and TRC10 is spam
-    for (const contract of tx.raw_data?.contract ?? []) {
+    (tx.raw_data?.contract ?? []).forEach((contract, i) => {
       const value = contract.parameter?.value;
-      if (contract.type !== 'TransferContract' || !(value?.amount && value.amount > 0)) continue;
-      push(tx.txID, tx.block_timestamp, tronHexToBase58(value.owner_address), tronHexToBase58(value.to_address), {
+      if (contract.type !== 'TransferContract' || !(value?.amount && value.amount > 0)) return;
+      push(tx.txID!, tx.block_timestamp!, tronHexToBase58(value.owner_address), tronHexToBase58(value.to_address), {
+        leg: `trx:${i}`,
         symbol: 'TRX',
         amount: value.amount / 1e6,
         coin: 'coingecko:tron',
       });
-    }
+    });
   }
 
   for (const row of trc20.data ?? []) {
@@ -250,13 +276,17 @@ async function tron(address: string): Promise<Leg[]> {
     if (row.type !== 'Transfer' || !row.transaction_id || !row.block_timestamp || !contract) continue;
     const amount = Number(row.value) / 10 ** (row.token_info?.decimals ?? 6);
     if (!(amount > 0)) continue;
+    // TronGrid gives a TRC20 row no index of its own inside the transaction
     push(row.transaction_id, row.block_timestamp, row.from ?? null, row.to ?? null, {
+      leg: `trc20:${contract}:${row.from}:${row.to}:${row.value}`,
       symbol: row.token_info?.symbol || 'TRC20',
       amount,
       coin: `tron:${contract}`,
     });
   }
-  return legs;
+
+  const next = { txs: txs.meta?.links?.next ?? null, trc20: trc20.meta?.links?.next ?? null };
+  return { legs, next: next.txs || next.trc20 ? JSON.stringify(next) : null };
 }
 
 // --- BTC: mempool.space ------------------------------------------------------
@@ -278,8 +308,9 @@ interface BtcTx {
  * others. What the address did is the net of the two, so one transaction is one
  * leg, and the other side is the biggest address on the far end of it.
  */
-async function btc(address: string): Promise<Leg[]> {
-  const path = `/address/${address}/txs/chain`;
+async function btc(address: string, floor: Date, cursor: string | null): Promise<LegPage> {
+  // 25 confirmed transactions a page, continued from the last txid seen; no time filter
+  const path = `/address/${address}/txs/chain${cursor ? `/${cursor}` : ''}`;
   const txs = await getJson<BtcTx[]>(`https://mempool.space/api${path}`).catch(() =>
     getJson<BtcTx[]>(`https://blockstream.info/api${path}`),
   );
@@ -299,6 +330,7 @@ async function btc(address: string): Promise<Leg[]> {
       .sort((x, y) => (y.value ?? 0) - (x.value ?? 0))[0];
     legs.push({
       txHash: tx.txid,
+      leg: 'net',
       at: new Date(tx.status.block_time * 1000),
       direction,
       counterparty: other?.scriptpubkey_address ?? null,
@@ -309,7 +341,10 @@ async function btc(address: string): Promise<Leg[]> {
       coin: 'coingecko:bitcoin',
     });
   }
-  return legs;
+
+  const last = txs.at(-1);
+  const older = txs.length === 25 && last?.txid && (last.status?.block_time ?? 0) * 1000 >= floor.getTime();
+  return { legs, next: older ? last.txid! : null };
 }
 
 // --- Prices at the time: DefiLlama ------------------------------------------

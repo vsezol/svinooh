@@ -2,14 +2,17 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { base58Decode } from '@svinooh/common';
 import { priceCache, pricesAt, tronHexToBase58, type Transfer } from '../src/portfolio/transfer-sources';
-import { crossings, type HeldAddress } from '../src/portfolio/transfers';
+import type { PrismaService } from '@svinooh/db';
+import { crossings, TransferHistory, type HeldAddress } from '../src/portfolio/transfers';
 
-const A: HeldAddress = { id: 'w-a', chain: 'EVM', address: '0x4838b106fce9647bdf1e7877bf73ce8b0bad5f97' };
-const B: HeldAddress = { id: 'w-b', chain: 'EVM', address: '0x95222290dd7278aa3ddd389cc1e1d165cc4bafe5' };
+const SINCE = new Date('2026-10-01T00:00:00Z');
+const A: HeldAddress = { id: 'w-a', chain: 'EVM', address: '0x4838b106fce9647bdf1e7877bf73ce8b0bad5f97', since: SINCE };
+const B: HeldAddress = { id: 'w-b', chain: 'EVM', address: '0x95222290dd7278aa3ddd389cc1e1d165cc4bafe5', since: SINCE };
 const OUTSIDE = '0x00000000219ab540356cbb839cbe05303d7705fa';
 
 const transfer = (over: Partial<Transfer>): Transfer => ({
   txHash: '0x1',
+  leg: '0',
   at: new Date('2026-10-20T10:00:00Z'),
   direction: 'out',
   counterparty: OUTSIDE,
@@ -80,6 +83,84 @@ test('a past hour is priced once; a price DefiLlama lacks today is asked again',
     await pricesAt([{ coin: 'coingecko:tron', at: lastWeek }, { coin: 'tron:Tunknown', at: now }]);
     assert.deepEqual(asked, ['coingecko:tron', 'tron:Tunknown', 'tron:Tunknown']);
     assert.equal([...priceCache.values()][0], 0.3);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+/** Two tables in memory, as much of Prisma as TransferHistory uses */
+function memoryDb() {
+  type Cursor = Record<string, any>;
+  const cursors = new Map<string, Cursor>();
+  const transfers = new Map<string, Record<string, any>>();
+  const prisma = {
+    addressTransferCursor: {
+      upsert: async ({ where, create }: any) => {
+        const key = `${where.chain_address.chain}:${where.chain_address.address}`;
+        if (!cursors.has(key)) {
+          cursors.set(key, { syncedTo: null, passCursor: null, passFloor: null, passStartedAt: null, lastError: null, retryAt: new Date(0), ...create });
+        }
+        return { ...cursors.get(key)! };
+      },
+      update: async ({ where, data }: any) => {
+        const key = `${where.chain_address.chain}:${where.chain_address.address}`;
+        Object.assign(cursors.get(key)!, data);
+      },
+      findMany: async () => [...cursors.values()],
+    },
+    addressTransfer: {
+      createMany: async ({ data }: any) => {
+        for (const row of data) transfers.set(`${row.chain}:${row.address}:${row.txHash}:${row.leg}`, row);
+      },
+      findMany: async () => [...transfers.values()],
+    },
+  } as unknown as PrismaService;
+  return { prisma, cursors, transfers };
+}
+
+test('a first pass reads down to when the wallet arrived, over as many tab opens as it takes, and then rests', async () => {
+  const address = 'bc1qlggpznpwv0e5nuc5lmgdcugd64lrjkspcgkyam';
+  const wallet: HeldAddress = { id: 'w-btc', chain: 'BTC', address, since: SINCE };
+  // 110 deposits, an hour apart, newest first: the last ten arrive before the wallet did
+  const txs = Array.from({ length: 110 }, (_, i) => ({
+    txid: `tx${i}`,
+    status: { confirmed: true, block_time: (SINCE.getTime() + (100 - i) * 3600e3) / 1000 },
+    vin: [{ prevout: { scriptpubkey_address: 'bc1qother', value: 2e6 } }],
+    vout: [{ scriptpubkey_address: address, value: 1e6 }],
+  }));
+
+  const asked: string[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: string) => {
+    if (url.includes('coins.llama.fi')) {
+      const coins = JSON.parse(decodeURIComponent(new URL(url).searchParams.get('coins')!)) as Record<string, number[]>;
+      const prices = coins['coingecko:bitcoin'].map((timestamp) => ({ timestamp, price: 60_000 }));
+      return new Response(JSON.stringify({ coins: { 'coingecko:bitcoin': { prices } } }));
+    }
+    asked.push(url);
+    const after = url.match(/txs\/chain\/(tx\d+)$/)?.[1];
+    const start = after ? txs.findIndex((t) => t.txid === after) + 1 : 0;
+    return new Response(JSON.stringify(txs.slice(start, start + 25)));
+  }) as typeof fetch;
+
+  try {
+    const { prisma, cursors } = memoryDb();
+    const history = new TransferHistory(prisma);
+
+    const first = await history.forPortfolio([wallet]);
+    assert.equal(asked.length, 3, 'one tab open spends three pages');
+    assert.deepEqual(first.loading, ['w-btc']);
+    assert.equal(first.transfers.length, 75);
+
+    const second = await history.forPortfolio([wallet]);
+    assert.equal(asked.length, 5, 'the next one carries on from where the first stopped');
+    assert.deepEqual(second.loading, []);
+    assert.equal(second.transfers.length, 101, 'nothing from before the wallet arrived');
+    assert.equal(second.transfers[0].usd, 600);
+    assert.ok(cursors.get(`BTC:${address}`)!.syncedTo);
+
+    await history.forPortfolio([wallet]);
+    assert.equal(asked.length, 5, 'a history caught up a moment ago is not read again');
   } finally {
     globalThis.fetch = realFetch;
   }

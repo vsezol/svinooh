@@ -7,14 +7,18 @@ import { api } from '../lib/api';
 import { fmtAmount, fmtUsd, shortAddress } from '../lib/format';
 import { networkName } from './ChainBadge';
 
+/** While some wallet's history is still being read, the list is asked again this often */
+const LOADING_POLL_MS = 30_000;
+
 /**
  * Deposits and withdrawals: plain transfers between the portfolio's wallets and
- * addresses it does not hold. Swaps, protocol deposits and moves between its
- * own wallets are left out — that money never left.
+ * addresses it does not hold, each wallet's since it was added. Swaps, protocol
+ * deposits and moves between its own wallets are left out — that money never left.
  */
 export function Transfers({ slug, wallets }: { slug: string; wallets: WalletDto[] }) {
   const [data, setData] = useState<TransfersDto | null>(null);
   const [failed, setFailed] = useState(false);
+  const [round, setRound] = useState(0);
   const walletKey = wallets.map((w) => w.id).join(',');
 
   useEffect(() => {
@@ -26,7 +30,14 @@ export function Transfers({ slug, wallets }: { slug: string; wallets: WalletDto[
     return () => {
       cancelled = true;
     };
-  }, [slug, walletKey]);
+  }, [slug, walletKey, round]);
+
+  const stillLoading = Boolean(data?.loading.length);
+  useEffect(() => {
+    if (!stillLoading) return;
+    const timer = setTimeout(() => setRound((n) => n + 1), LOADING_POLL_MS);
+    return () => clearTimeout(timer);
+  }, [stillLoading, data]);
 
   if (failed) return <Empty title="Could not load transfers" note="Try again in a minute." />;
   if (!data) {
@@ -38,20 +49,27 @@ export function Transfers({ slug, wallets }: { slug: string; wallets: WalletDto[
   }
 
   const byId = new Map(wallets.map((w) => [w.id, w]));
-  const unread = data.unread.map((id) => byId.get(id)).filter((w): w is WalletDto => Boolean(w));
+  const named = (ids: string[]) => ids.map((id) => byId.get(id)).filter((w): w is WalletDto => Boolean(w));
+  const unread = named(data.unread);
+  const loading = named(data.loading).filter((w) => !unread.includes(w));
 
   return (
     <div>
       {unread.length ? (
         <div className="mono" style={{ marginBottom: 'var(--sp-3)', fontSize: 'var(--fs-tag)', color: 'var(--mut)' }}>
-          Could not read {unread.map(walletTitle).join(', ')} — not in the list.
+          Could not read {unread.map(walletTitle).join(', ')} — the list may be missing some of it.
+        </div>
+      ) : null}
+      {loading.length ? (
+        <div className="mono" style={{ marginBottom: 'var(--sp-3)', fontSize: 'var(--fs-tag)', color: 'var(--mut)' }}>
+          Still reading the history of {loading.map(walletTitle).join(', ')} — the list fills in as it goes.
         </div>
       ) : null}
 
       {data.transfers.length === 0 ? (
         <Empty
           title="No deposits or withdrawals"
-          note="Nothing moved between this portfolio and the outside lately. Swaps, protocol deposits, moves between its own wallets and anything under $1 are not listed."
+          note="Nothing moved between this portfolio and the outside since its wallets were added. Swaps, protocol deposits, moves between its own wallets and anything under $1 are not listed."
         />
       ) : (
         <div style={{ borderTop: '1px solid var(--line)' }}>

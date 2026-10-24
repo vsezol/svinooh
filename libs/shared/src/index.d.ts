@@ -356,10 +356,12 @@ export interface TransferDto {
 }
 
 export interface TransfersDto {
-  /** Newest first */
+  /** Newest first, each wallet's since it entered the system */
   transfers: TransferDto[];
   /** Wallets whose transfers could not be read this time, as WalletDto.id */
   unread: string[];
+  /** Wallets whose history since they entered the system is still being read */
+  loading: string[];
 }
 
 export interface PositionHistoryLegDto {

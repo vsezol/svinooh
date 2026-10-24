@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import type { PrismaService } from '@svinooh/db';
 import type { PremiumService } from '../src/billing/premium.service';
 import { PortfolioService } from '../src/portfolio/portfolio.service';
+import type { TransferHistory } from '../src/portfolio/transfers';
 import type { ScanRequests } from '../src/wallet/scan-requests.service';
 
 const OWNER = 'user-1';
@@ -108,7 +109,7 @@ function standing(cap: number | null = null) {
   } as unknown as PremiumService;
   const scans = { now: (walletId: string) => scanned.push(walletId) } as unknown as ScanRequests;
 
-  return { holds, scanned, portfolios: new PortfolioService(prisma, premium, scans) };
+  return { holds, scanned, portfolios: new PortfolioService(prisma, premium, scans, {} as TransferHistory) };
 }
 
 describe('AddingAWalletTwiceIsAddingItOnce', () => {
