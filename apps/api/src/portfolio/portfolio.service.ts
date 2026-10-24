@@ -23,6 +23,7 @@ import type {
   PositionRange,
   PositionTokenDto,
   PublicPortfolioDto,
+  TransfersDto,
   TronResources,
   TronResourcesDto,
   UpdateWalletAlertsDto,
@@ -38,6 +39,7 @@ import { PremiumService } from '../billing/premium.service';
 import { ScanRequests } from '../wallet/scan-requests.service';
 import { positionKey } from '../wallet/sync/wallet-state';
 import { positionSeries } from './position-history';
+import { TransferHistory } from './transfers';
 
 /**
  * A wallet as a portfolio holds it: the address and its readings, plus the
@@ -357,6 +359,7 @@ export class PortfolioService {
     private readonly prisma: PrismaService,
     private readonly premium: PremiumService,
     private readonly scans: ScanRequests,
+    private readonly transferHistory: TransferHistory,
   ) {}
 
   /**
@@ -983,6 +986,22 @@ export class PortfolioService {
       notBefore,
     );
     return { range, points };
+  }
+
+  async transfers(slug: string): Promise<TransfersDto> {
+    const portfolio = await this.prisma.portfolio.findUnique({
+      where: { slug },
+      select: { wallets: { select: { id: true, wallet: { select: { chain: true, address: true, createdAt: true } } } } },
+    });
+    if (!portfolio) throw new NotFoundException('Portfolio not found');
+    return this.transferHistory.forPortfolio(
+      portfolio.wallets.map((m) => ({
+        id: m.id,
+        chain: m.wallet.chain as Chain,
+        address: m.wallet.address,
+        since: m.wallet.createdAt,
+      })),
+    );
   }
 
   /**
