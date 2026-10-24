@@ -1,0 +1,334 @@
+import { createHash } from 'node:crypto';
+import type { Chain } from '@svinooh/shared';
+import { config } from '../config';
+
+/**
+ * The latest plain transfers of one address, newest first, each leg priced at
+ * the time it moved. Only `send` and `receive` — a swap or a protocol deposit
+ * moved no money anywhere. A leg nobody can price is dropped: on TRON and EVM
+ * that is the spam and the address-poisoning dust, which is most of them.
+ *
+ * One page per address, no storage: this feeds a list, not a calculation.
+ */
+export interface Transfer {
+  txHash: string;
+  at: Date;
+  direction: 'in' | 'out';
+  counterparty: string | null;
+  network: string | null;
+  symbol: string;
+  amount: number;
+  usd: number;
+}
+
+/** A leg before pricing. `coin` is the DefiLlama id to price it by when `usd` is missing. */
+type Leg = Omit<Transfer, 'usd'> & { usd: number | null; coin: string | null };
+
+const MIN_USD = 0.01;
+const TIMEOUT_MS = 20_000;
+
+async function getJson<T>(url: string, headers: Record<string, string> = {}): Promise<T> {
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  if (!res.ok) throw new Error(`${new URL(url).host} answered ${res.status}`);
+  return (await res.json()) as T;
+}
+
+export async function readTransfers(chain: Chain, address: string): Promise<Transfer[]> {
+  const legs =
+    chain === 'TRON' ? await tron(address) : chain === 'BTC' ? await btc(address) : await zerion(address);
+  return priced(legs);
+}
+
+async function priced(legs: Leg[]): Promise<Transfer[]> {
+  const prices = await historicalPrices(
+    legs.filter((leg) => leg.usd === null && leg.coin).map((leg) => ({ coin: leg.coin!, at: leg.at })),
+  );
+  return legs
+    .map(({ coin, ...leg }) => {
+      const price = leg.usd === null && coin ? priceAt(prices, coin, leg.at) : null;
+      return { ...leg, usd: leg.usd ?? (price === null ? null : leg.amount * price) };
+    })
+    .filter((leg): leg is Transfer => leg.usd !== null && leg.usd >= MIN_USD);
+}
+
+// --- EVM and SOL: Zerion -----------------------------------------------------
+
+interface ZerionTx {
+  attributes?: {
+    hash?: string;
+    mined_at?: string;
+    status?: string;
+    transfers?: Array<{
+      direction?: string;
+      sender?: string | null;
+      recipient?: string | null;
+      quantity?: { float?: number };
+      value?: number | null;
+      fungible_info?: {
+        symbol?: string | null;
+        flags?: { verified?: boolean };
+        implementations?: Array<{ chain_id?: string; address?: string | null }>;
+      };
+    }>;
+  };
+  relationships?: { chain?: { data?: { id?: string } } };
+}
+
+/** Zerion's chain ids that differ from the network slugs the UI kit's badges use */
+const NETWORK: Record<string, string> = {
+  ethereum: 'eth',
+  arbitrum: 'arb',
+  optimism: 'op',
+  polygon: 'matic',
+  'binance-smart-chain': 'bsc',
+  avalanche: 'avax',
+  'zksync-era': 'era',
+  mantle: 'mnt',
+  fantom: 'ftm',
+  hyperevm: 'hyper',
+  unichain: 'uni',
+  scroll: 'scrl',
+  solana: 'sol',
+};
+
+/** ...and the ones that differ from DefiLlama's chain names */
+const LLAMA_CHAIN: Record<string, string> = {
+  'binance-smart-chain': 'bsc',
+  avalanche: 'avax',
+  'zksync-era': 'era',
+};
+
+/** EVM addresses are compared lowercased; base58 keeps its case */
+const spell = (raw: string | null | undefined): string | null => {
+  const value = (raw ?? '').trim();
+  if (!value) return null;
+  return value.startsWith('0x') ? value.toLowerCase() : value;
+};
+
+async function zerion(address: string): Promise<Leg[]> {
+  if (!config.zerionApiKey) throw new Error('ZERION_API_KEY is not set');
+  const url =
+    `https://api.zerion.io/v1/wallets/${address}/transactions/?currency=usd` +
+    '&filter[asset_types]=fungible&filter[trash]=only_non_trash' +
+    '&filter[operation_types]=send,receive&page[size]=100';
+  const auth = Buffer.from(`${config.zerionApiKey}:`).toString('base64');
+  const page = await getJson<{ data?: ZerionTx[] }>(url, { authorization: `Basic ${auth}` });
+
+  const legs: Leg[] = [];
+  for (const tx of page.data ?? []) {
+    const a = tx.attributes ?? {};
+    const at = new Date(a.mined_at ?? '');
+    if (a.status !== 'confirmed' || !a.hash || Number.isNaN(at.getTime())) continue;
+    const chainId = tx.relationships?.chain?.data?.id ?? '';
+
+    for (const t of a.transfers ?? []) {
+      const amount = t.quantity?.float ?? 0;
+      // Unverified tokens are the airdropped spam the trash filter lets through
+      if ((t.direction !== 'in' && t.direction !== 'out') || !(amount > 0)) continue;
+      if (!t.fungible_info?.flags?.verified) continue;
+      const contract = t.fungible_info.implementations?.find((i) => i.chain_id === chainId)?.address;
+      legs.push({
+        txHash: a.hash,
+        at,
+        direction: t.direction,
+        // The transfer's own ends, not the transaction's: a token transfer is
+        // sent TO the token contract, and that is not where the money went
+        counterparty: spell(t.direction === 'in' ? t.sender : t.recipient),
+        network: NETWORK[chainId] ?? (chainId || null),
+        symbol: t.fungible_info.symbol || '?',
+        amount,
+        // Zerion leaves most Solana transfers unpriced, USDC included
+        usd: t.value ?? null,
+        coin: contract ? `${LLAMA_CHAIN[chainId] ?? chainId}:${contract}` : null,
+      });
+    }
+  }
+  return legs;
+}
+
+// --- TRON: TronGrid ----------------------------------------------------------
+
+const BASE58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+/** TronGrid's `/transactions` names accounts in hex ("41…") whatever `visible` says */
+export function tronHexToBase58(hex: string | undefined): string | null {
+  const clean = (hex ?? '').trim().toLowerCase();
+  if (!/^41[0-9a-f]{40}$/.test(clean)) return null;
+  const body = Buffer.from(clean, 'hex');
+  const sha = (data: Buffer) => createHash('sha256').update(data).digest();
+  const full = Buffer.concat([body, sha(sha(body)).subarray(0, 4)]);
+  let n = BigInt('0x' + full.toString('hex'));
+  let out = '';
+  while (n > 0n) {
+    out = BASE58[Number(n % 58n)] + out;
+    n /= 58n;
+  }
+  return out;
+}
+
+interface TronTx {
+  txID?: string;
+  block_timestamp?: number;
+  ret?: Array<{ contractRet?: string }>;
+  raw_data?: {
+    contract?: Array<{
+      type?: string;
+      parameter?: { value?: { amount?: number; owner_address?: string; to_address?: string } };
+    }>;
+  };
+}
+
+interface Trc20Row {
+  transaction_id?: string;
+  block_timestamp?: number;
+  from?: string;
+  to?: string;
+  type?: string;
+  value?: string;
+  token_info?: { symbol?: string; address?: string; decimals?: number };
+}
+
+async function tron(address: string): Promise<Leg[]> {
+  const api = `https://api.trongrid.io/v1/accounts/${address}`;
+  const query = 'limit=200&only_confirmed=true';
+  const headers: Record<string, string> = config.tronApiKey ? { 'TRON-PRO-API-KEY': config.tronApiKey } : {};
+  const [txs, trc20] = await Promise.all([
+    getJson<{ data?: TronTx[] }>(`${api}/transactions?${query}`, headers),
+    getJson<{ data?: Trc20Row[] }>(`${api}/transactions/trc20?${query}`, headers),
+  ]);
+
+  const legs: Leg[] = [];
+  const push = (hash: string, at: number, from: string | null, to: string | null, rest: Pick<Leg, 'symbol' | 'amount' | 'coin'>) => {
+    if (from !== address && to !== address) return;
+    const direction = to === address ? 'in' : 'out';
+    legs.push({
+      txHash: hash,
+      at: new Date(at),
+      direction,
+      counterparty: direction === 'in' ? from : to,
+      network: 'tron',
+      usd: null,
+      ...rest,
+    });
+  };
+
+  for (const tx of txs.data ?? []) {
+    if (tx.ret?.[0]?.contractRet !== 'SUCCESS' || !tx.txID || !tx.block_timestamp) continue;
+    // TRX only: freezes, votes and delegations move nothing, and TRC10 is spam
+    for (const contract of tx.raw_data?.contract ?? []) {
+      const value = contract.parameter?.value;
+      if (contract.type !== 'TransferContract' || !(value?.amount && value.amount > 0)) continue;
+      push(tx.txID, tx.block_timestamp, tronHexToBase58(value.owner_address), tronHexToBase58(value.to_address), {
+        symbol: 'TRX',
+        amount: value.amount / 1e6,
+        coin: 'coingecko:tron',
+      });
+    }
+  }
+
+  for (const row of trc20.data ?? []) {
+    // Approval is a permission, not a movement — and its value is 2²⁵⁶−1
+    const contract = row.token_info?.address;
+    if (row.type !== 'Transfer' || !row.transaction_id || !row.block_timestamp || !contract) continue;
+    const amount = Number(row.value) / 10 ** (row.token_info?.decimals ?? 6);
+    if (!(amount > 0)) continue;
+    push(row.transaction_id, row.block_timestamp, row.from ?? null, row.to ?? null, {
+      symbol: row.token_info?.symbol || 'TRC20',
+      amount,
+      coin: `tron:${contract}`,
+    });
+  }
+  return legs;
+}
+
+// --- BTC: mempool.space ------------------------------------------------------
+
+interface Vout {
+  scriptpubkey_address?: string;
+  value?: number;
+}
+
+interface BtcTx {
+  txid?: string;
+  status?: { confirmed?: boolean; block_time?: number };
+  vin?: Array<{ prevout?: Vout | null }>;
+  vout?: Vout[];
+}
+
+/**
+ * Bitcoin has no transfers, only transactions spending some outputs and making
+ * others. What the address did is the net of the two, so one transaction is one
+ * leg, and the other side is the biggest address on the far end of it.
+ */
+async function btc(address: string): Promise<Leg[]> {
+  const path = `/address/${address}/txs/chain`;
+  const txs = await getJson<BtcTx[]>(`https://mempool.space/api${path}`).catch(() =>
+    getJson<BtcTx[]>(`https://blockstream.info/api${path}`),
+  );
+
+  const legs: Leg[] = [];
+  for (const tx of txs) {
+    if (!tx.txid || !tx.status?.confirmed || !tx.status.block_time) continue;
+    const inputs = (tx.vin ?? []).map((i) => i.prevout ?? {});
+    const outputs = tx.vout ?? [];
+    const sum = (list: Vout[]) =>
+      list.reduce((s, o) => s + (o.scriptpubkey_address === address ? (o.value ?? 0) : 0), 0);
+    const sats = sum(outputs) - sum(inputs);
+    if (sats === 0) continue;
+    const direction = sats > 0 ? 'in' : 'out';
+    const other = (direction === 'out' ? outputs : inputs)
+      .filter((o) => o.scriptpubkey_address && o.scriptpubkey_address !== address)
+      .sort((x, y) => (y.value ?? 0) - (x.value ?? 0))[0];
+    legs.push({
+      txHash: tx.txid,
+      at: new Date(tx.status.block_time * 1000),
+      direction,
+      counterparty: other?.scriptpubkey_address ?? null,
+      network: 'btc',
+      symbol: 'BTC',
+      amount: Math.abs(sats) / 1e8,
+      usd: null,
+      coin: 'coingecko:bitcoin',
+    });
+  }
+  return legs;
+}
+
+// --- Prices at the time: DefiLlama ------------------------------------------
+
+const HOUR_S = 3600;
+
+/** One batch per ten coins, every timestamp rounded to its hour. Throws rather than leave everything unpriced. */
+async function historicalPrices(
+  wanted: Array<{ coin: string; at: Date }>,
+): Promise<Map<string, Array<{ t: number; price: number }>>> {
+  const hours = new Map<string, Set<number>>();
+  for (const { coin, at } of wanted) {
+    const set = hours.get(coin) ?? new Set<number>();
+    set.add(Math.floor(at.getTime() / 1000 / HOUR_S) * HOUR_S);
+    hours.set(coin, set);
+  }
+
+  const out = new Map<string, Array<{ t: number; price: number }>>();
+  const coins = [...hours.keys()];
+  for (let i = 0; i < coins.length; i += 10) {
+    const batch = Object.fromEntries(coins.slice(i, i + 10).map((coin) => [coin, [...hours.get(coin)!]]));
+    const url = `https://coins.llama.fi/batchHistorical?coins=${encodeURIComponent(JSON.stringify(batch))}&searchWidth=4h`;
+    const body = await getJson<{ coins?: Record<string, { prices?: Array<{ timestamp: number; price: number }> }> }>(url);
+    for (const [coin, entry] of Object.entries(body.coins ?? {})) {
+      out.set(coin, (entry.prices ?? []).map((p) => ({ t: p.timestamp, price: p.price })));
+    }
+  }
+  return out;
+}
+
+/** The answer nearest in time; Llama only answers within the width it was asked to search */
+function priceAt(prices: Map<string, Array<{ t: number; price: number }>>, coin: string, at: Date): number | null {
+  const t = at.getTime() / 1000;
+  let best: { gap: number; price: number } | null = null;
+  for (const p of prices.get(coin) ?? []) {
+    const gap = Math.abs(p.t - t);
+    if (!best || gap < best.gap) best = { gap, price: p.price };
+  }
+  return best?.price ?? null;
+}

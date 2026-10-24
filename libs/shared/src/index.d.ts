@@ -326,6 +326,42 @@ export interface HistoryDto {
   points: HistoryPointDto[];
 }
 
+/** One asset inside a transfer, and what it was worth when it moved */
+export interface TransferLegDto {
+  symbol: string;
+  amount: number;
+  usd: number;
+}
+
+/**
+ * Money crossing the portfolio's edge: a plain transfer between one of its
+ * wallets and an address it does not hold. A swap, a deposit into a protocol and
+ * a move between two of its own wallets are not one.
+ */
+export interface TransferDto {
+  /** in — a deposit from outside; out — a withdrawal to outside */
+  direction: 'in' | 'out';
+  t: string;
+  /** The portfolio's wallet it moved through, as WalletDto.id */
+  walletId: string;
+  chain: Chain;
+  /** The network it happened on: eth, arb, base, sol, tron, btc */
+  network: string | null;
+  txHash: string;
+  /** The other side; null where there is no single one */
+  counterparty: string | null;
+  /** Value at the time it moved, not today */
+  usd: number;
+  legs: TransferLegDto[];
+}
+
+export interface TransfersDto {
+  /** Newest first */
+  transfers: TransferDto[];
+  /** Wallets whose transfers could not be read this time, as WalletDto.id */
+  unread: string[];
+}
+
 export interface PositionHistoryLegDto {
   symbol: string;
   role: PositionTokenRole;
