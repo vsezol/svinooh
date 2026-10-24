@@ -4,7 +4,8 @@ An MCP server (streamable HTTP) with a portfolio's reading tools: the caller's
 portfolios, a portfolio's overview, its positions, what its money is in, how
 its total moved, the best lending rates, and exact arithmetic. A wallet address
 works wherever a portfolio does. It also serves scenarios (prompts) and a
-portfolio as a resource.
+portfolio as a resource: any portfolio by `svinooh://portfolio/{id}` (and
+`…/assets`), and the caller's own listed, so a client can offer them to attach.
 
 Every request from the internet signs in. `/mcp` is signed in with svinooh
 over OAuth: a client that arrives without a token is answered 401 with where
