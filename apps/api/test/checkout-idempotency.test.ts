@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert';
 import { describe, test } from 'node:test';
 import { BadRequestException, ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { RabbitService } from '@svinooh/common';
+import type { QueueService } from '@svinooh/common';
 import type { PrismaService } from '@svinooh/db';
 import { idempotencyKeyOf } from '../src/billing/billing.controller';
 import { BillingService } from '../src/billing/billing.service';
@@ -98,7 +98,7 @@ function standing(gateway: { fails?: number; holds?: Promise<void> } = {}) {
     prisma,
     {} as PremiumService,
     nowpayments,
-    {} as RabbitService,
+    {} as QueueService,
   );
   return { rows, billing, invoices: () => invoices };
 }

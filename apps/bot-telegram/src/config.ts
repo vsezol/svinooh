@@ -11,7 +11,7 @@ export const config = {
   authUrl: (process.env.AUTH_URL || 'http://auth:3000').replace(/\/+$/, ''),
   /** What lets us ask for one. Without it the auth service refuses, correctly. */
   internalSecret: process.env.INTERNAL_SECRET || null,
-  rabbitUrl: process.env.RABBITMQ_URL ?? '',
+  queueUrl: process.env.REDIS_URL ?? '',
   /** Public URL of the site — the button under every message */
   webUrl: (process.env.WEB_URL || 'https://svinooh.com').replace(/\/+$/, ''),
   port: Number(process.env.PORT ?? 3000),

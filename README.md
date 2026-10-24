@@ -17,7 +17,7 @@ apps/
   api/    — gateway (NestJS): portfolios, history, JWT verification,
             /auth/* proxied to the auth service. It also carries two fenced-off
             modules that were services of their own: src/admin (the tunables)
-            and src/wallet (the scan pipeline — what is due, one RabbitMQ queue
+            and src/wallet (the scan pipeline — what is due, one queue
             per chain, the SOL/TRON/BTC scanners, snapshots, and the live
             watch that reads a wallet the second its Meteora pool leaves a
             position's range), and src/alerts (who should be told what, the
@@ -50,7 +50,7 @@ ops/
 ```
 web ──HTTPS+JWT──▶ api ──HTTP /auth/*───▶ auth ──▶ Telegram Bot API
                     │
-                    ├──▶ RabbitMQ (scan.evm, scan.sol, …) ──▶ scanner-evm ──▶ browser (lightpanda)
+                    ├──▶ Redis Streams (scan.evm, scan.sol, …) ──▶ scanner-evm ──▶ browser (lightpanda)
                     │      ▲ the api's own scan pipeline drains scan.sol/tron/btc
                     │      └─ and scan.result, where every reading is judged and stored
                     ├──WS accountSubscribe──▶ Solana node (SOLANA_WS_URL): the Meteora
@@ -82,9 +82,9 @@ Open http://localhost:5173, sign in with **dev login** (Telegram doesn't work on
 localhost — the widget needs a domain bound to the bot), paste a wallet address
 and the rest takes care of itself.
 
-`docker compose up -d` gives you Postgres and RabbitMQ, which is everything the
-services genuinely need. Redis, Loki and Tempo stay optional: without them the
-agent keeps its conversations in the process and logs/traces go to stdout only.
+`docker compose up -d` gives you Postgres and Redis, which is everything the
+services genuinely need: Redis carries the queue, and the agent's conversations.
+Loki and Tempo stay optional: without them logs and traces go to stdout only.
 
 The broker is not optional any more. It used to be, and the scan pipeline
 carried a second, broker-less copy of itself to cope — one that skipped EVM,
@@ -557,7 +557,7 @@ Reliability rules (a silently wrong number is worse than a failed request):
 
 ## The scan queue and history
 
-The api keeps a RabbitMQ queue of addresses (`src/wallet`). A producer tops it up
+The api keeps a queue of addresses on Redis Streams (`src/wallet`). A producer tops it up
 with the addresses that are **due**, a consumer takes them one at a time
 (`SCAN_PREFETCH`) with a pause after each (`SCAN_JOB_DELAY_MS`). Identical
 addresses in different portfolios are scanned once.
@@ -578,13 +578,13 @@ This matters more than it looks: the producer used to refill the moment the
 queue drained, so everything was rescanned every ~1.8 minutes no matter what
 `SYNC_INTERVAL_MIN` said — about 4,800 DeBank page loads a day from one
 datacenter IP, which is what got the EVM scans throttled into timeouts. After each successful scan an
-`AddressSnapshot` is written. The scan queues are `scan.v2.<chain>`: the v2 is not a message
-version but a new queue, because a queue's `x-max-priority` is fixed when it is
-declared and re-declaring the old name with it would fail the channel. Whatever
-is left in the old `scan.<chain>` queues is abandoned harmlessly — an address
-whose job is never delivered comes due again when its lease expires — and they
-can be deleted once empty. There is one pipeline and it goes through the broker — locally too,
-which is why `docker compose` brings RabbitMQ up alongside Postgres.
+`AddressSnapshot` is written. The scan queues are `scan.<chain>`, each a Redis
+stream with a consumer group (`libs/common/src/queue`); an urgent job goes to a
+second stream the consumer reads first. A job a stopped consumer never
+acknowledged is taken over by a live one after a minute, and a job that is simply
+never delivered comes due again when its lease expires. There is one pipeline
+and it goes through the queue — locally too, which is why `docker compose`
+brings Redis up alongside Postgres.
 
 The api assembles a portfolio from Postgres on every request — one query — so
 the page shows a scan the moment it lands. It used to be served from a Redis
@@ -606,7 +606,7 @@ most once a minute per portfolio per replica. Charts: 24h uses raw points,
 - **Traces** — OpenTelemetry → Tempo. Instrumentation is loaded ahead of the app
   with `node -r @svinooh/common/dist/tracing` (it patches modules as they're
   required, so anything already loaded would never be traced). One request
-  through web → api → auth/wallet → Postgres/RabbitMQ is a single trace.
+  through web → api → auth/wallet → Postgres/Redis is a single trace.
 - **Grafana** ties them together: a log line links to its trace, and a trace
   links back to its logs. Its datasources and dashboards live in `ops/grafana`
   and are baked into the image, so a fresh container comes up already
@@ -628,7 +628,7 @@ One project, eleven services:
 
 | Service | What it is |
 |---|---|
-| `Postgres`, `Redis`, `rabbitmq` | data and messaging (Redis holds the agent's conversations and rate limits) |
+| `Postgres`, `Redis` | data and messaging (Redis carries the queue, the agent's conversations and rate limits) |
 | `api`, `auth`, `wallet`, `web` | the application |
 | `prometheus`, `loki`, `tempo`, `grafana` | observability |
 
@@ -659,7 +659,7 @@ arrows on the project canvas.
 Key variables:
 
 ```
-api     DATABASE_URL, JWT_SECRET, AUTH_SERVICE_URL, RABBITMQ_URL,
+api     DATABASE_URL, JWT_SECRET, AUTH_SERVICE_URL, REDIS_URL,
         WEB_ORIGIN, LOKI_URL, OTEL_EXPORTER_OTLP_ENDPOINT, SERVICE_NAME
 auth    DATABASE_URL, JWT_SECRET (same as api), TELEGRAM_BOT_TOKEN,
         TELEGRAM_BOT_USERNAME, WEB_URL, AUTH_DEV_MODE=false, LOKI_URL, OTEL_…

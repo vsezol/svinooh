@@ -10,7 +10,7 @@
  */
 import { strict as assert } from 'node:assert';
 import { describe, test } from 'node:test';
-import type { RabbitService } from '@svinooh/common';
+import type { QueueService } from '@svinooh/common';
 import type { PrismaService } from '@svinooh/db';
 import type { WalletStateEvent } from '@svinooh/shared';
 import { AlertsCollector } from '../src/alerts/collector.service';
@@ -75,16 +75,16 @@ const collector = (telegramId: bigint | null) => {
     $transaction: async (ops: unknown[]) => ops,
   } as unknown as PrismaService;
 
-  const rabbit = {
+  const queue = {
     publish: async (queue: string, body: unknown) => {
       published.push({ queue, body });
       return true;
     },
-  } as unknown as RabbitService;
+  } as unknown as QueueService;
 
   const trial = { judge: async () => ({ verdict: 'send', count: false }) } as unknown as Trial;
 
-  return { published, remembered, alerts: new AlertsCollector(prisma, rabbit, trial) };
+  return { published, remembered, alerts: new AlertsCollector(prisma, queue, trial) };
 };
 
 describe('WhenTheWriterSaysWhatAnAddressLooksLike', () => {

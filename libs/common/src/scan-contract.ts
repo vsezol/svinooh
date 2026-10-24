@@ -6,21 +6,12 @@ import type { Chain, ScanResult } from '@svinooh/shared';
  * only lands on one of them doesn't compile.
  */
 
-/**
- * One queue per chain: scan.v2.evm, scan.v2.sol, scan.v2.tron, scan.v2.btc.
- *
- * The v2 is not a version of the message — it is a new queue, because these
- * carry a priority now and a queue's x-max-priority cannot be changed after it
- * is declared. Re-declaring the old name with the new argument is a
- * PRECONDITION_FAILED, which closes the channel and takes the connection with
- * it (see messageCount for how that goes).
- *
- * Whatever is left in the old queues is abandoned, and that costs nothing: an
- * address whose job is never delivered simply comes due again when its lease
- * runs out. The old queues can be deleted by hand once they are empty.
- */
+/** Every scan queue starts with this; see hasPriority */
+export const SCAN_QUEUE_PREFIX = 'scan.';
+
+/** One queue per chain: scan.evm, scan.sol, scan.tron, scan.btc. */
 export function scanQueueName(chain: Chain): string {
-  return `scan.v2.${chain.toLowerCase()}`;
+  return `${SCAN_QUEUE_PREFIX}${chain.toLowerCase()}`;
 }
 
 /**
@@ -28,9 +19,6 @@ export function scanQueueName(chain: Chain): string {
  * address nobody has ever scanned goes first, everything else is equal.
  */
 export const SCAN_MAX_PRIORITY = 1;
-
-/** Queues declared with a priority, so every declare of them matches — see queueOptions */
-export const PRIORITY_QUEUE_PREFIX = 'scan.v2.';
 
 /**
  * One queue for every result, not one per chain.
@@ -42,6 +30,11 @@ export const PRIORITY_QUEUE_PREFIX = 'scan.v2.';
  * here to separate.
  */
 export const SCAN_RESULT_QUEUE = 'scan.result';
+
+/** The scan queues carry a priority; the result queue and the telegram queues do not */
+export function hasPriority(queue: string): boolean {
+  return queue.startsWith(SCAN_QUEUE_PREFIX) && queue !== SCAN_RESULT_QUEUE;
+}
 
 export interface ScanJob {
   chain: Chain;

@@ -21,7 +21,7 @@ if (existsSync(envPath)) {
  */
 export const config = {
   port: int(process.env.PORT, 3000),
-  rabbitUrl: process.env.RABBITMQ_URL || null,
+  queueUrl: process.env.REDIS_URL || null,
   // Pause after each scan. The pacing knob against DeBank: this service holds
   // the slot for the whole pause, so the queue does not hand it another
   // address until the pause is over.

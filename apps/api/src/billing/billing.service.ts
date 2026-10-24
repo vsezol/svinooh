@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Payment } from '@prisma/client';
-import { BILLING_QUEUE, option, RabbitService, setting } from '@svinooh/common';
+import { BILLING_QUEUE, option, QueueService, setting } from '@svinooh/common';
 import type { BillingMeDto, BillingNotice, CheckoutDto } from '@svinooh/shared';
 import { PrismaService } from '@svinooh/db';
 import { randomUUID } from 'node:crypto';
@@ -56,7 +56,7 @@ export class BillingService {
     private readonly prisma: PrismaService,
     private readonly premium: PremiumService,
     private readonly nowpayments: NowPaymentsClient,
-    private readonly rabbit: RabbitService,
+    private readonly queue: QueueService,
   ) {}
 
   /** What this account pays for its next month — the welcome price while it applies */
@@ -363,7 +363,7 @@ export class BillingService {
       firstMonthUsd: setting('billing.firstMonthUsd'),
       paidUntil: paidUntil.toISOString(),
     };
-    await this.rabbit.publish(BILLING_QUEUE, notice);
+    await this.queue.publish(BILLING_QUEUE, notice);
   }
 
   /** The welcome price is for accounts that have never finished a payment */

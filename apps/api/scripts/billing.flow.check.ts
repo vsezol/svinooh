@@ -73,7 +73,7 @@ async function main(): Promise<void> {
   process.env.NOWPAYMENTS_API_URL = `http://127.0.0.1:${port}/v1`;
 
   const { PrismaService } = await import('@svinooh/db');
-  const { RabbitService, setting } = await import('@svinooh/common');
+  const { QueueService, setting } = await import('@svinooh/common');
   const { NowPaymentsClient, ipnSignature } = await import('../src/billing/nowpayments.client');
   const { PremiumService } = await import('../src/billing/premium.service');
   const { BillingService } = await import('../src/billing/billing.service');
@@ -87,7 +87,7 @@ async function main(): Promise<void> {
     prisma,
     premium,
     new NowPaymentsClient(config.nowpaymentsApiKey, config.nowpaymentsIpnSecret, config.nowpaymentsApiUrl),
-    new RabbitService(null), // disabled — the thank-you publish is a no-op here
+    new QueueService(null), // disabled — the thank-you publish is a no-op here
   );
 
   /** A signed webhook body, exactly as NOWPayments would send it */

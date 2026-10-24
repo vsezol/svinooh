@@ -1,15 +1,15 @@
 # Local development. `docker compose up -d` gives you the two things the
-# services genuinely cannot fake: a database and a broker.
+# services genuinely cannot fake: a database and the queue.
 #
-# The broker used to be optional, and the wallet service carried a second,
-# broker-less implementation of the whole scan pipeline to cope. Two pipelines
+# The queue used to be optional, and the wallet service carried a second,
+# queue-less implementation of the whole scan pipeline to cope. Two pipelines
 # meant two behaviours — the fallback skipped EVM entirely and paced itself
 # differently — and only one of them was the one that runs in production. It is
-# cheaper to run the broker locally than to keep a shadow copy of the system
-# honest.
+# cheaper to run Redis locally than to keep a shadow copy of the system honest.
+# A Redis already running on 6379 (brew) does just as well; then start only db.
 #
-# Redis, Loki and Tempo stay optional: without their variables the services use
-# an in-memory cache and log to stdout, which is the same code path either way.
+# Loki and Tempo stay optional: without their variables the services log to
+# stdout, which is the same code path either way.
 services:
   db:
     image: postgres:16-alpine
@@ -23,23 +23,16 @@ services:
     volumes:
       - dbdata:/var/lib/postgresql/data
 
-  rabbitmq:
-    image: rabbitmq:4-management-alpine
+  redis:
+    image: redis:8-alpine
     restart: unless-stopped
-    environment:
-      RABBITMQ_DEFAULT_USER: svinooh
-      RABBITMQ_DEFAULT_PASS: svinooh
+    # The same persistence production runs: a snapshot a minute, no AOF
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "no"]
     ports:
-      - "5672:5672"   # RABBITMQ_URL=amqp://svinooh:svinooh@localhost:5672
-      - "15672:15672" # the management UI, for looking at what is queued
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
+      - "6379:6379"   # REDIS_URL=redis://localhost:6379
     volumes:
-      - mqdata:/var/lib/rabbitmq
+      - redisdata:/data
 
 volumes:
   dbdata:
-  mqdata:
+  redisdata:

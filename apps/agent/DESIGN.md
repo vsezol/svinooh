@@ -62,7 +62,7 @@ lives inside the web app, deleted once the widget talks to the agent directly.
 **D1 — The agent is an API client, not a platform tenant.** A `DataSource`
 protocol inside the service; `PortfolioApiSource` is the first implementation,
 calling `GET /portfolios/{slug}` and `/history` with the caller's token. No
-`@svinooh/*` imports, no DATABASE_URL, no RabbitMQ — if the portfolio API can't
+`@svinooh/*` imports, no DATABASE_URL, no queue — if the portfolio API can't
 answer a question the agent needs answered, the fix is to extend the public
 API, which makes the product API better for every client.
 

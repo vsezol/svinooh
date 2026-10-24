@@ -64,7 +64,7 @@ service list once there is more than one of a kind.
 `scan.btc`.
 
 **Environment variables: SCREAMING_SNAKE_CASE**, named for what they configure
-and not for the service reading them: `SYNC_INTERVAL_MIN`, `RABBITMQ_URL`,
+and not for the service reading them: `SYNC_INTERVAL_MIN`, `REDIS_URL`,
 `CHROME_NO_SANDBOX`. A variable two services both read has one name in both.
 
 Two Railway services are off-convention and can only be renamed from the

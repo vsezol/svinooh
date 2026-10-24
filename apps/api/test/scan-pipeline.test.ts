@@ -10,7 +10,7 @@
 import { strict as assert } from 'node:assert';
 import { describe, mock, test } from 'node:test';
 import type { Wallet } from '@prisma/client';
-import { MetricsService, type RabbitService } from '@svinooh/common';
+import { MetricsService, type QueueService } from '@svinooh/common';
 import type { PrismaService } from '@svinooh/db';
 import type { ScanResult } from '@svinooh/shared';
 import { CATCHING_UP_MS, ScanRequests } from '../src/wallet/scan-requests.service';
@@ -46,12 +46,12 @@ describe('AJustAddedWalletIsScannedNow', () => {
     const prisma = {
       wallet: { findUnique: async () => walletRow({ lastSyncedAt: null }) },
     } as unknown as PrismaService;
-    const rabbit = {
+    const queue = {
       publish: async (queue: string, _job: unknown, opts?: { priority?: number }) => {
         published.push({ queue, priority: opts?.priority });
         return true;
       },
-    } as unknown as RabbitService;
+    } as unknown as QueueService;
     const leased: string[] = [];
     const sync = {
       takeIfFree: async () => free,
@@ -59,7 +59,7 @@ describe('AJustAddedWalletIsScannedNow', () => {
         leased.push(...addresses.map((a) => a.address));
       },
     } as unknown as SyncService;
-    return { published, leased, scans: new ScanRequests(prisma, rabbit, sync, new LandingOverlay()) };
+    return { published, leased, scans: new ScanRequests(prisma, queue, sync, new LandingOverlay()) };
   };
 
   test('the address is claimed, then published to its own queue, ahead of the rest', async () => {
@@ -67,7 +67,7 @@ describe('AJustAddedWalletIsScannedNow', () => {
     scans.now('w-1');
     await new Promise((r) => setImmediate(r));
     assert.equal(published.length, 1);
-    assert.equal(published[0].queue, 'scan.v2.sol');
+    assert.equal(published[0].queue, 'scan.sol');
     assert.ok((published[0].priority ?? 0) > 0, 'a spinner is being watched — it goes first');
   });
 
@@ -119,7 +119,7 @@ describe('AJustAddedWalletIsScannedNow', () => {
     await new Promise((r) => setImmediate(r));
     assert.deepEqual(leased, [ADDRESS], 'the claim is taken, not asked for');
     assert.equal(published.length, 1);
-    assert.equal(published[0].queue, 'scan.v2.sol');
+    assert.equal(published[0].queue, 'scan.sol');
     assert.ok((published[0].priority ?? 0) > 0, 'ahead of the routine top-ups');
   });
 });
@@ -140,12 +140,12 @@ const writer = (wallet: Wallet, overlay = new LandingOverlay()) => {
     noteUnbelievedReading: async (_id: string, n: number) => void unbelieved.push(n),
     markFailed: async () => {},
   } as unknown as SyncService;
-  const rabbit = { publish: async () => true } as unknown as RabbitService;
+  const queue = { publish: async () => true } as unknown as QueueService;
   return {
     applied,
     unbelieved,
     stored,
-    consumer: new ScanResultConsumerService(rabbit, prisma, sync, new MetricsService(), overlay),
+    consumer: new ScanResultConsumerService(queue, prisma, sync, new MetricsService(), overlay),
   };
 };
 

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { BILLING_QUEUE, RabbitService, setting } from '@svinooh/common';
+import { BILLING_QUEUE, QueueService, setting } from '@svinooh/common';
 import { PrismaService } from '@svinooh/db';
 import type { BillingNotice } from '@svinooh/shared';
 
@@ -43,7 +43,7 @@ export function expiredNoticeDue(
 export class Renewals {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly rabbit: RabbitService,
+    private readonly queue: QueueService,
   ) {}
 
   async sweep(now = new Date()): Promise<number> {
@@ -77,7 +77,7 @@ export class Renewals {
           daysLeft: Math.max(1, Math.ceil((sub.paidUntil.getTime() - now.getTime()) / DAY_MS)),
         };
         // Said before it is written down, the same way alerts are
-        if (!(await this.rabbit.publish(BILLING_QUEUE, notice))) continue;
+        if (!(await this.queue.publish(BILLING_QUEUE, notice))) continue;
         await this.prisma.subscription.update({
           where: { userId: sub.userId },
           data: { remindedAt: now },
@@ -96,7 +96,7 @@ export class Renewals {
             freeAiPerDay: setting('billing.freeAiPerDay'),
           },
         };
-        if (!(await this.rabbit.publish(BILLING_QUEUE, notice))) continue;
+        if (!(await this.queue.publish(BILLING_QUEUE, notice))) continue;
         await this.prisma.subscription.update({
           where: { userId: sub.userId },
           data: { expiredNoticeAt: now },

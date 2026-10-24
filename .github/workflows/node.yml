@@ -37,6 +37,18 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # The queue's contract tests (libs/common/test/queue.test.ts) run against a
+    # real Redis and skip themselves without one
+    services:
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -58,4 +70,6 @@ jobs:
       # Both targets build the libraries they depend on first, so the Prisma
       # client and the shared dist are there before anything imports them.
       - run: npm test
+        env:
+          QUEUE_TEST_REDIS_URL: redis://localhost:6379/15
       - run: npm run typecheck
