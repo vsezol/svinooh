@@ -241,8 +241,14 @@ interface ExtractedData {
  * It is recycled every so often anyway. A tab kept forever is a leak waiting to
  * be discovered, and starting fresh is cheap when it happens on a schedule
  * rather than on every scan.
+ *
+ * Ten, not forty. DeBank keeps about 6MB per profile the tab has visited, so
+ * the service's memory is a sawtooth whose teeth are this number: at forty it
+ * ran 290MB to 500-670MB and averaged 412MB over a week. At ten the peak stays
+ * near 350MB and the average drops by roughly a quarter. The price is one more
+ * SPA boot per ten scans, about a second per scan on scans of a minute or more.
  */
-const SCANS_PER_TAB = 40;
+const SCANS_PER_TAB = 10;
 
 const logger = new Logger('EvmBrowser');
 
