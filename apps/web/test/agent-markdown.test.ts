@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { describe, test } from 'node:test';
-import { tableAt } from '../src/components/blocks/Markdown';
+import { tableAt } from '../src/agent/components/blocks/Markdown';
 
 const linesOf = (text: string): string[] => text.trim().split('\n');
 

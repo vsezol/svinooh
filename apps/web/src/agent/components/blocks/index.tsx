@@ -28,7 +28,6 @@ import TableBlockView from './TableBlock';
 import TextBlockView from './TextBlock';
 import TraceBlockView from './TraceBlock';
 import UnsupportedBlock from './UnsupportedBlock';
-import './blocks.css';
 
 export type { ConfirmAction, SignInProvider };
 

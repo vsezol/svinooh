@@ -46,7 +46,7 @@ describe('WhatTheImageCarries', () => {
     const planted = join(mkdtempSync(join(tmpdir(), 'stray-')), 'reaches-out.ts');
     writeFileSync(
       planted,
-      "import { settledOf } from '../../../agent-web/src/components/blocks/DepositBlock';\n",
+      "import { settledOf } from '../../../scanner-evm/src/scanners/evm';\n",
     );
     assert.equal(escapes(planted).length, 1, 'the check has to be able to fail');
   });

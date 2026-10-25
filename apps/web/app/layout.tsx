@@ -2,6 +2,12 @@ import type { Metadata, Viewport } from 'next';
 import { IBM_Plex_Mono, Manrope } from 'next/font/google';
 import { Providers } from './providers';
 import '../src/styles.css';
+// The agent chat's own sheets, after the page's: they used to be injected at
+// runtime by the chat's bundle, which put them last in the cascade, and the
+// chat's rules were written against that order
+import '../src/agent/styles/base.css';
+import '../src/agent/components/chrome.css';
+import '../src/agent/components/blocks/blocks.css';
 
 // Served from this origin and arriving with the page: the old <link> to Google
 // Fonts was a render-blocking round trip to a third party on every first

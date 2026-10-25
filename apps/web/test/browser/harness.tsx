@@ -13,9 +13,9 @@
  *   harness.build(422, {message}) what the server answers the next build
  *   await harness.deposit()       the press, and everything it produced
  *
- * What the agent is told about the outcome is agent-web's half, covered by its
- * own tests: nothing here may import another app, because the image this one
- * ships in carries only this one.
+ * What the agent is told about the outcome is the chat's half (src/agent),
+ * covered by its own tests. Nothing here may import another app, because the
+ * image this one ships in carries only this one.
  */
 import { createRoot } from 'react-dom/client';
 import { useState } from 'react';

@@ -214,7 +214,10 @@ Then the independence milestones, unchanged in substance:
 - **M2b — the wire and the door.** The blocks contract per D3 on the wire
   (expand-then-contract: `blocks` added, `reply` kept for the transitional
   gateway), CORS allowlist, public domain. The gateway becomes unnecessary.
-- **M3a — the widget application.** `apps/agent-web`: React 19, a webpack
+- **M3a — the widget application.** (Since 2026-10: the chat lives in
+  `apps/web/src/agent` as plain React inside the web app; the federation
+  remote and its deployment are gone. What follows is how it was built.)
+  `apps/agent-web`: React 19, a webpack
   Module Federation remote exposing one `mount()` (D4), with the full design
   implemented — every block of the vocabulary, the standalone and embedded
   shells, and a `/demo` kitchen sink rendering all of it from canned data.

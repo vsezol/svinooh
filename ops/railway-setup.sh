@@ -261,8 +261,6 @@ The Railway CLI does not set these reliably; do them once in the dashboard
      grafana → nobody looks at it most of the day; it wakes on the first
               request, a few seconds. A dashboard tab left open with
               auto-refresh is traffic and keeps it awake (set 2026-10-23)
-   Not agent-web: the first request to a sleeping service can fail, and the
-   chat widget is fetched from it on the portfolio page — not worth ~40MB.
    Nothing holding a queue connection, polling settings or scraped by
    Prometheus can sleep: that traffic keeps a service awake by design.
 ========================================================================================
