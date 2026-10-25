@@ -5,13 +5,13 @@ import {
   OnApplicationBootstrap,
   OnModuleDestroy,
   Optional,
-} from "@nestjs/common";
-import { Queue, Worker, type DefaultJobOptions } from "bullmq";
-import { Redis } from "ioredis";
-import { serviceName } from "../env";
+} from '@nestjs/common';
+import { Queue, Worker, type DefaultJobOptions } from 'bullmq';
+import { Redis } from 'ioredis';
+import { serviceName } from '../env';
 
-export const QUEUE_URL = Symbol("QUEUE_URL");
-export const QUEUE_OPTIONS = Symbol("QUEUE_OPTIONS");
+export const QUEUE_URL = Symbol('QUEUE_URL');
+export const QUEUE_OPTIONS = Symbol('QUEUE_OPTIONS');
 
 /** What a caller can ask of a single publish */
 export interface PublishOptions {
@@ -32,7 +32,7 @@ export interface QueueOptions {
 }
 
 /** Every key the queue makes starts with this, beside anything else sharing the instance (the agent keeps `agent:`) */
-const PREFIX = "queue";
+const PREFIX = 'queue';
 
 /** Failed jobs kept for a look in redis-cli; completed ones go at once */
 const KEEP_FAILED = 100;
@@ -48,12 +48,11 @@ const KEEP_FAILED = 100;
  */
 const RETRIES = 10;
 const RETRY_DELAY_MS = 2_000;
-const retried = (queue: string): boolean => queue.endsWith(".telegram");
+const retried = (queue: string): boolean => queue.endsWith('.telegram');
 
 const DRAIN_MS = 5_000;
 
-const sleep = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 interface Consumer {
   queue: string;
@@ -105,7 +104,7 @@ export class QueueService implements OnApplicationBootstrap, OnModuleDestroy {
   /** Resolves once connected; ioredis retries a Redis that is down until it is not */
   async onApplicationBootstrap(): Promise<void> {
     if (!this.url) {
-      this.logger.log("REDIS_URL not set — queue disabled");
+      this.logger.log('REDIS_URL not set — queue disabled');
       return;
     }
     if (this.client || this.closing) return;
@@ -123,62 +122,47 @@ export class QueueService implements OnApplicationBootstrap, OnModuleDestroy {
 
     let connected = false;
     let failing = false;
-    client.on("error", (e: Error) => {
+    client.on('error', (e: Error) => {
       if (failing) return;
       failing = true;
       this.logger.warn(`Redis unreachable: ${e.message} — retrying`);
     });
-    client.on("ready", () => {
-      if (connected && failing) this.logger.log("Redis reconnected");
+    client.on('ready', () => {
+      if (connected && failing) this.logger.log('Redis reconnected');
       failing = false;
     });
-    if (client.status !== "ready")
-      await new Promise<void>((resolve) =>
-        client.once("ready", () => resolve()),
-      );
+    if (client.status !== 'ready')
+      await new Promise<void>((resolve) => client.once('ready', () => resolve()));
     connected = true;
-    this.logger.log("Redis queue connected");
+    this.logger.log('Redis queue connected');
 
     for (const consumer of this.consumers.values()) this.start(consumer);
   }
 
   /** Hands a message to the queue, and says whether it got there */
-  async publish(
-    queue: string,
-    message: unknown,
-    options: PublishOptions = {},
-  ): Promise<boolean> {
-    if (!this.client || this.client.status !== "ready") return false;
+  async publish(queue: string, message: unknown, options: PublishOptions = {}): Promise<boolean> {
+    if (!this.client || this.client.status !== 'ready') return false;
     try {
       // BullMQ runs a job with no priority before every prioritized one, and a
       // lower number before a higher. So an urgent job carries none and an
       // ordinary one carries 1: the urgent go first, the rest keep their order.
       const priority = (options.priority ?? 0) > 0 ? 0 : 1;
-      await this.queue(queue).add("m", message, { priority });
+      await this.queue(queue).add('m', message, { priority });
       return true;
     } catch (e) {
-      this.logger.warn(
-        `Publish to ${queue} failed: ${e instanceof Error ? e.message : e}`,
-      );
+      this.logger.warn(`Publish to ${queue} failed: ${e instanceof Error ? e.message : e}`);
       return false;
     }
   }
 
   /** How many messages are waiting across these queues, not counting any being worked on */
   async messageCount(queues: string[]): Promise<number> {
-    if (!this.client || this.client.status !== "ready") return 0;
+    if (!this.client || this.client.status !== 'ready') return 0;
     let total = 0;
     for (const queue of queues) {
       try {
-        const counts = await this.queue(queue).getJobCounts(
-          "wait",
-          "prioritized",
-          "delayed",
-        );
-        total +=
-          (counts.wait ?? 0) +
-          (counts.prioritized ?? 0) +
-          (counts.delayed ?? 0);
+        const counts = await this.queue(queue).getJobCounts('wait', 'prioritized', 'delayed');
+        total += (counts.wait ?? 0) + (counts.prioritized ?? 0) + (counts.delayed ?? 0);
       } catch {
         // a queue we cannot count contributes nothing, and must not abort the count for the others
       }
@@ -187,11 +171,7 @@ export class QueueService implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   /** `prefetch` is how many of this queue's messages this process works on at once */
-  consume<T>(
-    queue: string,
-    handler: (message: T) => Promise<void>,
-    prefetch: number,
-  ): void {
+  consume<T>(queue: string, handler: (message: T) => Promise<void>, prefetch: number): void {
     const consumer: Consumer = {
       queue,
       handler: handler as (message: unknown) => Promise<void>,
@@ -207,12 +187,8 @@ export class QueueService implements OnApplicationBootstrap, OnModuleDestroy {
     this.closing = true;
     // Let what is already running finish; past the drain, let go of the jobs —
     // their locks run out and another worker takes them
-    await Promise.all(
-      [...this.consumers.values()].map((consumer) => this.stop(consumer)),
-    );
-    await Promise.all(
-      [...this.queues.values()].map((queue) => queue.close().catch(() => {})),
-    );
+    await Promise.all([...this.consumers.values()].map((consumer) => this.stop(consumer)));
+    await Promise.all([...this.queues.values()].map((queue) => queue.close().catch(() => {})));
     const client = this.client;
     this.client = null;
     if (client) await client.quit().catch(() => client.disconnect());
@@ -239,7 +215,7 @@ export class QueueService implements OnApplicationBootstrap, OnModuleDestroy {
     if (retried(queue)) {
       options.attempts = RETRIES;
       options.backoff = {
-        type: "exponential",
+        type: 'exponential',
         delay: this.options.retryDelayMs ?? RETRY_DELAY_MS,
       };
     }
@@ -262,27 +238,19 @@ export class QueueService implements OnApplicationBootstrap, OnModuleDestroy {
         connection: this.client,
         prefix: PREFIX,
         concurrency: consumer.prefetch,
-        ...(this.options.lockDurationMs
-          ? { lockDuration: this.options.lockDurationMs }
-          : {}),
-        ...(this.options.stalledIntervalMs
-          ? { stalledInterval: this.options.stalledIntervalMs }
-          : {}),
+        ...(this.options.lockDurationMs ? { lockDuration: this.options.lockDurationMs } : {}),
+        ...(this.options.stalledIntervalMs ? { stalledInterval: this.options.stalledIntervalMs } : {}),
       },
     );
-    worker.on("failed", (job, e) => {
+    worker.on('failed', (job, e) => {
       const left = job ? job.opts.attempts! - job.attemptsMade : 0;
       this.logger.warn(
-        `Message from ${consumer.queue} failed: ${e.message}${left > 0 ? ` (${left} more tries)` : ""}`,
+        `Message from ${consumer.queue} failed: ${e.message}${left > 0 ? ` (${left} more tries)` : ''}`,
       );
     });
-    worker.on("error", (e) =>
-      this.logger.warn(`Consuming ${consumer.queue}: ${e.message}`),
-    );
+    worker.on('error', (e) => this.logger.warn(`Consuming ${consumer.queue}: ${e.message}`));
     consumer.worker = worker;
-    this.logger.log(
-      `Consuming ${consumer.queue} (prefetch ${consumer.prefetch})`,
-    );
+    this.logger.log(`Consuming ${consumer.queue} (prefetch ${consumer.prefetch})`);
   }
 
   /**

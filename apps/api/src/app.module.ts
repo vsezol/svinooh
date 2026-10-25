@@ -9,6 +9,7 @@ import { AgentConfigController } from './agent-config.controller';
 import { HealthController } from './health.controller';
 import { MetricsModule, QueueModule } from '@svinooh/common';
 import { DepositsModule } from './deposits/deposits.module';
+import { EarnModule } from './earn/earn.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { WalletModule } from './wallet/wallet.module';
@@ -30,6 +31,9 @@ import { PrismaModule } from '@svinooh/db';
       signOptions: { expiresIn: '30d' },
     }),
     AuthProxyModule,
+    // Where a token can be put to work: the yield catalog and the transactions
+    // that move money into it. The deposits module calls it in process.
+    EarnModule.with(),
     DepositsModule,
     PortfolioModule,
     BillingModule,
