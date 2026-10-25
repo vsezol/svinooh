@@ -14,8 +14,9 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route
+from starlette.types import ASGIApp, Receive, Scope, Send
 from svinooh_portfolio.pools import PoolCatalog
 from svinooh_portfolio.portfolio import Period, Portfolio, exposure_of
 from svinooh_portfolio.reading import (
@@ -327,9 +328,7 @@ def create_app(
     consent page's calls, which only svinooh.com may make from a browser."""
     oauth = SvinoohOAuth(store, source, web_url)
     signed_in = build(source, catalog, oauth, url.rstrip("/"))
-    protected = signed_in.streamable_http_app(
-        stateless_http=True, json_response=True, transport_security=ANYWHERE
-    )
+    protected = _stateless_app(signed_in)
 
     @asynccontextmanager
     async def lifespan(_app: Starlette) -> AsyncIterator[None]:
@@ -362,9 +361,34 @@ def create_anonymous_app(source: DataSource, catalog: PoolCatalog) -> Starlette:
     service inside the private network reaches it: from the internet, every
     request needs a sign-in.
     """
-    return build(source, catalog).streamable_http_app(
+    return _stateless_app(build(source, catalog))
+
+
+def _stateless_app(server: MCPServer) -> Starlette:
+    app = server.streamable_http_app(
         stateless_http=True, json_response=True, transport_security=ANYWHERE
     )
+    app.user_middleware.append(Middleware(_RefuseStandaloneStream))
+    return app
+
+
+class _RefuseStandaloneStream:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        user = scope.get("user")
+        must_sign_in = user is not None and not user.is_authenticated
+        if (
+            scope["type"] == "http"
+            and scope["method"] == "GET"
+            and scope["path"] == "/mcp"
+            and not must_sign_in
+        ):
+            refused = Response(status_code=405, headers={"Allow": "POST"})
+            await refused(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
 
 
 async def _portfolio(
