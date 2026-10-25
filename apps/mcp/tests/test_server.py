@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 import time
@@ -148,6 +149,18 @@ async def connected(
 async def called(session: ClientSession, name: str, **args) -> tuple[bool, str]:
     result = await session.call_tool(name, args)
     return result.is_error, "\n".join(part.text for part in result.content if part.type == "text")
+
+
+async def status_of_listening(app: Starlette, token: str | None = None) -> int:
+    headers = {"accept": "text/event-stream"} | ({"authorization": token} if token else {})
+    async with (
+        asyncio.timeout(5),
+        app.router.lifespan_context(app),
+        httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=app), base_url="http://localhost"
+        ) as client,
+    ):
+        return (await client.get("/mcp", headers=headers)).status_code
 
 
 class TestTheServer:
@@ -301,3 +314,12 @@ class TestTheServer:
             transport=httpx2.ASGITransport(app=app), base_url="http://localhost"
         ) as client:
             assert (await client.get("/health")).json() == {"ok": True}
+
+    async def test_no_stream_is_held_open_for_the_anonymous(self):
+        assert await status_of_listening(create_anonymous_app(Host(), Catalog())) == 405
+
+    async def test_no_stream_is_held_open_for_the_signed_in(self):
+        assert await status_of_listening(app_for(Host()), SESSION) == 405
+
+    async def test_a_listen_without_a_token_is_still_told_to_sign_in(self):
+        assert await status_of_listening(app_for(Host())) == 401

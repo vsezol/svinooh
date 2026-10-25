@@ -6,7 +6,9 @@ agent reading for visitors who are not signed in.
 """
 
 import asyncio
+import logging
 import os
+import sys
 
 import httpx
 import uvicorn
@@ -33,10 +35,26 @@ anonymous = create_anonymous_app(source, catalog)
 
 
 async def serve(served: Starlette, port: int) -> None:
-    await uvicorn.Server(uvicorn.Config(served, host="0.0.0.0", port=port)).serve()
+    config = uvicorn.Config(served, host="0.0.0.0", port=port, log_config=None)
+    await uvicorn.Server(config).serve()
+
+
+def split_uvicorn_logs_by_level() -> None:
+    formatter = logging.Formatter("%(levelname)s: %(message)s")
+    ordinary = logging.StreamHandler(sys.stdout)
+    ordinary.addFilter(lambda record: record.levelno < logging.WARNING)
+    ordinary.setFormatter(formatter)
+    bad = logging.StreamHandler(sys.stderr)
+    bad.setLevel(logging.WARNING)
+    bad.setFormatter(formatter)
+    uvicorn_log = logging.getLogger("uvicorn")
+    uvicorn_log.setLevel(logging.INFO)
+    uvicorn_log.handlers = [ordinary, bad]
+    uvicorn_log.propagate = False
 
 
 async def main() -> None:
+    split_uvicorn_logs_by_level()
     await asyncio.gather(
         serve(app, int(os.environ.get("PORT", "3000"))),
         serve(anonymous, int(os.environ.get("MCP_ANONYMOUS_PORT", "3001"))),
