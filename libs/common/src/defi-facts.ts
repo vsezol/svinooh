@@ -130,9 +130,12 @@ function loansOf(loans: LendingFact[], position: ScanPosition, borrowed: ScanPos
   if (named.length) return named;
   const inPool = byPool(loans, position);
   if (inPool.length) return new Set(inPool.map((loan) => loan.ref?.trim() ?? '')).size === 1 ? inPool : [];
+  // By asset, for a position that names no pool (Zerion's). Several assets owed
+  // to one market are one account, the same way a pool reads them above
   const owed = new Set(borrowed.map((leg) => symbolOf(leg)));
-  const loan = only(loans.filter((one) => !one.ref && owed.has(one.token)));
-  return loan ? [loan] : [];
+  const byAsset = loans.filter((one) => !one.ref && owed.has(one.token));
+  const markets = new Set(byAsset.map((one) => one.pool?.trim() || null));
+  return byAsset.length === 1 || (markets.size === 1 && !markets.has(null)) ? byAsset : [];
 }
 
 function supplyOf(facts: SupplyFact[], position: ScanPosition): SupplyFact | null {
@@ -155,11 +158,19 @@ function mainLoan(loans: LendingFact[], borrowed: ScanPositionToken[]): LendingF
 
 const symbolOf = (leg: ScanPositionToken): string => leg.symbol.trim().toUpperCase();
 
+/** Zerion's network names, and DeBank's `matic`, folded into DeBank's names */
 const NETWORK_NAMES: Record<string, string> = {
   ethereum: 'eth',
   arbitrum: 'arb',
   matic: 'polygon',
   optimism: 'op',
+  avalanche: 'avax',
+  'binance-smart-chain': 'bsc',
+  'zksync-era': 'era',
+  scroll: 'scrl',
+  mantle: 'mnt',
+  'metis-andromeda': 'metis',
+  okbchain: 'xlayer',
 };
 
 function networkOf(name: string | null | undefined): string | null {
@@ -189,9 +200,15 @@ function onNetworkOf<T extends { network?: string | null }>(facts: T[], position
  * The fact's own name is looked for INSIDE what the position says it is, since
  * every source writes a protocol its own way: an aggregator's project id
  * (`base_uniswap3`), a display name (`Uniswap V3`), a bare id (`kamino`).
+ *
+ * A version is part of the name, written the way DeBank writes it: `Aave V3`
+ * and Zerion's `aave-v3` both read as `aave3`. Without the version a wallet
+ * owing USDC on Ethereum to both V3 and V4 has its V3 rate on the V4 loan.
  */
 function ofProtocol<T extends { platform: string }>(facts: T[], position: ScanPosition): T[] {
-  const said = `${position.platform ?? ''} ${position.symbol ?? ''}`.toLowerCase();
+  const said = `${position.platform ?? ''} ${position.symbol ?? ''}`
+    .toLowerCase()
+    .replace(/[\s_-]+v(?=\d)/g, '');
   return facts.filter((fact) => said.includes(fact.platform));
 }
 
