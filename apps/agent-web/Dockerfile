@@ -23,6 +23,10 @@ RUN npm install --no-audit --no-fund --workspace apps/agent-web --workspace libs
 RUN npm run -w apps/agent-web build
 
 FROM nginx:1.27-alpine
+# One worker serves a static bundle fine. `auto` starts one per host core,
+# 48 on Railway, and each logs its start and exit at notice level to stderr,
+# which Railway shows as errors on every deploy.
+RUN sed -i -e 's/^worker_processes.*/worker_processes 1;/' -e 's/error\.log notice;/error.log warn;/' /etc/nginx/nginx.conf
 # The image runs envsubst over anything in templates/ at startup, which is how
 # Railway's injected PORT reaches the listen directive.
 COPY apps/agent-web/nginx.conf /etc/nginx/templates/default.conf.template
