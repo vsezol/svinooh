@@ -175,6 +175,18 @@ export const REGISTRY = {
     readBy: ['api'],
     live: true,
   },
+  'history.thinning': {
+    kind: 'choice',
+    group: 'history',
+    label: 'Nightly position history thinning',
+    about:
+      'on — every night at 03:00 UTC, position readings past a chart window are cut down to the one per slot the wider charts draw, so no chart changes. off — every reading of every scan is kept.',
+    options: ['on', 'off'],
+    default: 'on',
+    env: 'HISTORY_THINNING',
+    readBy: ['api'],
+    live: true,
+  },
 
   'scan.reloadSec': {
     kind: 'number',

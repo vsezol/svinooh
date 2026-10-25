@@ -82,7 +82,7 @@ const POINTS_PER_WINDOW = 200;
  * width: it is the whole history at a glance, and there is nothing either side
  * of it to scroll to.
  */
-const RANGES: Record<HistoryRange, { windowMs: number | null; bucket: string | null }> = {
+export const RANGES: Record<HistoryRange, { windowMs: number | null; bucket: string | null }> = {
   '1h': { windowMs: 3600e3, bucket: null }, // fetched raw; gridded to GRID_STEP_MS below
   '24h': { windowMs: 24 * 3600e3, bucket: null },
   '7d': { windowMs: 7 * 86400e3, bucket: '30 minutes' },
@@ -98,7 +98,7 @@ const RANGES: Record<HistoryRange, { windowMs: number | null; bucket: string | n
  * For the bucketed ranges it MUST match RANGES.bucket, so the SQL buckets and
  * the grid that fills the gaps between them line up.
  */
-const GRID_STEP_MS: Record<HistoryRange, number> = {
+export const GRID_STEP_MS: Record<HistoryRange, number> = {
   '1h': 60_000, // 1 min
   '24h': 5 * 60_000, // 5 min
   '7d': 30 * 60_000, // 30 min — matches bucket '30 minutes'
