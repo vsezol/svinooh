@@ -1,7 +1,15 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { base58Decode } from '@svinooh/common';
-import { priceCache, pricesAt, tronHexToBase58, type Transfer } from '../src/portfolio/transfer-sources';
+import {
+  evmPlain,
+  priceCache,
+  pricesAt,
+  solanaPlain,
+  tronHexToBase58,
+  tronPlain,
+  type Transfer,
+} from '../src/portfolio/transfer-sources';
 import type { PrismaService } from '@svinooh/db';
 import { crossings, TransferHistory, type HeldAddress } from '../src/portfolio/transfers';
 
@@ -164,4 +172,44 @@ test('a first pass reads down to when the wallet arrived, over as many tab opens
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+test('on EVM only a send signed by whoever the money left, to the recipient or the token itself, is plain', () => {
+  const me = '0x7a587e39c8b1bb54871942ab307ffc8ea11fc198';
+  const usdc = '0xaf88d065e77c8cc2239327c5edb3a432268e5831';
+  // a coin sent straight to someone, and a token's own transfer
+  assert.ok(evmPlain({ signer: me, to: OUTSIDE, sender: me, recipient: OUTSIDE }));
+  assert.ok(evmPlain({ signer: me, to: usdc.toUpperCase().replace('0X', '0x'), sender: me, recipient: OUTSIDE, token: usdc }));
+  // a bridge through Socket, and its fill paid out by a solver contract
+  assert.ok(!evmPlain({ signer: me, to: '0x50c4e7...', sender: me, recipient: '0x50cf', token: usdc }));
+  assert.ok(!evmPlain({ signer: '0xa85ba5', to: '0x97caca', sender: '0x97caca', recipient: me }));
+  // liquidity taken out of Uniswap: signed by us, paid by the pool
+  assert.ok(!evmPlain({ signer: me, to: '0x03a520', sender: '0xpool', recipient: me, token: usdc }));
+  // a Safe moving money: signed by its owner, not by the Safe
+  assert.ok(!evmPlain({ signer: '0x7f5e1b', to: me, sender: me, recipient: OUTSIDE }));
+});
+
+test('on Solana a transaction that calls anything but the transfer programs is not a transfer', () => {
+  const plainSend = ['ComputeBudget111111111111111111111111111111', 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'];
+  assert.ok(solanaPlain(plainSend));
+  assert.ok(!solanaPlain([...plainSend, 'KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD']), 'a Kamino deposit');
+  assert.ok(!solanaPlain([...plainSend, 'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo']), 'a Meteora withdrawal');
+});
+
+test('on TRON a TRC20 Transfer event is plain only when it is the token\'s own transfer, called by the sender', () => {
+  const usdt = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+  const me = 'TEF8gN62a3v8cH956eGe2NNfPoZQsrZfi3';
+  const call = (contract: string, data: string) => ({
+    raw_data: {
+      contract: [
+        {
+          type: 'TriggerSmartContract',
+          parameter: { value: { owner_address: '412ee38ce91a0aa2ca9de170d56af34b8435e326b7', contract_address: contract, data } },
+        },
+      ],
+    },
+  });
+  assert.ok(tronPlain(call('41a614f803b6fd780986a42c78ec9c7f77e6ded13c', 'a9059cbb00'), usdt, me));
+  // the "deposit" of 343 USDT that was a SunSwap swap the wallet signed itself
+  assert.ok(!tronPlain(call('418747979e9965c33e07d497008b08570e51ffccd0', '7ff36ab500'), usdt, 'TFGDbUyP8xez44C76fin3bn3Ss6jugoUwJ'));
 });
