@@ -49,6 +49,15 @@ const FENCES: Fence[] = [
     neighbours: [],
     exports: ['AlertsCollector'],
   },
+  {
+    dir: 'earn',
+    // The yield catalog and the transactions into it, once a service of its
+    // own. EarnApi is the HTTP surface without the HTTP; problems.ts is how a
+    // caller tells "you can fix this" from "earn cannot answer right now".
+    doors: ['earn.module', 'earn.api', 'api/problems'],
+    neighbours: [],
+    exports: ['EarnApi'],
+  },
 ];
 
 const files = (dir: string): string[] =>

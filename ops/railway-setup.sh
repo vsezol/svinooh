@@ -258,8 +258,6 @@ The Railway CLI does not set these reliably; do them once in the dashboard
 6. Serverless (Service → Settings → Deploy → Serverless) — a sleeping service
    costs nothing. The setting takes effect on the service's next deploy.
      loki   → nothing ships logs to it or scrapes it (see observability)
-     earn   → also needs EARN_REFRESH_INTERVAL_S=604800, or its five-minute
-              refresh counts as traffic and it never sleeps
      grafana → nobody looks at it most of the day; it wakes on the first
               request, a few seconds. A dashboard tab left open with
               auto-refresh is traffic and keeps it awake (set 2026-10-23)

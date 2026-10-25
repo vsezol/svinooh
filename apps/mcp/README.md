@@ -26,7 +26,7 @@ live in `libs/portfolio-py`, shared with `apps/agent`.
 
 ```bash
 uv sync
-PORTFOLIO_API_URL=https://api-production-b486.up.railway.app EARN_API_URL=<earn service> \
+PORTFOLIO_API_URL=https://api-production-b486.up.railway.app EARN_API_URL=https://api-production-b486.up.railway.app/api \
   uv run python main.py
 uv run ruff check && uv run ruff format --check && uv run mypy && uv run pytest -q
 ```

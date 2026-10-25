@@ -19,7 +19,7 @@ from app.store import MemoryStore, RedisStore
 
 http = httpx.AsyncClient(timeout=httpx.Timeout(10, connect=5))
 source = PortfolioApiSource(os.environ.get("PORTFOLIO_API_URL", "http://localhost:3000"), http)
-catalog = PoolCatalog(os.environ.get("EARN_API_URL", "http://localhost:8080"), http)
+catalog = PoolCatalog(os.environ.get("EARN_API_URL", "http://localhost:3000/api"), http)
 
 app = create_app(
     source,

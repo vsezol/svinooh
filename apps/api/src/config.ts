@@ -47,7 +47,6 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-me',
   // Internal URL of the auth service — the gateway forwards /auth/* to it.
   authServiceUrl: (process.env.AUTH_SERVICE_URL || 'http://localhost:3001').replace(/\/+$/, ''),
-  earnApiUrl: (process.env.EARN_API_URL || 'http://localhost:8080').replace(/\/+$/, ''),
   // How often a wallet that's in use is rescanned. Used for the "stale" flag
   // (3× this) and reported to the frontend. It used to have to match a second
   // copy of this variable in the wallet service, and reading as stale the

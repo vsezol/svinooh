@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '@svinooh/db';
 import type {
   DepositBuildDto,
@@ -12,10 +7,12 @@ import type {
   DepositLandingStatus,
   DepositStepDto,
 } from '@svinooh/shared';
-import { config } from '../config';
+import { EarnApi, type WireEffects, type WireTransaction } from '../earn/earn.api';
+import { problemOf } from '../earn/api/problems';
 import { ScanRequests, type WalletAfterLanding } from '../wallet/scan-requests.service';
 
-interface WireDeposit {
+/** The one shape of a built transaction the deposits module reads */
+type WireDeposit = WireTransaction & {
   transaction: string;
   fee_payer: string;
   instructions: number;
@@ -34,43 +31,7 @@ interface WireDeposit {
     above_pct?: string;
     holding: string;
   };
-}
-
-interface WireLanding {
-  signature: string;
-  status: DepositLandingStatus;
-  slot: number | null;
-  error: string | null;
-}
-
-interface WireEffects {
-  slot: number;
-  coins: Array<{ mint: string; symbol: string; amount: string; price_usd: string | null }>;
-  vaults: Array<{
-    address: string;
-    farm: string | null;
-    shares_mint: string | null;
-    name: string;
-    token: { symbol: string };
-    amount: string;
-    price_usd: string | null;
-    apy: string | null;
-  }>;
-  pairs: Array<{
-    pool: { id: string; x: { symbol: string }; y: { symbol: string }; base_fee_pct: string; price: string };
-    price_x_usd: string;
-    price_y_usd: string;
-    positions: Array<{
-      address: string;
-      amount_x: string;
-      amount_y: string;
-      lower_price: string;
-      upper_price: string;
-      in_range: boolean;
-      fees_usd: string;
-    }>;
-  }>;
-}
+};
 
 const THE_CALLER_CAN_FIX = new Set([400, 404, 422]);
 
@@ -124,43 +85,49 @@ type Built = DepositBuildDto & Required<Pick<DepositBuildDto, 'owner' | 'action'
 const CHAINS: Record<string, string> = { sol: 'SOL' };
 
 /**
- * Which of earn's endpoints builds what a card asks for. A deposit and a
+ * Which of earn's calls builds what a card asks for. A deposit and a
  * withdrawal of the pool's own token are plain; paying with another coin,
  * ending as another, or leaving another pool is a move, swapped on the way
- * wherever the tokens differ.
+ * wherever the tokens differ. The bodies are the wire bodies the routes take:
+ * earn parses them the same way whether they arrive by HTTP or from here.
  */
-function earnRequestFor(asked: Built): [string, Record<string, string | undefined>] {
-  const { poolId, amount, owner, action, fromPoolId, payWith, receiveAs } = asked;
-  const pool = encodeURIComponent(poolId ?? '');
-  const liquidity = {
+function earnBuild(earn: EarnApi, asked: Built): Promise<WireTransaction> {
+  const { poolId = '', amount, owner, action, fromPoolId, payWith, receiveAs } = asked;
+  // What JSON did on the wire: a field that is not there is not there
+  const liquidity = compact({
     amount_x: asked.amountX,
     amount_y: asked.amountY,
     below_pct: asked.belowPct,
     above_pct: asked.abovePct,
-  };
+  });
+  const built = (answer: Promise<{ data: WireTransaction }>) => answer.then((a) => a.data);
   if (action === 'provide') {
     const spend = fromPoolId ? { from: fromPoolId, amount } : payWith ? { coin: payWith, amount } : {};
-    return [`/v1/liquidity/pools/${pool}/provide`, { owner, ...spend, ...liquidity }];
+    return earn.provide(poolId, { owner, ...spend, ...liquidity });
   }
-  if (action === 'close' || action === 'rebalance') {
-    const position = encodeURIComponent(asked.position ?? '');
-    return [`/v1/liquidity/pools/${pool}/positions/${position}/${action}`, { owner, ...liquidity }];
-  }
-  if (action === 'swap') {
-    return ['/v1/lend/moves', { from_coin: payWith, to_coin: receiveAs, amount, owner }];
-  }
-  if (action === 'move') {
-    return ['/v1/lend/moves', { from: fromPoolId, to: poolId, amount, owner }];
-  }
+  if (action === 'close') return earn.close(poolId, asked.position ?? '', { owner, ...liquidity });
+  if (action === 'rebalance')
+    return earn.rebalance(poolId, asked.position ?? '', {
+      owner,
+      ...liquidity,
+    });
+  if (action === 'swap') return built(earn.move({ from_coin: payWith, to_coin: receiveAs, amount, owner }));
+  if (action === 'move') return built(earn.move({ from: fromPoolId, to: poolId, amount, owner }));
   if (action === 'withdraw') {
     return receiveAs
-      ? ['/v1/lend/moves', { from: poolId, to_coin: receiveAs, amount, owner }]
-      : [`/v1/lend/pools/${pool}/withdraw`, { amount, owner }];
+      ? built(earn.move({ from: poolId, to_coin: receiveAs, amount, owner }))
+      : built(earn.withdraw(poolId, { amount, owner }));
   }
   return payWith
-    ? ['/v1/lend/moves', { from_coin: payWith, to: poolId, amount, owner }]
-    : [`/v1/lend/pools/${pool}/deposit`, { amount, owner }];
+    ? built(earn.move({ from_coin: payWith, to: poolId, amount, owner }))
+    : built(earn.deposit(poolId, { amount, owner }));
 }
+
+const compact = (body: Record<string, string | undefined>): Record<string, string> =>
+  Object.fromEntries(Object.entries(body).filter(([, value]) => value !== undefined)) as Record<
+    string,
+    string
+  >;
 
 const stepOf = (then: NonNullable<WireDeposit['then']>): DepositStepDto => {
   const step: Record<string, string | undefined> = {
@@ -196,12 +163,12 @@ export class DepositsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly scans: ScanRequests,
+    private readonly earnApi: EarnApi,
   ) {}
 
   async build(asked: Built): Promise<DepositBuiltDto> {
     const { amount, owner, action } = asked;
-    const [path, body] = earnRequestFor(asked);
-    const data = await this.earn<WireDeposit>(path, { method: 'POST', body: JSON.stringify(body) });
+    const data = (await this.earn(() => earnBuild(this.earnApi, asked))) as WireDeposit;
     const how = amount ?? [asked.amountX, asked.amountY].filter(Boolean).join(' + ');
     this.log.log(`built ${action} ${how} ${routeOf(asked)} for ${owner.slice(0, 6)}…`);
     const then = data.then;
@@ -224,20 +191,34 @@ export class DepositsService {
     const chain = CHAINS[network];
     if (!chain) throw new BadRequestException(`${network} deposits are not followed here yet`);
 
-    const seen = await this.earn<WireLanding>(
-      `/v1/lend/deposits/${encodeURIComponent(signature)}?network=${encodeURIComponent(network)}`,
-    );
-    if (seen.status !== 'landed') {
-      return { status: seen.status, slot: seen.slot, error: seen.error, tracked: false, portfolio: null };
+    const seen = await this.earn(() => this.earnApi.landing(signature, { network }));
+    const status = seen.status as DepositLandingStatus;
+    if (status !== 'landed') {
+      return {
+        status,
+        slot: seen.slot,
+        error: seen.error,
+        tracked: false,
+        portfolio: null,
+      };
     }
 
     const tracked = await this.prisma.portfolioWallet.findFirst({
-      where: { wallet: { chain, address: owner }, portfolio: { owner: { userId } } },
+      where: {
+        wallet: { chain, address: owner },
+        portfolio: { owner: { userId } },
+      },
       select: { walletId: true, portfolio: { select: { slug: true } } },
     });
     if (!tracked) {
       this.log.log(`${signature.slice(0, 8)}… landed for an address nobody here tracks`);
-      return { status: 'landed', slot: seen.slot, error: null, tracked: false, portfolio: null };
+      return {
+        status: 'landed',
+        slot: seen.slot,
+        error: null,
+        tracked: false,
+        portfolio: null,
+      };
     }
 
     this.log.log(`${signature.slice(0, 8)}… landed, rescanning ${owner.slice(0, 6)}…`);
@@ -258,45 +239,37 @@ export class DepositsService {
     owner: string,
     network: string,
   ): Promise<WalletAfterLanding | null> {
-    const path =
-      `/v1/lend/deposits/${encodeURIComponent(signature)}/effects` +
-      `?network=${encodeURIComponent(network)}&owner=${encodeURIComponent(owner)}`;
+    // Bounded, as the HTTP call it replaces was: reading what a transaction
+    // left behind asks the chain, and a slow node must not hold the rescan
+    let timer: NodeJS.Timeout | undefined;
+    const gaveUp = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`no answer in ${EFFECTS_WAIT_MS}ms`)), EFFECTS_WAIT_MS);
+    });
     try {
-      const answered = await fetch(`${config.earnApiUrl}${path}`, {
-        signal: AbortSignal.timeout(EFFECTS_WAIT_MS),
-      });
-      if (!answered.ok) throw new Error(`earn answered ${answered.status}`);
-      const body = (await answered.json()) as { data?: WireEffects | null };
-      return body.data ? walletAfter(body.data) : null;
+      const found = await Promise.race([this.earnApi.effects(signature, { network, owner }), gaveUp]);
+      return found ? walletAfter(found) : null;
     } catch (unread) {
       this.log.warn(`what ${signature.slice(0, 8)}… left could not be read: ${(unread as Error).message}`);
       return null;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
-  private async earn<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const answered = await fetch(`${config.earnApiUrl}${path}`, {
-      ...init,
-      headers: { 'content-type': 'application/json', ...init.headers },
-    }).catch(() => null);
-    if (!answered) {
-      throw new ServiceUnavailableException('the earn service did not answer');
+  /**
+   * An earn failure, as this module's callers should see it: what the caller
+   * can fix is a 400 with earn's own words, what earn cannot do right now is a
+   * 503. The same split the HTTP client here made on earn's status codes.
+   */
+  private async earn<T>(call: () => Promise<T>): Promise<T> {
+    try {
+      return await call();
+    } catch (error) {
+      const problem = problemOf(error);
+      if (!problem) throw error;
+      throw THE_CALLER_CAN_FIX.has(problem.status)
+        ? new BadRequestException(problem.detail)
+        : new ServiceUnavailableException(problem.detail);
     }
-
-    const body = (await answered.json().catch(() => null)) as
-      | { data?: T; detail?: string }
-      | null;
-
-    if (!answered.ok) {
-      const said = body?.detail ?? `the earn service answered ${answered.status}`;
-      throw THE_CALLER_CAN_FIX.has(answered.status)
-        ? new BadRequestException(said)
-        : new ServiceUnavailableException(said);
-    }
-    if (!body?.data) {
-      throw new ServiceUnavailableException('the earn service answered with nothing');
-    }
-    return body.data;
   }
-
 }

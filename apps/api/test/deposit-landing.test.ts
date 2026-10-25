@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert';
 import { describe, test } from 'node:test';
 import type { PrismaService } from '@svinooh/db';
 import { DepositsService } from '../src/deposits/deposits.service';
+import type { EarnApi } from '../src/earn/earn.api';
 import type { ScanRequests, WalletAfterLanding } from '../src/wallet/scan-requests.service';
 
 const SIGNATURE = '5ndCyVRV3mQRLmTdhKbJdFVWEPfYhfqZmAaLvQnqaJ8pZJqvHkBQ7kkbXHbPMRLzrXhDcQAqfHuNvAhVQDWkZqYh';
@@ -14,15 +15,19 @@ const standing = (
   tracked: Tracked,
   left: unknown = null,
 ) => {
+  // earn in process, its calls written down as the routes they used to be
   const calls: string[] = [];
-  globalThis.fetch = (async (url: string) => {
-    calls.push(String(url));
-    if (String(url).includes('/effects?')) {
+  const earn = {
+    landing: async (signature: string, query: Record<string, string>) => {
+      calls.push(`/v1/lend/deposits/${signature}?network=${query.network}`);
+      return landing;
+    },
+    effects: async (signature: string, query: Record<string, string>) => {
+      calls.push(`/v1/lend/deposits/${signature}/effects?network=${query.network}&owner=${query.owner}`);
       if (left instanceof Error) throw left;
-      return { ok: true, status: 200, json: async () => ({ data: left }) } as Response;
-    }
-    return { ok: true, status: 200, json: async () => ({ data: landing }) } as Response;
-  }) as typeof fetch;
+      return left;
+    },
+  } as unknown as EarnApi;
 
   const prisma = {
     portfolioWallet: { findFirst: async () => tracked },
@@ -33,7 +38,11 @@ const standing = (
     landed: (walletId: string, after: WalletAfterLanding | null) => rescanned.push([walletId, after]),
   } as unknown as ScanRequests;
 
-  return { calls, rescanned, deposits: new DepositsService(prisma, scans) };
+  return {
+    calls,
+    rescanned,
+    deposits: new DepositsService(prisma, scans, earn),
+  };
 };
 
 const settled = async () => {
@@ -77,7 +86,14 @@ describe('WhenADepositLands', () => {
       { walletId: 'w-1', portfolio: { slug: 'my-money' } },
       {
         slot: 371_802_114,
-        coins: [{ mint: 'So1', symbol: 'SOL', amount: '0.062747282', price_usd: '117.14' }],
+        coins: [
+          {
+            mint: 'So1',
+            symbol: 'SOL',
+            amount: '0.062747282',
+            price_usd: '117.14',
+          },
+        ],
         vaults: [
           {
             pool_id: 'sol:kamino:vault:VAULT',
@@ -125,7 +141,14 @@ describe('WhenADepositLands', () => {
         'w-1',
         {
           slot: 371_802_114,
-          coins: [{ mint: 'So1', symbol: 'SOL', amount: 0.062747282, priceUsd: 117.14 }],
+          coins: [
+            {
+              mint: 'So1',
+              symbol: 'SOL',
+              amount: 0.062747282,
+              priceUsd: 117.14,
+            },
+          ],
           vaults: [
             {
               address: 'VAULT',
