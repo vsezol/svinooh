@@ -521,8 +521,8 @@ describe('enrich — a loan takes the facts of its own account', () => {
         }),
       ],
       facts([
-        loanFact({ platform: 'aave', pool: '0xpool', network: 'arb', token: 'USDC', borrowRate: 4 }),
-        loanFact({ platform: 'aave', pool: '0xpool', network: 'arb', token: 'USDT', borrowRate: 6 }),
+        loanFact({ platform: 'aave3', pool: '0xpool', network: 'arb', token: 'USDC', borrowRate: 4 }),
+        loanFact({ platform: 'aave3', pool: '0xpool', network: 'arb', token: 'USDT', borrowRate: 6 }),
       ]),
     );
     assert.equal(p.borrowApy, 0.05);
@@ -540,10 +540,76 @@ describe('enrich — a loan takes the facts of its own account', () => {
           tokens: [leg('USDC', 'borrow', -300)],
         }),
       ],
-      facts([loanFact({ platform: 'aave', network: 'base', market: 'Aave V3 Base', borrowRate: 4 })]),
+      facts([loanFact({ platform: 'aave3', network: 'base', market: 'Aave V3 Base', borrowRate: 4 })]),
     );
     assert.equal(p.borrowApy, 0.08);
     assert.equal(p.loan, undefined);
+  });
+
+  test('a V3 loan and a V4 loan in the same asset each get their own rate', () => {
+    const [v3, v4] = enrich(
+      [
+        // Zerion's spelling of both the protocol and the network
+        position({
+          symbol: 'Aave V3',
+          platform: 'aave-v3',
+          name: 'Lending',
+          network: 'ethereum',
+          tokens: [leg('USDC', 'borrow', -300)],
+        }),
+        position({
+          symbol: 'Aave V4',
+          platform: 'aave4',
+          name: 'Lending',
+          network: 'eth',
+          tokens: [leg('USDC', 'borrow', -300)],
+        }),
+      ],
+      facts([
+        loanFact({ platform: 'aave3', network: 'eth', token: 'USDC', borrowRate: 4 }),
+        loanFact({ platform: 'aave4', network: 'eth', token: 'USDC', borrowRate: 5 }),
+      ]),
+    );
+    assert.equal(v3.borrowApy, 0.04);
+    assert.equal(v4.borrowApy, 0.05);
+  });
+
+  test('two assets owed to one market are one loan when the position names no pool', () => {
+    const [p] = enrich(
+      [
+        position({
+          symbol: 'Aave V4',
+          platform: 'aave-v4',
+          name: 'Lending',
+          network: 'ethereum',
+          tokens: [leg('USDC', 'borrow', -300), leg('USDT', 'borrow', -100)],
+        }),
+      ],
+      facts([
+        loanFact({ platform: 'aave4', pool: '0xspoke', network: 'eth', token: 'USDC', borrowRate: 4 }),
+        loanFact({ platform: 'aave4', pool: '0xspoke', network: 'eth', token: 'USDT', borrowRate: 8 }),
+      ]),
+    );
+    assert.equal(p.borrowApy, 0.05);
+  });
+
+  test('two assets owed to two markets are not guessed between', () => {
+    const [p] = enrich(
+      [
+        position({
+          symbol: 'Aave V3',
+          platform: 'aave-v3',
+          name: 'Lending',
+          network: 'ethereum',
+          tokens: [leg('USDC', 'borrow', -300), leg('USDT', 'borrow', -100)],
+        }),
+      ],
+      facts([
+        loanFact({ platform: 'aave3', pool: '0xcore', network: 'eth', token: 'USDC', borrowRate: 4 }),
+        loanFact({ platform: 'aave3', pool: '0xlido', network: 'eth', token: 'USDT', borrowRate: 8 }),
+      ]),
+    );
+    assert.equal(p.borrowApy, undefined);
   });
 
   test('a farm is not the loan beside it', () => {

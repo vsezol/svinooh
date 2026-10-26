@@ -11,10 +11,10 @@ const logger = new Logger('DefiFacts');
  * Aave loan actually costs — a borrow rate DeBank carries nowhere, which is why
  * the borrow-rate threshold in the alert settings has had nothing to fire on.
  *
- * Both are read across four networks through a list of public nodes, so both
- * are slow and both are allowed to fail per network. A network that could not
- * be reached is named in `failed`: it told us nothing, which is not the same as
- * telling us there is nothing there.
+ * Uniswap is read across four networks through a list of public nodes, Aave
+ * through its own API for every chain it is on. Both are allowed to fail, per
+ * network or per version. What could not be reached is named in `failed`: it
+ * told us nothing, which is not the same as telling us there is nothing there.
  */
 export async function evmFacts(address: string): Promise<DefiFacts> {
   const [pools, lending] = await Promise.all([

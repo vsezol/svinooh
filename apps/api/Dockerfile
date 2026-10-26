@@ -40,4 +40,4 @@ EXPOSE 3000
 # instrumentation patches modules as they are required, so anything already
 # loaded would never be traced. With OTEL_EXPORTER_OTLP_ENDPOINT unset it is a
 # no-op.
-CMD ["sh", "-c", "npx prisma migrate deploy --schema libs/db/prisma/schema.prisma && node -r @svinooh/common/dist/tracing apps/api/dist/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy --schema libs/db/prisma/schema.prisma && exec node -r @svinooh/common/dist/tracing apps/api/dist/main.js"]

@@ -31,7 +31,6 @@ import { forgetQuestionInLink, questionInLink } from '../lib/handoff';
 import { SideNav, type Tab } from '../components/SideNav';
 import { SyncedAgo } from '../components/SyncedAgo';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { Transfers } from '../components/Transfers';
 import { WalletRow, type WalletActions } from '../components/WalletRow';
 import { track } from '../lib/analytics';
 import { api, ApiError, tokenStore } from '../lib/api';
@@ -67,11 +66,6 @@ const AdminPanel = dynamic(() => import('../components/admin/AdminPanel'), {
     </div>
   ),
 });
-
-const VIEWS = [
-  { key: 'positions', label: 'POSITIONS' },
-  { key: 'transfers', label: 'DEPOSITS & WITHDRAWALS' },
-] as const;
 
 /** What the window moved by, in money and in percent: "+$432 (+0.51%)" */
 interface Change {
@@ -280,7 +274,6 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   /** Whether pointing at a moment on one chart reads it on the others — see ChartSettings */
   const [syncCursor, setSyncCursor] = useSyncCursor();
   const [hideSmall, setHideSmall] = useState(false);
-  const [view, setView] = useState<'positions' | 'transfers'>('positions');
   // The saved preference, applied once per portfolio load. Seeding rather than
   // deriving keeps a toggle made just now from being undone by a reload that
   // was already in the air with the older answer.
@@ -1040,55 +1033,37 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
               </div>
             ) : null}
 
-            <div style={{ marginTop: 26 }}>
-              <Segmented
-                label="Portfolio view"
-                size="md"
-                items={VIEWS}
-                value={view}
-                onChange={setView}
-              />
+            {/* the dust switch, and what the list adds up to */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 26, marginBottom: 12 }}>
+              <Checkbox checked={hideSmall} onChange={toggleHideSmall} label="Hide small balances" />
+              <div className="mono ph-mask" style={{ fontSize: 'var(--fs-tag)', fontWeight: 'var(--fw-normal)', color: 'var(--mut)' }}>
+                {walletCount} {walletCount === 1 ? 'wallet' : 'wallets'} · {fmtUsd(data.totalUsd)}
+              </div>
             </div>
 
-            {view === 'transfers' ? (
-              <div style={{ marginTop: 16 }}>
-                <Transfers slug={slug} wallets={wallets} />
-              </div>
+            {wallets.length === 0 ? (
+              <Card style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--mut)', fontSize: 'var(--fs-body)' }}>
+                {canAdd
+                  ? 'No wallets yet. Paste an address above — the network is detected automatically.'
+                  : 'This portfolio has no wallets yet.'}
+              </Card>
             ) : (
-              <>
-                {/* the dust switch, and what the list adds up to */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 16, marginBottom: 12 }}>
-                  <Checkbox checked={hideSmall} onChange={toggleHideSmall} label="Hide small balances" />
-                  <div className="mono ph-mask" style={{ fontSize: 'var(--fs-tag)', fontWeight: 'var(--fw-normal)', color: 'var(--mut)' }}>
-                    {walletCount} {walletCount === 1 ? 'wallet' : 'wallets'} · {fmtUsd(data.totalUsd)}
-                  </div>
-                </div>
-
-                {wallets.length === 0 ? (
-                  <Card style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--mut)', fontSize: 'var(--fs-body)' }}>
-                    {canAdd
-                      ? 'No wallets yet. Paste an address above — the network is detected automatically.'
-                      : 'This portfolio has no wallets yet.'}
-                  </Card>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {wallets.map((w) => (
-                      <WalletRow
-                        key={w.id}
-                        slug={slug}
-                        wallet={w}
-                        actions={walletActions}
-                        total={data.totalUsd}
-                        hideSmall={hideSmall}
-                        onRemove={() => void removeWallet(w.id)}
-                        onRename={(label) => void renameWallet(w.id, label)}
-                        onRequireAuth={startClaim}
-                        onRebalance={isOwner && AGENT_ENABLED ? rebalance : undefined}
-                      />
-                    ))}
-                  </div>
-                )}
-              </>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {wallets.map((w) => (
+                  <WalletRow
+                    key={w.id}
+                    slug={slug}
+                    wallet={w}
+                    actions={walletActions}
+                    total={data.totalUsd}
+                    hideSmall={hideSmall}
+                    onRemove={() => void removeWallet(w.id)}
+                    onRename={(label) => void renameWallet(w.id, label)}
+                    onRequireAuth={startClaim}
+                    onRebalance={isOwner && AGENT_ENABLED ? rebalance : undefined}
+                  />
+                ))}
+              </div>
             )}
 
             {/* The way out, after everything else. Owners only — an anonymous

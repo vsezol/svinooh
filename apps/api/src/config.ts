@@ -88,10 +88,6 @@ export const config = {
     '',
   ),
   webOrigin: process.env.WEB_ORIGIN || '*',
-  // Zerion, for the EVM and SOL transfers behind a portfolio's deposits and
-  // withdrawals — the same key scanner-evm reads balances with. Empty — those
-  // wallets are reported unread; TRON and BTC need no key.
-  zerionApiKey: process.env.ZERION_API_KEY || '',
   // The node the live pool watch subscribes to — see wallet/live
   solanaWsUrl: solanaWsUrl(),
 };

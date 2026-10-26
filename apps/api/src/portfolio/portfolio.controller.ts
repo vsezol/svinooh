@@ -155,16 +155,6 @@ export class PortfolioController {
     return this.portfolios.history(slug, normalizeRange(range), userId);
   }
 
-  /**
-   * Deposits and withdrawals: what moved between the portfolio's wallets and the
-   * outside. Public by link like the history — it is read off the same public
-   * addresses the page already shows, and carries no label.
-   */
-  @Get(':slug/transfers')
-  transfers(@Param('slug') slug: string) {
-    return this.portfolios.transfers(slug);
-  }
-
   // Optional auth: an anonymous portfolio accepts wallets from anyone, an owned
   // one only from its owner — the service decides which applies. 201 when the
   // wallet went in, 200 when it was already there; the same body either way.
