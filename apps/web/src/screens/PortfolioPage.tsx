@@ -46,7 +46,7 @@ import {
   prefetchHistory,
   type History,
 } from '../lib/history';
-import { AGENT_ENABLED, AGENT_URL, AGENT_WIDGET_URL } from '../lib/agent';
+import { AGENT_ENABLED, AGENT_URL } from '../lib/agent';
 import { PERIODS, WINDOW_MS } from '../lib/ranges';
 
 /**
@@ -506,7 +506,7 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   const canChat = isOwner && AGENT_ENABLED;
   useEffect(() => {
     if (!canChat) return;
-    const start = () => preloadAgent(AGENT_WIDGET_URL);
+    const start = () => preloadAgent();
     const idle = window.requestIdleCallback;
     if (idle) {
       const id = idle(start, { timeout: 4000 });
@@ -847,7 +847,6 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
               <div {...paneProps('agent')}>
                 {onStrip('agent') ? (
                   <AgentEmbed
-                    widgetUrl={AGENT_WIDGET_URL}
                     agentUrl={AGENT_URL}
                     slug={slug}
                     token={tokenStore.get() ?? undefined}

@@ -7,9 +7,9 @@ import {
   requestOf,
   settledOf,
   sizeOf,
-} from '../src/components/blocks/DepositBlock';
-import type { DepositRequest } from '../src/app/types';
-import type { DepositBlock } from '../src/app/types';
+} from '../src/agent/components/blocks/DepositBlock';
+import type { DepositRequest } from '../src/agent/app/types';
+import type { DepositBlock } from '../src/agent/app/types';
 
 const card: DepositBlock = {
   kind: 'deposit',
@@ -87,10 +87,13 @@ describe('WhatTheHostIsHandedAndWhatComesBack', () => {
   });
 
   test('half a move is told as half, with why the second half did not happen', () => {
-    const told = settledOf(
-      { ...card, action: 'move', amount: 'all' } as never,
-      { ok: true, signature: '5xy', landed: 'landed', halfway: true, error: 'User rejected the request.' },
-    );
+    const told = settledOf({ ...card, action: 'move', amount: 'all' } as never, {
+      ok: true,
+      signature: '5xy',
+      landed: 'landed',
+      halfway: true,
+      error: 'User rejected the request.',
+    });
     assert.equal(told?.halfway, true);
     assert.equal(told?.error, 'User rejected the request.');
   });
@@ -185,7 +188,13 @@ describe('WhatTheAgentIsToldAfterASignature', () => {
 
   test('what was swapped is told in what left and what it became', () => {
     const told = settledOf(
-      { ...request, action: 'withdraw', token: 'SOL', amount: '0.1', receiveAs: { mint: 'EPjF', symbol: 'USDC' } },
+      {
+        ...request,
+        action: 'withdraw',
+        token: 'SOL',
+        amount: '0.1',
+        receiveAs: { mint: 'EPjF', symbol: 'USDC' },
+      },
       { ok: true, signature: '5xy', landed: 'landed' },
     );
     assert.equal(told?.token, 'SOL');
@@ -200,7 +209,14 @@ describe('WhatTheAgentIsToldAfterASignature', () => {
   test('stopping between steps says what the money waits in', () => {
     const told = settledOf(
       { ...request, action: 'move', fromToken: 'USDS', fromPool: 'Keel Flagship USDS' },
-      { ok: true, signature: '5xy', landed: 'landed', halfway: true, holding: 'USDS', error: 'User rejected the request.' },
+      {
+        ok: true,
+        signature: '5xy',
+        landed: 'landed',
+        halfway: true,
+        holding: 'USDS',
+        error: 'User rejected the request.',
+      },
     );
     assert.equal(told?.halfway, true);
     assert.equal(told?.holding, 'USDS');
@@ -293,21 +309,18 @@ describe('ALiquidityCard', () => {
 
   test('a card a strategy put up is told back as its, with the position it acted on', () => {
     const request = requestOf({ ...lp, action: 'rebalance', position: 'Def4KL', strategy: 'lpdown' });
-    assert.deepEqual(
-      settledOf(request, { ok: true, signature: '5xy', landed: 'landed' }),
-      {
-        amount: '5',
-        token: 'USDC',
-        pool: 'SOL-USDC',
-        action: 'rebalance',
-        from_pool: null,
-        strategy: 'lpdown',
-        position: 'Def4KL',
-        status: 'landed',
-        signature: '5xy',
-        error: null,
-      },
-    );
+    assert.deepEqual(settledOf(request, { ok: true, signature: '5xy', landed: 'landed' }), {
+      amount: '5',
+      token: 'USDC',
+      pool: 'SOL-USDC',
+      action: 'rebalance',
+      from_pool: null,
+      strategy: 'lpdown',
+      position: 'Def4KL',
+      status: 'landed',
+      signature: '5xy',
+      error: null,
+    });
   });
 
   test('hands the host the range and the coin to build it with', () => {

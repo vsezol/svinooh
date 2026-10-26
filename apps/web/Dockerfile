@@ -14,12 +14,10 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 # simply a build without analytics.
 ARG NEXT_PUBLIC_POSTHOG_KEY
 ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
-# Where the agent deployment lives. Inlined at build time like the others;
-# absent, the AI tab simply has nothing to load.
+# Where the agent service lives. Inlined at build time like the others;
+# absent, the AI tab simply has nothing to talk to.
 ARG NEXT_PUBLIC_AGENT_URL
 ENV NEXT_PUBLIC_AGENT_URL=$NEXT_PUBLIC_AGENT_URL
-ARG NEXT_PUBLIC_AGENT_WIDGET_URL
-ENV NEXT_PUBLIC_AGENT_WIDGET_URL=$NEXT_PUBLIC_AGENT_WIDGET_URL
 # The MCP server the /connect page answers for: an MCP client's sign-in lands
 # there, and the person's yes or no is sent back to this address.
 ARG NEXT_PUBLIC_MCP_URL

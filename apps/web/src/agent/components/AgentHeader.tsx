@@ -3,7 +3,6 @@
 // pulls in — the barrel would be the whole kit, charts and icon set included.
 import { AppHeader } from '@svinooh/ui/AppHeader';
 
-import './chrome.css';
 
 /** The product's own address, which the other two tabs are pages of. */
 const PRODUCT = 'https://svinooh.com';

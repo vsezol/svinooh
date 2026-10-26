@@ -1,9 +1,5 @@
-/* Kit layers: colors (theme.css, dark default + data-theme='light'),
-   measurements (tokens.css), components (ui.css). */
-@import '@svinooh/ui/theme.css';
-@import '@svinooh/ui/tokens.css';
-@import '@svinooh/ui/ui.css';
-@import '@svinooh/ui/shell.css';
+/* The chat's own sheet. The kit it draws with — theme, tokens, components,
+   shell — is loaded once by src/styles.css, which also imports this file. */
 
 /* Shell skeleton. The non-negotiable layout rule: a strict column of
    [log, flex:1, scrolls, content anchored to the bottom] over

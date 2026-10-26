@@ -11,7 +11,7 @@ import { AuthModal } from '../components/AuthModal';
 import { SideNav, type Tab } from '../components/SideNav';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { TAB_PARAM, tabsFor } from '../components/tabs';
-import { AGENT_ENABLED, AGENT_URL, AGENT_WIDGET_URL } from '../lib/agent';
+import { AGENT_ENABLED, AGENT_URL } from '../lib/agent';
 import { tokenStore } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { clearQuestion, forgetQuestionInLink, peekQuestion, questionInLink } from '../lib/handoff';
@@ -302,7 +302,6 @@ export function AgentPage({ conversationId }: { conversationId?: string } = {}) 
               </div>
             ) : (
               <AgentEmbed
-                widgetUrl={AGENT_WIDGET_URL}
                 agentUrl={AGENT_URL}
                 slug={slug}
                 token={token}

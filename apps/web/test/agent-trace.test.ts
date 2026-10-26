@@ -1,8 +1,8 @@
 import { strict as assert } from 'node:assert';
 import { describe, test } from 'node:test';
-import { asReceipt, secs, traceOf } from '../src/app/trace';
-import type { AgentBlock, TraceBlock } from '../src/app/types';
-import type { StepEvent } from '../src/app/wire';
+import { asReceipt, secs, traceOf } from '../src/agent/app/trace';
+import type { AgentBlock, TraceBlock } from '../src/agent/app/types';
+import type { StepEvent } from '../src/agent/app/wire';
 
 const done = (id: string, ms: number, label = id): StepEvent => ({ id, label, state: 'done', ms });
 const failed = (id: string, ms: number, label = id): StepEvent => ({

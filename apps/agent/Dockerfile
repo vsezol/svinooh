@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Build context is the monorepo ROOT (railway.json sets dockerfilePath; leave
 # Root Directory as "/"). A standalone Python service: npm and Nx do not build
-# it, and the widget that talks to it is its own deployment (apps/agent-web).
+# it, and the chat that talks to it is part of the web app (apps/web/src/agent).
 #
 # Two stages. The first has uv and installs exactly what uv.lock says; the
 # second carries only the interpreter, that venv and the code, and runs as a
