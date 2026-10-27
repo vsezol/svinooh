@@ -1,6 +1,7 @@
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -80,6 +81,7 @@ class Wallet:
     positions: tuple[Position, ...] = ()
     total_usd: float | None = None
     stale: bool = False
+    last_synced_at: datetime | None = None
 
     @property
     def largest_first(self) -> tuple[Position, ...]:

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from .arithmetic import evaluate
@@ -100,13 +101,28 @@ def _breakdown(label: str, totals: tuple[Total, ...], whole: float, limit: int =
     return f"{label}: {', '.join(parts)}"
 
 
-def _wallet_lines(wallet: Wallet, cap: int) -> list[str]:
+def scanned_ago(at: datetime | None, now: datetime) -> str:
+    if at is None:
+        return "never scanned"
+    minutes = int((now - at).total_seconds() // 60)
+    if minutes < 1:
+        return "scanned just now"
+    if minutes < 120:
+        return f"scanned {minutes} min ago"
+    hours = minutes // 60
+    if hours < 48:
+        return f"scanned {hours} h ago"
+    return f"scanned {hours // 24} days ago"
+
+
+def _wallet_lines(wallet: Wallet, cap: int, now: datetime) -> list[str]:
     stale = ", stale data" if wallet.stale else ""
     positions = wallet.largest_first
     header = (
         f"Wallet {short_address(wallet.address)} "
         f"[{wallet.chain}] — {usd(wallet.total_usd)}, "
-        f"{len(positions)} position(s), status {wallet.status}{stale}:"
+        f"{len(positions)} position(s), status {wallet.status}{stale}, "
+        f"{scanned_ago(wallet.last_synced_at, now)}:"
     )
     lines = [header] + [f"  - {position_line(p)}" for p in positions[:cap]]
     rest = positions[cap:]
@@ -118,12 +134,13 @@ def _wallet_lines(wallet: Wallet, cap: int) -> list[str]:
     return lines
 
 
-def portfolio_context(portfolio: Portfolio, max_positions: int) -> str:
+def portfolio_context(portfolio: Portfolio, max_positions: int, now: datetime | None = None) -> str:
+    now = now or datetime.now(UTC)
     whole = portfolio.total_usd
     lines = [
         f'Portfolio "{portfolio.title}" — '
         f"total {usd(whole)}, {len(portfolio.wallets)} wallet(s), "
-        f"{len(portfolio.positions)} position(s)."
+        f"{len(portfolio.positions)} position(s), {_freshness(portfolio, now)}."
     ]
     for line in (
         _breakdown("By network", portfolio.totals_by(lambda p: p.network), whole),
@@ -133,8 +150,16 @@ def portfolio_context(portfolio: Portfolio, max_positions: int) -> str:
         if line:
             lines.append(line)
     for wallet in portfolio.wallets:
-        lines.extend(_wallet_lines(wallet, max_positions))
+        lines.extend(_wallet_lines(wallet, max_positions, now))
     return _capped(lines)
+
+
+def _freshness(portfolio: Portfolio, now: datetime) -> str:
+    scanned = [w.last_synced_at for w in portfolio.wallets if w.last_synced_at is not None]
+    if not scanned:
+        return "not scanned yet"
+    oldest = scanned_ago(min(scanned), now)
+    return f"oldest wallet {oldest}" if len(scanned) > 1 else oldest
 
 
 def _capped(lines: list[str]) -> str:

@@ -65,6 +65,7 @@ class WalletWire(Wire):
     status: str = "?"
     total_usd: float | None = None
     stale: bool = False
+    last_synced_at: datetime | None = None
     positions: list[PositionWire] = Field(default_factory=list)
 
 
@@ -153,6 +154,7 @@ def _wallet(wire: WalletWire) -> Wallet:
         status=wire.status,
         total_usd=wire.total_usd,
         stale=wire.stale,
+        last_synced_at=wire.last_synced_at,
         positions=tuple(_position(p) for p in wire.positions),
     )
 
