@@ -61,6 +61,37 @@ data:
     - Steakhouse USDC (kamino vault) pays 5.12% net on USDC = 4.80% base + 0.32% rewards. $42.0M deposited. Risk low. id sol:kamino:vault:A1nS9pKq3vXw7
     Quote the net rate, name the risk in words with its reason, and never promise a rate will hold — base is what borrowers pay, the rest ends. Where a pool states a minimum, check it against what the user has before you name that pool: proposing one they cannot reach spends their turn on a refusal you could have read here.
 
+  whale_breakdown: |
+    Portfolio "Main" — total $158,536.15, 2 wallet(s), 18 position(s).
+    By network: eth $129,731.40 (82%), sol $16,279.00 (10%), arb $7,610.00 (5%), bsc $4,484.55 (3%), base $431.20 (0%)
+    By type: defi $110,224.95 (70%), token $48,311.20 (30%)
+    In protocols: ethena $56,210.40 (35%), aave3 $30,000.00 (19%), pendle $9,870.00 (6%), kamino $6,400.00 (4%), uniswap3 $4,120.00 (3%), gmx $2,340.00 (1%), thena $1,284.55 (1%)
+    Wallet 0x8f3a5c…b0d1 [EVM] — $142,257.15, 15 position(s), status ok:
+      - sUSDe (Ethena (Staked)): $56,210.40, eth, ethena, APY 7.1%
+      - AAVE-V3 (Aave V3 (Lending)): $30,000.00, eth, aave3, health 3.40
+      - ETH: $25,296.00, 10.2 @ $2,480.00, eth
+      - PT-sUSDe (Pendle (Principal Token)): $9,870.00, eth, pendle, APY 11.8%
+      - USDC: $8,000.00, 8,000 @ $1.00, eth
+      - UNI-V3 (Uniswap V3 (Liquidity Pool)) [ETH/USDC 0.05% fee]: $4,120.00, arb, uniswap3, APY 21.2%, range in
+      - BNB: $3,200.00, 5 @ $640.00, bsc
+      - GMX (GMX (Staked)): $2,340.00, arb, gmx, APY 9.4%
+      - THE-LP (Thena (Liquidity Pool)) [BNB/USDT 0.25% fee]: $1,284.55, bsc, thena, APY 19.0%, range in
+      - ARB: $1,150.00, 1,533 @ $0.75, arb
+      - unnamed position: $431.20, base
+      - LDO: $120.00, 150 @ $0.80, eth
+      - …and 3 smaller positions worth $235.00 in total (ask for details on any of them with the position search tool)
+    Wallet 5mVvq3nT…vX4r [SOL] — $16,279.00, 3 position(s), status ok:
+      - SOL: $9,150.00, 60 @ $152.50, sol
+      - Kamino (Lending): $6,400.00, sol, kamino
+      - JUP: $729.00, 900 @ $0.81, sol
+
+    A lookup returned:
+    Counted from every position's underlying tokens; what is owed is subtracted. Counted total $158,536.15.
+    Stablecoins: $110,480.40 held, $0.00 owed, $110,480.40 net — 69.69% of the counted total.
+    Volatile assets: $39,880.00 held, $0.00 owed, $39,880.00 net — 25.16% of the counted total.
+    Contents not reported by the source, so in neither figure above: $8,175.75 (5.16%) — UNI-V3 (Uniswap V3 (Liquidity Pool)) on arb $4,120.00, GMX (GMX (Staked)) on arb $2,340.00, THE-LP (Thena (Liquidity Pool)) on bsc $1,284.55, unnamed position on base $431.20.
+    Stablecoins by position: sUSDe (Ethena (Staked)) on eth $56,210.40 held, $0.00 owed; AAVE-V3 (Aave V3 (Lending)) on eth $30,000.00 held, $0.00 owed; PT-sUSDe (Pendle (Principal Token)) on eth $9,870.00 held, $0.00 owed; USDC on eth $8,000.00 held, $0.00 owed; Kamino (Lending) on sol $6,400.00 held, $0.00 owed.
+    By token, net: sUSDe $56,210.40 (35.46%), USDC $44,400.00 (28.01%), ETH $25,296.00 (15.96%), PT-sUSDe $9,870.00 (6.23%), SOL $9,150.00 (5.77%), BNB $3,200.00 (2.02%), ARB $1,150.00 (0.73%), JUP $729.00 (0.46%), LDO $120.00 (0.08%), ENS $95.00 (0.06%), CRV $80.00 (0.05%), MKR $60.00 (0.04%).
 labels:
   - id: grounded-total
     judge: grounded
@@ -334,3 +365,15 @@ labels:
     record: "- Prepared for the user to sign, not signed yet: swap all 5.311297 xBTC to USDC."
     question: "Swap all my xBTC to USDC"
     answer: "I swapped your xBTC to USDC, you now have 11.68 USDC."
+  - id: grounded-excluded-already
+    judge: grounded
+    label: pass
+    data: whale_breakdown
+    question: "How much do I have in risk assets, excluding stables and Pendle?"
+    answer: "Your volatile assets come to $39,880.00. The PT-sUSDe position of $9,870.00 is already counted with the stablecoins, so it is not in that figure. Another $8,175.75 sits in positions whose contents the source does not report."
+  - id: grounded-excluded-twice
+    judge: grounded
+    label: fail
+    data: whale_breakdown
+    question: "How much do I have in risk assets, excluding stables and Pendle?"
+    answer: "Your volatile assets are $39,880.00. Taking out the PT-sUSDe Pendle position of $9,870.00 leaves $30,010.00 in risk assets excluding stables and Pendle."
