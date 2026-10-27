@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 from svinooh_portfolio import testing as fx
 from svinooh_portfolio import wire
 from svinooh_portfolio.format import usd
@@ -10,6 +12,7 @@ from svinooh_portfolio.reading import (
     named_position,
     portfolio_context,
     position_line,
+    scanned_ago,
     summarize_history,
 )
 
@@ -291,3 +294,39 @@ class TestWhatTheDataDoesNotName:
         line = position_line(fx.as_position(fx.NAMELESS))
         assert line.startswith("unnamed position: $1,003.15")
         assert "?" not in line
+
+
+class TestHowFreshTheNumbersAre:
+    NOW = datetime(2026, 1, 1, 12, 30, tzinfo=UTC)
+
+    def test_the_header_says_how_old_the_oldest_scan_is(self):
+        read = fx.as_portfolio(
+            fx.portfolio(
+                [
+                    fx.wallet(fx.EVM_ADDRESS, [fx.ETH], last_synced_at="2026-01-01T12:27:00Z"),
+                    fx.wallet(
+                        fx.SOL_ADDRESS,
+                        [fx.SOL_TOKEN],
+                        chain="SOL",
+                        last_synced_at="2026-01-01T12:05:00Z",
+                    ),
+                ]
+            )
+        )
+        block = portfolio_context(read, 12, now=self.NOW)
+        assert "oldest wallet scanned 25 min ago." in block.splitlines()[0]
+        assert "scanned 3 min ago:" in block
+        assert "scanned 25 min ago:" in block
+
+    def test_a_wallet_never_scanned_says_so(self):
+        read = fx.as_portfolio(fx.portfolio([fx.wallet(fx.EVM_ADDRESS, [], last_synced_at=None)]))
+        block = portfolio_context(read, 12, now=self.NOW)
+        assert "not scanned yet." in block.splitlines()[0]
+        assert "never scanned:" in block
+
+    def test_ages_read_in_the_unit_a_person_would_use(self):
+        at = datetime(2026, 1, 1, tzinfo=UTC)
+        assert scanned_ago(at, at + timedelta(seconds=30)) == "scanned just now"
+        assert scanned_ago(at, at + timedelta(minutes=90)) == "scanned 90 min ago"
+        assert scanned_ago(at, at + timedelta(hours=5)) == "scanned 5 h ago"
+        assert scanned_ago(at, at + timedelta(days=3)) == "scanned 3 days ago"

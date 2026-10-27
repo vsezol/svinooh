@@ -46,6 +46,7 @@ def wallet(
     chain: str = "EVM",
     status: str = "ok",
     stale: bool = False,
+    last_synced_at: str | None = "2026-01-01T12:00:00Z",
 ) -> dict:
     return {
         "id": f"w-{address[-4:]}",
@@ -54,6 +55,7 @@ def wallet(
         "label": None,
         "status": status,
         "stale": stale,
+        "lastSyncedAt": last_synced_at,
         "totalUsd": round(sum(p["valueUsd"] for p in positions), 2),
         "positions": positions,
     }
