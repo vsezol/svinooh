@@ -143,6 +143,19 @@
     tools: [asset_breakdown]
     says: ["110480", "69.69"]
 
+- id: portfolio-risk-assets-excluding-pendle
+  slice: {intent: portfolio, role: regression, source: production 2026-10-27 Pendle taken out twice}
+  world: whale
+  turn:
+    question: How much money do I have in risk assets, excluding stables and Pendle tokens?
+    portfolio: whale-pf
+    signed_in: true
+  expect:
+    answered_by: grounded
+    tools: [asset_breakdown]
+    says: ["39880"]
+    never_says: ["30010"]
+
 - id: portfolio-no-hint-signed-in
   slice: {intent: portfolio, role: typical, source: design R3}
   world: whale
