@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import type { HistoryRange, PortfolioDto, WalletDto } from '@svinooh/shared';
 import { ChartSync } from '@svinooh/ui/chartSync';
-import { AppHeader, Button, Card, Checkbox, Eyebrow, Input, Segmented, Spinner, TagButton } from '../ui';
+import { AppHeader, Button, Card, Checkbox, Eyebrow, Input, Segmented, Spinner } from '../ui';
 import { AccountMenu } from '../components/AccountMenu';
 import type { AgentControl, ConversationRef } from '../components/agent/AgentEmbed';
 import { DepositDialog } from '../components/agent/DepositDialog';
@@ -270,7 +270,6 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
   const { onDeposit, asked: askedToDeposit } = useDeposits(chase);
   const [scope, setScope] = useState<string>('all');
   const [period, setPeriod] = useState<HistoryRange>('24h');
-  const [forecasting, setForecasting] = useState(false);
   /** Whether pointing at a moment on one chart reads it on the others — see ChartSettings */
   const [syncCursor, setSyncCursor] = useSyncCursor();
   const [hideSmall, setHideSmall] = useState(false);
@@ -968,14 +967,6 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
                           onChange={setPeriod}
                         />
                       </div>
-                      <TagButton
-                        variant="bare"
-                        size="sm"
-                        active={forecasting}
-                        onClick={() => setForecasting(!forecasting)}
-                      >
-                        FORECAST
-                      </TagButton>
                       <ChartSettings syncCursor={syncCursor} onSyncCursor={setSyncCursor} />
                     </div>
                   </div>
@@ -986,7 +977,6 @@ export function PortfolioPage({ slug: routeSlug }: { slug: string }) {
                       times={history?.data.total.times ?? []}
                       period={drawn}
                       height="clamp(160px,26vw,240px)"
-                      showForecast={forecasting}
                     />
                   </div>
                 </>

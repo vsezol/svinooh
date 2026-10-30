@@ -13,7 +13,6 @@ import {
 } from 'lightweight-charts';
 import type { HistoryRange } from '@svinooh/shared';
 import { nearestIndex, useChartSync } from './chartSync';
-import { forecast, type Forecast, type Line } from './forecast';
 import { fmtUsd } from './money';
 import { useThemeName } from './useThemeName';
 
@@ -61,7 +60,6 @@ interface Props {
   tone?: 'accent' | 'muted';
   format?: (value: number) => string;
   lines?: ReadonlyArray<ChartLine>;
-  showForecast?: boolean;
 }
 
 export interface ChartLine {
@@ -97,30 +95,6 @@ const token = (name: string): string =>
 
 const lineColor = (index: number): string => token(index < 4 ? `--series-${index + 1}` : '--mut');
 
-/**
- * The grey line softened a step, the way the design draws it — full-strength
- * grey reads nearly as loud as the accent on a dark card. As hex-with-alpha:
- * the library parses line colours itself and does not know color-mix().
- */
-function mainColor(tone: 'accent' | 'muted'): string {
-  const mut = token('--mut');
-  return tone === 'muted' ? (/^#[0-9a-f]{6}$/i.test(mut) ? `${mut}d9` : mut) : token('--acc');
-}
-
-function faded(color: string): string {
-  return /^#[0-9a-f]{6}$/i.test(color) ? `${color}80` : color;
-}
-
-function aheadData(ahead: Line, from: UTCTimestamp): Array<{ time: UTCTimestamp; value: number }> {
-  const out = [{ time: from, value: ahead.values[0] }];
-  for (let i = 1; i < ahead.times.length; i++) {
-    const t = Math.floor(ahead.times[i] / 1000);
-    const last = out[out.length - 1].time as number;
-    out.push({ time: (t <= last ? last + 1 : t) as UTCTimestamp, value: ahead.values[i] });
-  }
-  return out;
-}
-
 function toData(values: number[], times: number[]): Array<{ time: UTCTimestamp; value: number }> {
   const out: Array<{ time: UTCTimestamp; value: number }> = [];
   let last = -1;
@@ -131,11 +105,6 @@ function toData(values: number[], times: number[]): Array<{ time: UTCTimestamp; 
     out.push({ time, value: values[i] });
   }
   return out;
-}
-
-function aheadLabel(ms: number, period: HistoryRange): string {
-  const day = new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  return period === '1h' || period === '24h' ? `${day}, ${dateLabel(ms, period)}` : day;
 }
 
 function dateLabel(ms: number, period: HistoryRange): string {
@@ -182,26 +151,15 @@ export function AreaChart({
   tone = 'accent',
   format,
   lines,
-  showForecast = false,
 }: Props) {
   const multi = !!lines?.length;
   const values = multi ? lines[0].values : single;
-  const drawnLines = multi ? lines.map((line) => line.values) : [values];
-  const forecasts = showForecast ? drawnLines.map((line) => forecast(line, times, WINDOW_MS[period])) : [];
-  const ahead = forecasts.find((one): one is Forecast => one !== null)?.ahead ?? null;
-  const aheadLength = ahead ? ahead.times.length - 1 : 0;
-  const lastIndex = values.length - 1 + aheadLength;
-  const timeAt = (index: number) => (index < values.length ? times[index] : ahead!.times[index - values.length + 1]);
-  const valueAt = (line: number, index: number) =>
-    index < values.length ? drawnLines[line][index] : forecasts[line]?.ahead.values[index - values.length + 1];
   const fmtValue = format ?? fmtUsd;
   const fmtChange = format ?? ((value: number) => fmtUsd(value, 0));
   const box = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const series = useRef<ISeriesApi<'Area'> | null>(null);
   const lineSeries = useRef<Array<ISeriesApi<'Line'>>>([]);
-  const aheadSeries = useRef<Array<ISeriesApi<'Line'>>>([]);
-  const trendSeries = useRef<Array<ISeriesApi<'Line'>>>([]);
   /**
    * The mouse gesture in progress. `measuring` is decided at the press, not
    * read per move: letting go of shift halfway through a measurement should
@@ -296,8 +254,6 @@ export function AreaChart({
       chart.current = null;
       series.current = null;
       lineSeries.current = [];
-      aheadSeries.current = [];
-      trendSeries.current = [];
     };
   }, []);
 
@@ -322,7 +278,11 @@ export function AreaChart({
   useEffect(() => {
     if (!chart.current || !series.current) return;
     const mut = token('--mut');
-    const line = mainColor(tone);
+    // The grey line softened a step, the way the design draws it — full-strength
+    // grey reads nearly as loud as the accent on a dark card. As hex-with-alpha:
+    // the library parses line colours itself and does not know color-mix().
+    const line =
+      tone === 'muted' ? (/^#[0-9a-f]{6}$/i.test(mut) ? `${mut}d9` : mut) : token('--acc');
     series.current.applyOptions({
       lineColor: line,
       topColor: `color-mix(in srgb, ${line} ${tone === 'muted' ? 14 : 22}%, transparent)`,
@@ -330,10 +290,6 @@ export function AreaChart({
     });
     chart.current.applyOptions({ crosshair: { vertLine: { color: mut } } });
     lineSeries.current.forEach((line, index) => line.applyOptions({ color: lineColor(index) }));
-    aheadSeries.current.forEach((dashed, index) => dashed.applyOptions({ color: multi ? lineColor(index) : line }));
-    trendSeries.current.forEach((trend, index) =>
-      trend.applyOptions({ color: faded(multi ? lineColor(index) : line) }),
-    );
   }, [theme, tone]);
 
   /**
@@ -360,47 +316,16 @@ export function AreaChart({
         })
       : [];
     series.current?.setData(multi ? [] : data);
-    for (const line of [...aheadSeries.current, ...trendSeries.current]) c?.removeSeries(line);
-    const lastTime = data.length ? data[data.length - 1].time : null;
-    const drawn = c && lastTime !== null ? forecasts.map((one, index) => (one ? { one, index } : null)) : [];
-    const color = (index: number) => (multi ? lineColor(index) : mainColor(tone));
-    trendSeries.current = drawn.flatMap((entry) => {
-      if (!entry || !c) return [];
-      const trend = c.addSeries(LineSeries, {
-        lineWidth: 1,
-        color: faded(color(entry.index)),
-        priceLineVisible: false,
-        lastValueVisible: false,
-        crosshairMarkerVisible: false,
-      });
-      trend.setData(
-        entry.one.trend.values.map((value, k) => ({ time: data[entry.one.from + k].time, value })),
-      );
-      return [trend];
-    });
-    aheadSeries.current = drawn.flatMap((entry) => {
-      if (!entry || !c || lastTime === null) return [];
-      const dashed = c.addSeries(LineSeries, {
-        lineWidth: 2,
-        lineStyle: LineStyle.Dashed,
-        color: color(entry.index),
-        priceLineVisible: false,
-        lastValueVisible: false,
-      });
-      dashed.setData(aheadData(entry.one.ahead, lastTime));
-      return [dashed];
-    });
     const scale = chart.current?.timeScale();
     if (scale && data.length) {
       const window = WINDOW_MS[period];
       const last = data[data.length - 1].time as number;
-      const to = ahead ? (aheadData(ahead, last as UTCTimestamp).at(-1)!.time as number) : last;
       const from = window === null ? null : last - Math.floor(window / 1000);
       if (from === null || from <= (data[0].time as number)) scale.fitContent();
-      else scale.setVisibleRange({ from: from as UTCTimestamp, to: to as UTCTimestamp });
+      else scale.setVisibleRange({ from: from as UTCTimestamp, to: last as UTCTimestamp });
     }
     setSelection(null);
-  }, [period, fingerprint, showForecast]);
+  }, [period, fingerprint]);
 
   /**
    * What another chart in the group is showing — nothing when this one is the
@@ -451,7 +376,7 @@ export function AreaChart({
     if (multi) return;
     setSelection(next);
     publish?.(id, {
-      span: next ? { from: timeAt(next.fromIndex), to: timeAt(next.toIndex) } : null,
+      span: next ? { from: times[next.fromIndex], to: times[next.toIndex] } : null,
     });
   };
 
@@ -461,7 +386,7 @@ export function AreaChart({
     const x = clientX - box.current.getBoundingClientRect().left;
     const logical = chart.current.timeScale().coordinateToLogical(x);
     if (logical == null) return null;
-    return Math.min(lastIndex, Math.max(0, Math.round(logical)));
+    return Math.min(values.length - 1, Math.max(0, Math.round(logical)));
   };
 
   const xAt = (index: number): number => {
@@ -578,13 +503,10 @@ export function AreaChart({
     if (el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
   };
 
-  const spanLabel = (index: number) =>
-    index < values.length ? dateLabel(times[index], period) : aheadLabel(timeAt(index), period);
-
   const range = selection
     ? (() => {
-        const from = valueAt(0, selection.fromIndex) ?? 0;
-        const to = valueAt(0, selection.toIndex) ?? 0;
+        const from = values[selection.fromIndex];
+        const to = values[selection.toIndex];
         const chg = to - from;
         const up = chg >= 0;
         return {
@@ -594,26 +516,14 @@ export function AreaChart({
           // Which way is the good way. On a debt it is down: the sign in front
           // of the number stays what it is, only the colour behind it flips.
           good: tone === 'muted' ? !up : up,
-          label:
-            `${spanLabel(selection.fromIndex)} → ${spanLabel(selection.toIndex)}` +
-            (selection.toIndex >= values.length ? ' · FORECAST' : ''),
+          label: `${dateLabel(times[selection.fromIndex], period)} → ${dateLabel(times[selection.toIndex], period)}`,
         };
       })()
     : null;
 
-  const own = hover && hover.index >= 0 && hover.index <= lastIndex ? hover.index : null;
+  const own = hover && hover.index >= 0 && hover.index < values.length ? hover.index : null;
   /** Under this chart's own pointer, or under another chart's — the same reading either way */
   const hovered = own ?? followed;
-  const isAhead = hovered !== null && hovered >= values.length;
-  const outlook =
-    !multi && ahead
-      ? (() => {
-          const end = ahead.values[ahead.values.length - 1];
-          const now = values[values.length - 1];
-          const chg = end - now;
-          return { end, chg, pct: now ? (chg / Math.abs(now)) * 100 : 0, at: ahead.times[ahead.times.length - 1] };
-        })()
-      : null;
   /** The band belongs to the line, so it is drawn in the line's own colour */
   const SELECTION = tone === 'muted' ? 'var(--mut)' : 'var(--acc)';
 
@@ -692,32 +602,19 @@ export function AreaChart({
                 <span key={line.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <span style={{ width: 8, height: 2, borderRadius: 1, background: `var(--series-${index + 1}, var(--mut))` }} />
                   <span style={{ color: 'var(--mut)' }}>{line.label}</span>
-                  {hovered !== null && valueAt(index, hovered) !== undefined ? (
-                    <span style={{ fontWeight: 'var(--fw-medium)' }}>{fmtValue(valueAt(index, hovered)!)}</span>
+                  {hovered !== null ? (
+                    <span style={{ fontWeight: 'var(--fw-medium)' }}>{fmtValue(line.values[hovered])}</span>
                   ) : null}
                 </span>
               ))}
               {hovered !== null ? (
-                <span style={{ color: 'var(--mut)' }}>
-                  {isAhead ? `FORECAST ${aheadLabel(timeAt(hovered), period)}` : dateLabel(timeAt(hovered), period)}
-                </span>
+                <span style={{ color: 'var(--mut)' }}>{dateLabel(times[hovered], period)}</span>
               ) : null}
             </>
           ) : hovered !== null ? (
             <>
-              <span style={{ fontWeight: 'var(--fw-medium)' }}>{fmtValue(valueAt(0, hovered)!)}</span>
-              <span style={{ color: 'var(--mut)' }}>
-                {isAhead ? `FORECAST ${aheadLabel(timeAt(hovered), period)}` : dateLabel(timeAt(hovered), period)}
-              </span>
-            </>
-          ) : outlook ? (
-            <>
-              <span style={{ color: 'var(--mut)' }}>FORECAST</span>
-              <span style={{ fontWeight: 'var(--fw-medium)' }}>{fmtValue(outlook.end)}</span>
-              <span style={{ color: 'var(--mut)' }}>
-                {(outlook.chg >= 0 ? '+' : '−') + fmtChange(Math.abs(outlook.chg))} ({outlook.chg >= 0 ? '+' : ''}
-                {outlook.pct.toFixed(2)}%) by {aheadLabel(outlook.at, period)}
-              </span>
+              <span style={{ fontWeight: 'var(--fw-medium)' }}>{fmtValue(values[hovered])}</span>
+              <span style={{ color: 'var(--mut)' }}>{dateLabel(times[hovered], period)}</span>
             </>
           ) : null}
       </div>
@@ -730,7 +627,7 @@ export function AreaChart({
           chart inside somebody else's box, and in the assistant's it landed
           under that box's own reading in the same corner — two right-aligned
           mono labels stacked where the design has one. */}
-      {values.length && !multi && !outlook && !selection && hovered === null && !bare && framed ? (
+      {values.length && !multi && !selection && hovered === null && !bare && framed ? (
         <div
           className="mono mouse-only"
           style={{
@@ -767,11 +664,7 @@ export function AreaChart({
           {/* Scrolled off the live edge, the right-hand end is a time like any
               other; sitting on it, it is the only one worth naming. */}
           <span>
-            {!shown || Math.abs(shown.to - times[times.length - 1]) <= 1000
-              ? 'NOW'
-              : shown.to > times[times.length - 1]
-                ? aheadLabel(shown.to, period)
-                : dateLabel(shown.to, period)}
+            {shown && shown.to < times[times.length - 1] - 1000 ? dateLabel(shown.to, period) : 'NOW'}
           </span>
         </div>
       ) : null}
