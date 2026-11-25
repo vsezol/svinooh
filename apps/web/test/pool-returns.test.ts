@@ -10,6 +10,11 @@ test('fees over ten days are stretched to a year', () => {
   assert.ok(Math.abs(apy! - (0.005 / 10) * 365) < 1e-12);
 });
 
-test('under a day there is too little to stretch to a year', () => {
-  assert.equal(realizedApy({ since, capitalUsd: 1000, feesUsd: 5, pnlUsd: 0 }, Date.parse(since) + 3_600_000), null);
+test('a position read an hour ago is stretched to a year from that hour', () => {
+  const apy = realizedApy({ since, capitalUsd: 1000, feesUsd: 0.01, pnlUsd: 0 }, Date.parse(since) + 3_600_000);
+  assert.ok(Math.abs(apy! - 0.00001 * 365 * 24) < 1e-12);
+});
+
+test('a reading taken this instant has no time to stretch', () => {
+  assert.equal(realizedApy({ since, capitalUsd: 1000, feesUsd: 0, pnlUsd: 0 }, Date.parse(since)), null);
 });

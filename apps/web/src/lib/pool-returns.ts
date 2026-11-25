@@ -8,6 +8,6 @@ export function daysSince(returns: PositionReturns, now: number): number {
 
 export function realizedApy(returns: PositionReturns, now: number): number | null {
   const days = daysSince(returns, now);
-  if (days < 1) return null;
+  if (days <= 0) return null;
   return (returns.feesUsd / returns.capitalUsd) * (365 / days);
 }

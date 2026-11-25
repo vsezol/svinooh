@@ -59,8 +59,9 @@ const fmtDay = (iso: string): string =>
   new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
 function realizedApyTooltip(returns: PositionReturns, now: number): string {
-  const days = daysSince(returns, now).toFixed(1);
-  return `Fees earned since ${fmtDay(returns.since)}: ${fmtUsd(returns.feesUsd)} on ${fmtUsd(returns.capitalUsd)} supplied over ${days} days, stretched to a year`;
+  const days = daysSince(returns, now);
+  const period = days < 1 ? `${Math.max(1, Math.round(days * 24))} h` : `${days.toFixed(1)} days`;
+  return `Fees earned since ${fmtDay(returns.since)}: ${fmtUsd(returns.feesUsd)} on ${fmtUsd(returns.capitalUsd)} supplied over ${period}, stretched to a year`;
 }
 
 function pnlTooltip(returns: PositionReturns): string {
