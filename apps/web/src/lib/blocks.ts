@@ -1,4 +1,11 @@
-import type { PositionBand, PositionDto, PositionRange, PositionTokenRole, WalletDto } from '@svinooh/shared';
+import type {
+  PositionBand,
+  PositionDto,
+  PositionRange,
+  PositionReturns,
+  PositionTokenRole,
+  WalletDto,
+} from '@svinooh/shared';
 
 /**
  * One line of a position's table.
@@ -72,6 +79,7 @@ export interface Block {
   range: PositionRange | null;
   /** Where inside that range the price is — drawn as a bar under the header */
   band: PositionBand | null;
+  returns: PositionReturns | null;
   /** How many identical positions were folded into this block (1 — just the one) */
   count: number;
   sections: BlockSection[];
@@ -341,6 +349,7 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
       feesEarned: p.feesEarnedUsd ?? null,
       range: p.range ?? null,
       band: p.band ?? null,
+      returns: p.returns ?? null,
       count: 1,
       rows: rows.length ? rows : selfRow,
     });
@@ -365,6 +374,7 @@ export function buildBlocks(positions: PositionDto[]): Block[] {
       feesEarned: null,
       range: null,
       band: null,
+      returns: null,
       count: 1,
       rows: walletRows,
     });
