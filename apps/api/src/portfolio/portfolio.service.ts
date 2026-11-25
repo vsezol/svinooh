@@ -38,6 +38,7 @@ import { PremiumService } from '../billing/premium.service';
 import { ScanRequests } from '../wallet/scan-requests.service';
 import { positionKey } from '../wallet/sync/wallet-state';
 import { positionSeries } from './position-history';
+import { poolReturns, type PoolReading } from './pool-returns';
 
 /**
  * A wallet as a portfolio holds it: the address and its readings, plus the
@@ -536,8 +537,9 @@ export class PortfolioService {
     // The grace is one lease, because being briefly past due is the normal
     // state of a working queue — it means dispatched and waiting, not behind.
     const overdueBefore = Date.now() - setting('scan.leaseMin') * 60_000;
+    const firstReadings = await this.firstPoolReadings(portfolio.wallets);
     const wallets = portfolio.wallets
-      .map((held) => this.toWalletDto(held, overdueBefore))
+      .map((held) => this.toWalletDto(held, overdueBefore, firstReadings))
       .sort(walletOrder);
 
     const updatedAt = wallets.reduce<string | null>(
@@ -1356,13 +1358,39 @@ export class PortfolioService {
    * the address rather than about the address, and the one thing that is not
    * (its history) is resolved through the membership on the way.
    */
-  private toWalletDto(held: HeldWallet, overdueBefore: number): WalletDto {
+  private async firstPoolReadings(held: HeldWallet[]): Promise<Map<string, PoolReading>> {
+    const wanted = held.flatMap(({ wallet }) =>
+      wallet.positions
+        .filter((position) => position.band)
+        .map((position) => Prisma.sql`(${wallet.chain}, ${wallet.address}, ${storedPositionKey(position)})`),
+    );
+    if (!wanted.length) return new Map();
+    const rows = await this.prisma.$queryRaw<
+      Array<PoolReading & { chain: string; address: string; key: string }>
+    >(Prisma.sql`
+      SELECT DISTINCT ON ("chain", "address", "key") "chain", "address", "key", "createdAt", "valueUsd", "tokens"
+      FROM "PositionSnapshot"
+      WHERE ("chain", "address", "key") IN (${Prisma.join(wanted)})
+      ORDER BY "chain", "address", "key", "createdAt" ASC
+    `);
+    return new Map(rows.map((row) => [`${row.chain}:${row.address}:${row.key}`, row]));
+  }
+
+  private toWalletDto(
+    held: HeldWallet,
+    overdueBefore: number,
+    firstReadings: Map<string, PoolReading> = new Map(),
+  ): WalletDto {
     const wallet = held.wallet;
     const positions = [...wallet.positions]
       .sort((a, b) => b.valueUsd - a.valueUsd)
-      .map((p) => ({
+      .map((p) => {
+        const key = storedPositionKey(p);
+        const tokens = (p.tokens as PositionTokenDto[] | null) ?? null;
+        const first = p.band ? firstReadings.get(`${wallet.chain}:${wallet.address}:${key}`) : undefined;
+        return {
         id: p.id,
-        key: positionKey({ ...p, band: p.band as PositionBand | null }),
+        key,
         symbol: p.symbol,
         name: p.name,
         note: p.note,
@@ -1377,11 +1405,11 @@ export class PortfolioService {
         borrowApy: p.borrowApy,
         range: (p.range as PositionRange | null) ?? null,
         band: (p.band as PositionBand | null) ?? null,
-        // Written by the scan pipeline as PositionTokenDto[]; Prisma types it as
-        // opaque JSON, so this is the one place the shape is asserted
-        tokens: (p.tokens as PositionTokenDto[] | null) ?? null,
+        tokens,
         feesEarnedUsd: p.feesEarnedUsd,
-      }));
+        returns: first ? poolReturns(first, { valueUsd: p.valueUsd, tokens }) : null,
+        };
+      });
 
     return {
       id: held.id,
@@ -1439,6 +1467,10 @@ function toTronDto(stored: unknown, readAt: Date | null): TronResourcesDto | nul
 }
 
 /** Wallets ordered by descending value; not-yet-scanned ones go to the end */
+function storedPositionKey(position: Position): string {
+  return positionKey({ ...position, band: position.band as PositionBand | null });
+}
+
 function walletOrder(a: WalletDto, b: WalletDto): number {
   if (a.totalUsd === null && b.totalUsd === null) return a.createdAt < b.createdAt ? -1 : 1;
   if (a.totalUsd === null) return 1;

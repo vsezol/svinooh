@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
-import type { PositionTokenRole, WalletDto } from '@svinooh/shared';
+import type { PositionReturns, PositionTokenRole, WalletDto } from '@svinooh/shared';
 import { buildBlocks, isPoolKind, withoutDust, type BlockSection } from '../lib/blocks';
 import { chainMeta, fmtAmount, fmtPrice, fmtUsd, shortAddress, walletName } from '../lib/format';
 import { rebalanceable, rebalanceQuestion } from '../lib/rebalance';
@@ -48,6 +48,24 @@ const roleColor = (role: PositionTokenRole): string =>
 
 /** 0.8075 → "80.8% APY" */
 const fmtApy = (apy: number): string => `${(apy * 100).toFixed(apy < 0.1 ? 2 : 1)}% APY`;
+
+const DAY_MS = 86_400_000;
+
+const fmtSignedPct = (fraction: number): string =>
+  `${fraction < 0 ? '−' : '+'}${Math.abs(fraction * 100).toFixed(Math.abs(fraction) < 0.1 ? 2 : 1)}%`;
+
+const fmtSignedUsd = (usd: number): string => `${usd < 0 ? '−' : '+'}${fmtUsd(Math.abs(usd))}`;
+
+function returnsTooltips({ since, capitalUsd, feesUsd, pnlUsd }: PositionReturns) {
+  const sinceDate = new Date(since).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const days = (Date.now() - Date.parse(since)) / DAY_MS;
+  const yearlyPace = (feesUsd / capitalUsd) * (365 / days);
+  const pace = days >= 1 ? `, ${(yearlyPace * 100).toFixed(1)}% a year at this pace` : '';
+  return {
+    fees: `Fees earned since ${sinceDate}: ${fmtUsd(feesUsd)} on ${fmtUsd(capitalUsd)} supplied${pace}`,
+    pnl: `Change in value since ${sinceDate}, price and fees together: ${fmtSignedUsd(pnlUsd)} on ${fmtUsd(capitalUsd)} supplied`,
+  };
+}
 
 const ChartIcon = () => (
   <svg
@@ -329,6 +347,23 @@ export function WalletRow({
                   <span className="mono" style={{ ...NOTE, color: b.apy >= 0 ? 'var(--up)' : 'var(--down)' }}>
                     {fmtApy(b.apy)}
                   </span>
+                ) : null}
+                {b.returns ? (
+                  <>
+                    <Tooltip text={returnsTooltips(b.returns).fees}>
+                      <span className="mono" style={{ ...NOTE, color: 'var(--up)' }}>
+                        EARNED {fmtSignedPct(b.returns.feesUsd / b.returns.capitalUsd)}
+                      </span>
+                    </Tooltip>
+                    <Tooltip text={returnsTooltips(b.returns).pnl}>
+                      <span
+                        className="mono"
+                        style={{ ...NOTE, color: b.returns.pnlUsd >= 0 ? 'var(--up)' : 'var(--down)' }}
+                      >
+                        P&amp;L {fmtSignedPct(b.returns.pnlUsd / b.returns.capitalUsd)}
+                      </span>
+                    </Tooltip>
+                  </>
                 ) : null}
                 {b.feesEarned != null && b.feesEarned >= 0.01 ? (
                   <Tooltip text="Fees this pool has earned you in GMX, already counted in its value">

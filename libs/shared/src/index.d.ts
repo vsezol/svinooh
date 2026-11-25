@@ -94,6 +94,14 @@ export interface PositionDto {
   /** Underlying legs: what's supplied, what's accrued, what's borrowed */
   tokens?: PositionTokenDto[] | null;
   feesEarnedUsd?: number | null;
+  returns?: PositionReturns | null;
+}
+
+export interface PositionReturns {
+  since: string;
+  capitalUsd: number;
+  feesUsd: number;
+  pnlUsd: number;
 }
 
 /** What a card asks the wallet to do with a pool. */
