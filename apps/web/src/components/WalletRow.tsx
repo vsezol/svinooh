@@ -3,6 +3,7 @@ import type { KeyboardEvent, MouseEvent } from 'react';
 import type { PositionReturns, PositionTokenRole, WalletDto } from '@svinooh/shared';
 import { buildBlocks, isPoolKind, withoutDust, type BlockSection } from '../lib/blocks';
 import { chainMeta, fmtAmount, fmtPrice, fmtUsd, shortAddress, walletName } from '../lib/format';
+import { daysSince, realizedApy } from '../lib/pool-returns';
 import { rebalanceable, rebalanceQuestion } from '../lib/rebalance';
 import { Button, Card, Chevron, IconButton, Spinner, Tag, Tooltip } from '../ui';
 import { badgedText, ChainBadge } from './ChainBadge';
@@ -49,22 +50,22 @@ const roleColor = (role: PositionTokenRole): string =>
 /** 0.8075 → "80.8% APY" */
 const fmtApy = (apy: number): string => `${(apy * 100).toFixed(apy < 0.1 ? 2 : 1)}% APY`;
 
-const DAY_MS = 86_400_000;
-
 const fmtSignedPct = (fraction: number): string =>
   `${fraction < 0 ? '−' : '+'}${Math.abs(fraction * 100).toFixed(Math.abs(fraction) < 0.1 ? 2 : 1)}%`;
 
 const fmtSignedUsd = (usd: number): string => `${usd < 0 ? '−' : '+'}${fmtUsd(Math.abs(usd))}`;
 
-function returnsTooltips({ since, capitalUsd, feesUsd, pnlUsd }: PositionReturns) {
-  const sinceDate = new Date(since).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const days = (Date.now() - Date.parse(since)) / DAY_MS;
-  const yearlyPace = (feesUsd / capitalUsd) * (365 / days);
-  const pace = days >= 1 ? `, ${(yearlyPace * 100).toFixed(1)}% a year at this pace` : '';
-  return {
-    fees: `Fees earned since ${sinceDate}: ${fmtUsd(feesUsd)} on ${fmtUsd(capitalUsd)} supplied${pace}`,
-    pnl: `Change in value since ${sinceDate}, price and fees together: ${fmtSignedUsd(pnlUsd)} on ${fmtUsd(capitalUsd)} supplied`,
-  };
+const fmtDay = (iso: string): string =>
+  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+function realizedApyTooltip(returns: PositionReturns, now: number): string {
+  const days = daysSince(returns, now);
+  const period = days < 1 ? `${Math.max(1, Math.round(days * 24))} h` : `${days.toFixed(1)} days`;
+  return `Fees earned since ${fmtDay(returns.since)}: ${fmtUsd(returns.feesUsd)} on ${fmtUsd(returns.capitalUsd)} supplied over ${period}, stretched to a year`;
+}
+
+function pnlTooltip(returns: PositionReturns): string {
+  return `Value now against ${fmtDay(returns.since)}, fees included: ${fmtSignedUsd(returns.pnlUsd)} on ${fmtUsd(returns.capitalUsd)} supplied`;
 }
 
 const ChartIcon = () => (
@@ -134,6 +135,7 @@ export function WalletRow({
   }, [wallet.positions, hideSmall]);
   const tron = wallet.tron ?? null;
   const expanded = !collapsed && !syncing && (blocks.length > 0 || tron !== null);
+  const now = Date.now();
   const share = total > 0 && wallet.totalUsd ? ((wallet.totalUsd / total) * 100).toFixed(1) + '% of total' : '';
 
   const copy = (e: MouseEvent) => {
@@ -343,19 +345,16 @@ export function WalletRow({
                     {b.meta}
                   </span>
                 ) : null}
-                {b.apy != null ? (
-                  <span className="mono" style={{ ...NOTE, color: b.apy >= 0 ? 'var(--up)' : 'var(--down)' }}>
-                    {fmtApy(b.apy)}
-                  </span>
-                ) : null}
                 {b.returns ? (
                   <>
-                    <Tooltip text={returnsTooltips(b.returns).fees}>
-                      <span className="mono" style={{ ...NOTE, color: 'var(--up)' }}>
-                        EARNED {fmtSignedPct(b.returns.feesUsd / b.returns.capitalUsd)}
-                      </span>
-                    </Tooltip>
-                    <Tooltip text={returnsTooltips(b.returns).pnl}>
+                    {realizedApy(b.returns, now) != null ? (
+                      <Tooltip text={realizedApyTooltip(b.returns, now)}>
+                        <span className="mono" style={{ ...NOTE, color: 'var(--up)' }}>
+                          {fmtApy(realizedApy(b.returns, now)!)}
+                        </span>
+                      </Tooltip>
+                    ) : null}
+                    <Tooltip text={pnlTooltip(b.returns)}>
                       <span
                         className="mono"
                         style={{ ...NOTE, color: b.returns.pnlUsd >= 0 ? 'var(--up)' : 'var(--down)' }}
@@ -364,6 +363,10 @@ export function WalletRow({
                       </span>
                     </Tooltip>
                   </>
+                ) : b.apy != null ? (
+                  <span className="mono" style={{ ...NOTE, color: b.apy >= 0 ? 'var(--up)' : 'var(--down)' }}>
+                    {fmtApy(b.apy)}
+                  </span>
                 ) : null}
                 {b.feesEarned != null && b.feesEarned >= 0.01 ? (
                   <Tooltip text="Fees this pool has earned you in GMX, already counted in its value">
